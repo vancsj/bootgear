@@ -1,0 +1,40 @@
+name: ticket-writing
+description: Bootgear ticket-writing workflow with evidence and ticket gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the request, relevant code, tests, contracts, and settled context; record the evidence before drafting."
+      leave: "The relevant evidence and open unknowns are recorded in the run ledger."
+      branches:
+        spec: "The evidence is sufficient to draft the requirements and ticket."
+    next: [spec]
+  spec:
+    reminder:
+      do: "Draft the requirements and ticket artifacts with the public spec skill."
+      branches:
+        spec-debate: "The draft has an unresolved decision above the run threshold."
+        ticket: "The requirements and design are complete enough to finalize the ticket."
+    next: [spec-debate, ticket]
+  spec-debate:
+    reminder:
+      do: "Resolve the specification decision with the public debate skill and revise the draft when the decision changes it."
+      branches:
+        spec: "The decision changes the requirements or design."
+        ticket: "The decision is settled and the ticket can be finalized."
+    next: [spec, ticket]
+  ticket:
+    reminder:
+      do: "Finalize the ticket artifact with the problem, outcome, acceptance criteria, scope boundaries, and verification notes."
+      branches:
+        succeeded: "The complete ticket artifact is ready without implementation or delivery work."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

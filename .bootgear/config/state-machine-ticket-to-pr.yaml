@@ -1,0 +1,89 @@
+name: ticket-to-pr
+description: Bootgear implementation workflow with evidence, review, and delivery gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the ticket, relevant code, tests, contracts, and settled context; record the evidence before design."
+      leave: "The relevant evidence, affected surfaces, and open unknowns are recorded in the run ledger."
+      branches:
+        spec: "The evidence is sufficient to design the implementation."
+    next: [spec]
+  spec:
+    reminder:
+      do: "Draft the requirements and implementation design with the public spec skill."
+      branches:
+        spec-debate: "The design has an unresolved decision above the run threshold."
+        impl: "The requirements and design are complete enough to implement."
+    next: [spec-debate, impl]
+  spec-debate:
+    reminder:
+      do: "Resolve the specification decision with the public debate skill and revise the design when the decision changes it."
+      branches:
+        spec: "The decision changes the requirements or design."
+        impl: "The decision is settled and implementation can begin."
+    next: [spec, impl]
+  impl:
+    next: [quality]
+  quality:
+    reminder:
+      do: "Run the repository quality baseline and record its real output with the public test skill."
+      leave: "The quality command ran and its output is classified in the run ledger."
+      branches:
+        fix: "The quality baseline failed or exposed a required correction."
+        test: "The quality baseline passed."
+    next: [fix, test]
+  test:
+    reminder:
+      do: "Run the relevant tests and record their real output with the public test skill."
+      leave: "The relevant test command ran and its output is classified in the run ledger."
+      branches:
+        fix: "A relevant test failed or exposed a required correction."
+        review: "The relevant tests passed and no host-path check is needed."
+        runtime-check: "The tests passed and the change affects a host path requiring a fresh-session check."
+    next: [fix, review, runtime-check]
+  runtime-check:
+    reminder:
+      do: "Verify the affected plugin, hook, cache, or session path in a fresh host session and record the real event evidence."
+      leave: "The fresh-session host path ran, or an applicable failure is recorded in the run ledger."
+      branches:
+        fix: "The fresh-session path failed or exposed a required correction."
+        review: "The fresh-session path passed."
+    next: [fix, review]
+  fix:
+    max_visits: 5
+    next: [quality]
+  review:
+    max_visits: 5
+    reminder:
+      do: "Review the change with /review; it runs converge on every finding."
+      leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      branches:
+        review-debate: "A finding or requested fix needs an above-threshold decision."
+        fix: "An accepted finding requires a correction."
+        delivery: "The review is clean or all permitted findings are resolved."
+    next: [review-debate, fix, delivery]
+  review-debate:
+    reminder:
+      do: "Debate the choice claims from the review render with the public debate skill; factual disputes go back to /review."
+      branches:
+        fix: "The decision requires a correction."
+        delivery: "The finding is settled without another correction."
+    next: [fix, delivery]
+  delivery:
+    reminder:
+      do: "Inspect the changed files; when a shipped plugin surface changed, bump its plugin.json version (bump both host manifests when shared engine behavior changed), then perform only the explicitly permitted delivery mutations and record each result."
+      leave: "The permitted delivery scope, version-bump applicability and result, and actual mutation result are recorded in the run ledger."
+      branches:
+        succeeded: "All permitted delivery work is complete."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

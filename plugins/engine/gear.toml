@@ -1,0 +1,11 @@
+[plugin]
+name = "engine"
+
+[commands.task]
+exec = ["./bin/task"]
+
+[reminders.after_compaction]
+exec = ["python3", "hooks/session_start_recall.py"]
+severity = "reminder"
+order = 100
+dedupe = "engine:after_compaction"

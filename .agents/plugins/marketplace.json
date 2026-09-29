@@ -1,0 +1,36 @@
+{
+  "name": "bootgear",
+  "owner": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "plugins": [
+    {
+      "name": "memory-ledger",
+      "source": "./plugins/memory-ledger",
+      "description": "Codex skill and hook adapter for the canonical append-only memory ledger.",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "advisor",
+      "source": "./plugins/advisor",
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex, for a rewrite, an opinion, an adversarial review, or delegated investigation. Runs on Codex CLI or Claude Code — install via `codex plugin add advisor@bootgear`."
+    },
+    {
+      "name": "engine",
+      "source": {
+        "source": "local",
+        "path": "./codex-plugins/engine"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

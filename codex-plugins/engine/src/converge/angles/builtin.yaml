@@ -1,0 +1,149 @@
+# attack: refute a filed claim
+- id: cited-but-unread
+  tag: attack
+  tell: the claim names a source nobody opened
+  asks: What does that artifact actually say? A citation inherited from an earlier sentence is not a read.
+- id: point-in-time
+  tag: attack
+  tell: the source has versions
+  asks: Is this the operative version? A worktree lags the mainline; a doc can describe a version the installed dependency is not.
+- id: provenance
+  tag: attack
+  tell: the claim is "this doesn't exist" or "nobody knew"
+  asks: When did it become true, and who added it? Check git log -S and add-commit dates.
+- id: reachability
+  tag: attack
+  tell: the value exists upstream of the consumer
+  asks: Does it reach the consumer? Check schema, selection set, projection, filter, feature gate and serialisation.
+- id: absent-vs-default
+  tag: attack
+  tell: the field is optional, defaulted or nullable
+  asks: Can the consumer tell "declared no" from "never answered"?
+- id: downstream-consumer
+  tag: attack
+  tell: something already reads this
+  asks: Does that consumer's behaviour contradict the claim?
+- id: inverse-reading
+  tag: attack
+  tell: the claim paraphrases a source
+  asks: Read the original as if it says the opposite. Does the claim survive?
+- id: carve-out
+  tag: attack
+  tell: the source states a prohibition
+  asks: What does it exempt?
+- id: boundary
+  tag: attack
+  tell: a threshold, a count or a range
+  asks: Check exactly at the threshold, zero, one, empty and null.
+- id: dependents
+  tag: attack
+  tell: other claims depend on this one
+  asks: Which claims depend on it? If a dependent is independently known true, is this claim refuted?
+- id: positive-control
+  tag: attack
+  tell: the claim rests on finding nothing
+  asks: Does the search work? Search for something known to be present.
+- id: inherited-bounds
+  tag: attack
+  tell: the artifact said where to look
+  asks: What lies outside the quoted bounds? Checking only the named lines confirms the quotation, not the claim.
+- id: guarded-elsewhere
+  tag: attack
+  tell: the failure needs a bad value
+  asks: Does an upstream check, validation or type already rule it out?
+- id: deliberate
+  tag: attack
+  tell: it looks wrong on purpose
+  asks: Does a test, comment, ADR or memory-ledger entry settle it as intended?
+- id: real-referent
+  tag: attack
+  tell: the claim names a symbol, line or behaviour
+  asks: Does it exist in the artifact? If not, the claim is retracted.
+
+# evaluate: evidence for a cut field
+- id: entry-points
+  tag: evaluate
+  field: frequency
+  tell: the claim has a trigger path
+  asks: Which entry points reach the trigger? Cite the path.
+- id: call-site-count
+  tag: evaluate
+  field: frequency
+  tell: the trigger is a function or value with callers
+  asks: How many call sites reach it? Give the count and the search.
+- id: prod-traffic
+  tag: evaluate
+  field: frequency
+  tell: production data or metrics are available
+  asks: How often does the trigger happen in production? Quote the query output.
+- id: blast-radius
+  tag: evaluate
+  field: severity
+  tell: the effect reaches users or data
+  asks: What is the effect per user or per record, and how many are affected?
+- id: reversibility
+  tag: evaluate
+  field: severity
+  tell: the effect is stored or shown
+  asks: Is the damage stored (hard to reverse) or only shown (gone on the next read)?
+- id: who-notices
+  tag: evaluate
+  field: severity
+  tell: the effect is observable
+  asks: Who notices — the user, an operator, nobody until later?
+- id: evidence-tier
+  tag: evaluate
+  field: confidence
+  tell: the claim has supporting evidence
+  asks: Is it reproduced (output shown), traced (lines read) or inferred?
+- id: independent-confirmations
+  tag: evaluate
+  field: confidence
+  tell: more than one agent checked it
+  asks: How many independent checks confirm it?
+- id: files-touched
+  tag: evaluate
+  field: difficulty
+  tell: a fix changes code
+  asks: Which files does the fix touch?
+- id: callers-affected
+  tag: evaluate
+  field: difficulty
+  tell: the fix changes a contract
+  asks: Which callers must change with it?
+- id: migration
+  tag: evaluate
+  field: difficulty
+  tell: stored data or a public interface is involved
+  asks: Does the fix need a data or interface migration?
+- id: test-cost
+  tag: evaluate
+  field: difficulty
+  tell: the fix needs tests
+  asks: What does it cost to test the fix?
+
+# decide: argue a choice once the facts are settled
+- id: reversibility
+  tag: decide
+  tell: the options differ in how hard they are to undo
+  asks: Which option is cheapest to reverse if it turns out wrong?
+- id: blast-radius
+  tag: decide
+  tell: the options affect different scopes
+  asks: How much does each option touch if it goes wrong?
+- id: principle-fit
+  tag: decide
+  tell: the settlement or project states principles
+  asks: Which option fits the stated principles, quoted?
+- id: cost-of-delay
+  tag: decide
+  tell: one option defers work
+  asks: What does deferring cost, and who pays it?
+- id: precedent
+  tag: decide
+  tell: the codebase already faced this choice
+  asks: What did the existing code choose, and did it hold up?
+- id: stakeholder-view
+  tag: decide
+  tell: the options affect different people
+  asks: Which option would each affected party pick, and why?

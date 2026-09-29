@@ -1,0 +1,35 @@
+name: bug-triage
+description: Bug investigation workflow with reproduction and diagnosis gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the report, reproduction path, relevant code, tests, contracts, and settled context; record the evidence before triage."
+      leave: "The reproduction context, relevant evidence, and open unknowns are recorded in the run ledger."
+      branches:
+        triage: "The evidence is sufficient to investigate the report."
+    next: [triage]
+  triage:
+    reminder:
+      do: "Reproduce the report with test and record its real output; diagnose from that evidence: impact, cause, confidence, next action."
+      leave: "Reproduction or current-behavior evidence and the diagnosis are recorded in the run ledger."
+      branches:
+        triage-debate: "Competing diagnoses or a high-impact decision need resolution."
+        succeeded: "The bug is triaged and the goal is met."
+    next: [triage-debate, succeeded]
+  triage-debate:
+    reminder:
+      do: "Resolve the competing diagnosis with the resolve skill, and the debate skill if resolve escalates."
+      branches:
+        triage: "The decision changes the investigation; continue triage."
+        succeeded: "The diagnosis and next action are settled."
+    next: [triage, succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

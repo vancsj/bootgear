@@ -1,0 +1,50 @@
+# review find angles for a diff. Rows follow converge's angle schema:
+# id (kebab-case, unique across every angle file), tag, tell, asks, optional lens.
+- id: changed-contract
+  tag: find
+  tell: A signature, return value, error or semantics changed.
+  asks: Which callers assume the old contract?
+- id: removed-behavior
+  tag: find
+  tell: Lines or branches were deleted.
+  asks: What relied on the removed behavior?
+- id: new-input-path
+  tag: find
+  tell: A new parameter, endpoint or field accepts input.
+  asks: Is it reachable with bad, empty or hostile input?
+- id: failure-path
+  tag: find
+  tell: I/O, a retry or a multi-step write was added or changed.
+  asks: What happens on a timeout or a partial write?
+- id: shared-state
+  tag: find
+  tell: Mutable state, caching or ordering is involved.
+  asks: Can a race or a stale read occur?
+- id: boundary-input
+  tag: find
+  tell: A threshold, count or range is compared or computed.
+  asks: What happens at 0, 1, empty, null and exactly the limit?
+- id: absent-vs-default-field
+  tag: find
+  tell: A field is optional or defaulted.
+  asks: Does the code tell "no" apart from "never answered"?
+- id: gated-path
+  tag: find
+  tell: Behavior depends on a flag, environment variable or config value.
+  asks: How does the change behave with the flag off?
+- id: test-cant-fail
+  tag: find
+  tell: A test was added or changed.
+  asks: Would the test fail if the code under test were wrong?
+- id: ticket-diff
+  tag: find
+  tell: A ticket is linked to the change.
+  asks: What did the ticket ask for that the diff lacks, and what does the diff do that the ticket did not ask for?
+- id: odd-old-code
+  tag: find
+  tell: The changed old code looked odd.
+  asks: Why was it like that? Check `git log -S` and blame before removing it.
+- id: inverse-pr-text
+  tag: find
+  tell: The description claims a behavior.
+  asks: Read the claim as its opposite; does the diff still fit?

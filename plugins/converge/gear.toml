@@ -1,0 +1,5 @@
+[plugin]
+name = "converge"
+
+[commands.converge]
+exec = ["./bin/converge"]

@@ -1,0 +1,19 @@
+{
+  "name": "engine",
+  "version": "0.13.5",
+  "description": "Codex-native task loop with clarify, execute, debate, recall, resolve, spec, test, review, and converge skills backed by an atomic session ledger, state machine, and converge claims ledger.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Engine",
+    "shortDescription": "Run durable Codex task loops.",
+    "longDescription": "Engine carries a clarified goal through an atomic session ledger and validated state machine until it succeeds or fails.",
+    "developerName": "vancsj",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Start an engine run for this task."
+  }
+}

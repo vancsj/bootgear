@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$BIN_DIR/.." && pwd)
+
+if [ ! -f "$PLUGIN_ROOT/pyproject.toml" ]; then
+    echo "converge: active plugin root has no pyproject.toml: $PLUGIN_ROOT" >&2
+    exit 2
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "converge: uv is required to run the installed plugin; install uv and retry" >&2
+    exit 127
+fi
+
+exec uv run --project "$PLUGIN_ROOT" -m converge.cli "$@"

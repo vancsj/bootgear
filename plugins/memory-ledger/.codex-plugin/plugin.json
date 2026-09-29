@@ -1,0 +1,19 @@
+{
+  "name": "memory-ledger",
+  "version": "4.11.3",
+  "description": "Append-only ledger of settled questions, rival answers, and evidence, signed per AI session.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "Memory Ledger",
+    "shortDescription": "Read and record durable, evidence-backed findings.",
+    "longDescription": "Memory Ledger preserves settled questions, evidence, signatures, and confidence across sessions.",
+    "developerName": "vancsj",
+    "category": "Productivity",
+    "capabilities": []
+  }
+}

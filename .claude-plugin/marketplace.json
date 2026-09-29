@@ -1,0 +1,44 @@
+{
+  "name": "bootgear",
+  "owner": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "plugins": [
+    {
+      "name": "memory-ledger",
+      "source": "./plugins/memory-ledger",
+      "description": "Append-only ledger of settled questions, each carrying a runnable check and one signature per AI session, so confidence counts independent runs rather than asserting itself. Works standalone or as bootgear's memory gear."
+    },
+    {
+      "name": "engine",
+      "source": "./plugins/engine",
+      "description": "General autonomous task-execution loop: clarify settles task type, approach, per-domain source-of-truth, debate threshold, and autonomy scope, then execute runs unattended to a succeeded/failed /goal. Depends on converge, spec, test, review, advisor, and memory-ledger (installed automatically)."
+    },
+    {
+      "name": "spec",
+      "source": "./plugins/spec",
+      "description": "Default requirements-gathering skill for engine's ticket-writing task type. Works standalone or as an engine peer, overridable per project."
+    },
+    {
+      "name": "test",
+      "source": "./plugins/test",
+      "description": "Default test-writing, running, and triage skill for engine's bug-triage and ticket-to-pr task types. Works standalone or as an engine peer, overridable per project."
+    },
+    {
+      "name": "converge",
+      "source": "./plugins/converge",
+      "description": "Settles facts: claims pass find -> refute -> cut through separate agents, recorded in a validated append-only ledger with a computed cutoff and convergence. Works standalone (refute an existing slate) or as review's and debate's fact-settling peer."
+    },
+    {
+      "name": "review",
+      "source": "./plugins/review",
+      "description": "Default PR-review skill for engine's pr-review task type: lens finders, a gap hunt, and converge's refute/cut stages, reported from the converge ledger. Depends on converge (installed automatically). Works standalone or as an engine peer, overridable per project."
+    },
+    {
+      "name": "advisor",
+      "source": "./plugins/advisor",
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex — for a rewrite, an opinion, an adversarial review, or delegated investigation. Works standalone; engine's debate uses it for the adversarial reviewer on Claude Code. Install via `codex plugin add advisor@bootgear`."
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "converge",
+  "version": "0.4.4",
+  "description": "Settle the facts behind a findings slate: find, refute, and cut each claim with independent role agents against a validated append-only ledger, then compute which claims are reported. Works standalone or as a review/debate peer.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  }
+}

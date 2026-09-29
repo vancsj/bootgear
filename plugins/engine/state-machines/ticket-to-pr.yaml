@@ -1,0 +1,83 @@
+name: ticket-to-pr
+description: ticket-to-PR implementation with spec, test, and review gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the ticket, relevant code, tests, contracts, and settled context; record the evidence before design."
+      leave: "The relevant evidence, affected surfaces, and open unknowns are recorded in the run ledger."
+      branches:
+        spec: "The evidence is sufficient to design the implementation."
+    next: [spec]
+  spec:
+    reminder:
+      do: "Draft the spec with spec. Cite the ticket's acceptance criteria."
+      branches:
+        spec-debate: "The design has an unresolved decision above the run threshold."
+        impl: "The requirements and design are complete enough to implement."
+    next: [spec-debate, impl]
+  spec-debate:
+    reminder:
+      do: "Debate the spec draft: run the resolve skill, and the debate skill if resolve escalates."
+      branches:
+        spec: "Split and return to the spec."
+        impl: "Converge and continue to implementation."
+    next: [spec, impl]
+  impl:
+    reminder:
+      do: "Implement the signed-off design."
+    next: [test-code]
+  test-code:
+    reminder:
+      do: "Write and run tests with test."
+      leave: "Tests were actually run. The result, not a guess, decides the branch."
+      branches:
+        e2e-test: "Tests pass."
+        review: "Tests pass and the project has no e2e suite for this change."
+        fix: "Tests fail."
+    next: [e2e-test, review, fix]
+  e2e-test:
+    reminder:
+      do: "Run the e2e suite with test."
+      branches:
+        review: "Suite passes."
+        fix: "Suite fails."
+    next: [review, fix]
+  fix:
+    max_visits: 5
+    reminder:
+      do: "Fix the failed check or accepted finding and record the diff."
+    next: [test-code]
+  review:
+    reminder:
+      do: "Review the change with review; it runs converge on every finding."
+      leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      branches:
+        review-debate: "A finding or requested fix needs an above-threshold decision."
+        fix: "An accepted finding requires a correction."
+        delivery: "The review is clean or all permitted findings are resolved."
+    next: [review-debate, fix, delivery]
+  review-debate:
+    reminder:
+      do: "Debate the choice claims from the review render with the debate skill; factual disputes go back to review."
+      branches:
+        fix: "The decision requires a correction."
+        delivery: "The finding is settled without another correction."
+    next: [fix, delivery]
+  delivery:
+    reminder:
+      do: "Perform only the explicitly permitted delivery mutations and record each result."
+      leave: "The permitted delivery scope and actual mutation result are recorded in the run ledger."
+      branches:
+        succeeded: "All permitted delivery work is complete."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

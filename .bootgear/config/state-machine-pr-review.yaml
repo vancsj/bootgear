@@ -1,0 +1,52 @@
+name: pr-review
+description: Bootgear pull-request review workflow with evidence and disposition gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the pull request, ticket, changed files, tests, contracts, and settled context; record the evidence before review."
+      leave: "The reviewed scope, relevant evidence, and open unknowns are recorded in the run ledger."
+      branches:
+        review: "The evidence is sufficient to review the pull request."
+    next: [review]
+  review:
+    reminder:
+      do: "Review the change with /review; it runs converge on every finding."
+      leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      branches:
+        review-debate: "A finding or requested fix needs an above-threshold decision."
+        fix: "An accepted finding requires a correction."
+        disposition: "The review outcome is settled and no further review pass is required."
+    next: [review-debate, fix, disposition]
+  review-debate:
+    max_visits: 3
+    reminder:
+      do: "Debate the choice claims from the review render with the public debate skill; factual disputes go back to /review."
+      branches:
+        fix: "The decision requires a correction."
+        review: "The decision needs another review pass."
+        disposition: "The finding is settled and the review can be closed."
+    next: [fix, review, disposition]
+  fix:
+    max_visits: 4
+    reminder:
+      do: "Apply the accepted findings within permitted_mutations and run the affected tests."
+      branches:
+        review: "The fixes are applied and need a fresh review pass."
+    next: [review]
+  disposition:
+    reminder:
+      do: "Record the review outcome, finding disposition, impact and confidence where relevant, owner or next action, and supporting evidence."
+      branches:
+        succeeded: "The review disposition is recorded and the goal is met."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

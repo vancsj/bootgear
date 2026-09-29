@@ -1,0 +1,16 @@
+# Two rule families are switched off because the code violates them on purpose.
+# Everything else ruff has to say about these scripts is worth hearing.
+
+[lint]
+extend-ignore = [
+    # DTZ011 wants `datetime.now(tz=...)` instead of `date.today()`. Wrong here:
+    # every date in the ledger is the local calendar date of the session that
+    # wrote it, printed into a file a human reads. UTC would put a late-evening
+    # signature on tomorrow, and no reader of the file has the offset to undo it.
+    "DTZ011",
+    # PLW1510 wants an explicit `check=` on every subprocess.run. These calls
+    # deliberately pass no check because a non-zero exit IS the answer — an
+    # Evidence line that fails, a ref that does not resolve, a push that was
+    # rejected — and each one reads `.returncode` itself.
+    "PLW1510",
+]

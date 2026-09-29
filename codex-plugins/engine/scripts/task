@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=${PLUGIN_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)}
+
+if [ ! -f "$PLUGIN_ROOT/pyproject.toml" ]; then
+    echo "engine: active plugin root has no pyproject.toml: $PLUGIN_ROOT" >&2
+    exit 2
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "engine: uv is required to run the installed plugin; install uv and retry" >&2
+    exit 127
+fi
+
+# A Codex agent reads through a pipe but wants prose; --json or a caller's
+# BOOTGEAR_OUTPUT=json still gets JSON. Refusals and next steps name this path.
+export BOOTGEAR_OUTPUT="${BOOTGEAR_OUTPUT:-prose}"
+export BOOTGEAR_PROG="$0"
+exec uv run --project "$PLUGIN_ROOT" -m engine.cli "$@"

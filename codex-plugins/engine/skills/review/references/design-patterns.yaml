@@ -1,0 +1,251 @@
+# Design and architecture failure patterns: find angles for the architecture lens.
+# Rows follow converge's angle schema; `cost` is the change or failure the design
+# makes harder. A design claim with no cost scenario shown goes to the appendix.
+
+# Boundaries and coupling
+- id: layer-leak
+  tag: find
+  lens: architecture
+  tell: A controller or UI calls the repository or database, or domain code imports a framework or transport.
+  asks: Does a layer reach past the one below it?
+  cost: Swapping the store or transport touches domain code.
+- id: wrong-owner
+  tag: find
+  lens: architecture
+  tell: Logic was added where its data does not live.
+  asks: Does the rule belong with the data it reads?
+  cost: The next caller re-implements the rule.
+- id: hidden-coupling
+  tag: find
+  lens: architecture
+  tell: Two parts share a table, file, environment variable or string key.
+  asks: Which other part silently depends on the shared name?
+  cost: A rename breaks the other part silently.
+- id: circular-dependency
+  tag: find
+  lens: architecture
+  tell: A new import points back into a caller.
+  asks: Does the dependency graph now contain a cycle?
+  cost: The parts cannot be tested or deployed separately.
+- id: shotgun-change
+  tag: find
+  lens: architecture
+  tell: One concept is edited in five or more files.
+  asks: Is one concept spread over copies that must change together?
+  cost: The next change misses a copy.
+- id: feature-envy
+  tag: find
+  lens: architecture
+  tell: A call chain reaches through objects, such as `a.b().c().d()`.
+  asks: Does the caller depend on the internals of objects it does not own?
+  cost: A change inside `b` breaks distant callers.
+
+# Abstraction
+- id: premature-abstraction
+  tag: find
+  lens: architecture
+  tell: An interface, factory or strategy has one implementation.
+  asks: Does the abstraction serve more than one real case?
+  cost: Every change edits three layers.
+- id: wrong-abstraction
+  tag: find
+  lens: architecture
+  tell: A shared helper grows flags or `if type ==` branches.
+  asks: Do the callers actually share one behavior?
+  cost: Each caller adds another parameter.
+- id: missing-abstraction
+  tag: find
+  lens: architecture
+  tell: Five or more lines are copied with small differences.
+  asks: Should the copies be one unit?
+  cost: A fix lands in one copy only.
+- id: god-object
+  tag: find
+  lens: architecture
+  tell: A large class or file gains another responsibility.
+  asks: Does the unit now own unrelated concerns?
+  cost: Unrelated changes conflict.
+- id: flag-parameters
+  tag: find
+  lens: architecture
+  tell: A call passes positional booleans, such as `doThing(x, true, false)`.
+  asks: Can a caller pass a wrong combination without noticing?
+  cost: A wrong combination is passed.
+- id: leaky-abstraction
+  tag: find
+  lens: architecture
+  tell: Callers must know the internals to use the unit correctly.
+  asks: Can a caller misuse the interface in a way that compiles?
+  cost: Misuse compiles and fails at runtime.
+
+# State and data
+- id: two-sources-of-truth
+  tag: find
+  lens: architecture
+  tell: The same fact is stored or cached twice.
+  asks: Which copy wins when the two disagree?
+  cost: The copies drift and nobody detects it.
+- id: derived-data-stored
+  tag: find
+  lens: architecture
+  tell: A total or status is persisted beside its inputs.
+  asks: What updates the stored value when an input changes?
+  cost: The stored value goes stale when an input changes.
+- id: stringly-typed
+  tag: find
+  lens: architecture
+  tell: A status or kind is a free string or magic value.
+  asks: Does anything reject a value outside the known set?
+  cost: A typo becomes a new state.
+- id: invalid-states-representable
+  tag: find
+  lens: architecture
+  tell: Fields form nullable pairs, or `status` and `errorMsg` can both be set.
+  asks: Can the type hold a combination the domain forbids?
+  cost: Code has to handle impossible combinations.
+- id: implicit-state-machine
+  tag: find
+  lens: architecture
+  tell: State transitions are scattered over `if` statements.
+  asks: Where is the set of legal transitions enforced?
+  cost: An illegal transition gets written.
+- id: mutable-shared-state
+  tag: find
+  lens: architecture
+  tell: Module globals or singletons hold mutable state.
+  asks: Can two tests or requests see each other's writes?
+  cost: Tests or requests interfere with each other.
+
+# Contracts and interfaces
+- id: unversioned-breaking-change
+  tag: find
+  lens: architecture
+  tell: A public API, schema or event shape changed.
+  asks: Do existing clients keep working across the deploy?
+  cost: Clients break on deploy.
+- id: wide-interface
+  tag: find
+  lens: architecture
+  tell: A method was added to a widely implemented interface.
+  asks: How many implementers must now change?
+  cost: Every implementer changes.
+- id: temporal-coupling
+  tag: find
+  lens: architecture
+  tell: One call must precede another, such as `init()` before `use()`.
+  asks: What enforces the call order?
+  cost: The wrong order fails at runtime.
+- id: implied-output-shape
+  tag: find
+  lens: architecture
+  tell: A caller parses prose or relies on field order.
+  asks: Is the output shape stated anywhere the producer maintains?
+  cost: A wording change breaks the consumer.
+- id: inconsistent-error-contract
+  tag: find
+  lens: architecture
+  tell: One module mixes throwing, returning null and returning an error code.
+  asks: Does every caller handle the style it actually receives?
+  cost: Callers miss one error style.
+
+# Failure handling
+- id: swallowed-error
+  tag: find
+  lens: architecture
+  tell: An empty catch, log-and-continue, or `|| true`.
+  asks: Does a failure surface anywhere a caller or operator sees it?
+  cost: A broken run looks like success.
+- id: partial-write
+  tag: find
+  lens: architecture
+  tell: A multi-step mutation has no transaction or up-front validation.
+  asks: What state is left if the process stops between steps?
+  cost: A crash leaves corrupt state.
+- id: non-idempotent-retry
+  tag: find
+  lens: architecture
+  tell: A retry wraps a side effect.
+  asks: Is the side effect safe to repeat?
+  cost: A duplicate charge, email or row.
+- id: no-timeout-backpressure
+  tag: find
+  lens: architecture
+  tell: A new network or queue call.
+  asks: What bounds the wait and the backlog?
+  cost: One slow dependency stalls everything.
+- id: fallback-hides-failure
+  tag: find
+  lens: architecture
+  tell: A default value is returned on error.
+  asks: Can a caller tell the fallback from real data?
+  cost: Wrong data is served silently.
+
+# Evolution and operation
+- id: irreversible-migration
+  tag: find
+  lens: architecture
+  tell: A destructive change has no down path.
+  asks: Can the change be rolled back without losing data?
+  cost: A rollback loses data.
+- id: config-sprawl
+  tag: find
+  lens: architecture
+  tell: A new flag or environment variable has no owner or removal plan.
+  asks: Who owns the setting and when does it go away?
+  cost: Combinations go untested.
+- id: hardcoded-environment
+  tag: find
+  lens: architecture
+  tell: URLs, IDs or paths are written in code.
+  asks: Does the value differ between environments?
+  cost: The code breaks in another environment.
+- id: missing-observability
+  tag: find
+  lens: architecture
+  tell: A new path has no log or metric at its decisions.
+  asks: Could a production failure on this path be diagnosed?
+  cost: A production failure cannot be diagnosed.
+- id: hot-path-cost
+  tag: find
+  lens: architecture
+  tell: I/O inside a loop, an N+1 query, or an unbounded load.
+  asks: How does the cost grow with the data?
+  cost: Performance degrades as data grows.
+
+# Bad practice
+- id: test-induced-design-damage
+  tag: find
+  lens: architecture
+  tell: Production code gains test-only hooks or branches.
+  asks: Does test-only code run in production?
+  cost: Test branches run in production.
+- id: tests-of-the-mock
+  tag: find
+  lens: architecture
+  tell: A test only asserts that stubs were called.
+  asks: Would the test pass with a broken implementation?
+  cost: The test passes with a broken implementation.
+- id: rationale-misplaced
+  tag: find
+  lens: architecture
+  tell: Why-prose sits in code or instructions.
+  asks: Does the rationale belong in a reference document instead?
+  cost: Instructions bloat and drift.
+- id: unverified-platform-claim
+  tag: find
+  lens: architecture
+  tell: The design relies on assumed API or CLI behavior.
+  asks: Was the behavior checked against official docs or real output?
+  cost: The relied-on behavior does not exist.
+- id: dead-speculative-code
+  tag: find
+  lens: architecture
+  tell: Unused parameters or "for later" branches.
+  asks: Does anything run this code today?
+  cost: Paths nobody runs still need maintaining.
+- id: reinvented-wheel
+  tag: find
+  lens: architecture
+  tell: A hand-rolled version of an existing utility or library.
+  asks: Does an existing implementation already do this?
+  cost: Two implementations drift apart.

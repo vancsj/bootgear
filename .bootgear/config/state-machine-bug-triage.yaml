@@ -1,0 +1,40 @@
+name: bug-triage
+description: Bootgear bug-triage workflow with evidence and disposition gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the report, reproduction path, relevant code, tests, contracts, and settled context; record the evidence before triage."
+      leave: "The reproduction context, relevant evidence, and open unknowns are recorded in the run ledger."
+      branches:
+        triage: "The evidence is sufficient to investigate the report."
+    next: [triage]
+  triage:
+    reminder:
+      do: "Reproduce and triage the report with the public test skill; establish impact, candidate cause, confidence, and next action."
+      branches:
+        triage-debate: "Competing diagnoses or a high-impact decision need resolution."
+        disposition: "The diagnosis and next action are sufficiently supported."
+    next: [triage-debate, disposition]
+  triage-debate:
+    reminder:
+      do: "Resolve the competing diagnosis with the public debate skill and revise the investigation when the decision changes it."
+      branches:
+        triage: "The decision changes the investigation."
+        disposition: "The diagnosis and next action are settled."
+    next: [triage, disposition]
+  disposition:
+    reminder:
+      do: "Record the cause or unresolved status, impact, confidence, owner or next action, and supporting evidence."
+      branches:
+        succeeded: "The evidence-based triage disposition is recorded without implementation or delivery work."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

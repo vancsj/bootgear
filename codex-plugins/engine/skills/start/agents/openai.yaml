@@ -1,0 +1,6 @@
+interface:
+  display_name: "Start engine run"
+  short_description: "Begin a clarified task loop"
+  default_prompt: "Use $engine:start to begin a new engine run for this task."
+policy:
+  allow_implicit_invocation: false

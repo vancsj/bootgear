@@ -1,0 +1,12 @@
+{
+  "name": "review",
+  "version": "0.5.3",
+  "description": "General review domain interface: correctness, security, architecture, tests, simplicity, and contract lenses on a diff/branch/PR, with every finding filed, refuted and cut through converge, plus applying accepted feedback. Delegates to a project's own specialized review skill when registered. Works standalone; requires the converge plugin.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "dependencies": [
+    "converge"
+  ]
+}

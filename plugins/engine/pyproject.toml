@@ -1,0 +1,18 @@
+[project]
+name = "engine"
+version = "0.3.0"
+description = "Scripts backing the engine plugin's skills and hooks."
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/engine"]

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Advisor"
+  short_description: "Listen and advise Claude Code"
+  default_prompt: "Use $advisor --mode listening to listen for an explicit Claude Code request and return a bounded advisory response."
+policy:
+  allow_implicit_invocation: true

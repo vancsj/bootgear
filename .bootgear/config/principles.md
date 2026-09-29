@@ -1,0 +1,17 @@
+- Skills reference each other only by public interface — name (for `Skill`-tool invocation) and settlement-field name/meaning, stated inline. Never another skill's internal file, section, or heading.
+- `SKILL.md` carries no rationale, narration, or explanation — only what to do. Put reasoning in `reference.md`, kept as terse as possible. Token efficiency matters throughout.
+- Host parity: a behavior shared by the Claude and Codex plugins changes on both hosts in the same change.
+- Each plugin installs and works on its own. A plugin that needs another declares it (`dependencies` on Claude) or bundles a copy (Codex); it never assumes a sibling is installed.
+- Built-in defaults (state machines, angles, skills) are project-free. Anything specific to one project lives in that project's `.bootgear/config/`.
+- A rule a script can check is enforced by the script (CLI validation, a gate, a cap), not stated only in prose.
+- CLI output is designed for an LLM reader: minimize its retries and tokens.
+- Shared Claude/Codex plugin and skill sections use host-neutral references, terms, paths, and invocation names; host-specific adapters belong in explicit host sections.
+- Deterministic workflow detail derivable from validated CLI-owned state or configuration belongs in CLI output, not skill procedure; skills retain judgment, safety, orchestration, fallback, and public handbacks.
+- Every plugin script is a `gear` command: runnable as `gear.py <plugin> <command>` as well as on its own.
+- CLI scripts are part of the workflow: their output tells the LLM the next step, or a fact it needs at that point. A reminder at the right moment beats skill prose.
+- No personal info, company info, or local paths in the repo tree. `quality/check_content.py` flags home and scratchpad paths, plus any term in the optional local denylist (`~/.bootgear/content-denylist.txt`, never committed).
+- Code and skills never point to `docs/`: comments, docstrings, messages, and skill prose state the rule themselves. `quality/check_content.py` enforces it.
+- `docs/` holds only the up-to-date design, with no details: no history, alternatives, open questions, task lists, or procedure.
+- Reference only bootgear's own skills, plugins, and tools, plus host built-ins. Never name personal skills or skills from other marketplaces. The local denylist can carry those names. Referencing well-known products, for example in a comparison, is fine.
+- When an advisor from a different vendor is available, it takes the refuter or adversarial role by default, unless the user says no.
+- No development diary anywhere in the repo: comments, docstrings, tests, and docs state current behaviour and its reasons, never how it got there (fixes, earlier versions, review findings, incidents). `quality/check_content.py` flags the common diary phrases.

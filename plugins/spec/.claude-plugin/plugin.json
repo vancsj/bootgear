@@ -1,0 +1,9 @@
+{
+  "name": "spec",
+  "version": "0.1.5",
+  "description": "General requirements domain interface: requirements, design, sign-off, and task-breakdown stages, scaled to the task, with a structurally non-escalating task breakdown and open questions flagged rather than guessed. Delegates to a project's own specialized spec skill when registered. Works standalone; cites memory-ledger for durable rationale when installed, embeds it inline otherwise.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  }
+}

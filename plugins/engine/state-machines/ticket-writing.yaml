@@ -1,0 +1,35 @@
+name: ticket-writing
+description: Requirement-spike workflow with specification and decision gates.
+
+nodes:
+  clarify:
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the request, relevant code, tests, contracts, and settled context; record the evidence before drafting."
+      leave: "The relevant evidence and open unknowns are recorded in the run ledger."
+      branches:
+        spec: "The evidence is sufficient to draft the requirements and ticket."
+    next: [spec]
+  spec:
+    reminder:
+      do: "Draft the requirements and ticket artifacts with spec."
+      leave: "The ticket artifact states problem, outcome, acceptance criteria, scope boundaries and verification notes."
+      branches:
+        spec-debate: "The draft has an unresolved decision above the run threshold."
+        succeeded: "The ticket artifacts are complete and the goal is met."
+    next: [spec-debate, succeeded]
+  spec-debate:
+    reminder:
+      do: "Resolve the specification's open decision with the resolve skill, and the debate skill if resolve escalates."
+      branches:
+        spec: "The decision changes the requirements; revise the draft."
+        succeeded: "The decision is settled and the ticket artifacts are complete."
+    next: [spec, succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

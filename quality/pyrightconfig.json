@@ -1,0 +1,33 @@
+{
+  "include": [
+    "../cli",
+    "../plugins/engine",
+    "../plugins/converge",
+    "../codex-plugins/engine",
+    "."
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "executionEnvironments": [
+    {
+      "root": "../cli",
+      "extraPaths": [".."]
+    },
+    {
+      "root": "../plugins/engine",
+      "extraPaths": ["../plugins/engine/src"]
+    },
+    {
+      "root": "../plugins/converge",
+      "extraPaths": ["../plugins/converge/src"]
+    },
+    {
+      "root": "../codex-plugins/engine",
+      "extraPaths": ["../codex-plugins/engine/src"]
+    },
+    {
+      "root": ".",
+      "extraPaths": [".."]
+    }
+  ]
+}
