@@ -5,6 +5,19 @@ project's own skills, tools and conventions. Framework plugins carry no
 project-specific knowledge; each project customizes them through
 `.bootgear/config/` and by registering its own skills as overrides.
 
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| gear | One bootgear plugin, or a command it registers with `gear.py`. |
+| run | One engine task from `clarify` to `succeeded` or `failed`, recorded in its own session ledger. |
+| settlement | What `clarify` settles with the user before a run starts: task type, approach, principles, sources of truth, autonomy, `goal`, and the state machine. Written once. |
+| `goal` | The settlement's done condition: when the run has `succeeded`, and when it has `failed` because the task cannot be done. |
+| pitch | A progress report to the user, recorded in the session ledger. |
+| slate | One set of claims that `converge` tests together: find, refute, cut. |
+| lens | A review perspective, such as `correctness` or `security`, with its own finder brief. |
+| find angle | One specific question a finder asks under a lens. |
+
 ## Plugins
 
 | Plugin | What it is | Durable state |
@@ -46,7 +59,7 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
   needs, because Codex has no cross-plugin dependency mechanism. Converge and
   review therefore have no separate Codex install.
 - Host-specific parts: manifests, hook registrations and output envelopes,
-  wrapper paths (`bin/<cmd>` on Claude, `scripts/<cmd>` on Codex), session
+  wrapper paths (`engine`: `bin/<cmd>` on Claude, `scripts/<cmd>` on Codex), session
   identity delivery, user config directory (`~/.claude` vs `~/.codex`),
   debate-party dispatch (Claude Code: `independent-reviewer` is a sub-agent
   and `adversarial-reviewer` calls `advisor`, and a party mechanism is

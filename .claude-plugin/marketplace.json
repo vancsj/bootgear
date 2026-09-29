@@ -4,6 +4,7 @@
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
   },
+  "description": "bootgear: an autonomous task engine for Claude Code and Codex CLI, with review, spec, test, converge, advisor, and memory-ledger plugins.",
   "plugins": [
     {
       "name": "memory-ledger",
@@ -38,7 +39,7 @@
     {
       "name": "advisor",
       "source": "./plugins/advisor",
-      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex — for a rewrite, an opinion, an adversarial review, or delegated investigation. Works standalone; engine's debate uses it for the adversarial reviewer on Claude Code. Install via `codex plugin add advisor@bootgear`."
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex — for a rewrite, an opinion, an adversarial review, or delegated investigation. Works standalone; engine's debate uses it for the adversarial reviewer on Claude Code."
     }
   ]
 }

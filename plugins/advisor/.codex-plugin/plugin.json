@@ -1,7 +1,7 @@
 {
   "name": "advisor",
-  "version": "1.1.0",
-  "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Runs on Codex CLI as the listening side of the pair, or on Claude Code as the asking side — install via `codex plugin add advisor@bootgear`.",
+  "version": "1.1.1",
+  "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Either host can listen or ask. Install via `codex plugin add advisor@bootgear`.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"

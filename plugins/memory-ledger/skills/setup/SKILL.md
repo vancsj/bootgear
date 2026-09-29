@@ -1,7 +1,7 @@
 ---
 name: setup
 disable-model-invocation: true
-description: Set up (or re-check) the memory-ledger — verify python/git/config dependencies, create the local ledger beside the shared one, wire the config file and CLAUDE.md, add a shared remote, and audit existing entries for ones filed in the wrong ledger. Run it on a new machine, when a root is missing or misconfigured, or when adding the second ledger to an existing single-ledger setup.
+description: Set up (or re-check) the memory-ledger — verify python/git/config dependencies, create the local ledger beside the shared one, wire the config file and the host instructions file, add a shared remote, and audit existing entries for ones filed in the wrong ledger. Run it on a new machine, when a root is missing or misconfigured, or when adding the second ledger to an existing single-ledger setup.
 ---
 
 Set up the memory-ledger for this user.
@@ -9,6 +9,8 @@ Set up the memory-ledger for this user.
 ```
 Claude: ledger.py = ${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py
 Codex: ledger.py = ${PLUGIN_ROOT}/scripts/ledger.py
+Claude: instructions file = ~/.claude/CLAUDE.md
+Codex: instructions file = ~/.codex/AGENTS.md
 ```
 
 That placeholder is substituted with the plugin's real location before you read this,
@@ -18,7 +20,7 @@ own. `ledger.py` below is shorthand for it — there is no `bin/`, so it is not 
 
 **Every step that writes outside the ledger repos needs explicit confirmation, and
 you show the exact bytes before writing them.** That covers the config file,
-`~/.claude/CLAUDE.md`, any `.gitignore`, any git remote, and any push. Creating a
+the instructions file, any `.gitignore`, any git remote, and any push. Creating a
 ledger repo and its `_about.md` entries is the one thing you may do after a single
 yes, because it is a new empty directory and reversible with `rm -rf`.
 
@@ -155,14 +157,14 @@ public, so it gets its own yes.
 Before offering to push, work step 7 — publishing a ledger that still holds
 machine-local entries is the exact failure the two-ledger split exists to prevent.
 
-## 6. CLAUDE.md
+## 6. Instructions file
 
-Read `~/.claude/CLAUDE.md`. If it already has a memory-ledger section, propose an
+Read the instructions file. If it already has a memory-ledger section, propose an
 updated version reflecting two ledgers and show it as a diff. If it has none —
 the normal case on a first install — propose a new section instead, and say
 plainly that you are adding one rather than editing one. Do not write
 until the user accepts. Keep it to the rules the user needs at the moment of
-using the ledger; the mechanism lives in the skill, not in CLAUDE.md, and a
+using the ledger; the mechanism lives in the skill, not in the instructions file, and a
 second copy there is one that drifts.
 
 The facts a two-ledger setup adds, and nothing more:

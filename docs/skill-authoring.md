@@ -25,10 +25,10 @@ by its plain public name, without Claude `/` or Codex `$` punctuation. Only
 host adapter sections describe plugin-root paths, session identity, agent
 mechanism, and output wiring. A
 shared skill names the public command it calls in its common sections, and
-puts the resolved path in `## Host mechanics`. Claude adapters use
-`<plugin-dir>/bin/<command>` and Codex adapters use
-`<plugin-root>/scripts/<command>`. Each wrapper resolves the project root from
-its own location.
+puts the resolved path in `## Host mechanics`. `engine` and `converge` call a
+wrapper (`<plugin-dir>/bin/<command>` on Claude, `<plugin-root>/scripts/<command>`
+on Codex) that resolves the project root from its own location. `memory-ledger`
+and `advisor` call their Python script directly under the plugin root.
 
 ## Public skill contracts
 
