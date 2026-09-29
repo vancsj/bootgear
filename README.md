@@ -46,9 +46,9 @@ bootgear keeps the opinionated core but treats customizability as a first-class 
 
 | Platform | Status |
 |---|---|
-| Claude Code | **memory-ledger and engine ship now**, as plugins — see Install |
+| Claude Code | **engine, converge, spec, test, review, advisor, and memory-ledger**, as plugins — see Install |
 | opencode | Not shipped |
-| Codex | **memory-ledger, engine, and advisor ship now**, as plugins — see Install |
+| Codex | **memory-ledger, engine, and advisor**, as plugins — see Install |
 
 Skill/hook formats differ across platforms; bootgear aims to keep one conceptual gear set with platform-specific adapters.
 
@@ -80,7 +80,9 @@ bootgear/
 │                    # manifest from the same source directory
 ├── codex-plugins/   # gear that ships as Codex CLI-only plugins, with no
 │                    # Claude Code counterpart
-├── .agents/         # Codex marketplace and project agent configuration
+├── .agents/         # Codex marketplace
+├── .bootgear/       # this repo's own bootgear config; the same place any project puts its config
+├── cli/             # gear.py: runs any plugin command as `gear.py <plugin> <command>`
 ├── docs/            # current design
 └── quality/         # repository validation and quality checks
 ```
@@ -96,6 +98,11 @@ its own `.codex-plugin`, so there is no separate Codex install.
 
 ## Install
 
+Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/)
+(`engine` and `converge` run through it). `engine`'s debate on Claude Code
+asks Codex through `advisor`, so it needs the Codex CLI installed and signed in.
+`advisor`'s mailbox pairing runs on macOS only.
+
 Each plugin installs on its own — you do not need the rest of bootgear.
 
 ```
@@ -106,8 +113,12 @@ Each plugin installs on its own — you do not need the rest of bootgear.
 | gear | what it does |
 |---|---|
 | [memory-ledger](plugins/memory-ledger) | a ledger of settled questions, where confidence counts independent verifications instead of asserting itself |
-| [engine](plugins/engine) | an autonomous task-execution loop — start a run with `/engine:start`; installs `converge`, `spec`, `test`, `review`, `advisor` and `memory-ledger` with it |
+| [engine](plugins/engine) | an autonomous task-execution loop — start a run with `/engine:start` (Codex: `$engine:start`); installs `converge`, `spec`, `test`, `review`, `advisor` and `memory-ledger` with it |
 | [converge](plugins/converge) | settles the facts behind a findings slate: find, refute, and cut each claim with separate agents, then compute what is reported; installed automatically with `engine` and `review` |
+| [review](plugins/review) | PR review: lens finders and a gap hunt, with every finding settled through `converge`; installs `converge` with it |
+| [spec](plugins/spec) | requirements gathering for `engine`'s ticket-writing runs; works on its own too |
+| [test](plugins/test) | test writing, running, and failure triage for `engine`'s bug-triage and ticket-to-pr runs; works on its own too |
+| [advisor](plugins/advisor) | pairs Claude Code and Codex CLI through a shared mailbox, or makes a one-shot call to Codex |
 
 ### Codex CLI
 
@@ -125,6 +136,9 @@ codex plugin add advisor@bootgear
 codex plugin add engine@bootgear
 ```
 
+On Codex, start an engine run with `$engine:start`, and set up the ledger with
+`$memory-ledger:setup`.
+
 `advisor` pairs a Codex CLI session with a Claude Code session through a
 shared mailbox, or answers a one-shot direct call — either host can run
 either side of the pair. `channel.py` is co-located under the one shared
@@ -132,9 +146,8 @@ skill directory, so no runtime path resolution between hosts is needed.
 
 ## Status
 
-The first gear ships as native Claude Code and Codex CLI plugins. The
-`cli/gear.py` router ships and routes the registered plugins; moving skills
-and hooks onto it, and shared configuration tooling, remain in progress.
+bootgear ships as native Claude Code and Codex CLI plugins. `cli/gear.py`
+routes each plugin's commands (`gear.py <plugin> <command>`).
 
 ## License
 

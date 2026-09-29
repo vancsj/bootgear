@@ -3,7 +3,7 @@
 # or "<plugin-dir>/bin/task state ..." instead of repeating "uv run --project
 # <plugin-dir> -m engine.cli ...". Resolves the plugin directory from this
 # script's own location, not the caller's cwd, so it works from any working
-# directory the same way the scripts/ path did before the uv move.
+# directory.
 set -e
 BIN_DIR=$(cd "$(dirname "$0")" && pwd)
 PLUGIN_DIR=$(cd "$BIN_DIR/.." && pwd)

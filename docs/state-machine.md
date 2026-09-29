@@ -62,7 +62,7 @@ Every non-terminal node can move to `failed`, even though no `next:` list names 
 `clarify` resolves the machine once, before it writes the settlement:
 
 1. **Built-in**: `plugins/engine/state-machines/<task_type>.yaml`. There is one for each task type: `ticket-writing`, `bug-triage`, `ticket-to-pr` and `pr-review`. Each starts with `clarify -> inspect`. Every `review` node carries the `converge gate` `leave_check`, and every `fix` node, plus `review-debate` in `pr-review`, sets `max_visits` so the review and fix loops end.
-2. **Project**: `.bootgear/config/state-machine-<task_type>.yaml`. When this file exists, it replaces the built-in machine completely. It is not merged. People own it, and no skill writes it. This repo's overrides add nodes such as `disposition`, `quality` and `runtime-check`.
+2. **Project**: `.bootgear/config/state-machine-<task_type>.yaml`. When this file exists, it replaces the built-in machine completely. It is not merged. People own it, and no skill writes it.
 3. **Per-run**: `clarify` can adjust the resolved machine for this run. For example, it can drop `fix` from a review of someone else's PR. It validates the result, shows the diagram and every `leave_check` argv for the user to approve, and records the complete machine in the settlement's `state_machine: |` block scalar.
 
 After the settlement is written, the tiers are never resolved again. The run's machine starts as the settlement machine, which is v1. Only `amend` can change it.
@@ -91,7 +91,7 @@ On success, it makes one atomic write. The write updates `current:` and appends 
 `leave` is enforced only by the caller's word: `--confirm-leave` is a bare flag. The gate guarantees that the model cannot leave a node without deliberately asserting that the condition holds. `leave_check` adds a check the engine runs itself:
 
 - Each `{name}` placeholder is filled from exactly one `--leave-arg name=value`. `transition` refuses a missing arg, an extra arg, a repeated arg, an empty value, a multi-line value, or a value that starts with `-`. These refusals are skipped for `--to failed`, because the check does not run. `transition` refuses `--leave-arg` on a node without a `leave_check` for every destination.
-- `argv[0]` is resolved on `PATH`, where the plugin `bin/` directories are. The check runs without a shell and with no stdin, in its own process group. Its timeout is 120 s, or the value of `ENGINE_LEAVE_CHECK_TIMEOUT`. `transition` refuses the move on a non-zero exit or a timeout, and quotes the last 40 lines of output.
+- `argv[0]` is resolved on `PATH`, where the Claude plugin `bin/` directories are. On Codex, the plugin's own `scripts/<argv[0]>` is tried first, then `PATH`. The check runs without a shell and with no stdin, in its own process group. Its timeout is 120 s, or the value of `ENGINE_LEAVE_CHECK_TIMEOUT`. `transition` refuses the move on a non-zero exit or a timeout, and quotes the last 40 lines of output.
 - A passing check never replaces `--confirm-leave`, and `--confirm-leave` never bypasses a failing check.
 
 A `leave_check` is code that the engine runs, so the approval of the check at `clarify` is the point of trust.

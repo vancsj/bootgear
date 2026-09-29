@@ -70,13 +70,13 @@ Three things follow from that choice, and they are the whole design:
 Q: Which package manager does this repo use?
 alt_terms: npm or pnpm, lockfile, workspaces, how do I install
 
-## a1 · pnpm for all installs              conf 0.63 · checked 2026-03-05
+## a1 · pnpm for all installs              conf 0.49 · checked 2026-03-05
 Because: workspaces performance; ~10x smaller installs than npm.
 Evidence: test -f pnpm-workspace.yaml && head -1 pnpm-workspace.yaml
 Evidence: test ! -f package-lock.json
-    ✓ bob   2026-03-02  h=7f3a92  e=1
-    ✓ alice 2026-03-04  h=7f3a92  e=1
-    ✗ carol 2026-03-05  h=7f3a92  e=2
+    ✓ 1f0c9a2e        2026-03-02  h=7f3a92  e=1  (author)
+    ✓ codex:5b7d31c4  2026-03-04  h=7f3a92  e=1
+    ✗ 9e42d0b7        2026-03-05  h=7f3a92  e=2
     > cat: pnpm-workspace.yaml: No such file or directory
 ```
 
@@ -199,7 +199,7 @@ is a judgement the reader makes by running the checks.
 
 | | |
 |---|---|
-| `/memory-ledger:setup` | check dependencies, create the ledgers, wire the config file and `CLAUDE.md`, audit what is already filed |
+| `/memory-ledger:setup` (Codex: `$memory-ledger:setup`) | check dependencies, create the ledgers, wire the config file and the host instructions file (`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md`), audit what is already filed |
 | `/memory-ledger:ledger` | look something up, record a finding, verify or contest an entry |
 
 The CLI underneath is `scripts/ledger.py`. The skills invoke it by an absolute path
@@ -223,9 +223,10 @@ doctor    python, git, config, both roots
 
 ## Setup
 
-Install the plugin, then run `/memory-ledger:setup`. It reports `doctor`'s dependency table
-before touching anything, and every write outside the ledger repositories — the config file,
-`CLAUDE.md`, a git remote, a push — needs your explicit yes.
+Install the plugin, then run `/memory-ledger:setup` (Codex: `$memory-ledger:setup`). It reports
+`doctor`'s dependency table before touching anything, and every write outside the ledger
+repositories — the config file, the host instructions file, a git remote, a push — needs your
+explicit yes.
 
 Roots default to `~/.memory-ledger/shared` and `~/.memory-ledger/local`, and are configured in
 `~/.memory-ledger/config.yaml`:

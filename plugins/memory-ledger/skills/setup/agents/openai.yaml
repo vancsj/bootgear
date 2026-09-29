@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up memory-ledger"
+  short_description: "Check dependencies and wire both ledgers"
+  default_prompt: "Use $memory-ledger:setup to set up or re-check the memory-ledger."
+policy:
+  allow_implicit_invocation: false
