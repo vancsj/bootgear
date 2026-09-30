@@ -4,13 +4,14 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 import unittest
 
 from quality import check
 
 
 class QualityCheckTests(unittest.TestCase):
-    def test_run_checks_preserves_deterministic_command_order(self) -> None:
+    def test_run_checks_runs_every_check_and_reports_in_check_order(self) -> None:
         calls: list[tuple[str, ...]] = []
 
         def execute(command: tuple[str, ...], **_: object) -> subprocess.CompletedProcess[str]:
@@ -20,7 +21,24 @@ class QualityCheckTests(unittest.TestCase):
         results = check._run_checks(execute)
 
         self.assertEqual([item.name for item in check.CHECKS], [item.check.name for item in results])
-        self.assertEqual([item.command for item in check.CHECKS], calls)
+        self.assertCountEqual([item.command for item in check.CHECKS], calls)
+
+    def test_run_checks_runs_the_checks_concurrently(self) -> None:
+        # Every call waits until all checks are in flight; run one at a time,
+        # the first call times out and breaks the barrier.
+        barrier = threading.Barrier(len(check.CHECKS), timeout=5)
+        broken: list[tuple[str, ...]] = []
+
+        def execute(command: tuple[str, ...], **_: object) -> subprocess.CompletedProcess[str]:
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                broken.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        check._run_checks(execute)
+
+        self.assertEqual([], broken)
 
     def test_run_checks_reports_missing_tool(self) -> None:
         def execute(*_: object, **__: object) -> subprocess.CompletedProcess[str]:
