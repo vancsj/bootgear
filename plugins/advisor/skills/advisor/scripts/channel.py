@@ -6,16 +6,17 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import math
 import os
 import re
 import secrets
 import shlex
+import signal
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import NoReturn
-
 
 DEFAULT_ROOT = Path.home() / ".bootgear" / "advisor"
 ROLES = {"listener", "asker"}
@@ -25,22 +26,122 @@ DEFAULT_PENDING_CAP = 2
 PREVIEW_WORDS = 10
 HISTORY_SIZE = 3
 LIVE_CANDIDATE_WINDOW_SECONDS = 48 * 3600
+HEARTBEAT_INTERVAL_SECONDS = 3
+HEARTBEAT_TTL_SECONDS = 10
+HEARTBEAT_MAX_FAILURES = 3
+HEARTBEAT_MAX_AGE_SECONDS = 6180
+# A max_age stop keeps the seat live this long for the restart; max-age + grace stays under
+# Claude Code's 2-hour background task cap.
+RESTART_GRACE_SECONDS = 720
+COMMANDS = ("register", "init", "send", "receive", "fetch", "state", "close", "heartbeat", "list", "status")
+EXAMPLES = {
+    "register": 'register --role asker --channel 0001 --session "$SESSION_ID"',
+    "init": "init --channel 0001",
+    "send": "send --channel 0001 --from asker --to listener --kind request --body-file -",
+    "receive": "receive --channel 0001 --for asker --timeout 300",
+    "fetch": "fetch --channel 0001 --message-id MESSAGE_ID",
+    "state": "state --channel 0001 --role listener --value waiting",
+    "close": "close --channel 0001 --role listener",
+    "heartbeat": 'heartbeat --channel 0001 --role listener --session "$SESSION_ID"',
+    "list": 'list --live-for asker --session "$SESSION_ID"',
+    "status": "status --channel 0001",
+}
 
 
-def fail(message: str, category: str | None = None) -> NoReturn:
+def fail(message: str, category: str | None = None, next_step: str | None = None,
+         extra: dict[str, str] | None = None) -> NoReturn:
     payload = {"error": message}
     if category is not None:
         payload["category"] = category
+    if next_step is not None:
+        payload["next"] = next_step
+    payload.update(extra or {})
     print(json.dumps(payload), file=sys.stderr)
     raise SystemExit(2)
 
 
-def safe_name(value: str, label: str) -> str:
-    if not value or value in {".", ".."} or any(
-        char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for char in value
-    ):
-        fail(f"invalid {label}: {value!r}")
-    return value
+def invocation(root_value: str | None) -> str:
+    """This script's invocation for a `--root` value, without creating the root: an absolute
+    `--root` whenever one was given or `BOOTGEAR_ADVISOR_DIR` moves it off the default."""
+    command = f"python3 {shlex.quote(str(Path(__file__).resolve()))}"
+    configured = root_value or os.environ.get("BOOTGEAR_ADVISOR_DIR")
+    if configured:
+        root = caller_path(configured)
+        if root_value is not None or root != DEFAULT_ROOT:
+            command += f" --root {shlex.quote(str(root))}"
+    return command
+
+
+def refuse_command(command: str | None, root_value: str | None, message: str,
+                   category: str = "invalid_args") -> NoReturn:
+    """An argument refusal of `command`, with one correct invocation and the other subcommands."""
+    fail(message, category=category, next_step="run the command again with corrected arguments, as in example",
+         extra={
+             "example": f"{invocation(root_value)} {EXAMPLES[command or 'list']}",
+             "commands": ", ".join(c for c in COMMANDS if c != command),
+         })
+
+
+def refuse(args: argparse.Namespace, message: str, category: str = "invalid_args") -> NoReturn:
+    refuse_command(args.command, args.root, message, category)
+
+
+def argv_command(argv: list[str]) -> tuple[str | None, str | None]:
+    """The `--root` value and the subcommand in `argv`, reading `--root` and its abbreviations
+    (`--r`, `--ro`, `--roo`) the way argparse does."""
+    root = None
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token in COMMANDS:
+            return root, token
+        name, equals, value = token.partition("=")
+        if len(name) >= 3 and "--root".startswith(name):
+            if equals:
+                root = value
+            elif index + 1 < len(argv):
+                index += 1
+                root = argv[index]
+        index += 1
+    return root, None
+
+
+class RefusingParser(argparse.ArgumentParser):
+    """Reports a parse error as the same JSON refusal the subcommands print, for the subcommand
+    in argv (argparse raises unrecognized arguments from the top-level parser)."""
+
+    def error(self, message: str) -> NoReturn:
+        root, command = argv_command(sys.argv[1:])
+        refuse_command(command, root, message)
+
+
+def check_channel(args: argparse.Namespace) -> None:
+    """Refuse a `--channel` that is not at least four digits."""
+    value = getattr(args, "channel", None)
+    if value is not None and not CHANNEL_PATTERN.fullmatch(value):
+        refuse(args, f"invalid --channel {value!r}: expected at least four digits")
+
+
+def check_session(args: argparse.Namespace) -> None:
+    """Refuse a `--session` a printed command could not pass back as its own argument."""
+    if not args.session or args.session.startswith("-"):
+        refuse(args, f"invalid --session {args.session!r}: must be non-empty and not start with '-'")
+
+
+def check_role(args: argparse.Namespace, value: str, flag: str) -> None:
+    if value not in ROLES:
+        refuse(args, f"invalid {flag} {value!r}: must be listener or asker", category="invalid_role")
+
+
+def safe_name(value: str) -> bool:
+    return bool(value) and value not in {".", ".."} and all(
+        char in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for char in value
+    )
+
+
+def closed_channel(channel: str) -> NoReturn:
+    fail(f"channel is closed: {channel}", category="channel_closed",
+         next_step=f"stop using channel {channel} and tell the user; continuing needs a new pairing")
 
 
 def safe_channel(value: str) -> str:
@@ -88,12 +189,8 @@ def atomic_write(path: Path, content: str) -> None:
 
 
 def read_body(body_file: str) -> str:
-    if body_file == "-" and sys.stdin.isatty():
-        fail("--body-file - requires piped input")
     path = None if body_file == "-" else caller_path(body_file)
     body = sys.stdin.read() if path is None else path.read_text(encoding="utf-8")
-    if not body.strip():
-        fail("message body is empty")
     return body.rstrip()
 
 
@@ -123,8 +220,8 @@ def new_record(channel: str) -> dict[str, object]:
         "created_at": now,
         "updated_at": now,
         "state": "waiting",
-        "listener_owner": None, "listener_pid": None, "listener_pid_started_at": None,
-        "asker_owner": None, "asker_pid": None, "asker_pid_started_at": None,
+        "listener_owner": None,
+        "asker_owner": None,
     }
 
 
@@ -132,22 +229,49 @@ def brief_record(record: dict[str, object]) -> dict[str, object]:
     return {
         "channel": record.get("channel"),
         "listener_owner": record.get("listener_owner"),
-        "listener_pid": record.get("listener_pid"),
-        "listener_pid_started_at": record.get("listener_pid_started_at"),
         "asker_owner": record.get("asker_owner"),
-        "asker_pid": record.get("asker_pid"),
-        "asker_pid_started_at": record.get("asker_pid_started_at"),
     }
+
+
+def script_command(args: argparse.Namespace, root: Path) -> str:
+    """This script's invocation, with `--root` whenever it was given or is not the default."""
+    command = f"python3 {shlex.quote(str(Path(__file__).resolve()))}"
+    if args.root is not None or root != DEFAULT_ROOT:
+        command += f" --root {shlex.quote(str(root))}"
+    return command
+
+
+def heartbeat_command(args: argparse.Namespace, root: Path, channel: str) -> str:
+    """The `heartbeat` invocation for this seat, with `--interval`/`--max-age` when not the default."""
+    command = (f"{script_command(args, root)} heartbeat --channel {channel} "
+               f"--role {args.role} --session {shlex.quote(args.session)}")
+    interval = getattr(args, "interval", HEARTBEAT_INTERVAL_SECONDS)
+    max_age = getattr(args, "max_age", HEARTBEAT_MAX_AGE_SECONDS)
+    if interval != HEARTBEAT_INTERVAL_SECONDS:
+        command += f" --interval {exact(interval)}"
+    if max_age != HEARTBEAT_MAX_AGE_SECONDS:
+        command += f" --max-age {exact(max_age)}"
+    return command
+
+
+def exact(value: float) -> str:
+    """`value` as text that parses back to the same float."""
+    return str(int(value)) if float(value).is_integer() else repr(float(value))
+
+
+def print_registered(args: argparse.Namespace, root: Path, record: dict[str, object]) -> None:
+    output = brief_record(record)
+    output["note"] = ("run next in the background for as long as this session uses the channel; "
+                      "the seat reads stale without it")
+    output["next"] = heartbeat_command(args, root, str(record["channel"]))
+    print(json.dumps(output))
 
 
 def register(args: argparse.Namespace) -> None:
     if args.role not in ROLES:
-        fail("role must be listener or asker", category="invalid_role")
-    if args.pid <= 0:
-        fail("pid must be a positive integer", category="invalid_pid")
+        refuse(args, "role must be listener or asker", category="invalid_role")
+    check_session(args)
     owner_key = f"{args.role}_owner"
-    pid_key = f"{args.role}_pid"
-    started_key = f"{args.role}_pid_started_at"
     root = root_from(args)
     session = args.session
 
@@ -165,14 +289,14 @@ def register(args: argparse.Namespace) -> None:
                     category="seat_claimed",
                 )
             record[owner_key] = session
-            record[pid_key] = args.pid
-            record[started_key] = args.pid_started_at
+            record[f"{args.role}_seen_at"] = time.time()
+            record.pop(f"{args.role}_restart_until", None)
             record["updated_at"] = time.time()
             atomic_write(path / "channel.json", json.dumps(record) + "\n")
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
             lock.close()
-        print(json.dumps(brief_record(record)))
+        print_registered(args, root, record)
         return
 
     # No --channel: allocate the next number and create fresh, claiming `role`.
@@ -190,24 +314,26 @@ def register(args: argparse.Namespace) -> None:
         path = channel_dir(root, channel)
         record = new_record(channel)
         record[owner_key] = session
-        record[pid_key] = args.pid
-        record[started_key] = args.pid_started_at
+        record[f"{args.role}_seen_at"] = time.time()
         atomic_write(path / "channel.json", json.dumps(record) + "\n")
         fcntl.flock(lock, fcntl.LOCK_UN)
-    print(json.dumps(brief_record(record)))
+    print_registered(args, root, record)
 
 
-def state(args: argparse.Namespace) -> None:
+def write_state(args: argparse.Namespace, value: str, check=None) -> None:
+    """Record `value` for `args.role` under the channel lock, after `check(record)` passes. Closing
+    drops both seats' restart grace, so no seat reads live on a closed channel past its stamp."""
     root = root_from(args)
     path = channel_dir(root, args.channel)
-    if args.role not in ROLES:
-        fail("role must be listener or asker")
-    if args.value not in {"waiting", "busy", "closed"}:
-        fail("state must be waiting, busy, or closed")
     lock = channel_lock(path)
     try:
         record = read_channel_record(path)
-        record.update({"state": args.value, "state_role": args.role, "updated_at": time.time()})
+        if check is not None:
+            check(root, path, record)
+        record.update({"state": value, "state_role": args.role, "updated_at": time.time()})
+        if value == "closed":
+            for role in ROLES:
+                record.pop(f"{role}_restart_until", None)
         atomic_write(path / "channel.json", json.dumps(record) + "\n")
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
@@ -215,85 +341,68 @@ def state(args: argparse.Namespace) -> None:
     print(json.dumps(record))
 
 
+def state(args: argparse.Namespace) -> None:
+    check_role(args, args.role, "--role")
+    if args.value not in {"waiting", "busy", "closed"}:
+        refuse(args, f"invalid --value {args.value!r}: must be waiting, busy, or closed")
+    write_state(args, args.value)
+
+
 def close(args: argparse.Namespace) -> None:
-    if args.role not in ROLES:
-        fail("role must be listener or asker")
-    args.value = "closed"
-    state(args)
+    check_role(args, args.role, "--role")
+    if not args.if_peer_stale:
+        write_state(args, "closed")
+        return
+    peer = other_role(args.role)
 
+    def peer_stale_and_inbox_empty(root: Path, path: Path, record: dict[str, object]) -> None:
+        if record.get("state") == "closed":
+            return
+        if seat_live(record, peer) is True:
+            message, category = f"the {peer} on channel {args.channel} is live", "peer_live"
+        elif any(not (m := json.loads(f.read_text(encoding="utf-8"))).get("read")
+                 and m.get("recipient") == args.role for f in message_files(path)):
+            message, category = f"channel {args.channel} has an unread message for {args.role}", "unread_message"
+        else:
+            return
+        fail(f"{message}; the channel stays open", category=category,
+             next_step=(f"keep listening: run `{script_command(args, root)} receive --channel {args.channel} "
+                        f"--for {args.role} --timeout 300`"))
 
-def read_process_start_time(pid: int) -> float | None:
-    """macOS-only: proc_pidinfo's own stable p_start value for this PID, via ctypes.
-
-    Returns None if the process exists but its start time can't be read (a
-    malformed/short proc_pidinfo result); raises ProcessLookupError if no
-    process exists at this PID at all. Fails with category
-    `unsupported_platform` on any other OS.
-    """
-    if sys.platform != "darwin":
-        fail("the advisor mailbox needs macOS: it reads process start times with proc_pidinfo",
-             category="unsupported_platform")
-    import ctypes
-    import ctypes.util
-
-    PROC_PIDTBSDINFO = 3
-    libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-
-    class ProcBsdInfo(ctypes.Structure):
-        _fields_ = [
-            ("pbi_flags", ctypes.c_uint32),
-            ("pbi_status", ctypes.c_uint32),
-            ("pbi_xstatus", ctypes.c_uint32),
-            ("pbi_pid", ctypes.c_uint32),
-            ("pbi_ppid", ctypes.c_uint32),
-            ("pbi_uid", ctypes.c_uint32),
-            ("pbi_gid", ctypes.c_uint32),
-            ("pbi_ruid", ctypes.c_uint32),
-            ("pbi_rgid", ctypes.c_uint32),
-            ("pbi_svuid", ctypes.c_uint32),
-            ("pbi_svgid", ctypes.c_uint32),
-            ("rfu_1", ctypes.c_uint32),
-            ("pbi_comm", ctypes.c_char * 16),
-            ("pbi_name", ctypes.c_char * 32),
-            ("pbi_nfiles", ctypes.c_uint32),
-            ("pbi_pgid", ctypes.c_uint32),
-            ("pbi_pjobc", ctypes.c_uint32),
-            ("e_tdev", ctypes.c_uint32),
-            ("e_tpgid", ctypes.c_uint32),
-            ("pbi_nice", ctypes.c_int32),
-            ("pbi_start_tvsec", ctypes.c_uint64),
-            ("pbi_start_tvusec", ctypes.c_uint64),
-        ]
-
-    info = ProcBsdInfo()
-    size = libc.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, ctypes.byref(info), ctypes.sizeof(info))
-    if size == 0:
-        raise ProcessLookupError(f"no process at pid {pid}")
-    if size != ctypes.sizeof(info) or info.pbi_pid != pid:
-        return None
-    return info.pbi_start_tvsec + info.pbi_start_tvusec / 1_000_000
-
-
-def is_alive(pid: int | None, started_at: float | None) -> bool | None:
-    if pid is None or started_at is None:
-        return None  # no pid recorded (never registered)
-    try:
-        actual_started_at = read_process_start_time(pid)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return None  # a process exists at this pid, but its start time isn't readable
-    if actual_started_at is None:
-        return None  # process exists but its start time couldn't be confirmed
-    return actual_started_at == started_at  # exact match -- not a tolerance comparison
-
-
-def _as_int(value: object) -> int | None:
-    return value if isinstance(value, int) else None
+    write_state(args, "closed", peer_stale_and_inbox_empty)
 
 
 def _as_float(value: object) -> float | None:
     return value if isinstance(value, (int, float)) else None
+
+
+def _stamp(value: object) -> float | None:
+    """`value` as a finite positive timestamp, or None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
+
+
+def seat_fresh(record: dict[str, object], role: str) -> bool:
+    """Whether `<role>_seen_at` is 0-TTL seconds old."""
+    seen = _stamp(record.get(f"{role}_seen_at"))
+    return seen is not None and 0 <= time.time() - seen <= HEARTBEAT_TTL_SECONDS
+
+
+def seat_restarting(record: dict[str, object], role: str) -> bool:
+    """Whether the seat is owned and inside the restart grace its max_age stop wrote. A
+    `<role>_restart_until` that is invalid or more than the grace ahead counts as absent."""
+    until = _stamp(record.get(f"{role}_restart_until"))
+    now = time.time()
+    return (record.get(f"{role}_owner") is not None and until is not None
+            and now < until <= now + RESTART_GRACE_SECONDS)
+
+
+def seat_live(record: dict[str, object], role: str) -> bool | None:
+    """None if nobody holds the seat; else whether it is fresh or inside its restart grace."""
+    if record.get(f"{role}_owner") is None:
+        return None
+    return seat_fresh(record, role) or seat_restarting(record, role)
 
 
 def status(args: argparse.Namespace) -> None:
@@ -301,24 +410,9 @@ def status(args: argparse.Namespace) -> None:
     path = channel_dir(root, args.channel)
     record = read_channel_record(path)
     output = dict(record)
-    output["listener_alive"] = is_alive(_as_int(record.get("listener_pid")), _as_float(record.get("listener_pid_started_at")))
-    output["asker_alive"] = is_alive(_as_int(record.get("asker_pid")), _as_float(record.get("asker_pid_started_at")))
+    output["listener_alive"] = seat_live(record, "listener")
+    output["asker_alive"] = seat_live(record, "asker")
     print(json.dumps(output))
-
-
-def whoami(args: argparse.Namespace) -> None:
-    """Prints the exact proc_pidinfo start time for a PID the caller already
-    knows (its own long-lived host process), so --pid-started-at is sourced
-    from the same precision this design's liveness check requires -- not
-    from a caller's own guess at a shell command like `ps -o lstart`, whose
-    whole-second resolution can never satisfy is_alive's exact comparison."""
-    try:
-        started_at = read_process_start_time(args.pid)
-    except ProcessLookupError:
-        fail(f"no process at pid {args.pid}")
-    if started_at is None:
-        fail(f"pid {args.pid} exists but its start time could not be read")
-    print(json.dumps({"pid": args.pid, "pid_started_at": started_at}))
 
 
 def message_files(path: Path):
@@ -326,24 +420,37 @@ def message_files(path: Path):
 
 
 def send(args: argparse.Namespace) -> None:
-    if args.sender not in ROLES or args.recipient not in ROLES:
-        fail("sender and recipient must be listener or asker")
+    check_role(args, args.sender, "--from")
+    check_role(args, args.recipient, "--to")
     if args.sender == args.recipient:
-        fail("sender and recipient must differ")
+        refuse(args, "--from and --to must differ", category="invalid_role")
     if args.kind not in KINDS:
-        fail(f"unknown kind: {args.kind}")
+        refuse(args, f"invalid --kind {args.kind!r}: must be request, response, or stop")
     if args.kind == "response" and not args.parent_id:
-        fail("responses require --parent-id")
+        refuse(args, "--kind response requires --parent-id")
+    if args.body_file == "-" and sys.stdin.isatty():
+        refuse(args, "--body-file - requires piped input")
 
     root = root_from(args)
     path = channel_dir(root, args.channel)
     record = read_channel_record(path)
     if record.get("state") == "closed":
-        fail(f"channel is closed: {args.channel}")
+        closed_channel(args.channel)
 
-    body = read_body(args.body_file)
+    try:
+        body = read_body(args.body_file)
+    except (OSError, UnicodeDecodeError) as error:
+        refuse(args, f"cannot read --body-file: {error}")
+    if not body.strip():
+        refuse(args, "message body is empty")
     lock = channel_lock(path)
     try:
+        if args.kind != "stop" and seat_live(read_channel_record(path), args.recipient) is not True:
+            fail(
+                f"{args.recipient} on channel {args.channel} has no live heartbeat",
+                category="peer_not_live",
+                next_step=f"tell the user the {args.recipient} is gone; a new {args.recipient} has to start and pair",
+            )
         pending = [
             f for f in message_files(path)
             if (loaded := json.loads(f.read_text(encoding="utf-8"))).get("recipient") == args.recipient
@@ -394,13 +501,12 @@ def summarize(message: dict[str, object]) -> dict[str, object]:
 
 
 def receive(args: argparse.Namespace) -> None:
-    if args.recipient not in ROLES:
-        fail("recipient must be listener or asker")
+    check_role(args, args.recipient, "--for")
     root = root_from(args)
     path = channel_dir(root, args.channel)
     record = read_channel_record(path)
     if record.get("state") == "closed":
-        fail(f"channel is closed: {args.channel}")
+        closed_channel(args.channel)
 
     wait_lock_path = path / f"receive-{args.recipient}.lock"
     wait_lock_path.touch(mode=0o600, exist_ok=True)
@@ -442,18 +548,27 @@ def receive(args: argparse.Namespace) -> None:
         fcntl.flock(wait_lock, fcntl.LOCK_UN)
         wait_lock.close()
 
+    peer_record = read_channel_record(path)
+    peer = other_role(args.recipient)
+    peer_live = seat_live(peer_record, peer)
     messages = [json.loads(f.read_text(encoding="utf-8")) for f in current]
     messages.sort(key=lambda m: m.get("created_at", 0), reverse=True)
     recent = messages[:HISTORY_SIZE]
     output = {
         "new_since_call": pending,
         "messages": [summarize(m) for m in recent],
+        "peer_live": peer_live,
     }
-    script = f"python3 {shlex.quote(str(Path(__file__).resolve()))}"
-    if args.root is not None or root != DEFAULT_ROOT:
-        script += f" --root {shlex.quote(str(root))}"
+    script = script_command(args, root)
     if pending == 0:
         read = "; the messages listed were already read" if recent else ""
+        if peer_live is False:
+            output["note"] = (
+                f"no new message for {args.recipient} on channel {args.channel} "
+                f"within {args.timeout:g}s{read} — peer heartbeat stale; tell the user instead of waiting again"
+            )
+            print(json.dumps(output, ensure_ascii=False))
+            raise SystemExit(1)
         if args.recipient == "asker":
             wait = ("a reply can take many minutes, so run receive again with a long "
                     "--timeout (e.g. 300) instead of giving up or resending; up to 5 "
@@ -461,6 +576,8 @@ def receive(args: argparse.Namespace) -> None:
         else:
             wait = ("a request can come at any time, so run receive again with a long "
                     "--timeout (e.g. 300)")
+        if not seat_fresh(peer_record, peer) and seat_restarting(peer_record, peer):
+            wait = f"the {peer} is restarting its heartbeat, so keep waiting; {wait}"
         output["note"] = (
             f"no new message for {args.recipient} on channel {args.channel} "
             f"within {args.timeout:g}s{read} — {wait}"
@@ -478,11 +595,12 @@ def receive(args: argparse.Namespace) -> None:
 
 
 def fetch(args: argparse.Namespace) -> None:
+    if not safe_name(args.message_id):
+        refuse(args, f"invalid --message-id {args.message_id!r}: use the message_id receive printed")
     root = root_from(args)
     path = channel_dir(root, args.channel)
     read_channel_record(path)
-    message_id = safe_name(args.message_id, "message id")
-    message_path = path / "messages" / f"{message_id}.json"
+    message_path = path / "messages" / f"{args.message_id}.json"
     if not message_path.exists():
         fail(f"no such message on channel {args.channel}: {args.message_id}")
     lock = channel_lock(path)
@@ -508,37 +626,166 @@ def all_channels(root: Path) -> list[dict[str, object]]:
     ]
 
 
-def live_candidates(root: Path, my_role: str) -> list[dict[str, object]]:
-    """Channels updated within the last 48 hours where the peer seat is
-    filled and not confirmed dead. Does not check my own seat at all --
-    the only caller is an asker about to claim an open listener seat,
-    and a listener never calls it."""
+def live_candidates(root: Path, my_role: str, session: str) -> list[dict[str, object]]:
+    """Open channels updated within the last 48 hours whose peer seat is live and whose
+    `my_role` seat is free or held by `session`, most recently updated first."""
     cutoff = time.time() - LIVE_CANDIDATE_WINDOW_SECONDS
     other = other_role(my_role)
-    other_owner_key = f"{other}_owner"
-    other_pid_key = f"{other}_pid"
-    other_started_key = f"{other}_pid_started_at"
-    return [
+    candidates = [
         c for c in all_channels(root)
         if c.get("state") != "closed"
         and max(_as_float(c.get("created_at")) or 0, _as_float(c.get("updated_at")) or 0) >= cutoff
-        and c.get(other_owner_key) is not None
-        and is_alive(_as_int(c.get(other_pid_key)), _as_float(c.get(other_started_key))) is not False
+        and seat_live(c, other) is True
+        and c.get(f"{my_role}_owner") in (None, session)
     ]
+    return sorted(candidates, key=lambda c: _as_float(c.get("updated_at")) or 0, reverse=True)
+
+
+class HeartbeatStopped(Exception):
+    pass
+
+
+class RecordUnreadable(Exception):
+    pass
+
+
+def pause(seconds: float) -> None:
+    """Sleep `seconds`, ending early once the wall clock has moved past them (a system sleep stops the monotonic clock)."""
+    wall, monotonic = time.time(), time.monotonic()
+    while (elapsed := max(time.time() - wall, time.monotonic() - monotonic)) < seconds:
+        time.sleep(min(seconds - elapsed, 1.0))
+
+
+def beat(path: Path, role: str, session: str, expired: bool) -> str | None:
+    """One heartbeat under the channel lock: the reason to stop, or None after stamping `<role>_seen_at`.
+    Raises OSError or RecordUnreadable when the seat cannot be read or stamped."""
+    lock = channel_lock(path)
+    try:
+        try:
+            record = json.loads((path / "channel.json").read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise RecordUnreadable(f"channel metadata is invalid: {error}") from error
+        if not isinstance(record, dict):
+            raise RecordUnreadable("channel metadata is not an object")
+        if record.get("state") == "closed":
+            return "channel_closed"
+        if record.get(f"{role}_owner") != session:
+            return "seat_taken"
+        if expired:
+            record[f"{role}_restart_until"] = time.time() + RESTART_GRACE_SECONDS
+            atomic_write(path / "channel.json", json.dumps(record) + "\n")
+            return "max_age"
+        record[f"{role}_seen_at"] = time.time()
+        record.pop(f"{role}_restart_until", None)
+        atomic_write(path / "channel.json", json.dumps(record) + "\n")
+        return None
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+
+
+def heartbeat(args: argparse.Namespace) -> None:
+    if args.role not in ROLES:
+        refuse(args, "role must be listener or asker", category="invalid_role")
+    check_session(args)
+    if not (math.isfinite(args.interval) and 0 < args.interval <= HEARTBEAT_TTL_SECONDS / 2):
+        refuse(args, f"--interval must be above 0 and at most {HEARTBEAT_TTL_SECONDS / 2:g}")
+    if not (math.isfinite(args.max_age) and args.max_age > 0):
+        refuse(args, "--max-age must be a finite number above 0")
+    root = root_from(args)
+    path = channel_dir(root, args.channel, create=False)
+    if not (path / "channel.json").exists():
+        fail(f"channel does not exist: {args.channel}", category="channel_missing",
+             next_step="use the channel number register printed")
+    restart = heartbeat_command(args, root, args.channel)
+    nexts = {
+        "channel_closed": f"nothing to restart: channel {args.channel} is closed; stop using it",
+        "seat_taken": (f"nothing to restart: another session holds the {args.role} seat on channel "
+                       f"{args.channel}; stop using it and tell the user"),
+        "max_age": restart,
+        "signal": (f"nothing to restart if this session stopped it; if the host stopped it while "
+                   f"channel {args.channel} is still in use, run `{restart}`"),
+    }
+
+    def on_signal(_signum: int, _frame: object) -> None:
+        raise HeartbeatStopped
+
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(signum, on_signal)
+    try:
+        start = time.time()
+        failures = 0
+        while True:
+            try:
+                stopped = beat(path, args.role, args.session, time.time() - start >= args.max_age)
+            except (OSError, RecordUnreadable) as error:
+                failures += 1
+                if failures >= HEARTBEAT_MAX_FAILURES:
+                    fail(f"heartbeat could not stamp the seat {failures} times in a row: {error}",
+                         category="heartbeat_failed",
+                         next_step=(f"the seat reads stale; run `{script_command(args, root)} status --channel "
+                                    f"{args.channel}`, and if the channel is open, register again with the same "
+                                    "session and start a new heartbeat"))
+            else:
+                failures = 0
+                if stopped is not None:
+                    output = {"stopped": stopped, "next": nexts[stopped]}
+                    if stopped == "seat_taken":
+                        output["category"] = "seat_claimed"
+                    print(json.dumps(output))
+                    raise SystemExit(2 if stopped == "seat_taken" else 0)
+            pause(args.interval)
+    except HeartbeatStopped:
+        print(json.dumps({"stopped": "signal", "next": nexts["signal"]}))
 
 
 def list_channels(args: argparse.Namespace) -> None:
+    if args.wait is not None and not args.live_for:
+        refuse(args, "--wait requires --live-for")
+    if args.session is not None:
+        check_session(args)
+    if args.live_for and args.live_for not in ROLES:
+        refuse(args, "--live-for must be listener or asker", category="invalid_role")
+    if args.live_for and not args.session:
+        refuse(args, "--live-for requires --session")
+    if args.wait is not None and not (math.isfinite(args.wait) and args.wait >= 0):
+        refuse(args, "--wait must be a finite number of seconds, 0 or more")
     root = root_from(args)
 
     if not args.live_for:
-        print(json.dumps(all_channels(root)))
+        print(json.dumps({"channels": all_channels(root)}))
         return
 
     role = args.live_for
-    if role not in ROLES:
-        fail("--live-for must be listener or asker")
+    peer = other_role(role)
+    script = script_command(args, root)
+    session_id = str(args.session)
+    session = shlex.quote(session_id)
 
-    print(json.dumps(live_candidates(root, role)))
+    deadline = time.monotonic() + (args.wait or 0)
+    while not (candidates := live_candidates(root, role, session_id)) and args.wait is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(json.dumps({
+                "channels": [],
+                "note": f"no {peer} appeared within {args.wait:g}s; tell the user to start one",
+            }))
+            raise SystemExit(1)
+        time.sleep(min(1.0, remaining))
+
+    if candidates:
+        print(json.dumps({
+            "channels": candidates,
+            "next": f"{script} register --role {role} --channel {candidates[0]['channel']} --session {session}",
+        }))
+        return
+    print(json.dumps({
+        "channels": [],
+        "note": f"no live {peer} found",
+        "next": (f"only if you started the {peer} yourself or the user said one is starting, run "
+                 f"`{script} list --live-for {role} --session {session} --wait 120`; "
+                 f"otherwise tell the user to start a {peer} and stop"),
+    }))
 
 
 def add_channel(parser: argparse.ArgumentParser, required: bool = True) -> None:
@@ -550,7 +797,7 @@ def add_root(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = RefusingParser(description=__doc__)
     add_root(parser)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -558,8 +805,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_channel(register_parser, required=False)
     register_parser.add_argument("--role", required=True)
     register_parser.add_argument("--session", required=True, help="this party's session/process id")
-    register_parser.add_argument("--pid", required=True, type=int, help="the long-lived host process's own PID")
-    register_parser.add_argument("--pid-started-at", required=True, type=float, dest="pid_started_at")
     register_parser.set_defaults(handler=register)
 
     init_parser = subparsers.add_parser("init")
@@ -597,28 +842,37 @@ def build_parser() -> argparse.ArgumentParser:
     close_parser = subparsers.add_parser("close")
     add_channel(close_parser)
     close_parser.add_argument("--role", required=True)
+    close_parser.add_argument("--if-peer-stale", dest="if_peer_stale", action="store_true",
+                              help="close only if the peer is not live and nothing unread waits for --role")
     close_parser.set_defaults(handler=close)
+
+    heartbeat_parser = subparsers.add_parser("heartbeat")
+    add_channel(heartbeat_parser)
+    heartbeat_parser.add_argument("--role", required=True)
+    heartbeat_parser.add_argument("--session", required=True, help="the session that registered the seat")
+    heartbeat_parser.add_argument("--interval", type=float, default=HEARTBEAT_INTERVAL_SECONDS)
+    heartbeat_parser.add_argument("--max-age", dest="max_age", type=float, default=HEARTBEAT_MAX_AGE_SECONDS)
+    heartbeat_parser.set_defaults(handler=heartbeat)
 
     list_parser = subparsers.add_parser("list")
     list_parser.add_argument("--live-for", dest="live_for", default=None)
+    list_parser.add_argument("--session", default=None, help="this party's session id, for the printed next step")
+    list_parser.add_argument("--wait", type=float, default=None, help="seconds to wait for a live peer")
     list_parser.set_defaults(handler=list_channels)
 
     status_parser = subparsers.add_parser("status")
     add_channel(status_parser)
     status_parser.set_defaults(handler=status)
 
-    whoami_parser = subparsers.add_parser("whoami")
-    whoami_parser.add_argument("--pid", required=True, type=int, help="a PID the caller already knows, typically its own long-lived process")
-    whoami_parser.set_defaults(handler=whoami)
-
     return parser
 
 
 if __name__ == "__main__":
     arguments = build_parser().parse_args()
+    check_channel(arguments)
     try:
         arguments.handler(arguments)
     except SystemExit:
         raise
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001
         fail(f"{type(error).__name__}: {error}")
