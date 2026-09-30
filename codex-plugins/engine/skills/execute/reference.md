@@ -150,8 +150,10 @@ Checking and recording in memory-ledger.
 
 ## Skill invocation
 
-The platform provides no stronger guarantee for calling `spec`, `test`,
-or `review` by its public name. Their output must
+Invoke `spec`, `test` and `review` as `engine:spec`, `engine:test` and `engine:review`:
+Codex names a skill bundled in a plugin `<plugin>:<skill>`.
+The platform provides no stronger guarantee for calling them than invoking them
+by that name. Their output must
 therefore be read and checked against the request. See SKILL.md § Delegating to `spec`, `test`, and `review`.
 
 ## Open debates before close

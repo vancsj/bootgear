@@ -55,7 +55,7 @@ It also refuses two node names that map to the same Mermaid ID, because `-` and 
 
 ### The universal failed edge
 
-Every non-terminal node can move to `failed`, even though no `next:` list names it. `validate` counts this edge for reachability, and `transition` always accepts `--to failed` from a non-terminal node. Every other destination, `succeeded` included, must be in the current node's `next:` list. A move to `failed` still passes the node's `leave` gate. Only `leave_check` is skipped for `failed`, so a run can still fail when the check cannot pass.
+Every non-terminal node can move to `failed`, even though no `next:` list names it. `validate` counts this edge for reachability, and `transition` always accepts `--to failed` from a non-terminal node. Every other destination, `succeeded` included, must be in the current node's `next:` list. A move to `failed` skips the node's `leave` gate and its `leave_check`, so a run can still fail when the condition cannot hold.
 
 ## Override tiers
 
@@ -79,7 +79,7 @@ task state transition <run-id> --dir <session-dir> --to <node> --reason "<why>" 
 - The current node is terminal.
 - The destination is not a node, or it is neither in `next:` nor `failed`.
 - The destination has reached its `max_visits` limit.
-- The current node has a `leave` and `--confirm-leave` was not passed.
+- The current node has a `leave`, `--confirm-leave` was not passed, and the destination is not `failed`.
 - The current node has a `leave_check` that fails, and the destination is not `failed`.
 
 On success, it makes one atomic write. The write updates `current:` and appends `- <ts> <from> -> <to> (<reason>)` to the `## state` log. When a check ran, the log line ends with `[leave_check exit 0: <argv>]`. A refused move writes nothing.
@@ -88,7 +88,7 @@ On success, it makes one atomic write. The write updates `current:` and appends 
 
 ### The leave gate
 
-`leave` is enforced only by the caller's word: `--confirm-leave` is a bare flag. The gate guarantees that the model cannot leave a node without deliberately asserting that the condition holds. `leave_check` adds a check the engine runs itself:
+`leave` is enforced only by the caller's word: `--confirm-leave` is a bare flag. The gate guarantees that the model cannot leave a node for any destination other than `failed` without deliberately asserting that the condition holds. `leave_check` adds a check the engine runs itself:
 
 - Each `{name}` placeholder is filled from exactly one `--leave-arg name=value`. `transition` refuses a missing arg, an extra arg, a repeated arg, an empty value, a multi-line value, or a value that starts with `-`. These refusals are skipped for `--to failed`, because the check does not run. `transition` refuses `--leave-arg` on a node without a `leave_check` for every destination.
 - `argv[0]` is resolved on `PATH`, where the Claude plugin `bin/` directories are. On Codex, the plugin's own `scripts/<argv[0]>` is tried first, then `PATH`. The check runs without a shell and with no stdin, in its own process group. Its timeout is 120 s, or the value of `ENGINE_LEAVE_CHECK_TIMEOUT`. `transition` refuses the move on a non-zero exit or a timeout, and quotes the last 40 lines of output.

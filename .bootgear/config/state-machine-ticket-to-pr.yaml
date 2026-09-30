@@ -3,6 +3,9 @@ description: Bootgear implementation workflow with evidence, review, and deliver
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -14,6 +17,7 @@ nodes:
   spec:
     reminder:
       do: "Draft the requirements and implementation design with the public spec skill."
+      leave: "Resolve was attempted on the requirements and design, or spec_debate_mode is threshold and the decision is below threshold, and the outcome is recorded in the run ledger."
       branches:
         spec-debate: "The design has an unresolved decision above the run threshold."
         impl: "The requirements and design are complete enough to implement."
@@ -21,11 +25,15 @@ nodes:
   spec-debate:
     reminder:
       do: "Resolve the specification decision with the public debate skill and revise the design when the decision changes it."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the requirements or design is in the artifact."
       branches:
         spec: "The decision changes the requirements or design."
         impl: "The decision is settled and implementation can begin."
     next: [spec, impl]
   impl:
+    reminder:
+      do: "Implement the signed-off design."
+      leave: "Every item in the task breakdown is implemented with its failing-first test recorded in the run ledger."
     next: [quality]
   quality:
     reminder:
@@ -54,6 +62,9 @@ nodes:
     next: [fix, review]
   fix:
     max_visits: 5
+    reminder:
+      do: "Fix the failed check or accepted finding and record the diff."
+      leave: "Every accepted claim id is applied or recorded as rejected, and the affected suite result is recorded in the run ledger."
     next: [quality]
   review:
     max_visits: 5
@@ -69,6 +80,7 @@ nodes:
   review-debate:
     reminder:
       do: "Debate the choice claims from the review render with the public debate skill; factual disputes go back to /review."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any required correction or further review pass is recorded with it."
       branches:
         fix: "The decision requires a correction."
         delivery: "The finding is settled without another correction."

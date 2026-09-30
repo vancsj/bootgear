@@ -219,7 +219,7 @@ class ClaudePackageContractTest(unittest.TestCase):
         manifest = json.loads(
             (PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text()
         )
-        self.assertEqual(manifest["version"], "0.15.0")
+        self.assertEqual(manifest["version"], "0.16.0")
         self.assertEqual(manifest["dependencies"], ["converge", "spec", "test", "review", "advisor", "memory-ledger"])
     def test_compaction_recall_uses_session_start_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
@@ -256,6 +256,21 @@ class ClaudePackageContractTest(unittest.TestCase):
         self.assertIn("For `pr-review` of a PR the user did not author, remove the `fix` node",
                       clarify)
 
+
+    def test_domain_skills_are_invoked_by_plugin_qualified_name(self):
+        skills = PLUGIN_DIR / "skills"
+        execute = (skills / "execute" / "SKILL.md").read_text()
+        reference = " ".join((skills / "execute" / "reference.md").read_text().split())
+        recall = (skills / "recall" / "reference.md").read_text()
+        self.assertIn("`spec:spec`, `test:test` and `review:review`", execute)
+        self.assertIn("`spec:spec`, `test:test`, and `review:review`", recall)
+        self.assertIn("a bare name fails when another installed plugin ships a skill "
+                      "of the same name", reference)
+        self.assertNotIn("bare name", execute)
+
+    def test_failed_needs_no_confirm_leave(self):
+        execute = " ".join((PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text().split())
+        self.assertIn("`--to failed` needs no `--confirm-leave`, from any node.", execute)
 
     def test_execute_scope_checks_review_fixes_and_prunes_snapshots(self):
         execute = (PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text()

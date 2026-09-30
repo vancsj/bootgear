@@ -155,6 +155,26 @@ class ClaudeStateMachineTest(unittest.TestCase):
                 reminder = (node or {}).get("reminder") or {}
                 self.assertNotIn("skill", reminder, f"{path} node '{name}'")
 
+    def test_every_non_terminal_node_has_a_reminder_leave(self):
+        paths = [
+            REPO_ROOT / host / "engine" / "state-machines" / f"{task_type}.yaml"
+            for host in ("plugins", "codex-plugins") for task_type in TASK_TYPES
+        ] + [
+            REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
+            for task_type in TASK_TYPES
+        ]
+        self.assertEqual(len(paths), 12)
+        for path in paths:
+            machine = yaml.safe_load(path.read_text())
+            for name, node in machine["nodes"].items():
+                if (node or {}).get("terminal"):
+                    continue
+                leave = ((node or {}).get("reminder") or {}).get("leave")
+                self.assertTrue(
+                    isinstance(leave, str) and leave.strip(),
+                    f"{path} node '{name}' has no reminder.leave",
+                )
+
     def test_validate_rejects_removed_reminder_skill(self):
         with tempfile.TemporaryDirectory(prefix="engine-state-skill-") as tmp:
             machine = Path(tmp) / "machine.yaml"

@@ -39,7 +39,7 @@ this run, unconditionally.
   and session directory.
 - Supply `<plugin-root>` as `<engine-root>` in the handoff to downstream skills.
 
-When delegating, invoke `spec`, `test`, or `review` by public name. Do not read `spec_skill`, `test_skill`, or `review_skill` yourself and call that skill instead. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly.
+When delegating, invoke the domain skills by their plugin-qualified names `engine:spec`, `engine:test` and `engine:review`. Do not read `spec_skill`, `test_skill`, or `review_skill` yourself and call that skill instead. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly.
 
 ## Reading and merging principles
 
@@ -146,7 +146,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
    task state transition <run-id> --dir <session-dir> --to <node> --reason "<why>" [--confirm-leave]
    ```
 
-   Pass `--confirm-leave` when the current node's `reminder.leave` is set; omit it otherwise, since `transition` refuses the move without it. Only pass `--confirm-leave` once the named condition is actually true, never to get past the gate. Read+merge principles per "Reading and merging principles" below, and state the merged result in the same turn as the `transition` call. Read the printed reminder for the new node before continuing; it is this run's instruction for the next iteration's Act step, not merely a log line.
+   Pass `--confirm-leave` when the current node's `reminder.leave` is set, only once the named condition is actually true, never to get past the gate; omit it otherwise. `--to failed` needs no `--confirm-leave`, from any node. Read+merge principles per "Reading and merging principles" below, and state the merged result in the same turn as the `transition` call. Read the printed reminder for the new node before continuing; it is this run's instruction for the next iteration's Act step, not merely a log line.
 
    Do not transition mid-node. A node whose work spans several iterations (writing tests, running them, fixing a failure, running again) transitions once, when a `branches` destination is actually reached, not once per iteration.
 

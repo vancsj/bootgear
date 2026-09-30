@@ -3,6 +3,9 @@ description: Bug investigation workflow with reproduction and diagnosis gates.
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -22,6 +25,7 @@ nodes:
   triage-debate:
     reminder:
       do: "Resolve the competing diagnosis with the resolve skill, and the debate skill if resolve escalates."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the diagnosis or next action is recorded with it."
       branches:
         triage: "The decision changes the investigation; continue triage."
         succeeded: "The diagnosis and next action are settled."

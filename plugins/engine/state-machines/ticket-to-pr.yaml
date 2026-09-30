@@ -3,6 +3,9 @@ description: ticket-to-PR implementation with spec, test, and review gates.
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -14,6 +17,7 @@ nodes:
   spec:
     reminder:
       do: "Draft the spec with spec. Cite the ticket's acceptance criteria."
+      leave: "Resolve was attempted on the requirements and design, or spec_debate_mode is threshold and the decision is below threshold, and the outcome is recorded in the run ledger."
       branches:
         spec-debate: "The design has an unresolved decision above the run threshold."
         impl: "The requirements and design are complete enough to implement."
@@ -21,6 +25,7 @@ nodes:
   spec-debate:
     reminder:
       do: "Debate the spec draft: run the resolve skill, and the debate skill if resolve escalates."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the requirements or design is in the artifact."
       branches:
         spec: "Split and return to the spec."
         impl: "Converge and continue to implementation."
@@ -28,6 +33,7 @@ nodes:
   impl:
     reminder:
       do: "Implement the signed-off design."
+      leave: "Every item in the task breakdown is implemented with its failing-first test recorded in the run ledger."
     next: [test-code]
   test-code:
     reminder:
@@ -41,6 +47,7 @@ nodes:
   e2e-test:
     reminder:
       do: "Run the e2e suite with test."
+      leave: "The e2e suite ran and its output is classified in the run ledger."
       branches:
         review: "Suite passes."
         fix: "Suite fails."
@@ -49,6 +56,7 @@ nodes:
     max_visits: 5
     reminder:
       do: "Fix the failed check or accepted finding and record the diff."
+      leave: "Every accepted claim id is applied or recorded as rejected, and the affected suite result is recorded in the run ledger."
     next: [test-code]
   review:
     reminder:
@@ -63,6 +71,7 @@ nodes:
   review-debate:
     reminder:
       do: "Debate the choice claims from the review render with the debate skill; factual disputes go back to review."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any required correction or further review pass is recorded with it."
       branches:
         fix: "The decision requires a correction."
         delivery: "The finding is settled without another correction."

@@ -27,7 +27,7 @@ The script provides the ledger's consistent read interface. The settlement conta
 
 Amendments can be arbitrarily far back in the decisions section. Recent-history reads and open-todo reads cannot establish that no amendment exists. Every settlement consumer therefore needs the full decisions scan.
 
-`spec_skill`, `test_skill`, and `review_skill` record the general defaults in the run manifest. The engine invokes `spec`, `test`, and `review` by public name and dispatches only from `spec_override`, `test_override`, and `review_override`. The parallel `_skill` fields are never runtime dispatch targets. An amendment to `spec_skill`, `test_skill`, or `review_skill` can pass shape validation while having no runtime effect. The override fields are the values that change runtime behavior. See SKILL.md § Amendments override the settlement.
+`spec_skill`, `test_skill`, and `review_skill` record the general defaults in the run manifest. The engine invokes `engine:spec`, `engine:test`, and `engine:review` by plugin-qualified name and dispatches only from `spec_override`, `test_override`, and `review_override`. The parallel `_skill` fields are never runtime dispatch targets. An amendment to `spec_skill`, `test_skill`, or `review_skill` can pass shape validation while having no runtime effect. The override fields are the values that change runtime behavior. See SKILL.md § Amendments override the settlement.
 
 An amendment must name a real settlement field, pass the field's shape/value check, and preserve cross-field invariants. A typo or invented field is not a value to apply. An invalid value cannot replace the last valid value. See SKILL.md § Amendments override the settlement.
 
