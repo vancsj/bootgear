@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Use when the user asks Codex a question, wants a second opinion, wants a draft rewritten, wants delegated investigation, or when starting/continuing Codex as the dedicated advisor for Claude Code.",
   "author": {
     "name": "vancsj",

@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Either host can listen or ask. Install via `codex plugin add advisor@bootgear`.",
   "author": {
     "name": "vancsj",

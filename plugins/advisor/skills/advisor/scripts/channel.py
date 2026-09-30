@@ -227,8 +227,12 @@ def read_process_start_time(pid: int) -> float | None:
 
     Returns None if the process exists but its start time can't be read (a
     malformed/short proc_pidinfo result); raises ProcessLookupError if no
-    process exists at this PID at all.
+    process exists at this PID at all. Fails with category
+    `unsupported_platform` on any other OS.
     """
+    if sys.platform != "darwin":
+        fail("the advisor mailbox needs macOS: it reads process start times with proc_pidinfo",
+             category="unsupported_platform")
     import ctypes
     import ctypes.util
 

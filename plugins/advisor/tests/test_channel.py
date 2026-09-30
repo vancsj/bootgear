@@ -17,6 +17,9 @@ CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
 sys.path.insert(0, str(CHANNEL.parent))
 import channel as channel_module  # pyright: ignore[reportMissingImports]
 
+if sys.platform != "darwin":
+    raise unittest.SkipTest("the advisor mailbox runs on macOS only")
+
 
 def run(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
