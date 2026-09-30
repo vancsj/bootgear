@@ -3,6 +3,9 @@ description: Bootgear ticket-writing workflow with evidence and ticket gates.
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -14,6 +17,7 @@ nodes:
   spec:
     reminder:
       do: "Draft the requirements and ticket artifacts with the public spec skill."
+      leave: "Resolve was attempted on the requirements and design, or spec_debate_mode is threshold and the decision is below threshold, and the outcome is recorded in the run ledger."
       branches:
         spec-debate: "The draft has an unresolved decision above the run threshold."
         ticket: "The requirements and design are complete enough to finalize the ticket."
@@ -21,6 +25,7 @@ nodes:
   spec-debate:
     reminder:
       do: "Resolve the specification decision with the public debate skill and revise the draft when the decision changes it."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the requirements or design is in the artifact."
       branches:
         spec: "The decision changes the requirements or design."
         ticket: "The decision is settled and the ticket can be finalized."
@@ -28,6 +33,7 @@ nodes:
   ticket:
     reminder:
       do: "Finalize the ticket artifact with the problem, outcome, acceptance criteria, scope boundaries, and verification notes."
+      leave: "The ticket artifact states problem, outcome, acceptance criteria, scope boundaries and verification notes."
       branches:
         succeeded: "The complete ticket artifact is ready without implementation or delivery work."
     next: [succeeded]

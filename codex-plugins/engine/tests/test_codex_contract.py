@@ -20,7 +20,7 @@ class CodexPackageContractTest(unittest.TestCase):
     def test_manifest_and_hooks_are_codex_package_shape(self):
         manifest = json.loads(MANIFEST.read_text())
         self.assertEqual(manifest["name"], "engine")
-        self.assertEqual(manifest["version"], "0.13.5")
+        self.assertEqual(manifest["version"], "0.14.0")
         self.assertIn("converge", manifest["description"])
         self.assertNotIn("hooks", manifest)
 
@@ -472,6 +472,25 @@ class CodexPackageContractTest(unittest.TestCase):
                       "behaviour.", flat[find:flat.index("### 4. Gap hunt")])
         self.assertIn("Record the slate, converge directory, snapshot, and render counts",
                       flat)
+
+    def test_domain_skills_are_invoked_by_their_bundled_names(self):
+        skills = PLUGIN_DIR / "skills"
+        texts = {name: (skills / name).read_text() for name in (
+            "execute/SKILL.md", "execute/reference.md", "recall/reference.md")}
+        self.assertIn("`engine:spec`, `engine:test` and `engine:review`", texts["execute/SKILL.md"])
+        self.assertIn("`engine:spec`, `engine:test`, and `engine:review`",
+                      texts["recall/reference.md"])
+        self.assertIn("`engine:spec`, `engine:test` and `engine:review`",
+                      " ".join(texts["execute/reference.md"].split()))
+        self.assertNotIn("bare name", texts["execute/SKILL.md"])
+        self.assertNotIn("by its public name", texts["execute/reference.md"])
+        for name, text in texts.items():
+            for wrong in ("spec:spec", "test:test", "review:review"):
+                self.assertNotIn(wrong, text, name)
+
+    def test_failed_needs_no_confirm_leave(self):
+        execute = " ".join((PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text().split())
+        self.assertIn("`--to failed` needs no `--confirm-leave`, from any node.", execute)
 
     def test_execute_scope_checks_review_fixes_and_prunes_snapshots(self):
         execute = (PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text()

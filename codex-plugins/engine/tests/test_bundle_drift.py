@@ -1,5 +1,6 @@
 """The Codex engine bundle carries copies of the Claude converge and review
-sources; these tests fail when a copy drifts from its source."""
+sources, and a twin of the Claude engine's execute skill; these tests fail
+when a copy drifts from its source."""
 
 import tempfile
 import unittest
@@ -30,6 +31,78 @@ TEST_FILE_ADAPTATIONS: list[tuple[str, str]] = [
     ),
     ("bin/task, then manipulates", "scripts/task, then manipulates"),
     ('TASK_BIN = PLUGIN_DIR / "bin" / "task"', 'TASK_BIN = PLUGIN_DIR / "scripts" / "task"'),
+]
+
+
+# The engine's execute skill is written once per host. Each pair is
+# (exact Claude text, exact Codex text) for a host-specific line; every other
+# byte must match, so a shared rule changes on both hosts together.
+EXECUTE_SKILL_ADAPTATIONS: list[tuple[str, str]] = [
+    (
+        (
+            "description: Run the autonomous task loop after clarify confirms `goal`: "
+            "dispatch by task type, act, resolve contested decisions, report progress, and "
+            "end succeeded or failed against `goal`. Use immediately after clarify hands off "
+            "a confirmed goal.\n"
+        ),
+        (
+            'description: "Run the autonomous task loop after clarify confirms goal: '
+            "dispatch by task type, act, resolve contested decisions, report progress, and "
+            "end succeeded or failed against goal. Use immediately after clarify hands off "
+            'a confirmed goal."\n'
+        ),
+    ),
+    (
+        (
+            "- Resolve `task` to `<plugin-dir>/bin/task`; the wrapper derives its project\n"
+            "  directory from its own location.\n"
+        ),
+        (
+            "- Resolve `task` to `<plugin-root>/scripts/task`; the wrapper derives its\n"
+            "  project directory from its own location and honors `PLUGIN_ROOT` when set.\n"
+        ),
+    ),
+    ("- Supply `<plugin-dir>` as `<engine-root>`", "- Supply `<plugin-root>` as `<engine-root>`"),
+    (
+        "names `spec:spec`, `test:test` and `review:review`.",
+        "names `engine:spec`, `engine:test` and `engine:review`.",
+    ),
+    (
+        "`memory-ledger` is a declared dependency; it may still be unconfigured or missing.",
+        "`memory-ledger` is an optional peer: engine neither declares nor bundles it.",
+    ),
+]
+
+EXECUTE_REFERENCE_ADAPTATIONS: list[tuple[str, str]] = [
+    (
+        (
+            "`engine` declares `converge`, `spec`, `test`, `review`, `advisor` and\n"
+            "`memory-ledger` as plugin dependencies, so the platform installs them with it. "
+            "A required\nskill can still be missing, for example after the user removes it."
+        ),
+        (
+            "The Codex `engine` bundles `converge`, `spec`, `test` and `review`;\n"
+            "`memory-ledger` and `advisor` are separate, optional plugins. A required\n"
+            "skill can still be missing from a damaged install."
+        ),
+    ),
+    (
+        (
+            "## Skill-tool invocation\n\n"
+            "Invoke `spec`, `test` and `review` as `spec:spec`, `test:test` and `review:review`:\n"
+            "a bare name fails when another installed plugin ships a skill of the same name.\n"
+            "The platform provides no stronger guarantee for calling them than invoking the\n"
+            "`Skill` tool by that name."
+        ),
+        (
+            "## Skill invocation\n\n"
+            "Invoke `spec`, `test` and `review` as `engine:spec`, `engine:test` and "
+            "`engine:review`:\n"
+            "Codex names a skill bundled in a plugin `<plugin>:<skill>`.\n"
+            "The platform provides no stronger guarantee for calling them than invoking them\n"
+            "by that name."
+        ),
+    ),
 ]
 
 
@@ -110,6 +183,20 @@ class BundleDriftTest(unittest.TestCase):
         )
         self.assertSameTree(
             CLAUDE_REVIEW / "references", CODEX_SKILLS / "review" / "references"
+        )
+
+    def test_execute_skill_matches_claude_twin(self):
+        self.assertAdaptedMatch(
+            CLAUDE_ENGINE / "skills" / "execute" / "SKILL.md",
+            CODEX_SKILLS / "execute" / "SKILL.md",
+            EXECUTE_SKILL_ADAPTATIONS,
+        )
+
+    def test_execute_reference_matches_claude_twin(self):
+        self.assertAdaptedMatch(
+            CLAUDE_ENGINE / "skills" / "execute" / "reference.md",
+            CODEX_SKILLS / "execute" / "reference.md",
+            EXECUTE_REFERENCE_ADAPTATIONS,
         )
 
     def test_state_nudge_hook_matches_claude_source(self):

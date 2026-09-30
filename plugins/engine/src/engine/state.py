@@ -466,11 +466,11 @@ def cmd_transition(args: argparse.Namespace) -> None:
 
     reminder = current_node.get("reminder")
     leave = reminder.get("leave") if isinstance(reminder, dict) else None
-    if leave and not args.confirm_leave:
+    if leave and dest != "failed" and not args.confirm_leave:
         sys.exit(f"'{current}' has a leave condition and cannot be left "
                  f"without confirming it: {leave}\n"
-                 f"Pass --confirm-leave once this is actually true — for "
-                 f"'{dest}' included")
+                 f"Pass --confirm-leave once this is actually true; "
+                 f"'--to failed' needs no confirmation")
 
     log_line = f"- {_now()} {current} -> {dest} ({reason})"
     leave_check = reminder.get("leave_check") if isinstance(reminder, dict) else None
@@ -935,7 +935,7 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                    help="one line stating why this move happens now")
     s.add_argument("--confirm-leave", action="store_true",
                    help="required to leave a node whose reminder has a "
-                        "`leave` condition, 'failed' included; bare flag, "
+                        "`leave` condition, except for 'failed'; bare flag, "
                         "no accompanying text needed")
     s.add_argument("--leave-arg", action="append", metavar="NAME=VALUE",
                    help="value for a {NAME} placeholder in the current "

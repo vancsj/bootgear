@@ -3,6 +3,9 @@ description: Bootgear bug-triage workflow with evidence and disposition gates.
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -14,6 +17,7 @@ nodes:
   triage:
     reminder:
       do: "Reproduce and triage the report with the public test skill; establish impact, candidate cause, confidence, and next action."
+      leave: "Reproduction or current-behavior evidence and the diagnosis (impact, candidate cause, confidence, next action) are recorded in the run ledger."
       branches:
         triage-debate: "Competing diagnoses or a high-impact decision need resolution."
         disposition: "The diagnosis and next action are sufficiently supported."
@@ -21,6 +25,7 @@ nodes:
   triage-debate:
     reminder:
       do: "Resolve the competing diagnosis with the public debate skill and revise the investigation when the decision changes it."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the diagnosis or next action is recorded with it."
       branches:
         triage: "The decision changes the investigation."
         disposition: "The diagnosis and next action are settled."
@@ -28,6 +33,7 @@ nodes:
   disposition:
     reminder:
       do: "Record the cause or unresolved status, impact, confidence, owner or next action, and supporting evidence."
+      leave: "The cause or unresolved status, impact, confidence, owner or next action, and supporting evidence are recorded in the run ledger."
       branches:
         succeeded: "The evidence-based triage disposition is recorded without implementation or delivery work."
     next: [succeeded]

@@ -303,6 +303,14 @@ class LeaveCheckTransitionTest(_LeaveCheckLedger):
         self.assertIn("current: failed", self.ledger.read_text())
         self.assertNotIn("[leave_check", self._log_lines()[-1])
 
+    def test_failed_needs_no_confirm_leave(self):
+        self._init()
+        result = self._move("failed")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("current: failed", self.ledger.read_text())
+        self.assertTrue(self._log_lines()[-1].endswith("gate -> failed (to failed)"),
+                        self._log_lines()[-1])
+
     def test_passing_check_without_confirm_leave_is_refused(self):
         self._init()
         result = self._assert_refused_unchanged(

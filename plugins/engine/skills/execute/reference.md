@@ -150,8 +150,10 @@ Checking and recording in memory-ledger.
 
 ## Skill-tool invocation
 
-The platform provides no stronger guarantee for calling `spec`, `test`,
-or `review` than invoking the `Skill` tool by public name. Their output must
+Invoke `spec`, `test` and `review` as `spec:spec`, `test:test` and `review:review`:
+a bare name fails when another installed plugin ships a skill of the same name.
+The platform provides no stronger guarantee for calling them than invoking the
+`Skill` tool by that name. Their output must
 therefore be read and checked against the request. See SKILL.md § Delegating to `spec`, `test`, and `review`.
 
 ## Open debates before close

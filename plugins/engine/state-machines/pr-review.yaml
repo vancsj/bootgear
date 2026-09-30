@@ -3,6 +3,9 @@ description: Pull-request review workflow with findings and decision gates.
 
 nodes:
   clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
     next: [inspect]
   inspect:
     reminder:
@@ -25,6 +28,7 @@ nodes:
     max_visits: 3
     reminder:
       do: "Debate the choice claims from the review render with the debate skill; factual disputes go back to review."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any required correction or further review pass is recorded with it."
       branches:
         fix: "The decision requires a correction."
         review: "The decision needs another review pass."
@@ -34,6 +38,7 @@ nodes:
     max_visits: 4
     reminder:
       do: "Apply the accepted findings within permitted_mutations and run the affected tests."
+      leave: "Every accepted claim id is applied or recorded as rejected, and the affected suite result is recorded in the run ledger."
       branches:
         review: "The fixes are applied and need a fresh review pass."
     next: [review]
