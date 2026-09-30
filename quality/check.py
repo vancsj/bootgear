@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
@@ -79,11 +80,11 @@ CHECKS = (
     ),
     Check(
         "pytest-plugins",
-        ("python", "-m", "pytest", "plugins/engine/tests"),
+        ("python", "-m", "pytest", "-n", "auto", "plugins/engine/tests"),
     ),
     Check(
         "pytest-converge",
-        ("python", "-m", "pytest", "plugins/converge/tests"),
+        ("python", "-m", "pytest", "-n", "auto", "plugins/converge/tests"),
     ),
     Check(
         "pytest-review",
@@ -91,7 +92,7 @@ CHECKS = (
     ),
     Check(
         "pytest-codex",
-        ("python", "-m", "pytest", "codex-plugins/engine/tests"),
+        ("python", "-m", "pytest", "-n", "auto", "codex-plugins/engine/tests"),
     ),
     Check(
         "pytest-memory-ledger",
@@ -142,8 +143,7 @@ def _load_baseline(path: Path) -> list[dict[str, str]]:
 def _run_checks(
     execute: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> list[Result]:
-    results: list[Result] = []
-    for check in CHECKS:
+    def run_one(check: Check) -> Result:
         try:
             completed = execute(
                 check.command,
@@ -157,8 +157,11 @@ def _run_checks(
         except OSError as exc:
             output = f"{type(exc).__name__}: {exc}"
             returncode = 127
-        results.append(Result(check, returncode, output, _fingerprint(output)))
-    return results
+        return Result(check, returncode, output, _fingerprint(output))
+
+    # Checks are independent subprocesses; run them together, report in CHECKS order.
+    with ThreadPoolExecutor(max_workers=len(CHECKS)) as pool:
+        return list(pool.map(run_one, CHECKS))
 
 
 def _report(results: Sequence[Result], baseline: Sequence[dict[str, str]]) -> int:
