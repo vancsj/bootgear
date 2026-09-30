@@ -64,6 +64,9 @@ def _next(cv: Converge, rest: str) -> str:
 
 
 def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
+    # Through the shipped wrapper, so every subcommand runs on the plugin's own
+    # declared dependencies at least once.
+    cv.use_bin = True
     d = str(cv.dir)
     init = _json(cv, *_init_args(cv))
     assert init == {"slate": "s1", "mode": "full", "lenses": ["correctness", "security"],

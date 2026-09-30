@@ -1,13 +1,19 @@
-"""Drive `bin/converge` as a subprocess against a scratch ledger dir.
+"""Drive the converge CLI against a scratch ledger dir.
 
-HOME is pointed at a scratch dir so the user config layer is empty; uv's
-cache and managed-python dirs stay on the real ones so no download happens.
+`Converge.run` calls `converge.cli.main` in-process by default. In-process runs
+see the test interpreter's packages, not only the plugin's declared ones, so
+tests that must exercise the shipped wrapper set `use_bin` or run `BIN`
+directly. HOME is pointed at a scratch dir so the user config layer is empty;
+uv's cache and managed-python dirs stay on the real ones so no download happens.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +21,9 @@ import pytest
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 BIN = PLUGIN_DIR / "bin" / "converge"
+sys.path.insert(0, str(PLUGIN_DIR / "src"))
+
+from converge import cli
 
 FIND_ANGLES = """\
 - id: changed-contract
@@ -73,10 +82,38 @@ class Converge:
         # VIRTUAL_ENV makes uv print a mismatch warning on stderr.
         for var in ("CONVERGE_HOST", "BOOTGEAR_PROG", "GEAR_CALLER_CWD", "VIRTUAL_ENV"):
             self.env.pop(var, None)
+        # False: call `cli.main` in-process. True: run the real `bin/converge`,
+        # which resolves the plugin's own declared dependencies through uv.
+        self.use_bin = False
 
     def run(self, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        return subprocess.run([str(BIN), *args], capture_output=True, text=True,
-                              env={**self.env, **(env or {})}, cwd=self.project, check=False)
+        if self.use_bin:
+            return subprocess.run([str(BIN), *args], capture_output=True, text=True,
+                                  env={**self.env, **(env or {})}, cwd=self.project, check=False)
+        return self._run_in_process(*args, env=env)
+
+    def _run_in_process(self, *args: str, env: dict[str, str] | None = None
+                        ) -> subprocess.CompletedProcess[str]:
+        """Call `converge.cli.main` with `bin/converge`'s env and cwd, but on the
+        test interpreter: packages the plugin does not declare are importable here."""
+        saved_env, saved_cwd = dict(os.environ), os.getcwd()
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        try:
+            os.environ.clear()
+            os.environ.update({**self.env, **(env or {})})
+            os.chdir(self.project)
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    cli.main(list(args))
+                except SystemExit as exc:
+                    # `clikit.run` turns every `sys.exit(str)` into an int exit.
+                    code = int(exc.code or 0)
+        finally:
+            os.chdir(saved_cwd)
+            os.environ.clear()
+            os.environ.update(saved_env)
+        return subprocess.CompletedProcess([str(BIN), *args], code, out.getvalue(), err.getvalue())
 
     def __call__(self, *args: str, code: int = 0, env: dict[str, str] | None = None
                  ) -> subprocess.CompletedProcess[str]:

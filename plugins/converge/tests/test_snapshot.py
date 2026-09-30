@@ -183,6 +183,8 @@ def test_since_refusals_name_the_failed_check(cv: Converge) -> None:
 
 
 def test_prune_removes_exactly_the_named_refs(cv: Converge) -> None:
+    # Through the shipped wrapper: the only subcommand the every-command JSON test skips.
+    cv.use_bin = True
     repo(cv)
     head = git(cv, "rev-parse", "HEAD")
     for slate in ("slate-1", "slate-2", "slate-10", "other"):
