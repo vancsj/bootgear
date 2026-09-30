@@ -101,7 +101,6 @@ its own `.codex-plugin`, so there is no separate Codex install.
 Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/)
 (`engine` and `converge` run through it). `engine`'s debate on Claude Code
 asks Codex through `advisor`, so it needs the Codex CLI installed and signed in.
-`advisor`'s mailbox pairing runs on macOS only.
 
 Each plugin installs on its own — you do not need the rest of bootgear. The table's
 "installs … with it" notes describe Claude Code's declared dependencies; Codex CLI packages

@@ -40,7 +40,10 @@ Read-only advisor for the paired session. Don't contact the peer except in respo
 CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"
 ```
 
-Set `SESSION_ID` to your own host's real session identifier — on Codex CLI, the same value its hooks deliver as `session_id` in their payload; on Claude Code, its own real session identifier — not a value you invent or copy from an unrelated shell variable. If no real session identifier is available to you in this invocation, fail rather than fabricate one; `SESSION_ID` is used for addressing/attribution (see `references/channel.md`), not pairing correctness, but it must still be genuine.
+Set `SESSION_ID` to the host's real session identifier, never an invented one; if none is available, fail.
+
+- Claude Code: `SESSION_ID="$CLAUDE_CODE_SESSION_ID"`.
+- Codex CLI: the `session_id` the host gives you in your context; the shell has no environment variable for it.
 
 ### 0. Escalation
 
@@ -49,6 +52,19 @@ Every `channel.py` call needs `sandbox_permissions: require_escalated` — `~/.b
 ### 1. Register first, report immediately
 
 See `references/channel.md` for the pairing procedure.
+
+Right after `register`, start the heartbeat in the background and keep it running until `close`:
+
+```sh
+python3 "$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
+```
+
+- Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000`.
+- Codex CLI: a terminal session left running, as for `receive`.
+- It prints nothing while it runs. It ends with one JSON line carrying `next`; do what `next` says:
+  - stdout `{"stopped": ...}`: `channel_closed` (exit 0), `max_age` after 6180 seconds (exit 0; the seat stays live for a 720-second restart grace, so run `next` promptly), `signal` on SIGTERM, SIGINT or SIGHUP (exit 0), or `seat_taken` with category `seat_claimed` (exit 2) when this session does not hold the seat, at start or later.
+  - stderr `{"error": ...}` (exit 2): category `heartbeat_failed` after three failed stamps in a row (the record unreadable or missing included), `channel_missing` when the channel does not exist, `invalid_args` or `invalid_role` for a bad argument (with `example` and `commands`).
+- Host reports the task stopped with no output, or handle lost: run `register` again with the same `SESSION_ID`, then start a new heartbeat.
 
 ### 2. Goal
 
@@ -63,9 +79,9 @@ Read-only, safe anytime. Check the last 3 for a request from `<peer>` with no la
 
 ### 4. First poll
 
-Before any other work, run one bounded `receive` and collect its output. Foreground, or a terminal session polled with `write_stdin`. Exit status `1` = no new message (its `note` says so); a request can take many minutes to come, so start the next bounded wait immediately. A background listener nobody polls doesn't count as listening.
+Before any other work, run one bounded `receive` and collect its output. Foreground, or a terminal session polled with `write_stdin`. Exit status `1` = no new message (its `note` says so); a request can take many minutes to come, so start the next bounded wait immediately — unless its `peer_live` is `false`: then run `close --role <mine> --channel "$CHANNEL" --if-peer-stale`. If it closes, your heartbeat ends; tell the user the asker's heartbeat is stale. If it refuses, do what its `next` says and keep listening. A background listener nobody polls doesn't count as listening.
 
-Never return to the human after one empty poll while claiming to still be listening — start the next `receive` immediately, until a request arrives, the user stops the advisor, or the channel closes.
+Never return to the human after one empty poll while claiming to still be listening — start the next `receive` immediately, until a request arrives, `close --if-peer-stale` closes the channel, the user stops the advisor, or the channel closes.
 
 ### 5. Listener loop
 
@@ -76,7 +92,14 @@ while :; do
   python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
   RECEIVE_JSON=$(python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300)
   RECEIVE_STATUS=$?
-  if [ "$RECEIVE_STATUS" -eq 1 ]; then continue; fi
+  if [ "$RECEIVE_STATUS" -eq 1 ]; then
+    PEER_LIVE=$(printf '%s' "$RECEIVE_JSON" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["peer_live"]))')
+    if [ "$PEER_LIVE" = false ] &&
+      python3 "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
+      break
+    fi
+    continue
+  fi
   if [ "$RECEIVE_STATUS" -ne 0 ]; then exit "$RECEIVE_STATUS"; fi
   # The message_id that RECEIVE_JSON's `next` fetches (the newest unread request):
   REQUEST_ID=<message_id>
@@ -89,6 +112,10 @@ while :; do
   python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting
 done
 ```
+
+`close --if-peer-stale` closes only while `<peer>` is still not live and no unread message waits for `<mine>`; otherwise it refuses (`peer_live` or `unread_message`, exit 2), the channel stays open, and the loop keeps listening.
+
+After `break`: the loop has closed the channel, so your heartbeat ends with `channel_closed`; stop listening and tell the user the peer's heartbeat is stale.
 
 - `discuss` → read-only investigation; return evidence, conclusions, assumptions, open risks.
 - `delegate` → follow the stated scope exactly. No commit, push, external contact, production mutation, or irreversible action unless explicitly authorized.
