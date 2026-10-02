@@ -1,0 +1,36 @@
+What belongs in the local ledger
+
+This WHAT-BELONGS.txt is this ledger's rule file. Sessions read it before
+choosing a ledger or filing an entry, so editing it changes what they are told.
+It is .txt because every .md file under the ledger root is read as an entry.
+Where it differs from the plugin's general guidance, this file wins.
+
+Belongs here
+- A non-obvious finding: one an agent starting from scratch would need real
+  exploration to reach, such as tracing code, cross-checking sources or
+  external research. It belongs even when the code, a ticket, a review or a
+  vendor page also holds the answer.
+- Facts true only of this machine: its paths, configuration and installed tools.
+- How your own tools and personal setup work.
+- Claims about an unmerged branch or an open change.
+- Perishable snapshots worth keeping as a dated record.
+- Entries that link to local-only entries.
+
+Moving entries
+- To move an entry, copy it to the same path in the other ledger, remove it
+  from this one, and save both.
+- Move local to shared only after rereading the entry against the shared
+  ledger's rules.
+- Replace any personal path in a check with a repo-relative one by filing a
+  rival answer, never by editing.
+
+Keep out
+- Secrets and credentials, even here.
+- An obvious fact: an agent starting from scratch gets it from one quick
+  lookup, such as reading one file or the ticket linked in the task. If it
+  would take real exploration, it is not obvious.
+- Duplicates, opinions and trivia.
+
+This team's own rules
+List here the topics that always stay local, and any personal tools whose
+setup is worth recording.

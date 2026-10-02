@@ -10,8 +10,8 @@ finding, or when verifying or contesting an existing entry.
    path, or output shape needs checking.
 2. Resolve the question before reading or writing an entry.
 3. Read the selected answer and run every listed evidence check before using it.
-4. Choose shared or local storage from the question's lasting scope; read both
-   ledgers before writing to one.
+4. Read each ledger's rules (`rules`), then choose shared or local storage from
+   the question's lasting scope; read both ledgers before writing to one.
 5. Add a rival instead of editing an answer, evidence line, or signature bytes.
 6. Sign the verified result with the current AI session.
 

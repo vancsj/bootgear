@@ -19,6 +19,7 @@ from pathlib import Path
 from .audit import unportable_paths
 from .constants import CACHE_NAME
 from .lint import cmd_lint
+from .rules import RULES_FILE, rules_path, rules_problem
 from .store import load_entries
 
 _LINT_TAG = re.compile(r"^([A-Z][A-Z-]*)\s")
@@ -102,16 +103,28 @@ def save_one(args, root):
         sys.exit(f"{root} is not a git repository — nothing to save into")
 
     entries = sorted(p for p in root.rglob("*.md"))
-    if not entries:
+    rules_why = rules_problem(rules_path(root))
+    refusal = _staged_bad_rules(root)
+    if rules_why and not refusal:
+        print(f"WARN     {RULES_FILE} {rules_why} — not staged; replace it with a regular file")
+    has_rules = not rules_why and rules_path(root).is_file()
+    if not entries and not has_rules:
         # Not fatal any more. A freshly created local ledger is legitimately
         # empty, and killing the whole save over it would strand the shared
         # ledger's commit — the one with something in it.
         print(f"  {root} holds no entries yet — nothing to commit")
         return 0
+    if refusal:
+        print(f"REFUSED  save {root}: {refusal}")
+        return 1
     # -f defeats every ignore rule, global and repo-local, for entry files only.
     # The cache is never passed in, so no ignore rule has to be trusted to omit it.
-    _git(root, "add", "-f", "--", *[str(p.relative_to(root)) for p in entries])
-    _git(root, "add", "-u", "--", ".")          # deletions and renames
+    if entries:
+        _git(root, "add", "-f", "--", *[str(p.relative_to(root)) for p in entries])
+    if has_rules:
+        _git(root, "add", "-f", "--", RULES_FILE)
+    # Deletions and renames; a rule path that is not a regular file stays unstaged.
+    _git(root, "add", "-u", "--", ".", *([f":(exclude){RULES_FILE}"] if rules_why else []))
 
     staged = _git(root, "diff", "--cached", "--name-only").stdout.split()
     if not staged:
@@ -122,10 +135,12 @@ def save_one(args, root):
     _git(root, "commit", "-q", "-m", msg)
     head = _git(root, "rev-parse", "--short", "HEAD").stdout.strip()
 
-    # The guarantee: every .md on disk is in this commit, or this is an error.
+    # The guarantee: every .md on disk, and the rule file, is in this commit.
     in_commit = set(_git(root, "ls-tree", "-r", "--name-only", "HEAD").stdout.split())
     missing = [str(p.relative_to(root)) for p in entries
                if str(p.relative_to(root)) not in in_commit]
+    if has_rules and RULES_FILE not in in_commit:
+        missing.append(RULES_FILE)
     if missing:
         sys.exit(f"COMMITTED {head} BUT {len(missing)} entr(ies) are not in it:\n  "
                  + "\n  ".join(missing)
@@ -144,6 +159,21 @@ def save_one(args, root):
     else:
         _push(root, remote[0])
     return 0
+
+
+def _staged_bad_rules(root: Path) -> str | None:
+    """The refusal for a ledger whose rule path is not a regular file while the
+    index holds a change to it, which a commit would carry. A ledger with no
+    entries commits nothing, so it is never refused."""
+    why = rules_problem(rules_path(root))
+    if not why or not any(root.rglob("*.md")):
+        return None
+    staged = _git(root, "diff", "--cached", "--name-only", "--", RULES_FILE, check=False)
+    if staged.returncode or not staged.stdout.strip():
+        return None
+    return (f"{RULES_FILE} {why} and is staged; unstage it with "
+            f"`git -C {root} reset -q -- {RULES_FILE}`, then replace it with a "
+            f"regular file")
 
 
 def cmd_save(args, root):

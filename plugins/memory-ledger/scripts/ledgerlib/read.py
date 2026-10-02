@@ -170,7 +170,7 @@ def cmd_resolve(args, root):
     if len(ledgers) > 1:
         print("         `new` needs --shared or --local. Ask before writing to shared: "
               "history is append-only, so a machine-local fact filed there cannot be "
-              "unpublished later.")
+              "unpublished later. Each ledger's rules: ledger.py rules.")
 
 
 def cmd_show(args, root):

@@ -20,6 +20,8 @@ Everything below needs a decision from you, or names a trap that generalises pas
 
 ## Which ledger
 
+Each ledger's `WHAT-BELONGS.txt` (`ledger.py rules`) is the authority on what it holds; the points below are the defaults it starts from and lose to it.
+
 1. **Shared holds what stays true; local holds what drifts.** Shared: anything a teammate could re-check about the codebase, the product, the business, a third-party contract. Local: true of this machine only — shell profile, tool config, scratch paths, locally-bound services — or true but perishable — a count, a cohort size, a snapshot of moving state. Never an open-ended count in shared: the next session re-runs the check, gets a different number, signs `✗`, and the tally records a refutation that never happened.
 2. **The test is whether the claim pins to a ref**: mainline code, a locked dependency version, an applied migration, a *closed* date window. Production counts, PR and branch status, a runtime flag, an issue tracker pin to nothing.
 3. **Mutability is not the test.** A pinned dependency moves only when someone bumps it; what rots is the vendor's live state, not their code.
@@ -66,7 +68,7 @@ ledger.py new <folder>/_about --local --q "What belongs here?" …       # new f
 3. **Cover the clause that carries the decision.** A two-part claim checked on one half passes, and the untested half gains a corroboration nothing looked at.
 4. **Never chain checks with `;`** — a chain exits 0 on a partial run, so a failure in the middle reads as success. Repeat `--evidence` instead.
 5. **Anchor any `;`-chained line** with `cd <repo> &&` or `git -C <repo>`: with the failing part anywhere but last, the chain exits 0.
-6. **Never hardcode an absolute path into a home directory**; use `~` or `git -C ~/<checkout>`. `/Users/someone/…` fails for everyone else and is tallied as a refutation.
+6. **Never hardcode a path into a home directory**; use a repo-relative path, or `--repo <name>` to name the checkout. A tool's conventional directory, such as a package manager's cache (`~/.gradle/`, `~/.m2/`, `~/.npm/`), is the exception: it has the same shape on every machine with that tool. `/Users/someone/…` fails for everyone else and is tallied as a refutation; `~/<checkout>` assumes every checkout sits in the same place.
 7. **Use `-E` with `git grep`.** Basic regex makes `'fun a|fun b'` match nothing and exit 1 — indistinguishable from a proven absence.
 8. **A branch claim's check must name the ref** (`git grep … origin/<branch> …`), or a session on mainline records a `✗` that is only a ref mismatch.
 

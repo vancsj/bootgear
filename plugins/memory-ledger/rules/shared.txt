@@ -1,0 +1,46 @@
+What belongs in the shared ledger
+
+This WHAT-BELONGS.txt is this ledger's rule file. Sessions read it before
+choosing a ledger or filing an entry, so editing it changes what they are told.
+It is .txt because every .md file under the ledger root is read as an entry.
+Where it differs from the plugin's general guidance, this file wins.
+
+An entry
+- One question, one short claim, and a check that proves the claim.
+- The check is what a teammate re-runs to sign it, so it must run for them.
+
+Belongs here
+- A non-obvious finding: one an agent starting from scratch would need real
+  exploration to reach, such as tracing code, cross-checking sources or
+  external research. It belongs even when the code, a ticket, a review or a
+  vendor page also holds the answer.
+- A fact a teammate can re-check by re-running the check on their own machine.
+- A fact that stays true, or stays useful as a dated record.
+- Facts about mainline code, locked dependency versions, the product and its
+  business rules, and the contracts of third-party services.
+
+A check must run on any teammate's machine
+- Use repo-relative paths, public sources, or a tool's conventional directory.
+- Never a personal path, a personal account, or a local-only file.
+- Name the repository the check runs in, not where it sits on this machine.
+
+Does not belong here
+- Secrets, credentials, or personal data about named people.
+- Anything machine-local. History is append-only: nothing filed here can be
+  taken back once it is pushed.
+- Claims about an unmerged branch or an open change. Keep them local until
+  they merge, then file a mainline answer here.
+- An entry that links to a local-only entry.
+- An obvious fact: an agent starting from scratch gets it from one quick
+  lookup, such as reading one file or the ticket linked in the task. If it
+  would take real exploration, it is not obvious.
+- Duplicates, opinions, habits and trivia.
+
+Dating and change
+- Every claim carries the date it was checked.
+- Never edit an answer. Correct it with a rival answer and its own check.
+- A claim true only for a time window says so and keeps its dates.
+
+This team's own rules
+List here the scripts and tools every teammate has, which checks may use, and
+the topics that always stay in the local ledger.

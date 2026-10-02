@@ -43,6 +43,7 @@ from .model import (
     sig_line,
     split_evidence,
 )
+from .rules import warn_missing_rules
 from .store import Entry, add_cache_row, find_entry
 
 PORTABILITY = "hardcoded personal path"
@@ -307,6 +308,7 @@ def cmd_new(args, root):
               f"to be promoted and re-verified against "
               f"{mainline_ref(context=context) or FALLBACK_REF}")
     warn_missing_about(root, path)
+    warn_missing_rules(root, lg.kind, getattr(args, "prog", "ledger.py"))
 
 
 def _get_answer(e: Entry, aid: str) -> Answer:
