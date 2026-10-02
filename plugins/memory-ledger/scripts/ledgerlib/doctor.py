@@ -20,6 +20,7 @@ from pathlib import Path
 from .config import config_candidates, load_config, resolve_roots
 from .constants import DEFAULT_LOCAL_ROOT, DEFAULT_SHARED_ROOT, KINDS
 from .context import InvocationContext
+from .rules import rules_path, rules_problem, seed_hint
 
 # Walrus assignments in the entry parser put the hard floor at 3.8. Reported
 # rather than assumed: a session on an older interpreter gets a SyntaxError from
@@ -67,6 +68,7 @@ def cmd_doctor(args, root=None):
     context = getattr(args, "context", None) or InvocationContext.from_environment()
     rows = []
     machine_rows = rows if args.json else None
+    prog = getattr(args, "prog", None) or "ledger.py"
     states = []
 
     v = sys.version_info
@@ -124,6 +126,16 @@ def cmd_doctor(args, root=None):
             probe.unlink()
         except OSError as exc:
             states.append(_row(FAIL, f"{kind} writable", f"{exc}", machine_rows))
+        rules = rules_path(p)
+        why = rules_problem(rules)
+        if why:
+            states.append(_row(WARN, f"{kind} rules", f"{rules} {why} — replace it with a "
+                                                      f"regular file", machine_rows))
+        elif rules.is_file():
+            states.append(_row(OK, f"{kind} rules", f"{rules} present", machine_rows))
+        else:
+            states.append(_row(WARN, f"{kind} rules",
+                               f"{rules} missing — {seed_hint(kind, prog)}", machine_rows))
 
     ignored = []
     for kind in KINDS:

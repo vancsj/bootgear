@@ -13,6 +13,7 @@ confidence — and this file is only the front door onto them.
     gates       what `new` and `rival` refuse to write
     lint        drift, voided signatures, folder shape, cross-ledger collisions
     gitops      `save`: one commit per ledger
+    rules       `rules`: each ledger's WHAT-BELONGS.txt, and the shipped defaults
     read        resolve, show, list, resolve-roots
     write       new, rival, sign, refute, promote, assert
     selftest    pins the constants the skill body states in prose
@@ -38,6 +39,7 @@ from ledgerlib.doctor import cmd_doctor
 from ledgerlib.gitops import cmd_save
 from ledgerlib.lint import cmd_lint
 from ledgerlib.read import cmd_list, cmd_resolve, cmd_resolve_roots, cmd_show
+from ledgerlib.rules import cmd_rules
 from ledgerlib.selftest import cmd_selftest
 from ledgerlib.write import (
     cmd_add_evidence,
@@ -70,6 +72,7 @@ EXAMPLES = {
     "assert": 'assert <slug> a1 --why "<ruling>"',
     "set-repo": "set-repo <slug> a1 <repo>",
     "save": "save",
+    "rules": "rules",
     "resolve-roots": "resolve-roots",
     "audit": "audit",
     "doctor": "doctor --json",
@@ -250,6 +253,13 @@ def build_parser() -> argparse.ArgumentParser:
                          "default is a one-line count by tag, `ledger.py lint` for the rest")
     only_arg(sv)
 
+    ru = sub.add_parser("rules", help="print each ledger's WHAT-BELONGS.txt, the rules for "
+                                      "what it holds")
+    ru.add_argument("--init", action="store_true",
+                    help="seed the plugin's default into a ledger that has none; never "
+                         "overwrites an existing file")
+    only_arg(ru)
+
     rs = sub.add_parser("resolve-roots", help="print where each ledger is and whether it exists")
     rs.add_argument("--json", action="store_true", help="machine-readable, for setup")
 
@@ -288,7 +298,7 @@ def _dispatch(args) -> int:
           "show": cmd_show, "list": cmd_list,
           "sign": cmd_sign, "refute": cmd_refute, "promote": cmd_promote, "lint": cmd_lint,
           "save": cmd_save, "audit": cmd_audit, "set-repo": cmd_set_repo,
-          "add-evidence": cmd_add_evidence, "assert": cmd_assert}[args.cmd]
+          "add-evidence": cmd_add_evidence, "assert": cmd_assert, "rules": cmd_rules}[args.cmd]
     # A slug names exactly one entry, so the ledger that holds it is a lookup and
     # never a flag. Only `new` — where the entry does not exist yet — has to be
     # told, which is why that is the one command carrying --shared/--local.

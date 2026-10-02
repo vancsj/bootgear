@@ -81,7 +81,8 @@ repos is their filing habit, not something to infer.
 
 An existing ledger with entries in it is treated as **the shared one** — do not
 repurpose it as the local ledger, and do not move it. On a first install both
-roots are created fresh. `resolve-roots` shows where it actually is; leave it there and record that path in the config rather
+roots are created fresh; once each repo exists, seed its rule file with
+`ledger.py rules --init --only <shared|local>`. `resolve-roots` shows where it actually is; leave it there and record that path in the config rather
 than relocating it to match a default.
 
 ## 3. Create the local ledger
@@ -91,6 +92,13 @@ Only if `doctor` reported it missing. Confirm the path first, then:
 ```
 mkdir -p <local-root> && cd <local-root> && git init -q .
 printf '.ledger-cache.json\n' > .gitignore
+```
+
+Seed its rule file, then read it:
+
+```
+ledger.py rules --init --only local
+ledger.py rules --only local
 ```
 
 Then seed its charter — a folder with no `_about.md` is an orphan and `lint`
@@ -188,8 +196,9 @@ fails for every other person for the reason "you are not them", and that failure
 gets signed `✗` and counted by the tally as a refutation of the claim.
 
 Answer bodies are immutable, so the fix is a new answer carrying a portable
-check: `ledger.py rival <slug> --keep-evidence <aN> --evidence "…"` with a `~`
-or `git -C ~/<checkout>` form. It starts unconfirmed and earns its own votes —
+check: `ledger.py rival <slug> --keep-evidence <aN> --evidence "…"` with a
+repo-relative path, or `--repo <name>` to name the checkout instead of embedding
+its location. It starts unconfirmed and earns its own votes —
 correct, since nobody has verified the new check.
 
 **Which ledger an entry belongs in has no heuristic, and you make the call, not
@@ -212,9 +221,9 @@ ledger — asking one question of each:
   exits non-zero with no output, which the next session cannot tell apart from a
   proven absence, so it signs `✗` and the ledger records a refutation that never
   happened.
-- **Yes** → nothing to do, including when the path looks personal. A directory
-  under `~/` is very often a convention the whole team shares, which is exactly
-  why no pattern is allowed to decide this.
+- **Yes** → nothing to do. A path under `~/` counts as portable when it is a
+  tool's conventional directory, such as a package manager's cache (`~/.gradle/`,
+  `~/.m2/`, `~/.npm/`), or the ledger's rules name it.
 
 Report your proposed classification to the user and let them confirm before
 anything moves. Moving an entry is `git mv` and fixing its `# <slug>` header line
@@ -267,7 +276,7 @@ ledger.py lint
 ledger.py resolve "<something the user has asked before>"
 ```
 
-Setup is done when `doctor` shows no failures, both ledgers appear in
-`resolve-roots` with entry counts, and a `resolve` returns candidates tagged
+Setup is done when `doctor` shows no failures and a `rules` row per ledger,
+both ledgers appear in `resolve-roots` with entry counts, and a `resolve` returns candidates tagged
 `[shared]` / `[local]`. Report those three results and stop — do not go on to
 file anything.

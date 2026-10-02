@@ -27,6 +27,7 @@ ledger.py lint [--fix] [--only …]              # drift, voided sigs, folder sh
 ledger.py save [-m "…"] [--no-push] [--only …] # lint --fix, then one commit per ledger
 ledger.py audit [--json] [--filter <text>]     # Evidence lines hardcoding a home path
 ledger.py doctor                               # python, git, config, both roots
+ledger.py rules [--init] [--only …]            # each ledger's WHAT-BELONGS.txt; --init seeds a missing one
 ledger.py resolve-roots [--json]               # where each ledger is, and whether it exists yet
 ledger.py doctor --json                         # structured configured/unconfigured/broken status
 ledger.py selftest                             # pin the conf/hash constants
@@ -68,7 +69,10 @@ ledger.py selftest                             # pin the conf/hash constants
 <ledger root>/business/ tech/ process/
   └── <slug>.md                 # entry: Q + answers + sig lines + recorded output
   └── _about.md                 # what belongs in this folder — an entry like any other
+  WHAT-BELONGS.txt              # what belongs in this ledger; `save` commits it
 ```
+
+- `WHAT-BELONGS.txt` is `.txt` because every `*.md` under the root is read as an entry. `rules --init` seeds the plugin's default and never overwrites an existing file.
 
 - Every directory has an `_about.md`, written in the commit that creates the folder: `Q: What belongs here?`, competing visions as rival answers. A local and a shared `tech/_about` are not a collision.
 - No `_meta/`. The schema and constants are this skill and `ledgerlib/constants.py`; a copy inside the ledger drifts.
