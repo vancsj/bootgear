@@ -5,8 +5,9 @@ Runs on `SessionStart` with matcher `compact`, which fires after compaction
 and, unlike `PostCompact`, can return `additionalContext` to the model.
 
 Appends the run's `/goal` text when the session ledger
-`~/.bootgear/session/<session_id>.md` exists. `goal:` is a YAML ">" folded
-scalar, so the settlement section is parsed as real YAML. Every failure path
+`~/.bootgear/session/<session_id>.md` exists. The settlement section is parsed
+as real YAML; `goal` may be a legacy string or a mapping with `succeeded` and
+`failed` conditions. Every failure path
 (missing ledger, malformed YAML, missing `goal`) still prints the base
 NUDGE_MESSAGE.
 
@@ -57,7 +58,15 @@ def _goal_text(settlement: dict | None) -> str | None:
     if not settlement:
         return None
     goal = settlement.get("goal")
-    return goal.strip() if isinstance(goal, str) and goal.strip() else None
+    if isinstance(goal, str):
+        return goal.strip() or None
+    if isinstance(goal, dict):
+        succeeded = goal.get("succeeded")
+        failed = goal.get("failed")
+        if (isinstance(succeeded, str) and succeeded.strip()
+                and isinstance(failed, str) and failed.strip()):
+            return f"succeeded when {succeeded.strip()}\nfailed when {failed.strip()}"
+    return None
 
 
 def _read_file_text(path: Path) -> str | None:

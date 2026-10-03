@@ -1,6 +1,6 @@
 {
   "name": "engine",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "General autonomous task-execution loop: clarify settles task type, approach, per-domain source-of-truth, debate threshold, and autonomy scope, then execute runs unattended to a succeeded/failed /goal. Declared dependencies, installed automatically: converge, spec, test, review, advisor, memory-ledger.",
   "author": {
     "name": "vancsj",

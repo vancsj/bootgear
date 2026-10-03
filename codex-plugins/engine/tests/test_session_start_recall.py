@@ -88,6 +88,24 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
 
+    def _set_mapping_goal(self):
+        ledger = self.session_dir / f"{self.run_id}.md"
+        ledger.write_text(
+            ledger.read_text().replace(
+                "goal: succeeded when done. failed when undoable.",
+                "goal:\n  succeeded: the mapping goal is rendered\n  failed: the mapping goal cannot be rendered\n",
+            )
+        )
+
+    def test_mapping_goal_is_rendered(self):
+        self._set_mapping_goal()
+        msg = self._run()
+        self.assertIn(
+            "This run's goal:\nsucceeded when the mapping goal is rendered\n"
+            "failed when the mapping goal cannot be rendered",
+            msg,
+        )
+
     def test_no_sources_present_base_message_only(self):
         msg = self._run()
         self.assertIn("This session just compacted", msg)

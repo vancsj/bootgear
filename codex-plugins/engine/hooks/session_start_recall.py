@@ -14,11 +14,9 @@ rather than needing a search-shaped heuristic the way memory-ledger's
 Also loads the run's actual `goal` text, when a ledger for this session
 exists, and appends it to the nudge — a compaction summary of the goal is
 lossy in exactly the way the settlement itself is, so recall's own re-read
-should not be the first time the real goal text reappears. `goal:` is a
-YAML ">" folded scalar (line breaks fold to spaces unless a line is blank),
-a different scalar type from state.py's `state_machine: |` literal block —
-folding it with the same dedent-and-join trick used there would produce
-the wrong text, so this parses the whole settlement section as real YAML.
+should not be the first time the real goal text reappears. `goal` may be a
+legacy string or a mapping with `succeeded` and `failed` conditions, so this
+parses the whole settlement section as real YAML.
 Every failure path here (missing ledger, malformed YAML, missing `goal`
 field) still prints the base NUDGE_MESSAGE — recall's own reminder to
 re-read from disk must never be silently dropped because the goal-loading
@@ -82,7 +80,15 @@ def _goal_text(settlement: dict | None) -> str | None:
     if not settlement:
         return None
     goal = settlement.get("goal")
-    return goal.strip() if isinstance(goal, str) and goal.strip() else None
+    if isinstance(goal, str):
+        return goal.strip() or None
+    if isinstance(goal, dict):
+        succeeded = goal.get("succeeded")
+        failed = goal.get("failed")
+        if (isinstance(succeeded, str) and succeeded.strip()
+                and isinstance(failed, str) and failed.strip()):
+            return f"succeeded when {succeeded.strip()}\nfailed when {failed.strip()}"
+    return None
 
 
 def _read_file_text(path: Path) -> str | None:
