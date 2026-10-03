@@ -12,7 +12,7 @@ TASK = PLUGIN_DIR / "scripts" / "task"
 CONVERGE = PLUGIN_DIR / "scripts" / "converge"
 EXPECTED_SKILLS = {
     "clarify", "converge", "debate", "execute", "recall", "resolve", "review", "spec",
-    "start", "test",
+    "start", "spec-review", "test",
 }
 
 
@@ -20,7 +20,7 @@ class CodexPackageContractTest(unittest.TestCase):
     def test_manifest_and_hooks_are_codex_package_shape(self):
         manifest = json.loads(MANIFEST.read_text())
         self.assertEqual(manifest["name"], "engine")
-        self.assertEqual(manifest["version"], "0.14.1")
+        self.assertEqual(manifest["version"], "0.15.0")
         self.assertIn("converge", manifest["description"])
         self.assertNotIn("hooks", manifest)
 
@@ -477,16 +477,60 @@ class CodexPackageContractTest(unittest.TestCase):
         skills = PLUGIN_DIR / "skills"
         texts = {name: (skills / name).read_text() for name in (
             "execute/SKILL.md", "execute/reference.md", "recall/reference.md")}
-        self.assertIn("`engine:spec`, `engine:test` and `engine:review`", texts["execute/SKILL.md"])
-        self.assertIn("`engine:spec`, `engine:test`, and `engine:review`",
+        self.assertIn("`engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`", texts["execute/SKILL.md"])
+        self.assertIn("`engine:spec`, `engine:spec-review`, `engine:test`, and `engine:review`",
                       texts["recall/reference.md"])
-        self.assertIn("`engine:spec`, `engine:test` and `engine:review`",
+        self.assertIn("`engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`",
                       " ".join(texts["execute/reference.md"].split()))
         self.assertNotIn("bare name", texts["execute/SKILL.md"])
         self.assertNotIn("by its public name", texts["execute/reference.md"])
         for name, text in texts.items():
-            for wrong in ("spec:spec", "test:test", "review:review"):
+            for wrong in ("spec:spec", "spec:spec-review", "test:test", "review:review"):
                 self.assertNotIn(wrong, text, name)
+
+    def test_spec_review_contract_and_angles_are_present(self):
+        skill = PLUGIN_DIR / "skills" / "spec-review"
+        text = " ".join((skill / "SKILL.md").read_text().split())
+        self.assertIn("fresh converge roles", text)
+        self.assertIn("blocked > revise > choices > ready", text)
+        self.assertIn("eight dedicated find angles", text)
+        for name in ("reference.md", "references/lenses.md", "references/find-angles.yaml"):
+            self.assertTrue((skill / name).is_file())
+
+    def test_spec_review_settlement_fields_are_optional_and_shaped(self):
+        with tempfile.TemporaryDirectory(prefix="engine-spec-review-fields-") as tmp:
+            root = Path(tmp)
+            settlement = root / "settlement.txt"
+            settlement.write_text(
+                "task_type: ticket-to-pr\nrequest_assessment: fixture\n"
+                "approach: fixture\nprinciples: none\nsource_of_truth:\n  scope: fixture\n"
+                "debate_threshold: fixture\ndebate_round_cap: 1\n"
+                "convergence_policy: unanimous\nconsented_stop_allowed: true\n"
+                "debate_party_config: {}\ndebate_roster: [main-agent, independent-reviewer]\n"
+                "spec_skill: spec\ntest_skill: test\nreview_skill: review\n"
+                "spec_review_skill: spec-review\nspec_review_override: spec-review\n"
+                "spec_debate_mode: threshold\nreview_fix_mode: accepted_only\n"
+                "autonomy:\n  no_further_questions: true\n  permitted_mutations: [run tests]\n"
+                "goal:\n  succeeded: done\n  failed: never\n"
+                "state_machine: |\n  name: smoke\n  nodes:\n    clarify:\n      next: [succeeded]\n"
+                "    succeeded:\n      terminal: true\n    failed:\n      terminal: true\n"
+                f"session_dir: {root.resolve()}\n"
+            )
+            accepted = subprocess.run(
+                [str(TASK), "session", "validate", "spec-review-fields", "--dir", tmp,
+                 "--settlement-file", str(settlement), "--prose"],
+                capture_output=True, text=True, check=False,
+            )
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+    def test_spec_review_angles_resolve_as_find_angles(self):
+        angle_file = PLUGIN_DIR / "skills" / "spec-review" / "references" / "find-angles.yaml"
+        result = subprocess.run(
+            [str(CONVERGE), "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(json.loads(result.stdout)["angles"]), 8)
 
     def test_failed_needs_no_confirm_leave(self):
         execute = " ".join((PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text().split())

@@ -3,14 +3,14 @@ name: spec
 description: Gather requirements, design an approach for real trade-offs, get sign-off, and derive a mechanical task breakdown — investigating current behavior, listing open questions instead of guessing, and skipping stages a small task doesn't need. Terse skeleton docs with rationale kept in a separate notes file. Runs standalone and delegates to a project-specific spec skill when one is registered. Use when requirements, a design choice, or an implementation checklist must be settled before implementation.
 ---
 
-Use this process unless an override applies. Read `reference.md` § `Four stages, not one pass` for design rationale.
+Use this process unless an override applies. Read `reference.md` § `Five stages, not one pass` for design rationale.
 
 ## Check for an override first
 
 Use this precedence before doing other work, and again before each of the 4
 stages below when `spec_override` is a mapping — a bare skill name applies
 to the whole task and only needs checking once, but a mapping is keyed by
-sub-task label, and each stage (`requirements`, `design`, `sign-off`, `task`)
+sub-task label, and each stage (`requirements`, `design`, `review`, `task`)
 is its own sub-task that may have its own matching entry:
 
 1. **Active `engine` run.** If the current `<run-id>` has a session ledger, run:
@@ -22,7 +22,7 @@ is its own sub-task that may have its own matching entry:
    Read `spec_override` from the settlement, then scan the session ledger's decisions for an `AMENDMENT spec_override` entry — a later, explicit change to this field recorded mid-run. If one exists, its most recent value wins over the field just read.
 
    - A bare `<skill-name>` applies to the task.
-   - A mapping from sub-task label to `<skill-name>` applies to the matching sub-task — for this skill's own stages, use the labels `requirements`, `design`, `sign-off`, `task`.
+   - A mapping from sub-task label to `<skill-name>` applies to the matching sub-task — for this skill's own stages, use the labels `requirements`, `design`, `review`, `task`.
 
    `clarify` registers this entry once per run. If it is absent, or a mapping has no matching label for the current stage, use the default for that stage. Do not search for another override.
 
@@ -36,7 +36,7 @@ An override must return each stage's artifact as defined in that stage's own "Re
 
 ## Default implementation
 
-Four stages: requirements, design, sign-off, task breakdown. Each returns
+Five stages: requirements, design, independent review package, task breakdown, and package return. Each returns
 its own artifact via its own "Return the ... artifact" step; nothing here
 decides an open question itself. Stages 1 and 2 each write two files — see
 "Skeleton and notes" below.
@@ -65,13 +65,13 @@ decides an open question itself. Stages 1 and 2 each write two files — see
 
 4. **List open questions.** Record conflicting signals, missing ticket details, and design choices with real trade-offs. Do not guess or run `resolve` or `debate`; this stage produces the artifact and does not decide its own open questions.
 
-5. **Return the requirements artifact.** `requirements.md`'s content and suggested path, `requirements-notes.md`'s suggested path, and the open-questions list. `spec` does not decide where either file actually lives — the caller does. A direct caller answers the open questions itself. In an `engine` run, `execute` runs `resolve` and, if needed, `debate` for each one before design starts.
+5. **Return the requirements artifact.** `requirements.md`'s content and suggested path, `requirements-notes.md`'s suggested path, and the open-questions list. `spec` does not decide where either file actually lives — the caller does. A direct caller answers the open questions itself. In an `engine` run, open choice claims are handled by `execute` after independent `spec-review`, through `resolve` and, if needed, `debate`.
 
 ### Stage 2: design
 
 Only for a task whose requirements stage found real design trade-offs — an
 implementation choice with more than one reasonable shape, not a
-mechanical follow-through with one obvious path. Skip straight to sign-off
+mechanical follow-through with one obvious path. Skip straight to the review package
 otherwise; see "Progressive disclosure." A skipped stage 2 means stage 3
 checks `requirements.md` instead of `design.md` — see "The completeness
 check."
@@ -80,25 +80,21 @@ check."
 
 2. **Write `design.md`** (skeleton). What changes, where, and in what order — concrete enough that "implement this" doesn't require another design decision mid-build. Cite an existing pattern in the codebase being mirrored, rather than re-deriving a convention already settled elsewhere. Apply the same terseness as `requirements.md`: this file is what stage 3 checks against, so padding here makes the completeness check harder to satisfy honestly, not easier.
 
-3. **Write `design-notes.md`** for rationale — see "Skeleton and notes."
+3. **Write `design-notes.md`** for rationale only — see "Skeleton and notes." Keep every considered alternative and its cost in `design.md` so independent review can inspect it.
 
-4. **Return the design artifact.** `design.md`'s content and suggested path, `design-notes.md`'s suggested path, and any trade-off it could not resolve on its own — carried into sign-off as an open question, not decided here either.
+4. **Return the design artifact.** `design.md`'s content and suggested path, `design-notes.md`'s suggested path, and any trade-off it could not resolve on its own — carried into the review package as an open question, not decided here either.
 
-### Stage 3: sign-off
+### Stage 3: prepare for independent review
 
-1. **Run the completeness check.** Read only `design.md` (or, if stage 2 was skipped, `requirements.md`) — never the `-notes.md` file. See "The completeness check" for the exact criteria. If a change fails a criterion, name the failing criterion and the change. If `design.md` failed, return to stage 2 with the specific gap. If `requirements.md` failed because stage 2 was skipped, run stage 2 now — the failure means this task needed the design stage after all, so the check both catches the gap and corrects the skip. Do not proceed to the next step until this passes.
+1. **Run the completeness check.** Read only the skeleton artifacts — `requirements.md` and `design.md` when stage 2 ran — never the `-notes.md` files. Apply the four criteria in "The completeness check". If one fails, name the criterion and return to stage 2 or revise requirements before continuing; if stage 2 was skipped and requirements fail, run stage 2 now.
 
 2. **Check the result against `goal` and every constraint stage 1 recorded.** Confirm nothing was dropped or contradicted.
 
-3. **Judge whether this needs more than a solo sign-off.** Read `spec_debate_mode` from the settlement (default `mandatory`; see "spec_debate_mode"). Under `mandatory`, always attempt `resolve` on `requirements.md` and `design.md` together, or on `requirements.md` alone if stage 2 was skipped; escalate to `debate` only if `resolve` cannot decide and the disagreement is at or above `debate_threshold`. Under `threshold`, use `execute`'s own below-threshold solo-decision rule instead: sign off directly when the task is narrow, reversible, and has no open design trade-off (or one already resolved in stage 2); attempt `resolve`/escalate only at or above threshold. Either way, do not call `resolve`/`debate` directly from inside `spec`: report the specific unresolved trade-off as this stage's open question instead. In an `engine` run, `execute` runs `resolve`, then `debate` if needed, using its own `spec-debate` node — calling either directly from inside `spec` has no admission path and would debate the same trade-off `spec-debate` already exists to debate. A standalone caller without an active run resolves it itself.
-
-4. **Iterate on rejection.** If sign-off rejects the design (from either step 1 or step 3), return to stage 2 with the specific objection; do not silently patch the artifact and re-submit without naming what changed and why.
-
-5. **Return the sign-off artifact.** The final shape, ready for stage 4 if signed off, or the specific open trade-off if it needs `resolve`/`debate` first.
+3. **Proceed to task breakdown.** Do not return the review package until the task artifact has been derived in stage 4.
 
 ### Stage 4: task breakdown
 
-Only reached once sign-off's completeness check (stage 3, step 1) has
+Only reached once the requirements/design completeness check (stage 3, step 1) has
 passed. Never runs before that, and never on a design that failed it.
 
 1. **Derive the checklist.** Write `task.md`: an ordered list of concrete
@@ -107,10 +103,12 @@ passed. Never runs before that, and never on a design that failed it.
    step that makes a choice `design.md` didn't already make.
 
 2. **Refuse structurally on a gap, never decide one.** If a step cannot be
-   derived from a single, unambiguous statement in the signed-off
+   derived from a single, unambiguous statement in the reviewed
    document — it's silent, ambiguous, or offers more than one *substantive*
    option (what to build, which file, what behavior results) — stop.
-   Return no `task.md`. Return instead the specific step you could not
+   Return no `task.md`; make one bounded loop back within `spec` to stage 2 or stage 3 with
+   the specific gap, then derive the task again. If the same gap remains, return `blocked` to
+   `execute` with the missing statement as the failure reason. Return instead the specific step you could not
    derive and the missing or ambiguous statement. Do not choose, do not
    infer the likely intent, do not call `resolve` or `debate`, and do not
    record the gap as an open question of your own; report it and stop.
@@ -125,7 +123,15 @@ passed. Never runs before that, and never on a design that failed it.
    penalize a design for correctly declaring order-independence.
 
 3. **Return the task artifact.** `task.md`'s content and suggested path,
-   or the structural refusal from step 2.
+   or the structural refusal from step 2 after the one retry is exhausted.
+
+### Re-entry from independent review
+
+When `spec-review` returns `revise`, read its render and claim IDs, address each claim in the skeleton artifacts, rerun stages 3–5, and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. A blocked return transitions the run to `failed` with the claim IDs and evidence.
+
+### Stage 5: return review package
+
+Return the requirements, design when stage 2 ran, and `task.md` paths, the open interpretations or material design choices, and the exact repository evidence the independent `spec-review` stage must inspect. Do not call `resolve` or `debate`; the state machine owns those decisions after review.
 
 ## Skeleton and notes
 
@@ -134,8 +140,9 @@ Each of `requirements.md`/`design.md` (the skeleton) pairs with
 the always-read main content: it must state the facts stage 3's
 completeness check reads, and only those and closely related ones, as
 tersely as the facts allow. The notes file holds rationale, cited
-`memory-ledger` entries, considered-and-rejected alternatives, and
-anything else read conditionally rather than by default.
+`memory-ledger` entries, and anything else read conditionally rather than by
+default. Considered alternatives and their costs belong in the `design.md`
+skeleton because independent review must inspect them.
 
 The completeness check (stage 3, step 1) reads only the skeleton files,
 never a `-notes.md` file. This is structural, not a policy the check
@@ -163,32 +170,29 @@ Check each one by reading; none require an aggregate judgment:
 
 If any criterion fails, name the failing criterion and the specific change
 that fails it, and run or return to stage 2 as described in "Stage 3:
-sign-off," step 1. Never proceed to stage 4 on a failing check, and never
+review package," step 1. Never proceed to stage 4 on a failing check, and never
 let stage 4 make the judgment call this check exists to catch upstream.
 
 ## spec_debate_mode
 
-A settlement field, set once by `clarify`, read by stage 3. Two values:
+A settlement field, set once by `clarify`, read by the engine after `spec-review`. Two values:
 
-- **`mandatory`** (default): stage 3 always attempts `resolve` on
-  `requirements.md` and `design.md` together, escalating to `debate` (via
-  `execute`'s `spec-debate` node, never a direct call from `spec`) only if
-  `resolve` cannot decide and the disagreement is at or above
-  `debate_threshold`.
-- **`threshold`**: sign off solo below
-  `debate_threshold`, attempt `resolve`/escalate only at or above it.
+- **`mandatory`** (default): every unresolved choice claim returned by
+  `spec-review` is sent to `resolve`; unresolved claims at or above
+  `debate_threshold` go to `debate` through the `spec-debate` node.
+- **`threshold`**: below-threshold choice claims are decided solo; only
+  above-threshold claims are sent to `resolve` and possibly `debate`.
 
-Either value leaves the completeness check (stage 3, step 1) and stage 4's
-non-escalation unchanged; `spec_debate_mode` only changes how often stage 3
-attempts `resolve`, never whether stage 4 can reach `resolve`/`debate` — it
-never can, under either value.
+Neither value changes the independent correctness/completeness review. They
+only control how the engine handles choice claims after that review; debate
+never bypasses a re-review.
 
 ## Progressive disclosure
 
 Scale the detail, and the stages actually run, to the task:
 
-- For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, sign off in stage 3 against `requirements.md`, and derive a short `task.md` in stage 4.
-- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether sign-off needs `resolve`/`debate`.
+- For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, complete the review package check against `requirements.md`, derive a short `task.md`, and return the package.
+- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
 
 ## Host mechanics
 

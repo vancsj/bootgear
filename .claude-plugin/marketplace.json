@@ -19,7 +19,7 @@
     {
       "name": "spec",
       "source": "./plugins/spec",
-      "description": "Default requirements-gathering skill for engine's ticket-writing task type. Works standalone or as an engine peer, overridable per project."
+      "description": "Requirements and independent spec-review skill for engine's ticket-writing and ticket-to-pr task types. Works standalone or as an engine peer, overridable per project."
     },
     {
       "name": "test",

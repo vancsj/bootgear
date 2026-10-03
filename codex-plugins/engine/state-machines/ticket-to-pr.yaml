@@ -16,23 +16,32 @@ nodes:
     next: [spec]
   spec:
     reminder:
-      do: "Draft the spec with spec. Cite the ticket's acceptance criteria."
-      leave: "Resolve was attempted on the requirements and design, or spec_debate_mode is threshold and the decision is below threshold, and the outcome is recorded in the run ledger."
+      do: "Draft requirements, design, and tasks with spec. Cite the request's acceptance criteria; record open interpretations and design choices without inventing answers."
+      leave: "The requirements, design, and task breakdown are complete enough for independent review; do not resolve the final spec sign-off here."
       branches:
-        spec-debate: "The design has an unresolved decision above the run threshold."
-        impl: "The requirements and design are complete enough to implement."
-    next: [spec-debate, impl]
+        spec-review: "The draft is ready for an independent correctness and completeness review."
+    next: [spec-review]
+  spec-review:
+    max_visits: 3
+    reminder:
+      do: "Run spec-review. Independently check request fit, clarity and completeness, architecture fit, best practices, simpler alternatives, proportionality, testability, and generic converge coverage; do not use the author transcript or another role's reasoning."
+      leave: "The independent review has complete coverage and its findings, evidence, choices, and one handback outcome are recorded; mixed findings use blocked > revise > choices > ready."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      branches:
+        spec: "The artifacts need revision; carry the claim IDs and evidence back to spec."
+        spec-debate: "Only unresolved material interpretations or design choices remain after review."
+        impl: "The reviewed artifacts are ready for implementation."
+    next: [spec, spec-debate, impl]
   spec-debate:
     reminder:
-      do: "Debate the spec draft: run the resolve skill, and the debate skill if resolve escalates."
-      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the requirements or design is in the artifact."
+      do: "Apply spec_debate_mode to the spec-review choice claims: decide below-threshold claims solo in threshold mode, resolve every claim in mandatory mode, and debate only unresolved claims at or above the settled threshold; update the artifacts and record the decision."
+      leave: "The decision is recorded in the run ledger and any change to the requirements or design is in the artifact; return through spec for re-review."
       branches:
-        spec: "Split and return to the spec."
-        impl: "Converge and continue to implementation."
-    next: [spec, impl]
+        spec: "The decision is settled or changes the artifacts; return to spec and then spec-review."
+    next: [spec]
   impl:
     reminder:
-      do: "Implement the signed-off design."
+      do: "Implement the reviewed design."
       leave: "Every item in the task breakdown is implemented with its failing-first test recorded in the run ledger."
     next: [test-code]
   test-code:

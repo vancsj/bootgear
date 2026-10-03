@@ -105,7 +105,7 @@ task session read <run-id> --dir <session-dir> --section decisions
 - Require `spec`, `test`, and `review` to check `spec_override`, `test_override`, `review_override`, and `review_fix_mode` before trusting settlement values. See each skill's "Check for an override first".
 - Never dispatch from `spec_skill`, `test_skill`, or `review_skill`.
 - Dispatch only from the corresponding `_override` field.
-- Record `AMENDMENT spec_skill: ...`, `AMENDMENT test_skill: ...`, or `AMENDMENT review_skill: ...` after normal shape validation, but do not use those amendments for runtime dispatch.
+- Record `AMENDMENT spec_skill: ...`, `AMENDMENT spec_review_skill: ...`, `AMENDMENT test_skill: ...`, or `AMENDMENT review_skill: ...` after normal shape validation, but do not use those amendments for runtime dispatch.
 - Amend the corresponding `_override` field to change which skill a domain call uses.
 
 Reject an amendment in any of these cases. Keep the last valid value:
@@ -134,7 +134,7 @@ Reject an amendment in any of these cases. Keep the last valid value:
 ## Run manifest after compaction
 
 - Read the run manifest under `--section settlement`.
-- Read these manifest fields: `spec_skill`, `test_skill`, `review_skill`, `debate_roster`, `debate_admission`, and `review_fix_mode`.
+- Read these manifest fields: `spec_skill`, `spec_review_skill` (default `spec-review` when absent), `test_skill`, `review_skill`, `debate_roster`, `debate_admission`, and `review_fix_mode`.
 - Do not use a separate manifest flag.
 - Treat the manifest as the authority for skills, agents, and capabilities allowed in the run.
 - Do not infer permission from pre-compaction context.

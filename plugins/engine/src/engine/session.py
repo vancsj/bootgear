@@ -346,6 +346,7 @@ def _check_no_embedded_heading(body: str, label: str) -> None:
 TASK_TYPES = {"ticket-writing", "bug-triage", "ticket-to-pr", "pr-review"}
 ENGINE_SKILLS = {"clarify", "execute", "resolve", "debate", "recall"}
 SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
+OPTIONAL_SKILL_FIELDS = ("spec_review_skill", "spec_review_override")
 # Claude Code dispatches a debate party as a sub-agent or through the advisor
 # skill; the Codex port accepts native_subagent only.
 PARTY_MECHANISMS = ("advisor", "native_subagent")
@@ -426,9 +427,13 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
 
     for field in SKILL_FIELDS:
         skill_value(field)
-    for field in ("spec_override", "test_override", "review_override"):
+    for field in ("spec_override", "test_override", "review_override", *OPTIONAL_SKILL_FIELDS):
         if field in data:
             skill_value(field, override=True)
+
+    spec_debate_mode = data.get("spec_debate_mode")
+    if spec_debate_mode is not None and spec_debate_mode not in {"mandatory", "threshold"}:
+        problems.append(("spec_debate_mode", "must be mandatory or threshold"))
 
     roster = data.get("debate_roster")
     if roster is not None:

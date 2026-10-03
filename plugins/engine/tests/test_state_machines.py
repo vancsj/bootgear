@@ -68,6 +68,29 @@ class ClaudeStateMachineTest(unittest.TestCase):
                 task_type,
             )
 
+    def test_spec_review_is_the_only_implementation_gate(self):
+        paths = [PLUGIN_DIR / "state-machines", REPO_ROOT / ".bootgear" / "config"]
+        for machine_dir in paths:
+            for filename, terminal in (("ticket-to-pr.yaml", "impl"), ("ticket-writing.yaml", "succeeded")):
+                machine_name = (
+                    filename if machine_dir == PLUGIN_DIR / "state-machines"
+                    else "state-machine-" + filename
+                )
+                machine = yaml.safe_load((machine_dir / machine_name).read_text())
+                spec = machine["nodes"]["spec"]
+                review = machine["nodes"]["spec-review"]
+                expected_spec_next = (
+                    ["ticket"]
+                    if filename == "ticket-writing.yaml" and machine_dir != PLUGIN_DIR / "state-machines"
+                    else ["spec-review"]
+                )
+                self.assertEqual(spec["next"], expected_spec_next)
+                self.assertEqual(review["max_visits"], 3)
+                self.assertNotIn(terminal, spec["next"])
+                self.assertIn(terminal, review["next"])
+                self.assertEqual(machine["nodes"]["spec-debate"]["next"], ["spec"])
+                self.assertIn("leave_check", review["reminder"])
+
     @staticmethod
     def _normalize(machine):
         nodes = {}

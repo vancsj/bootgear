@@ -39,7 +39,7 @@ this run, unconditionally.
   and session directory.
 - Supply `<plugin-root>` as `<engine-root>` in the handoff to downstream skills.
 
-When delegating, invoke the domain skills by their plugin-qualified names `engine:spec`, `engine:test` and `engine:review`. Do not read `spec_skill`, `test_skill`, or `review_skill` yourself and call that skill instead. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly.
+When delegating, invoke the domain skills by their plugin-qualified names `engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`. Do not read skill fields yourself and call that skill instead. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly.
 
 ## Reading and merging principles
 
@@ -134,6 +134,8 @@ For each iteration, follow these steps:
 
    A debate/resolve node is worked like any other: check the debate threshold, run `resolve`, and run `debate` only if `resolve` escalates. For a reversible, narrow decision below the threshold, decide solo instead and record it with its below-threshold basis:
 
+   For `spec-debate`, apply `spec_debate_mode` to the choice claims returned by `spec-review`: `mandatory` resolves every claim, while `threshold` decides below-threshold claims solo and resolves only claims at or above the threshold. Debate always returns through `spec` and `spec-review`.
+
    ```text
    task session record-decision <run-id> --dir <session-dir> --mode solo --summary "<decision; below-threshold basis>"
    ```
@@ -169,7 +171,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 
 ## Delegating to `spec`, `test`, and `review`
 
-Before using `spec`, `test`, or `review`:
+Before using `spec`, `spec-review`, `test`, or `review`:
 
 - Check that the skill is available. If the task type requires a missing dependency, such as `test` for ticket-to-PR, report it once and fail with the dependency named as the reason. Do not retry.
 - Invoke the dependency by its public name.
@@ -177,6 +179,7 @@ Before using `spec`, `test`, or `review`:
 - On a `review` outcome of `handoff`, stay at `review` and check the returned claim ids first. Before building a fix that adds a mechanism the signed-off spec does not name (a command, flag, check, guard, node or file), run `resolve` in the `scope and outcome` domain, with the spec as the scope source, or else the ticket or PR. On a settled rejection, the fix is out of scope: do not build it. On an undecided `resolve`, go to `review-debate`. Then transition to the current node's `fix` branch and apply the remaining claim ids there; with none remaining, take the branch that matches the review without them.
 - On `comment_only`, report the claims and take the branch that matches the reported outcome.
 - Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
+- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the spec-review visit number `<n>` (used only in the slate id, never as `--pass`). On `ready`, use the implementation/ticket branch; on `revise`, pass claim IDs, render path, slate, and converge directory back to `spec`; on `choices`, pass the same fields to `spec-debate`; on `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. When leaving, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
 
 ## Checking and recording in memory-ledger
 

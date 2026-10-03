@@ -5,7 +5,7 @@
 `clarify` resolves and writes `task_type`, `approach`, `principles`,
 `source_of_truth`, `debate_threshold`, `debate_round_cap`,
 `convergence_policy`, `consented_stop_allowed`, the run manifest
-(`spec_skill`, `test_skill`, `review_skill`, `debate_roster`,
+(`spec_skill`, `spec_review_skill`, `test_skill`, `review_skill`, `debate_roster`,
 `review_fix_mode`), `autonomy` (`no_further_questions`,
 `permitted_mutations`), `goal`, and `state_machine` unconditionally.
 
@@ -26,7 +26,7 @@ ledger at a different `--dir` with the same run id. See SKILL.md § Picking up f
 ## Resolved skill fields
 
 `spec_override`, `test_override`, and `review_override` record the user's
-choice, which may be a mapping or absent. `spec_skill`, `test_skill`, and
+choice, which may be a mapping or absent. `spec_skill`, `spec_review_skill`, `test_skill`, and
 `review_skill` record the resolved skill for the current delegation.
 
 The manifest fields describe what the run may use; they are not a
@@ -150,7 +150,7 @@ Checking and recording in memory-ledger.
 
 ## Skill invocation
 
-Invoke `spec`, `test` and `review` as `engine:spec`, `engine:test` and `engine:review`:
+Invoke `spec`, `spec-review`, `test` and `review` as `engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`:
 Codex names a skill bundled in a plugin `<plugin>:<skill>`.
 The platform provides no stronger guarantee for calling them than invoking them
 by that name. Their output must

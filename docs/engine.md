@@ -59,8 +59,10 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `task config resolve` report);
 - `autonomy`: `no_further_questions` and an explicit list of permitted mutations;
 - domain overrides `spec_override` / `test_override` / `review_override`, a
-  skill name or a `{sub-task-label: skill}` map, and `spec_debate_mode`;
-- the run manifest: `spec_skill` / `test_skill` / `review_skill`,
+  skill name or a `{sub-task-label: skill}` map, optional
+  `spec_review_skill` / `spec_review_override`, and `spec_debate_mode`;
+- the run manifest: `spec_skill` / `spec_review_skill` / `test_skill` /
+  `review_skill`,
   `debate_roster`, `debate_admission`, `review_fix_mode`;
 - `goal` and `session_dir` (written by `init` as the resolved absolute path).
 
@@ -101,7 +103,8 @@ Only skills listed in `debate_admission` may call `debate` directly.
 ## Delegation
 
 - Each machine node's `reminder.do` names the skill that does its work:
-  `spec` for spec nodes, `test` for test and triage nodes, `review` for review
+  `spec` for authoring nodes, `spec-review` for independent artifact review,
+  `test` for test and triage nodes, `review` for review
   nodes, `resolve`/`debate` for `*-debate` nodes.
 - `execute` invokes domain skills by public name and passes `<run-id>`,
   `<engine-root>`, `<session-dir>`. Each domain skill checks its own

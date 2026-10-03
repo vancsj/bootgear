@@ -3,7 +3,7 @@
 This document records the design choices behind
 [SKILL.md](SKILL.md). It does not add spec steps.
 
-## Four stages, not one pass
+## Five stages, not one pass
 
 A single requirements-and-questions pass conflates two different kinds of
 work: finding out what's needed (requirements) and deciding how to build it
@@ -11,34 +11,26 @@ when more than one shape would work (design). Folding design into
 requirements either skips real trade-offs or bloats every requirements
 statement with implementation detail a small task never needed. Splitting
 lets a mechanical task skip stage 2 entirely while a genuinely ambiguous
-one gets a dedicated pass, and lets sign-off check the actual shape that
-will be built rather than a requirements paragraph that never committed to
-one. Stage 4 is split out for the same reason design was split from
-requirements: turning a signed-off design into an ordered checklist is a
+one gets a dedicated pass. An independent `spec-review` stage then checks the
+actual shape that will be built rather than letting the author certify it.
+Stage 4 is split out for the same reason design was split from
+requirements: turning a reviewed design into an ordered checklist is a
 different kind of work again, mechanical rather than exploratory, and
 giving it its own stage is what makes its non-escalation guarantee
 possible to state and check — see "Why stage 4 can never escalate."
 
-## Sign-off reports the decision, execute makes it
+## Independent review reports the result, execute routes it
 
-A design's sign-off is itself a decision, and engine already has a rule
-for which decisions need more than one party: `debate_threshold`. Giving
-sign-off a separate, spec-specific escalation rule would duplicate that
-mechanism and risk drifting from it. But `spec` calling `resolve`/`debate`
-directly would duplicate `ticket-to-pr.yaml`'s own `spec-debate` node — the
-same trade-off debated twice, once invisibly inside `spec` and once in the
-node that exists for exactly this. So stage 3 reports an above-threshold
-trade-off as an open question instead, and `execute`'s `spec-debate` node
-runs the actual `resolve`/`debate` — one reversibility/blast-radius
-judgment for the whole run, made in one visible place, not duplicated
-inside a domain skill.
+The authoring skill prepares a complete review package but does not certify its
+own requirements or design. `spec-review` uses fresh converge roles to check
+request fit, clarity, architecture, alternatives, proportionality, and
+testability. Its handback is `ready`, `revise`, `choices`, or `blocked`, with
+mixed findings ordered `blocked > revise > choices > ready`.
 
-`spec_debate_mode: mandatory` changes only how often stage 3 *attempts*
-`resolve` — always, rather than only above `debate_threshold` — not
-whether an escalation, once needed, still routes through `spec-debate`
-rather than a direct call. The distinction that matters isn't
-attempt-frequency, it's who's allowed to actually run `debate`; that
-stays exactly as before.
+`resolve` and `debate` apply only to surviving choice claims after review.
+`spec_debate_mode: mandatory` resolves every such claim; `threshold` handles
+below-threshold choices solo and resolves only claims at or above the threshold.
+Debate returns through `spec` and the independent review gate.
 
 ## Why stage 4 can never escalate
 
@@ -51,7 +43,7 @@ the one artifact meant to require no more decisions. That was considered
 and rejected: it just relocates the judgment call into a different
 document instead of removing it.
 
-The actual fix is upstream: stage 3's completeness check (see "The
+The actual fix is upstream: the review package's completeness check (see "The
 completeness check") gates entry to stage 4 on the design already being
 concrete enough that deriving a checklist requires no new judgment call.
 This makes non-escalation a property of what reaches stage 4, not a
@@ -63,7 +55,7 @@ choosing, inferring, or recording its own open question. Both of stage
 to admit.
 
 The completeness check runs against the skeleton file only
-(`design.md`/`requirements.md`), never the paired `-notes.md` file — see
+(`design.md`/`requirements.md`/`task.md`), never the paired `-notes.md` file — see
 "Skeleton and notes." This makes the boundary structural rather than a
 rule the check has to actively enforce: a fact that exists only in notes
 is invisible to the check, so it cannot make an incomplete skeleton pass.

@@ -11,6 +11,7 @@ REPO_ROOT = PLUGIN_DIR.parents[1]
 CLAUDE_ENGINE = REPO_ROOT / "plugins" / "engine"
 CLAUDE_CONVERGE = REPO_ROOT / "plugins" / "converge"
 CLAUDE_REVIEW = REPO_ROOT / "plugins" / "review" / "skills" / "review"
+CLAUDE_SPEC_REVIEW = REPO_ROOT / "plugins" / "spec" / "skills" / "spec-review"
 CODEX_SKILLS = PLUGIN_DIR / "skills"
 HOST_MECHANICS = "## Host mechanics\n"
 
@@ -64,8 +65,8 @@ EXECUTE_SKILL_ADAPTATIONS: list[tuple[str, str]] = [
     ),
     ("- Supply `<plugin-dir>` as `<engine-root>`", "- Supply `<plugin-root>` as `<engine-root>`"),
     (
-        "names `spec:spec`, `test:test` and `review:review`.",
-        "names `engine:spec`, `engine:test` and `engine:review`.",
+        "names `spec:spec`, `spec:spec-review`, `test:test` and `review:review`.",
+        "names `engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`.",
     ),
     (
         "`memory-ledger` is a declared dependency; it may still be unconfigured or missing.",
@@ -89,14 +90,14 @@ EXECUTE_REFERENCE_ADAPTATIONS: list[tuple[str, str]] = [
     (
         (
             "## Skill-tool invocation\n\n"
-            "Invoke `spec`, `test` and `review` as `spec:spec`, `test:test` and `review:review`:\n"
+            "Invoke `spec`, `spec-review`, `test` and `review` as `spec:spec`, `spec:spec-review`, `test:test` and `review:review`:\n"
             "a bare name fails when another installed plugin ships a skill of the same name.\n"
             "The platform provides no stronger guarantee for calling them than invoking the\n"
             "`Skill` tool by that name."
         ),
         (
             "## Skill invocation\n\n"
-            "Invoke `spec`, `test` and `review` as `engine:spec`, `engine:test` and "
+            "Invoke `spec`, `spec-review`, `test` and `review` as `engine:spec`, `engine:spec-review`, `engine:test` and "
             "`engine:review`:\n"
             "Codex names a skill bundled in a plugin `<plugin>:<skill>`.\n"
             "The platform provides no stronger guarantee for calling them than invoking them\n"
@@ -183,6 +184,20 @@ class BundleDriftTest(unittest.TestCase):
         )
         self.assertSameTree(
             CLAUDE_REVIEW / "references", CODEX_SKILLS / "review" / "references"
+        )
+
+    def test_spec_review_bundle_matches_above_host_mechanics(self):
+        self.assertEqual(
+            _body_above_host_mechanics(CLAUDE_SPEC_REVIEW / "SKILL.md"),
+            _body_above_host_mechanics(CODEX_SKILLS / "spec-review" / "SKILL.md"),
+        )
+        self.assertSameBytes(
+            CLAUDE_SPEC_REVIEW / "reference.md",
+            CODEX_SKILLS / "spec-review" / "reference.md",
+        )
+        self.assertSameTree(
+            CLAUDE_SPEC_REVIEW / "references",
+            CODEX_SKILLS / "spec-review" / "references",
         )
 
     def test_execute_skill_matches_claude_twin(self):

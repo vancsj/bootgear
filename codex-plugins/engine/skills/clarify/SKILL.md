@@ -83,17 +83,17 @@ Ask items in the order that fits the conversation. Use answers already implied b
    Use the project's own sub-task labels. Do not invent a fixed vocabulary. Treat an absent override as the general default. Ask about specialized skills once here. At call time, resolve the current override, including any later `AMENDMENT`, select the entry matching the current sub-task, and fall back to the general default when no mapping label matches.
 
    When the task type calls `spec`, also settle **`spec_debate_mode`** —
-   `mandatory` (default: always attempt `resolve` before sign-off, escalating
-   only if `resolve` can't decide and the disagreement is at or above
-   `debate_threshold`) or `threshold` (attempt `resolve`/escalate only at or
-   above `debate_threshold`, otherwise sign off solo). This field is read
-   by `spec` itself, not by `execute`; an absent value means `spec` uses
-   `mandatory`. `execute` does not validate it.
+   `mandatory` (default: resolve every surviving choice claim from
+   `spec-review`, escalating only if unresolved at or above
+   `debate_threshold`) or `threshold` (decide below-threshold choice claims
+   solo and resolve/escalate only at or above the threshold). This field is read by
+   `execute` after independent `spec-review`; an absent value means
+   `mandatory`. The engine validates its shape.
 
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
    Write:
-   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override:
+   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage.
      - **Bare `<skill-name>`** when the override or its absence names one skill. Use the override, or the general default (`spec`, `test`, `review`) when absent.
      - **`{sub-task-label: <skill-name>}` mapping** when the override is a mapping. Mirror it exactly.
 
@@ -135,7 +135,7 @@ After confirmation:
 
 4. After `init`, read `<session-dir>` back from `recall`, or parse it from `init`'s printed path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
-Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
+Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 

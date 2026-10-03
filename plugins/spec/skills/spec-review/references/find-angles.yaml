@@ -1,0 +1,40 @@
+- id: request-criterion
+  tag: find
+  lens: request-fit
+  tell: The request or acceptance criteria names an outcome, constraint, or boundary.
+  asks: Is it represented in the requirements and design with the same meaning?
+- id: missing-requirement
+  tag: find
+  lens: clarity-completeness
+  tell: The artifact states a behavior or boundary without its necessary counterpart.
+  asks: What required case, failure mode, or acceptance condition is absent?
+- id: unresolved-term
+  tag: find
+  lens: clarity-completeness
+  tell: The request or artifact uses an ambiguous domain term or interpretation.
+  asks: Can implementation settle this without inventing a requirement?
+- id: architecture-call
+  tag: find
+  lens: architecture-fit
+  tell: The design adds or changes a call path, module boundary, or state transition.
+  asks: Does it follow the established architecture and existing contracts?
+- id: architecture-choice
+  tag: find
+  lens: architecture-fit
+  tell: The design changes architecture or introduces a new pattern.
+  asks: Are minimal, clean, and pragmatic alternatives and relevant best practices considered?
+- id: simpler-alternative
+  tag: find
+  lens: simplicity
+  tell: The design adds a component, branch, field, or mechanism.
+  asks: Is there a simpler clean way to implement the stated requirement?
+- id: disproportionate-scope
+  tag: find
+  lens: proportionality
+  tell: The artifact introduces scope not implied by the request.
+  asks: Does this requirement or design overcomplicate the original request?
+- id: unverifiable-outcome
+  tag: find
+  lens: testability
+  tell: An acceptance condition or task has no observable verification path.
+  asks: What test or evidence would distinguish the intended behavior from a wrong implementation?

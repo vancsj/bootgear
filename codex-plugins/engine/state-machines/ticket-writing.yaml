@@ -16,20 +16,29 @@ nodes:
     next: [spec]
   spec:
     reminder:
-      do: "Draft the requirements and ticket artifacts with spec."
-      leave: "The ticket artifact states problem, outcome, acceptance criteria, scope boundaries and verification notes."
+      do: "Draft the requirements and ticket artifacts with spec. State problem, outcome, acceptance criteria, scope boundaries, verification notes, and open interpretations without inventing answers."
+      leave: "The ticket artifact is complete enough for independent correctness and completeness review; do not resolve the final sign-off here."
       branches:
-        spec-debate: "The draft has an unresolved decision above the run threshold."
-        succeeded: "The ticket artifacts are complete and the goal is met."
-    next: [spec-debate, succeeded]
+        spec-review: "The draft is ready for an independent review."
+    next: [spec-review]
+  spec-review:
+    max_visits: 3
+    reminder:
+      do: "Run spec-review. Review request fit, clarity and completeness, proportionality, simplicity, and testability; mark architecture-fit not applicable when no design artifact exists."
+      leave: "The independent review has complete converge coverage and one handback outcome with findings and evidence recorded; mixed findings use blocked > revise > choices > ready."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      branches:
+        spec: "The ticket needs revision; carry claim IDs and evidence back to spec."
+        spec-debate: "Only unresolved material interpretations or choices remain after review and source-of-truth resolution."
+        succeeded: "The final ticket is independently reviewed and ready."
+    next: [spec, spec-debate, succeeded]
   spec-debate:
     reminder:
-      do: "Resolve the specification's open decision with the resolve skill, and the debate skill if resolve escalates."
-      leave: "The decision is recorded in the run ledger with mode resolve or debate, and any change to the requirements or design is in the artifact."
+      do: "Apply spec_debate_mode to the spec-review choice claims: decide below-threshold claims solo in threshold mode, resolve every claim in mandatory mode, and debate only unresolved claims at or above the settled threshold; update the ticket and record the decision."
+      leave: "The decision is recorded in the run ledger and any ticket change is in the artifact; return through spec for re-review."
       branches:
-        spec: "The decision changes the requirements; revise the draft."
-        succeeded: "The decision is settled and the ticket artifacts are complete."
-    next: [spec, succeeded]
+        spec: "The decision is settled or changes the ticket; return to spec and then spec-review."
+    next: [spec]
   succeeded:
     terminal: true
   failed:

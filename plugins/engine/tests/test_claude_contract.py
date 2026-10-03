@@ -219,7 +219,7 @@ class ClaudePackageContractTest(unittest.TestCase):
         manifest = json.loads(
             (PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text()
         )
-        self.assertEqual(manifest["version"], "0.16.1")
+        self.assertEqual(manifest["version"], "0.17.0")
         self.assertEqual(manifest["dependencies"], ["converge", "spec", "test", "review", "advisor", "memory-ledger"])
     def test_compaction_recall_uses_session_start_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
@@ -262,11 +262,41 @@ class ClaudePackageContractTest(unittest.TestCase):
         execute = (skills / "execute" / "SKILL.md").read_text()
         reference = " ".join((skills / "execute" / "reference.md").read_text().split())
         recall = (skills / "recall" / "reference.md").read_text()
-        self.assertIn("`spec:spec`, `test:test` and `review:review`", execute)
-        self.assertIn("`spec:spec`, `test:test`, and `review:review`", recall)
+        self.assertIn("`spec:spec`, `spec:spec-review`, `test:test` and `review:review`", execute)
+        self.assertIn("`spec:spec`, `spec:spec-review`, `test:test`, and `review:review`", recall)
         self.assertIn("a bare name fails when another installed plugin ships a skill "
                       "of the same name", reference)
         self.assertNotIn("bare name", execute)
+
+    def test_spec_review_contract_and_angles_are_present(self):
+        skill = PLUGIN_DIR.parents[1] / "plugins" / "spec" / "skills" / "spec-review"
+        text = " ".join((skill / "SKILL.md").read_text().split())
+        self.assertIn("fresh converge roles", text)
+        self.assertIn("blocked > revise > choices > ready", text)
+        self.assertIn("all eight dedicated find angles", text)
+        for name in ("reference.md", "references/lenses.md", "references/find-angles.yaml"):
+            self.assertTrue((skill / name).is_file())
+
+    def test_spec_review_settlement_fields_are_optional_and_shaped(self):
+        accepted = self._validate(
+            "spec_review_skill: spec-review\nspec_review_override: spec-review\n"
+            "spec_debate_mode: threshold\ndebate_party_config: {}\n"
+        )
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        refused = self._validate("spec_debate_mode: later\n")
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("spec_debate_mode", refused.stderr)
+
+    def test_spec_review_angles_resolve_as_find_angles(self):
+        angle_file = (PLUGIN_DIR.parents[1] / "plugins" / "spec" / "skills" /
+                      "spec-review" / "references" / "find-angles.yaml")
+        result = subprocess.run(
+            [str(PLUGIN_DIR.parents[1] / "plugins" / "converge" / "bin" / "converge"),
+             "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(json.loads(result.stdout)["angles"]), 8)
 
     def test_failed_needs_no_confirm_leave(self):
         execute = " ".join((PLUGIN_DIR / "skills" / "execute" / "SKILL.md").read_text().split())

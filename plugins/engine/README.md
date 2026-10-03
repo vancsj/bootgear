@@ -45,7 +45,7 @@ flowchart TD
 | Source of truth, per domain | who decides scope and outcome, current behaviour, implementation approach, correctness |
 | Debate threshold | which decisions are too hard to reverse or too broad to make alone; reversibility and blast radius by default |
 | Autonomy | an explicit list of permitted mutations (commit, push, open a PR, post review comments, ...) — "go ahead autonomously" is not a list |
-| Domain-skill overrides | a project skill to use in place of `spec`, `test` or `review`, whole or per sub-task |
+| Domain-skill overrides | a project skill to use in place of `spec`, `spec-review`, `test` or `review`, whole or per sub-task |
 | `goal` | what the task is, and the concrete *succeeded when* and *failed when* conditions |
 
 After you confirm `goal`, no further work questions are asked. The one exception is recovering
@@ -67,10 +67,11 @@ stateDiagram-v2
     [*] --> clarify
     clarify --> inspect
     inspect --> spec
-    spec --> spec_debate
-    spec --> impl
+    spec --> spec_review
+    spec_review --> spec
+    spec_review --> spec_debate
+    spec_review --> impl
     spec_debate --> spec
-    spec_debate --> impl
     impl --> test_code
     test_code --> e2e_test
     test_code --> review
@@ -97,9 +98,9 @@ settled. You approve every `leave_check` command at `clarify`.
 
 | Task type | Built-in path |
 |---|---|
-| `ticket-writing` | inspect → spec → (spec-debate) → succeeded |
+| `ticket-writing` | inspect → spec → spec-review → succeeded |
 | `bug-triage` | inspect → triage → (triage-debate) → succeeded |
-| `ticket-to-pr` | inspect → spec → impl → test-code → (e2e-test, fix) → review → delivery → succeeded |
+| `ticket-to-pr` | inspect → spec → spec-review → impl → test-code → (e2e-test, fix) → review → delivery → succeeded |
 | `pr-review` | inspect → review → (review-debate, fix) → succeeded |
 
 A project can replace a built-in machine wholesale with
