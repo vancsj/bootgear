@@ -20,7 +20,7 @@ class CodexPackageContractTest(unittest.TestCase):
     def test_manifest_and_hooks_are_codex_package_shape(self):
         manifest = json.loads(MANIFEST.read_text())
         self.assertEqual(manifest["name"], "engine")
-        self.assertEqual(manifest["version"], "0.14.0")
+        self.assertEqual(manifest["version"], "0.14.1")
         self.assertIn("converge", manifest["description"])
         self.assertNotIn("hooks", manifest)
 

@@ -1,6 +1,6 @@
 {
   "name": "engine",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Codex-native task loop with clarify, execute, debate, recall, resolve, spec, test, review, and converge skills backed by an atomic session ledger, state machine, and converge claims ledger.",
   "author": {
     "name": "vancsj",

@@ -79,6 +79,23 @@ class SessionStartRecallTest(unittest.TestCase):
     def _run(self, run_id=None):
         return self._run_raw(run_id)["additionalContext"]
 
+    def _set_mapping_goal(self):
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                "goal: succeeded when done. failed when undoable.",
+                "goal:\n  succeeded: the mapping goal is rendered\n  failed: the mapping goal cannot be rendered\n",
+            )
+        )
+
+    def test_mapping_goal_is_rendered(self):
+        self._set_mapping_goal()
+        msg = self._run()
+        self.assertIn(
+            "This run's /goal:\nsucceeded when the mapping goal is rendered\n"
+            "failed when the mapping goal cannot be rendered",
+            msg,
+        )
+
     def test_emits_session_start_event(self):
         self.assertEqual(self._run_raw()["hookEventName"], "SessionStart")
 
