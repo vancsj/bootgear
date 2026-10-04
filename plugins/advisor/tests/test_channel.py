@@ -1282,6 +1282,10 @@ class SendLivenessTests(unittest.TestCase):
             with self.subTest(recipient=recipient):
                 result = self.send(sender, recipient)
                 self.assertEqual(result.returncode, 0, result.stderr)
+                output = json.loads(result.stdout)
+                self.assertIn(f"--for {sender} --timeout 300", output["next"])
+                self.assertIn("synchronous", output["next"])
+                self.assertIn("infinite background polling", output["next"])
         self.assertEqual(len(self.messages()), 2)
 
     def test_busy_heartbeating_listener_accepts_a_request(self) -> None:
@@ -1469,6 +1473,15 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertEqual(output["messages"][0]["message_id"], message_id)
         self.assertIn("fetch", output["note"])
         self.assertIn(f"fetch --channel {self.channel} --message-id {message_id}", output["next"])
+
+    def test_fetch_reminds_caller_to_keep_receiving(self) -> None:
+        message_id = self._send_to_asker()
+        fetched = run(self.root, "fetch", "--channel", self.channel, "--message-id", message_id)
+        self.assertEqual(fetched.returncode, 0, fetched.stderr)
+        output = json.loads(fetched.stdout)
+        self.assertIn(f"--for asker --timeout 300", output["next"])
+        self.assertIn("synchronous", output["next"])
+        self.assertIn("infinite background polling", output["next"])
 
     def test_timed_wait_expires_with_the_note(self) -> None:
         result = run(self.root, "receive", "--channel", self.channel, "--for", "asker",

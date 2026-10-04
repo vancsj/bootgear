@@ -241,6 +241,12 @@ def script_command(args: argparse.Namespace, root: Path) -> str:
     return command
 
 
+def receive_next(args: argparse.Namespace, root: Path, role: str) -> str:
+    """Tell the caller how to keep receiving after a message changes the inbox."""
+    receive = f"{script_command(args, root)} receive --channel {args.channel} --for {role} --timeout 300"
+    return f"start receiving for {role}: synchronous `{receive}`, or infinite background polling `while :; do {receive}; done &`"
+
+
 def heartbeat_command(args: argparse.Namespace, root: Path, channel: str) -> str:
     """The `heartbeat` invocation for this seat, with `--interval`/`--max-age` when not the default."""
     command = (f"{script_command(args, root)} heartbeat --channel {channel} "
@@ -479,7 +485,8 @@ def send(args: argparse.Namespace) -> None:
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
-    print(json.dumps({"message_id": message_id, "channel": args.channel}))
+    print(json.dumps({"message_id": message_id, "channel": args.channel,
+                      "next": receive_next(args, root, args.sender)}))
 
 
 def preview_of(body: str, words: int = PREVIEW_WORDS) -> str:
@@ -606,7 +613,8 @@ def fetch(args: argparse.Namespace) -> None:
     lock = channel_lock(path)
     try:
         message = json.loads(message_path.read_text(encoding="utf-8"))
-        output = {"body": message.get("body"), "kind": message.get("kind")}
+        output = {"body": message.get("body"), "kind": message.get("kind"),
+                  "next": receive_next(args, root, message["recipient"])}
         if message.get("parent_id"):
             output["parent_id"] = message["parent_id"]
         if not message.get("read"):

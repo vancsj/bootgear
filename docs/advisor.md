@@ -103,7 +103,7 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   `next` says to wait with `--wait 120` only for a listener the asker
   started itself or the user said is starting, and otherwise to tell the
   user and stop; `--wait N` polls up to N seconds and exits 1 on timeout.
-  Both hosts must run the same advisor version (1.2.0): a listener from an
+  Both hosts must run the same advisor version (1.2.1): a listener from an
   older version stamps its seat on a different cadence, so its liveness
   reads wrong. The asker claims the most recently updated channel. If another
   session already holds the seat (`seat_claimed`) or the channel has closed
@@ -124,7 +124,10 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   and to keep waiting. Exit code `1` means no new
   message; the caller waits again unless `peer_live` is false. `receive` never changes
   state, so it is safe after compaction.
-  `fetch` returns the full body and marks the message read.
+  `fetch` returns the full body, marks the message read, and reminds the caller
+  to continue with either a synchronous 300-second `receive` or an infinite
+  background polling loop. Successful `send` returns the same reminder for the
+  sending role.
 - **Lifecycle.** `state` records `waiting`, `busy`, or `closed` for a role.
   `close` sets `closed` and clears both seats' `<role>_restart_until`, so no
   seat reads live on a closed channel once its stamp passes the TTL.

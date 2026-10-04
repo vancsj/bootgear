@@ -128,7 +128,7 @@ heartbeat keep a seat live; run in the background after register
 list      list channels; --live-for asker --session S shows the ones an asker can claim; --wait N waits for one
 send      post a request, response or stop
 receive   wait for an unread message; prints previews of the last three and a next command
-fetch     read a message's full body and mark it read
+fetch     read a message's full body, mark it read, and remind the caller to receive
 state     record waiting, busy or closed for a role
 close     close the channel; --if-peer-stale closes only if the peer is not live and nothing unread waits
 status    show a channel's record
@@ -154,7 +154,7 @@ Requirements:
 
 - macOS or Linux (POSIX); Windows is not supported.
 - Python 3.11 or later.
-- The same advisor version (1.2.0) on both hosts of a pair: a listener from an older version
+- The same advisor version (1.2.1) on both hosts of a pair: a listener from an older version
   stamps its seat on a different cadence, so its liveness reads wrong.
 - The Codex CLI, installed and signed in, for `direct` mode.
 
