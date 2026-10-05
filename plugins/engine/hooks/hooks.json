@@ -3,18 +3,30 @@
     "SessionStart": [
       {
         "matcher": "compact",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session_start_recall.py" }]
+        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern compact" }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop_recall_reminder.py" }]
+        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern \"\"" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": ".*",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/state_nudge_reminder.py" }]
+        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler state_nudge --matcher-pattern '.*'" }]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'" }]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'" }]
       }
     ]
   }

@@ -20,7 +20,7 @@ class CodexPackageContractTest(unittest.TestCase):
     def test_manifest_and_hooks_are_codex_package_shape(self):
         manifest = json.loads(MANIFEST.read_text())
         self.assertEqual(manifest["name"], "engine")
-        self.assertEqual(manifest["version"], "0.15.0")
+        self.assertEqual(manifest["version"], "0.16.0")
         self.assertIn("converge", manifest["description"])
         self.assertNotIn("hooks", manifest)
 
@@ -28,17 +28,28 @@ class CodexPackageContractTest(unittest.TestCase):
         session_start = hooks["SessionStart"][0]
         self.assertEqual(session_start["matcher"], "^(startup|resume|compact)$")
         self.assertIn("${PLUGIN_ROOT}", session_start["hooks"][0]["command"])
+        self.assertIn("--handler session_recall", session_start["hooks"][0]["command"])
         stop = hooks["Stop"][0]["hooks"][0]
-        self.assertIn("${PLUGIN_ROOT}/hooks/stop_recall_reminder.py", stop["command"])
+        self.assertIn("${PLUGIN_ROOT}/hooks/adapter.py", stop["command"])
+        self.assertIn("--handler stop_reminder", stop["command"])
         post_tool_commands = [
             hook["command"]
             for group in hooks["PostToolUse"]
             for hook in group["hooks"]
         ]
         self.assertTrue(
-            any("${PLUGIN_ROOT}/hooks/stop_recall_reminder.py" in command
+            any("--handler stop_reminder" in command
                 for command in post_tool_commands)
         )
+        self.assertTrue(
+            any("--handler state_nudge" in command for command in post_tool_commands)
+        )
+        for event in ("PreCompact", "PostCompact"):
+            self.assertEqual(hooks[event][0]["matcher"], "manual|auto")
+            self.assertIn(
+                "--handler compaction_observe",
+                hooks[event][0]["hooks"][0]["command"],
+            )
 
     def test_engine_bundles_all_public_workflow_skills(self):
         skill_dirs = {

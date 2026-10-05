@@ -219,16 +219,40 @@ class ClaudePackageContractTest(unittest.TestCase):
         manifest = json.loads(
             (PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text()
         )
-        self.assertEqual(manifest["version"], "0.17.0")
+        self.assertEqual(manifest["version"], "0.18.0")
         self.assertEqual(manifest["dependencies"], ["converge", "spec", "test", "review", "advisor", "memory-ledger"])
     def test_compaction_recall_uses_session_start_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
-        self.assertNotIn("PostCompact", hooks)
         self.assertEqual(
             [(entry["matcher"], [h["command"] for h in entry["hooks"]])
              for entry in hooks["SessionStart"]],
             [("compact",
-              ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session_start_recall.py"])],
+              ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern compact"])],
+        )
+        self.assertIn("PreCompact", hooks)
+        self.assertIn("PostCompact", hooks)
+        for event in ("PreCompact", "PostCompact"):
+            self.assertEqual(hooks[event][0]["matcher"], "manual|auto")
+            self.assertIn(
+                "--handler compaction_observe --matcher-pattern 'manual|auto'",
+                hooks[event][0]["hooks"][0]["command"],
+            )
+        self.assertEqual(
+            hooks["Stop"][0]["hooks"][0]["command"],
+            'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern ""',
+        )
+        post_tool_commands = [
+            hook["command"]
+            for group in hooks["PostToolUse"]
+            for hook in group["hooks"]
+        ]
+        self.assertEqual(
+            post_tool_commands,
+            ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler state_nudge --matcher-pattern '.*'"],
+        )
+        self.assertEqual(
+            [entry["matcher"] for entry in hooks["PostToolUse"]],
+            [".*"],
         )
 
     def test_clarify_lists_leave_check_commands_for_approval(self):

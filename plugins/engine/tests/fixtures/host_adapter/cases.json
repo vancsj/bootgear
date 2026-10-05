@@ -1,0 +1,200 @@
+[
+  {
+    "name": "claude_precompact_observe",
+    "host": "claude",
+    "handler": "compaction_observe",
+    "matcher_pattern": "manual|auto",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PreCompact",
+      "trigger": "manual"
+    },
+    "expected": {"stdout": "", "stderr": "", "decision": "observe", "exit": 0}
+  },
+  {
+    "name": "codex_postcompact_observe",
+    "host": "codex",
+    "handler": "compaction_observe",
+    "matcher_pattern": "manual|auto",
+    "input": {
+      "session_id": "fixture-codex",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PostCompact",
+      "turn_id": "fixture-turn",
+      "trigger": "auto"
+    },
+    "expected": {"stdout": "", "stderr": "", "decision": "observe", "exit": 0}
+  },
+  {
+    "name": "codex_posttooluse_fixed_handler",
+    "host": "codex",
+    "handler": "state_nudge",
+    "matcher_pattern": ".*",
+    "input": {
+      "session_id": "fixture-codex",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PostToolUse",
+      "turn_id": "fixture-turn",
+      "tool_name": "Bash",
+      "tool_use_id": "fixture-tool",
+      "tool_input": {"command": "true"},
+      "tool_response": {"exit": 0}
+    },
+    "expected": {"stdout": "", "stderr": "", "decision": "observe", "exit": 0}
+  },
+  {
+    "name": "unknown_event_error",
+    "host": "claude",
+    "handler": "compaction_observe",
+    "matcher_pattern": "manual|auto",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "Interrupt"
+    },
+    "expected": {"stdout": "", "stderr_contains": "unsupported_event", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "partial_identity_error",
+    "host": "claude",
+    "handler": "state_nudge",
+    "matcher_pattern": ".*",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Bash",
+      "tool_input": {},
+      "tool_response": {},
+      "agent_id": "only-one-side"
+    },
+    "expected": {"stdout": "", "stderr_contains": "contradictory_identity", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "malformed_json_error",
+    "host": "claude",
+    "handler": "state_nudge",
+    "matcher_pattern": ".*",
+    "input_json": "{truncated",
+    "expected": {"stdout": "", "stderr_contains": "invalid JSON", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "matcher_pattern_error",
+    "host": "claude",
+    "handler": "compaction_observe",
+    "matcher_pattern": "auto",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PreCompact",
+      "trigger": "manual"
+    },
+    "expected": {"stdout": "", "stderr_contains": "invalid_matcher", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "matcher_value_mismatch",
+    "host": "claude",
+    "handler": "compaction_observe",
+    "matcher_pattern": "manual|auto",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PreCompact",
+      "trigger": "unexpected"
+    },
+    "expected": {"stdout": "", "stderr_contains": "matcher_mismatch", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "invalid_handler_error",
+    "host": "claude",
+    "handler": "state_nudge",
+    "matcher_pattern": "manual|auto",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "PreCompact",
+      "trigger": "manual"
+    },
+    "expected": {"stdout": "", "stderr_contains": "unsupported_handler", "decision": "error", "exit": 0}
+  },
+  {
+    "name": "claude_stop_add_context_and_marker",
+    "host": "claude",
+    "handler": "stop_reminder",
+    "matcher_pattern": "",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "Stop",
+      "stop_hook_active": false
+    },
+    "setup": {
+      "files": [
+        {"path": ".bootgear/session/fixture-claude.md", "text": "active run\n"}
+      ]
+    },
+    "expected": {
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"An engine run is active in this session (fixture-claude). Before treating this as a natural stopping point, call recall to re-read the settlement and open todos from the ledger, and check state against /goal's succeeded/failed conditions \\u2014 don't rely on this turn's own memory of them.\"}}\n",
+      "stderr": "",
+      "decision": "add_context",
+      "exit": 0,
+      "marker": {
+        "path": ".bootgear/session/.fixture-claude.stop_reminder_state",
+        "contains": {"nudge_count": 1}
+      }
+    }
+  },
+  {
+    "name": "codex_stop_continue_and_marker",
+    "host": "codex",
+    "handler": "stop_reminder",
+    "matcher_pattern": "",
+    "input": {
+      "session_id": "fixture-codex",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "Stop",
+      "turn_id": "fixture-turn",
+      "stop_hook_active": false
+    },
+    "setup": {
+      "files": [
+        {"path": ".bootgear/session/fixture-codex.md", "text": "active run\n"}
+      ]
+    },
+    "expected": {
+      "stdout": "{\"decision\":\"block\",\"reason\":\"An engine run is active in this session (fixture-codex). Before treating this as a natural stopping point, call recall to re-read the settlement and open todos from the ledger, and check state against /goal's succeeded/failed conditions \\u2014 don't rely on this turn's own memory of them.\"}\n",
+      "stderr": "",
+      "decision": "continue",
+      "exit": 0,
+      "marker": {
+        "path": ".bootgear/session/.fixture-codex.stop_reminder_state",
+        "contains": {
+          "nudge_count": 1,
+          "turns": [
+            {"turn_id": "fixture-turn", "stop_seen": true, "fallback_reminded": false}
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "corrupt_claude_marker_error",
+    "host": "claude",
+    "handler": "stop_reminder",
+    "matcher_pattern": "",
+    "input": {
+      "session_id": "fixture-claude",
+      "cwd": "/tmp/fixture-project",
+      "hook_event_name": "Stop",
+      "stop_hook_active": false
+    },
+    "setup": {
+      "files": [
+        {"path": ".bootgear/session/fixture-claude.md", "text": "active run\n"},
+        {"path": ".bootgear/session/.fixture-claude.stop_reminder_state", "text": "{truncated"}
+      ]
+    },
+    "expected": {"stdout": "", "stderr_contains": "invalid_marker", "decision": "error", "exit": 0}
+  }
+]
