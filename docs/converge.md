@@ -140,7 +140,6 @@ On Claude, converge is its own plugin, and `review` and `engine` declare it as a
 dependency. It has no Codex plugin of its own; on Codex it ships inside
 `codex-plugins/engine`. `src/converge/` is a byte-identical copy of the package;
 `scripts/converge` sets `CONVERGE_HOST=codex` and defaults output to prose;
-`skills/converge/SKILL.md` matches the Claude body above `## Host mechanics`, and its host
+`skills/converge/SKILL.md` carries the Claude body above `## Host mechanics`, and its host
 section spawns native subagents and names the script path.
-`codex-plugins/engine/tests/test_bundle_drift.py` fails on any drift in the package, the
-skill body, `reference.md` or the review references.
+`codex-plugins/engine/tests/test_bundle_drift.py` fails on any drift in the package.

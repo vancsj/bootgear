@@ -4,50 +4,50 @@ severities: [must, should]
 cutoff: must
 
 ## R001 [must]
-Every skill's `SKILL.md` must state what it hands back and to whom — a
-finding, a decision, a report — not just what it does internally. A skill
-whose output shape another skill depends on (e.g. `test`/`review` feeding
-`execute`'s goal-check) must make that shape explicit in its own file.
+Every skill's `SKILL.md` must state what it hands back and to whom: a
+finding, a decision, a report. A skill whose output shape another skill
+depends on must make that shape explicit in its own file. A skill that can
+end in more than one outcome names every one.
 
 ## R002 [must]
-A script that owns a shared, mutable file (the session ledger, a
-project-wide config) must reject structurally invalid input before
-writing: validate, exit clearly on a violation, never a partial write (see
-`session.py`'s `_check_structure`).
+A skill doc (`SKILL.md` or a reference doc) must contain instructions, not
+rationale, and never maintainer rationale. A required action may carry a
+short why, a clause at most. Detail needed only on some paths goes in a
+focused reference doc that `SKILL.md` points to; a skill may have several.
+Edge-case handling that changes what to do stays in the skill.
 
 ## R003 [must]
-A design decision recorded anywhere in this repo (a doc, a skill's prose, a
-commit message) that states a fact about the platform (a hook event, a
-tool's real behavior, a CLI flag) must be checked against the official docs
-or the actual CLI output before it is written down as settled, not asserted
-from memory.
+A `SKILL.md` points to its own reference docs by file name, where the
+detail applies and with the condition for reading it. It never names
+another skill's file, section or heading, writes another skill's name with
+`/` or `$`, or opens with an H1 that repeats its own name.
 
-## R004 [should]
-A skill that can end in more than one distinct outcome (converged vs.
-capped vs. degraded; clean vs. blocked vs. capped) should name every
-outcome explicitly in its own file.
+## R004 [must]
+A `SKILL.md` orders its sections: when to invoke, inputs and handback
+outcomes; procedure, including the overall workflow; judgment rules and
+safety boundaries; fallbacks, such as the owning CLI being unavailable; and
+`## Host mechanics` last.
 
 ## R005 [must]
-A `SKILL.md` must contain instructions — how to work — not design
-rationale. Justification for why a rule exists goes in a reference doc the
-skill points to; a skill may point to more than one. Edge-case handling
-that changes what to actually do stays inline; only pure justification
-moves out.
-
-## R006 [must]
-A file the Codex plugin carries as a copy of a Claude-side source (bundled
-code, a synced skill or reference) must be covered by a drift test that
-fails when the copy and its source differ — see `test_bundle_drift.py`.
-
-## R007 [must]
 A shipped plugin that calls another bootgear plugin's skill or command
 within this repo must declare that plugin in `dependencies` (Claude) or
-bundle a copy guarded by R006 (Codex).
+bundle a copy (Codex).
 
-## R008 [must]
+## R006 [must]
+A behavior shared by the Claude and Codex plugins is covered by test cases
+on both hosts, and a change to that behavior updates both hosts' tests in
+the same change. Review compares the two hosts' test cases for the same
+behavior.
+
+## R007 [must]
 Built-in state machines, angle files and skills must name no skill, path
 or convention specific to one project; project specifics go in
 `.bootgear/config/`.
+
+## R008 [must]
+A script that owns a shared, mutable file (the session ledger, a
+project-wide config) must reject structurally invalid input before
+writing: validate, exit clearly on a violation, never a partial write.
 
 ## R009 [must]
 A value substituted into a command's argv (a placeholder, a `--leave-arg`)
@@ -75,13 +75,25 @@ A CLI's default output format must be concise prose for every stdout sink.
 script passes prose unless the caller asked for JSON.
 
 ## R013 [must]
-A shipped CLI or script must have a `[commands]` entry in its plugin's
-`gear.toml`, and when `GEAR_CALLER_CWD` is set it must resolve the
-caller's relative paths against it (`gear.py` runs the child from the
-plugin root).
-
-## R014 [must]
 A subcommand that completes a workflow step must end its output with the
 next step — the next command or the decision to make — in one line, and as
 a `next` field in JSON. The reminder appears only when it changes what the
-caller does next; a skill line that repeats it is removed.
+caller does next; a skill line that repeats the per-step detail the CLI
+prints (command, branches, gates) is removed; the skill's overall workflow
+outline stays.
+
+## R014 [must]
+A statement of fact about the platform (a hook event, a tool's real
+behavior, a CLI flag) in code, docs, skill prose, a commit message or a PR
+must be checked against the official docs or the actual CLI output before
+it is written down as settled, not asserted from memory.
+
+## R015 [must]
+No personal info, company info or local paths in the repo tree.
+`quality/check_content.py` flags home and scratchpad paths and denylisted
+terms. Personal or company info it cannot match is flagged in review.
+
+## R016 [must]
+Code and skills never point to `docs/`. Comments, docstrings, messages and
+skill prose state the rule themselves. `quality/check_content.py` flags the
+pointers.

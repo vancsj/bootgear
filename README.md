@@ -28,7 +28,7 @@ Inspired by Spring Boot: you don't call the framework, the framework calls you. 
 Every component works out of the box with sensible defaults, and every component declares its customization points. Tune preferences, swap steps, or extend behavior without forking the skill.
 
 **Your workflow stays yours.**
-bootgear puts you inside a productive loop, not inside a black box. You always see which gear is engaged and can steer at any point.
+bootgear puts you inside a productive loop, not inside a black box. You always see which gear is engaged and can amend the run or stop it at any point.
 
 ## How is this different from [superpowers](https://github.com/obra/superpowers)?
 

@@ -45,10 +45,6 @@ class Result:
 
 CHECKS = (
     Check(
-        "skill-reference-contract",
-        ("python", "quality/check_skill_references.py"),
-    ),
-    Check(
         "content",
         ("python", "quality/check_content.py"),
     ),

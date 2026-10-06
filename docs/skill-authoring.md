@@ -9,16 +9,16 @@ its body. The public interface of a skill is:
 
 - its **name**, used to invoke it through the `Skill` tool (for example
   `memory-ledger:ledger`, `spec`, `review`);
-- the **name and meaning of each settlement field** it reads or writes,
-  stated inline where the field is used.
+- its **modes** and their **handbacks**;
+- its **`settings` subcommand**, which prints what a caller must supply to use
+  it: the settlement fields it reads, their value domains and defaults.
 
 A skill never refers to another skill's internal file, section, heading,
 script path, or layout. The other skill owns that structure and can rename it,
-restructure it, or replace it with a project override, and a reference into it
-goes stale without any error. If a caller needs a fact, state it inline, even
-if the same short fact then appears in two places. A skill may call another
-skill by name, and a plugin that does so must declare the callee as a
-dependency or bundle a copy of it.
+restructure it, or replace it with a project override. A caller learns a
+callee's settings by running `settings`, never by reading the callee's files.
+A skill may call another skill by name, and a plugin that does so must declare
+the callee as a dependency or bundle a copy of it.
 
 Every line of a skill, host adapter sections included, names another skill
 by its plain public name, without Claude `/` or Codex `$` punctuation. Only
@@ -60,39 +60,33 @@ A shared field vocabulary does not make unrelated operations interchangeable.
 | `test` | Write cases, run tests, triage reports. | Separate cases-written, run, and triage results with real output. |
 | `review` | New review or applying accepted comments, `quick`/`full` depth. | `handoff`, `comment_only`, `clean`, `below_cutoff`, `blocked`, `no_progress`, or `iteration_cap`. |
 
-## SKILL.md and reference.md
+## SKILL.md and reference docs
 
 - `SKILL.md` is the action contract. It says when to invoke the skill, the
   inputs it needs, what it hands back and to whom, every outcome, judgment
   rules, safety boundaries, and what to do when the owning CLI is
-  unavailable. It holds no rationale. Edge-case handling that changes the
-  action stays in `SKILL.md`.
-- `reference.md` sits next to `SKILL.md` and holds the rationale, kept as
-  short as possible. It is not a second procedure manual.
+  unavailable. Edge-case handling that changes the action stays in
+  `SKILL.md`.
+- No rationale in a skill doc or its reference docs, and absolutely no
+  maintainer rationale (design history, alternatives considered, why the doc
+  is laid out as it is). Design rationale belongs in tickets, PR bodies and PR
+  comments.
+- Explaining why an action is required is fine, kept to a clause or a short
+  sentence.
+- A skill can have several reference docs next to `SKILL.md`. They implement
+  progressive exposure: detail needed only on some paths lives in a reference
+  doc, and `SKILL.md` points to it where it applies. Each reference doc is
+  focused on one topic and concise. None is a second procedure manual.
 - The harness supplies the skill name from frontmatter, so `SKILL.md` has no
   H1 that repeats it.
 
 ## Reference form
 
-A `SKILL.md` refers to its own `reference.md` only by an exact heading path:
-
-- ``Read `reference.md` § `Heading` ``
-- ``Read `reference.md` § `Parent` > `Child` ``
-
-The heading text is the source spelling, not an anchor or line number. When a
-heading is renamed, its callers change in the same commit.
-
-`quality/check_skill_references.py` runs in the quality gate
-(`quality/check.py`). It scans every `SKILL.md` and `reference.md` under both
-plugin trees and rejects:
-
-- a heading path that does not resolve in the adjacent `reference.md`, or
-  that matches more than one heading;
-- ``Read `reference.md` `` with no `§` heading path;
-- a path to another skill's `SKILL.md` or `reference.md`, or wording like
-  "the X skill's reference/file/section/heading";
-- a `/name` or `$name` invocation of another skill on any line, host adapter sections included;
-- an H1 that repeats the frontmatter name.
+A `SKILL.md` points to its own reference docs by file name, where the detail
+applies and with the condition for reading it. It never names another skill's
+file, section or heading, writes another skill's name with `/` or `$`, or
+opens with an H1 that repeats its own name. Review checks this against
+`.bootgear/config/review-standard.md`.
 
 ## CLI-owned reminders and skill prose
 

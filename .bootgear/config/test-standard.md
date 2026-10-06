@@ -6,14 +6,12 @@ cutoff: must
 ## R001 [must]
 A claimed fix or behavior change must be verified by actually running the
 relevant check and reading its real output, never asserted from reading
-the code alone. This mirrors `test/SKILL.md`'s own "Running tests" step:
-capture the actual output, never assume a result without seeing it.
+the code alone.
 
 ## R002 [must]
 A test failure must be classified with the evidence that supports the
 classification (the actual error text or stack trace), never guessed from
-the test's name or a hunch — see `test/SKILL.md`'s "Reading and triaging
-reports".
+the test's name or a hunch.
 
 ## R003 [should]
 A script's own behavior (a CLI flag, an exit code, a validation rule)

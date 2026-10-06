@@ -1,17 +1,28 @@
-- Skills reference each other only by public interface — name (for `Skill`-tool invocation) and settlement-field name/meaning, stated inline. Never another skill's internal file, section, or heading.
-- `SKILL.md` carries no rationale, narration, or explanation — only what to do. Put reasoning in `reference.md`, kept as terse as possible. Token efficiency matters throughout.
-- Host parity: a behavior shared by the Claude and Codex plugins changes on both hosts in the same change.
+0. Principles do not conflict. Where two must, the earlier one wins, so list the winner first; the engine resolves a conflict by that order.
+
+## Plugins and skills
+
 - Each plugin installs and works on its own. A plugin that needs another declares it (`dependencies` on Claude) or bundles a copy (Codex); it never assumes a sibling is installed.
+- Reference only bootgear's own skills, plugins and tools, host built-ins, and well-known skills or plugins from outside this repo. Never name local personal skills or plugins. The local denylist can carry those names.
+- Skills call each other only through the public interface: the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns a callee's settings by running `settings`, never by reading the callee's files.
 - Built-in defaults (state machines, angles, skills) are project-free. Anything specific to one project lives in that project's `.bootgear/config/`.
-- A rule a script can check is enforced by the script (CLI validation, a gate, a cap), not stated only in prose.
-- CLI output is designed for an LLM reader: minimize its retries and tokens.
+- Host parity: a behavior shared by the Claude and Codex plugins changes on both hosts in the same change.
 - Shared Claude/Codex plugin and skill sections use host-neutral references, terms, paths, and invocation names; host-specific adapters belong in explicit host sections.
-- Deterministic workflow detail derivable from validated CLI-owned state or configuration belongs in CLI output, not skill procedure; skills retain judgment, safety, orchestration, fallback, and public handbacks.
-- Every plugin script is a `gear` command: runnable as `gear.py <plugin> <command>` as well as on its own.
-- CLI scripts are part of the workflow: their output tells the LLM the next step, or a fact it needs at that point. A reminder at the right moment beats skill prose.
-- No personal info, company info, or local paths in the repo tree. `quality/check_content.py` flags home and scratchpad paths, plus any term in the optional local denylist (`~/.bootgear/content-denylist.txt`, never committed).
-- Code and skills never point to `docs/`: comments, docstrings, messages, and skill prose state the rule themselves. `quality/check_content.py` enforces it.
+
+## CLI and enforcement
+
+- Every plugin script is a `gear` command: registered under `[commands]` in its plugin's `gear.toml`, runnable as `gear.py <plugin> <command>` as well as on its own, and resolving the caller's relative paths against `GEAR_CALLER_CWD` when it is set.
+- CLI output is designed for an LLM reader: minimize its retries and tokens. The last few lines carry all the key information (result, errors, next step), because readers often `tail` the output.
+- A skill states the overall workflow, so the model knows where each step leads and can use its judgment. Deterministic detail derivable from validated CLI-owned state or configuration (the next command, legal branches, gates, argument tables) is printed by the CLI at the step where it matters, not repeated in skill prose. Skills keep judgment, safety, orchestration, fallbacks and public handbacks.
+- A rule about data or behavior that a script can check is enforced by the script (CLI validation, a gate, a cap), not stated only in prose. Rules about doc content are enforced by the review standard, not by tests or scripts, except mechanical repo hygiene such as `check_content.py`.
+
+## Docs and repo content
+
+- Skill docs (`SKILL.md` and its reference docs) say what to do. No rationale, and absolutely no maintainer rationale. A required action may carry a short why, a clause at most. Detail needed only on some paths goes in focused reference docs that `SKILL.md` points to. Token efficiency matters throughout.
+- No development diary anywhere in the repo: comments, docstrings, tests and docs state current behavior and, where needed, a short why, never how it got there (fixes, earlier versions, review findings, incidents). History and design rationale belong in tickets, PR bodies and PR comments.
 - `docs/` holds only the up-to-date design, with no details: no history, alternatives, open questions, task lists, or procedure.
-- Reference only bootgear's own skills, plugins, and tools, plus host built-ins. Never name personal skills or skills from other marketplaces. The local denylist can carry those names. Referencing well-known products, for example in a comparison, is fine.
+- No private information in the repo.
+
+## Run behavior
+
 - When an advisor from a different vendor is available, it takes the refuter or adversarial role by default, unless the user says no.
-- No development diary anywhere in the repo: comments, docstrings, tests, and docs state current behaviour and its reasons, never how it got there (fixes, earlier versions, review findings, incidents). `quality/check_content.py` flags the common diary phrases.
