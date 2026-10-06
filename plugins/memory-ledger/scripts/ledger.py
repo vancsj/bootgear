@@ -133,10 +133,12 @@ def build_parser() -> argparse.ArgumentParser:
                                       "not code-scoped (business rules, policy)")
         p_.add_argument("--repo", help="checkout the Evidence lines run in; defaults to the "
                                        "current one when --ref is given, since a bare ref "
-                                       "resolves in whatever repo the reader happens to be in")
+                                       "resolves in whatever repo the reader happens to be in. "
+                                       "On the shared ledger a repo name, never a machine path")
         p_.add_argument("--force", action="store_true",
-                        help=f"accept a claim longer than {CLAIM_MAX_WORDS} words, or a check "
-                             f"that hardcodes a personal path")
+                        help=f"accept a claim longer than {CLAIM_MAX_WORDS} words, a check "
+                             f"that hardcodes a personal path, or a machine-path --repo on a "
+                             f"shared answer")
         signer_arg(p_)
 
     n = sub.add_parser("new", help="seed an entry, carrying the author's own ✓")
@@ -243,7 +245,10 @@ def build_parser() -> argparse.ArgumentParser:
     sr = sub.add_parser("set-repo", help="name the checkout an existing answer's checks run in")
     sr.add_argument("slug")
     sr.add_argument("answer")
-    sr.add_argument("repo")
+    sr.add_argument("repo", help="the repo name (for example widgets); on the shared ledger "
+                                 "a name, never a machine path")
+    sr.add_argument("--force", action="store_true",
+                    help="file a machine-path Repo: on a shared answer anyway")
 
     sv = sub.add_parser("save", help="lint --fix, stage every entry, commit, push — per ledger")
     sv.add_argument("-m", "--message", help="commit message (default: derived from what changed)")

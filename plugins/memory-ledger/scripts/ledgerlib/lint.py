@@ -13,7 +13,14 @@ from .constants import (
     GROUP_MIN_MEMBERS,
     REGROUP_MIN_FOLDER,
 )
-from .model import confidence, mainline_ref, ref_state, render_header, split_evidence
+from .model import (
+    confidence,
+    machine_path,
+    mainline_ref,
+    ref_state,
+    render_header,
+    split_evidence,
+)
 from .scoring import normalize
 from .store import load_entries
 
@@ -183,6 +190,11 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                   f"signature is voided by it")
             problems += 1
         for a in e.answers:
+            if lg.kind == "shared" and machine_path(a.repo_value):
+                print(f"REPO-PATH  {e.slug} {a.aid}  Repo: {a.repo_value} is a machine path — "
+                      f"the shared ledger takes a repo name; run `set-repo` with the name "
+                      f"(`--force` keeps the path)")
+                problems += 1
             if a.hash is None:
                 print(f"NO-EVIDENCE {e.slug} {a.aid} — unverifiable, cannot be signed")
                 problems += 1

@@ -165,7 +165,7 @@ REF_RE = re.compile(r"^Ref:\s*(\S+)\s*$")
 # it can be set later on an answer that already has signatures without
 # voiding them, which is the only way the field can ever reach the answers
 # written before it existed.
-REPO_RE = re.compile(r"^Repo:\s*(\S+)\s*$")
+REPO_RE = re.compile(r"^Repo:\s*(\S.*?)\s*$")
 
 
 # Used only when git cannot answer; the mainline is discovered per repo — see

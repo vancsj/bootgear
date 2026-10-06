@@ -78,6 +78,8 @@ Evidence: test -f example.cfg
   `rival`, `add-evidence` and `promote` refuse, on any write not to the local ledger, an
   evidence path that is absolute or `~`-relative, except fixed system paths (`/usr/`,
   `/etc/`, …) and tool caches (`~/.cache/`, `~/.m2/`, …). `--force` / `--anyway` override.
+  `new`, `rival` and `set-repo` refuse a machine-path `Repo:` on a shared answer; `--force`
+  overrides, on `set-repo` too.
 
 ## Confidence
 

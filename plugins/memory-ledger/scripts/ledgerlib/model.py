@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -107,6 +108,22 @@ def repo_name(path: Path | None = None,
     if url.returncode == 0 and url.stdout.strip():
         return url.stdout.strip().rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
     return repo.name
+
+
+_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def machine_path(value: str | None) -> bool:
+    """Whether a `Repo:` value is a location on one machine rather than a repo name.
+
+    A name has no spaces and never climbs out of a directory, so whitespace or a
+    `..` segment marks a path as surely as a root, a home, a drive or a `file:` URL.
+    """
+    v = (value or "").strip()
+    if not v:
+        return False
+    return (v.startswith(("/", "~", "\\")) or v[:5].lower() == "file:" or bool(_DRIVE_RE.match(v))
+            or ".." in re.split(r"[\\/]", v) or any(c.isspace() for c in v))
 
 
 _MAINLINE_CACHE: dict[str, str | None] = {}

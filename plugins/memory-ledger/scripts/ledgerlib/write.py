@@ -26,6 +26,7 @@ from .gates import (
     check_not_asked,
     portability_problem,
     refuse_problems,
+    repo_problem,
     report_evidence,
 )
 from .lint import warn_missing_about
@@ -47,6 +48,7 @@ from .rules import warn_missing_rules
 from .store import Entry, add_cache_row, find_entry
 
 PORTABILITY = "hardcoded personal path"
+REPO_PATH = "Repo: is a machine path"
 
 
 def _as_list(v):
@@ -125,6 +127,9 @@ def cmd_set_repo(args, root):
     """
     e = find_entry(root, args.slug)
     a = _get_answer(e, args.answer)
+    kind = locate(args.ledgers, args.slug).kind
+    if path_repo := repo_problem(args.repo, kind, args.force):
+        refuse_problems(f"set-repo {e.slug} {a.aid}", [(REPO_PATH, path_repo)])
     before = a.hash
     line = f"Repo: {args.repo}"
     if a.repo:
@@ -282,6 +287,9 @@ def cmd_new(args, root):
         problems.append(("claim too long", long_claim))
     if port := portability_problem(args.evidence, lg.kind, args.force):
         problems.append((PORTABILITY, port))
+    if path_repo := repo_problem(getattr(args, "repo", None), lg.kind, args.force,
+                                 local_option=True):
+        problems.append((REPO_PATH, path_repo))
     refuse_problems(f"new {args.slug}", problems)
     report_evidence(args.evidence, root, lg.kind, getattr(args, "context", None))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,6 +366,8 @@ def cmd_rival(args, root):
         problems.append(("claim too long", long_claim))
     if port := portability_problem(args.evidence, kind, args.force):
         problems.append((PORTABILITY, port))
+    if path_repo := repo_problem(getattr(args, "repo", None), kind, args.force):
+        problems.append((REPO_PATH, path_repo))
     refuse_problems(f"rival {e.slug}", problems)
     report_evidence(args.evidence, root, kind, getattr(args, "context", None))
     # max+1, never count+1. An answer id is immutable and gets referenced by

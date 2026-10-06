@@ -101,6 +101,7 @@ optional `Repo:` + optional `Ref:` + sig lines, each with its recorded output be
 - `e=N` is how many checks the answer carried when that signature was cast. `show` marks a shallower one `[ran 1 of 3 checks]`.
 - Link entries as `[[tech/<folder>/<slug>]]` — the full slug, anywhere in a claim or `Because:` line.
 - `Ref:` is for a code-scoped claim only, and is the branch name, never a SHA — a name survives rebases. `new`/`rival` fill `Repo:` in from the current checkout whenever `--ref` is given; set it later with `set-repo`, never by hand. Without a `Repo:` the ref resolves in whatever repo the reader stands in, and when it resolves nowhere `lint` says `REF-UNSCOPED` and declines to advise deletion.
+- A shared `Repo:` is a repo name (`widgets`, `acme/widgets`), never a machine path (`/…`, `~…`, `C:\…`, `file:`, `..`, spaces): `new`, `rival` and `set-repo` refuse one without `--force`, and `lint` reports it as `REPO-PATH`.
 - `conf`: `<0.45` unconfirmed · `0.45–0.75` confirmed · `>0.75` well-confirmed. Anchors: author alone `0.30` · one independent ✓ `0.61` · two `0.79` · 2✓+1✗ `0.63` · 6✓+1✗ `0.78`. Counted confidence caps at `0.99`; `1.00` is only ever `asserted`.
 - `Asserted: <who> <date> — <why>` records a human's ruling. Outside `h=`, like `Evidence:` and `Repo:`.
 

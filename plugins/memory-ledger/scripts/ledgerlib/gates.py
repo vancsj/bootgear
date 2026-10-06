@@ -16,6 +16,7 @@ from .clikit import refuse
 from .config import Ledger
 from .context import InvocationContext
 from .constants import BROKEN_EVIDENCE, CLAIM_MAX_WORDS, DUPLICATE_GATE, FUZZY_FLOOR
+from .model import machine_path
 from .scoring import build_scorer, cut_candidates, normalize
 from .store import all_index, tag_of
 
@@ -103,6 +104,24 @@ def portability_problem(evidences, kind: str | None = None,
             f"Use a repo-relative path, or --repo <name> to name the checkout instead "
             f"of embedding its location; write this to the local ledger instead; or "
             f"pass --force to file the personal path anyway.")
+
+
+def repo_problem(repo: str | None, kind: str | None = None, force: bool = False,
+                 local_option: bool = False) -> str | None:
+    """The refusal for a machine-path `Repo:` on a shared write, or None.
+
+    Gated like `portability_problem`: a local ledger keeps its paths, an unset
+    kind checks anyway, and `--force` files the path. Only an explicit `--repo`
+    reaches here; a value inferred from the checkout is left to `lint`.
+    `local_option` offers the local ledger only where the writer still picks one —
+    `rival` and `set-repo` act on an entry wherever it already lives.
+    """
+    if kind == "local" or force or not machine_path(repo):
+        return None
+    local = ", write to the local ledger instead (--local)," if local_option else ","
+    return (f"Repo: {repo.strip()} is a machine path, which only this machine can resolve. "
+            f"Use the repo name (for example widgets){local} or pass --force to file the "
+            f"path anyway.")
 
 
 def report_evidence(evidences, root: Path, kind: str | None = None,
