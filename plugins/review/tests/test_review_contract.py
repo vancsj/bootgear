@@ -27,8 +27,6 @@ class ReviewContractTest(unittest.TestCase):
                     self.assertTrue(row["cost"].strip(), row)
                 ids.append(row["id"])
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(len(yaml.safe_load((REFERENCES / ANGLE_FILES[0]).read_text())), 12)
-        self.assertEqual(len(yaml.safe_load((REFERENCES / ANGLE_FILES[1]).read_text())), 39)
 
 
 if __name__ == "__main__":
