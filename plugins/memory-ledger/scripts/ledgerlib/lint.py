@@ -17,8 +17,10 @@ from .model import (
     confidence,
     machine_path,
     mainline_ref,
+    on_mainline,
     ref_state,
     render_header,
+    same_repo_name,
     split_evidence,
 )
 from .scoring import normalize
@@ -100,7 +102,7 @@ def report_folder_shape(root: Path) -> int:
     # "move them there", which is the action.
     existing: dict[str, str] = {}
     for d in sorted(root.rglob("*")):
-        if d.is_dir() and not any(s.startswith(".") for s in d.parts):
+        if d.is_dir() and not any(s.startswith(".") for s in d.relative_to(root).parts):
             existing.setdefault(d.name, str(d.relative_to(root)))
     problems = 0
 
@@ -189,7 +191,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                   f"Renumber the one no other answer cites; ids are not hashed, so no "
                   f"signature is voided by it")
             problems += 1
-        for a in e.answers:
+        for i, a in enumerate(e.answers):
             if lg.kind == "shared" and machine_path(a.repo_value):
                 print(f"REPO-PATH  {e.slug} {a.aid}  Repo: {a.repo_value} is a machine path — "
                       f"the shared ledger takes a repo name; run `set-repo` with the name "
@@ -235,7 +237,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
             # REF-LANDED line below.
             context = getattr(args, "context", None)
             mainline = mainline_ref(context=context)
-            if rv and rv != mainline:
+            if rv and not on_mainline(rv, mainline):
                 state = ref_state(rv, a.repo_value, context)
                 # A landed branch is only unfinished business while nothing in
                 # the entry speaks for mainline yet. Once a sibling answer is
@@ -244,18 +246,20 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                 # for a promotion that `promote` itself refuses — these checks
                 # name their branch outright, so a copied one would read the
                 # branch while claiming mainline.
-                answered = any(o is not a and o.ref_value == mainline
-                               and o.repo_value == a.repo_value for o in e.answers)
+                answered = any(o is not a and on_mainline(o.ref_value, mainline)
+                               and same_repo_name(o.repo_value, a.repo_value)
+                               for o in e.answers)
                 if state == "merged" and not answered:
                     print(f"REF-LANDED {e.slug} {a.aid}  {rv} is now in {mainline} — "
                           f"add an answer scoped to mainline (`promote` if its checks do not "
                           f"name the branch, otherwise `rival` with a mainline check)")
                     problems += 1
                 elif state == "missing" and a.repo_value:
-                    print(f"REF-GONE   {e.slug} {a.aid}  {rv} resolves nowhere in "
-                          f"{a.repo_value} — promote it if it landed, drop the entry if the "
-                          f"branch was abandoned")
-                    problems += 1
+                    if not answered:
+                        print(f"REF-GONE   {e.slug} {a.aid}  {rv} resolves nowhere in "
+                              f"{a.repo_value} — promote it if it landed, drop the entry if the "
+                              f"branch was abandoned")
+                        problems += 1
                 elif state == "missing":
                     # Without a `Repo:` the ref was resolved against whatever
                     # checkout the caller stands in, so `missing` may mean only
@@ -268,7 +272,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                 # `unknown` (not in a repo) is deliberately silent. It is not
                 # a problem with the ledger, and REF-GONE must never fire for it
                 # — that line tells the reader to delete a verified entry.
-            if split_evidence(yes, no):
+            if split_evidence(yes, no) and i == len(e.answers) - 1:
                 # Not "rewrite the Evidence line": an answer body is immutable, so
                 # the disagreement is settled by an answer whose check names the
                 # thing the split turned on, not by editing the one that did not.
@@ -289,7 +293,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
     problems += report_folder_shape(root)
 
     for d in sorted(p for p in root.rglob("*")
-                    if p.is_dir() and not any(s.startswith(".") for s in p.parts)):
+                    if p.is_dir() and not any(s.startswith(".") for s in p.relative_to(root).parts)):
         if not (d / "_about.md").is_file():
             print(f"NO-ABOUT   {d.relative_to(root)}/")
             problems += 1

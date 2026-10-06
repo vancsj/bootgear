@@ -180,6 +180,30 @@ def mainline_ref(here: Path | None = None,
     return _MAINLINE_CACHE[key]
 
 
+def _repo_key(value: str) -> str:
+    """A repo reference reduced to its last path segment, so `widgets`, `acme/widgets`,
+    `git@github.com:acme/widgets.git` and `/home/me/widgets` all compare equal."""
+    return value.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git").lower()
+
+
+def same_repo_name(a: str | None, b: str | None) -> bool:
+    """Whether two `Repo:` values name the same repo; two empty values match, one empty does not."""
+    if not a or not b:
+        return not a and not b
+    return _repo_key(a) == _repo_key(b)
+
+
+def on_mainline(ref: str | None, mainline: str | None) -> bool:
+    """Whether `ref` is the mainline, up to a leading `origin/` on either side.
+
+    Nothing is mainline when either value is missing: no discoverable mainline means
+    no answer can be scoped to it.
+    """
+    if not ref or not mainline:
+        return False
+    return ref.removeprefix("origin/") == mainline.removeprefix("origin/")
+
+
 def same_repo(named: str | None,
               context: InvocationContext | None = None) -> bool:
     """Whether the checkout we are standing in is the one an answer names.
@@ -193,8 +217,7 @@ def same_repo(named: str | None,
     here = repo_name(context=context)
     if here is None:
         return False
-    want = named.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
-    return here.lower() == want.lower()
+    return here.lower() == _repo_key(named)
 
 
 def ref_state(ref: str, repo: str | None = None,

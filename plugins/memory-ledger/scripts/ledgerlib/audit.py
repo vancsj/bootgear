@@ -49,8 +49,9 @@ from .store import load_entries
 # location every session has: the repo the question is about. The lookbehind
 # also excludes a URL's `//` (as in `https://host/path`): a scheme's colon is
 # not a word character, so a plain "not preceded by \w or /" miscounts that
-# slash as a path start.
-_PATH_CANDIDATE = re.compile(r"(?<![\w/:])/(?!/)[\w./-]*/|(?<![\w/])~[\w./-]*/")
+# slash as a path start. A segment that directly follows `}` is relative to the
+# `${VAR}` expansion before it, not absolute.
+_PATH_CANDIDATE = re.compile(r"(?<![\w/:}])/(?!/)[\w./-]*/|(?<![\w/])~[\w./-]*/")
 
 # A tool's own fixed cache dir — same shape on anyone's machine that has the
 # tool, not a name the author chose. Unlike ~/<checkout>, where the checkout's
