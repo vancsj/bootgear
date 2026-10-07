@@ -75,11 +75,8 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
 Parity is kept by two rules. First, a behavior shared by both hosts changes
 on both in the same change. Second, drift tests in the Codex engine package
 fail when a copy diverges from its Claude source. The tests check that the
-converge package, converge reference, review references and `clikit.py`
-copies are byte-identical. They check that the converge skill body above
-`## Host mechanics` is identical; no other skill body is drift-tested. They
-check that the state-nudge hook differs only by an explicit allowlist of
-adaptations.
+converge package, the `clikit.py` copies and the host adapter core files
+(`host_adapter.py`, `host_contracts.py`, `policy.py`) are byte-identical.
 
 ## `gear.py` CLI
 

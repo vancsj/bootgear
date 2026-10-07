@@ -3,7 +3,24 @@ name: converge
 description: Settle the facts behind a set of claims — find, refute and cut each claim with separate agents over a validated append-only ledger, then compute which claims are reported. Use to review an artifact through lenses, to refute an existing numbered slate until a round changes nothing, or when review or debate needs its claims settled before acting.
 ---
 
-Read `reference.md` § `converge — rationale` for rationale. `converge` below is the CLI named in `## Host mechanics`.
+`converge` below is the CLI named in `## Host mechanics`.
+
+## Use, inputs and handback
+
+Use it when a caller (another skill, or the user standalone) needs the facts behind a set of claims settled before acting. Inputs: the mode (step 1), the artifact, and for `full` the lenses and find-angle files, for `refute-only` a numbered slate; optionally a gap-hunt brief and a request for one refuter.
+
+Hand back to the caller the render, every claim carrying a `choice`, and exactly one outcome (step 8):
+
+- `converged`: full mode with the reported and appendix counts; refute-only mode with the survived, inconclusive, downgraded, killed and retracted counts.
+- `unconverged`: list the claims whose refute state is `unconverged`.
+- `blocked`: name the role agent that was unavailable and the claims it held. No claim is marked survived without its refuter.
+
+In the render nothing verified is dropped: below-cutoff claims go to the appendix; inconclusive, unconverged and cut-capped claims, and claims tagged with a rule listed in `cutoff.report_rules`, are always reported; `report_rules` claims are exempt from the per-lens cap.
+
+## Workflow
+
+- `full`: init → find (step 3) → coverage → refute rounds until converged (step 4) → optional gap hunt → cut rounds until converged (step 5) → cutoff and render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
+- `refute-only`: init and file the slate → refute rounds until converged (step 4) → render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
 
 ## 1. Modes
 
@@ -14,7 +31,6 @@ Pick a valid slate id and an absolute ledger directory. Provide the mode's
 artifact, lenses, angle files, and optional project configuration to the
 public `converge` command. Its refusal or status output is authoritative for
 the accepted shape, current phase, and next fixed action.
-
 
 ## 2. Roles
 
@@ -28,15 +44,13 @@ these ids:
 | main | `main` | orchestrator: writes `init`, and in refute-only mode the slate's `file` events as `slate` |
 | F | `finder` | every find angle of every lens |
 | R1 | `r1` | refuter: ≥1 unused attack angle per claim per round; ≥2 when it is the round's only refuter |
-| R2 | `r2` | refuter like `r1`, and the gap-hunt finder; omitted when the caller asks for one refuter (review `quick`) |
+| R2 | `r2` | refuter like `r1`, and the gap-hunt finder; omitted when the caller asks for one refuter |
 | C | `cutter` | every cut round of every claim (full mode only) |
 
 Refute-only mode uses main, R1 and R2.
 
 - Spawn each role once and reuse it across rounds by continuing that agent; never spawn a new agent for a role that already has one.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test (id, current text, `loc`, `trigger`), its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes. Never give it another role's reasoning.
-- As main, write only `init` and, in refute-only mode, the slate's `file` events. Never write `refute`, `cut`, `rebut` or `accept`.
-- If a role agent cannot be spawned or does not return, stop with outcome `blocked` (step 8). Never write an event for it.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test (id, current text, `loc`, `trigger`), its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes.
 
 ## 3. Find
 
@@ -56,7 +70,7 @@ Repeat until the CLI reports the refute phase converged:
 
 1. Run the CLI's JSON status action. Live claims with `refute: open` are under
    test.
-2. For each claim under test, choose ≥2 of its `unused_attack_angles` whose tell applies. With R1 and R2, give each refuter ≥1 of them (more when more apply); with R1 alone, give it ≥2. Never give a refuter a claim it filed. Declare the round's angles before continuing the refuters.
+2. For each claim under test, choose ≥2 of its `unused_attack_angles` whose tell applies. With R1 and R2, give each refuter ≥1 of them (more when more apply); with R1 alone, give it ≥2. Declare the round's angles before continuing the refuters.
 3. Continue R1 (and R2) with its angles for every claim this round; one refuter takes many angles across many claims. The round number for a claim is its status `round` + 1.
 4. Refuter brief:
    - The claim is refuted unless the artifact's code or evidence proves it. Read every source you cite.
@@ -91,19 +105,26 @@ Full mode only. Repeat until the CLI reports the cut phase converged:
 - Refute-only mode: run the fixed render action the CLI reports after
   refutation convergence.
 
-Hand back the render and every claim carrying a `choice`.
-
 ## 7. Memory-ledger
 
-After cutoff (refute-only: after refute converges), mint facts that hold beyond this artifact through the `memory-ledger:ledger` skill, each with a runnable check. These are conventions, root causes, and the deliberate decisions behind appendix or killed claims. If memory-ledger is `missing`, `unconfigured` or `broken`, append `memory-ledger: <status> — <diagnostic>` to the render you hand back and continue.
+After cutoff (refute-only: after refute converges), mint facts that hold beyond this artifact through the `memory-ledger:ledger` skill, each with a runnable check. These are conventions, root causes, and the deliberate decisions behind appendix or killed claims.
 
 ## 8. Outcomes
 
-Hand back exactly one:
+Hand back the render, every claim carrying a `choice`, and exactly one outcome: `converged`, `unconverged` or `blocked`, with the details listed under `## Use, inputs and handback`.
 
-- `converged`: full mode with the reported and appendix counts; refute-only mode with the survived, inconclusive, downgraded, killed and retracted counts.
-- `unconverged`: list the claims whose refute state is `unconverged`.
-- `blocked`: name the role agent that was unavailable and the claims it held. No claim is marked survived without its refuter.
+## Rules
+
+- As main, write only `init` and, in refute-only mode, the slate's `file` events. Never write `refute`, `cut`, `rebut` or `accept`.
+- Never give a role agent another role's reasoning.
+- Never give a refuter a claim it filed.
+- A factual dispute is never a choice; it stays in converge.
+- Agent-id distinctness checks stop accidental self-judging, not a lying agent; a caller that needs more must run role agents it trusts.
+
+## Fallbacks
+
+- If a role agent cannot be spawned or does not return, stop with outcome `blocked` (step 8). Never write an event for it.
+- If memory-ledger is `missing`, `unconfigured` or `broken`, append `memory-ledger: <status> — <diagnostic>` to the render you hand back and continue.
 
 ## Host mechanics
 

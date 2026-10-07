@@ -13,7 +13,7 @@ factual dispute never goes to debate.
 | `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and validation), `model` (replayed state, refute/cut state, cutoff), `config`, `angles`, `render`, `cli` |
 | `plugins/converge/src/converge/angles/builtin.yaml` | Built-in `attack`, `evaluate` and `decide` angles |
 | `plugins/converge/bin/converge` | Wrapper: `uv run --project <plugin-root> -m converge.cli` |
-| `plugins/converge/skills/converge/` | Orchestration skill (modes, roles, rounds, outcomes); `reference.md` gives the rationale |
+| `plugins/converge/skills/converge/` | Orchestration skill (modes, roles, rounds, outcomes) |
 | `codex-plugins/engine/` | Codex copy: `src/converge/`, `scripts/converge`, `skills/converge/` |
 
 Callers: `review` runs every finding through a `full` slate; the engine `pr-review` and
