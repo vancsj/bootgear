@@ -3,7 +3,15 @@ name: recall
 description: Re-read the session ledger's settlement and open state from disk, never from model context. Use at the start of every engine iteration and whenever settlement is uncertain.
 ---
 
-Read the session ledger from disk. Do not reconstruct settlement from context. Read `reference.md` § `recall reference` for rationale.
+Read the session ledger from disk. Do not reconstruct settlement from context.
+
+The caller (`execute`, `resolve`, `debate`, or the next turn after a hook reminder) passes `<run-id>` and `<session-dir>`. Hand back to that caller one of these outcomes:
+
+- **State restored:** the settlement with valid amendments applied, open todos, recent decisions and pitches, the current node and its `do`, the open question id and each party's latest position when a debate is open, and the run manifest's permissions. An incomplete `debate_roster`/`debate_parties` amendment pair is reported as a gap, with the last fully-valid pair in force.
+- **Validation refusal:** the grouped refusal from `session validate`, unchanged.
+- **No active run:** the ledger file is missing at the given path.
+- **Recovered ledger:** after a lost `<session-dir>`, the user-confirmed existing ledger, then the restored state.
+- **Terminal node:** on a terminal node of an open ledger, the `session close` command it prints as `next`, run.
 
 ## When to run it
 
@@ -14,6 +22,11 @@ Read the session ledger from disk. Do not reconstruct settlement from context. R
 - The host's stop continuation and fallback direct the next engine iteration
   to `recall` rather than trusting the prior context.
 - Run whenever a decision depends on settlement that is not certain word for word.
+- With a custom `init --dir <custom-path>`, no hook reminds you: the hooks read only the default session directory. Run `recall` yourself at every iteration start.
+
+## Workflow
+
+Locate the ledger from the caller's `<session-dir>` → read the settlement, open todos and recent history → run `session validate` → scan the full decisions section and apply amendments → read the state machine and current node → if a `[qN]` question is open, identify it and each party's latest position → hand back.
 
 ## Finding the run ID
 
@@ -24,24 +37,8 @@ Read the session ledger from disk. Do not reconstruct settlement from context. R
 - Receive `<session-dir>` at the caller's handoff and pass it unchanged on every ledger call.
 - Pass `--dir <session-dir>` before reading the ledger.
 - Do not attempt to discover `<session-dir>` from `recall`.
-- Do not guess `~/.bootgear/session` or any other path when `<session-dir>` is unavailable.
+- Do not guess `~/.bootgear/session` or any other path when `<session-dir>` is unavailable; only the recovery in `When <session-dir> is lost` applies.
 - Do not search for another run.
-- Treat a missing file at the specified path as an error.
-- Report that no active run exists in this session.
-
-### When `<session-dir>` is lost
-
-- If the caller has no `<session-dir>`, list `~/.bootgear/session/`.
-- Match `<run-id>.md` as a default-directory candidate.
-- Support both `init` and `init --dir <custom-path>`.
-- If the default-directory listing finds nothing, ask the user directly for the absolute `session_dir` path or where `clarify` reported it.
-- Use this direct user question as the one documented work-question exception.
-- Treat a default-directory filename match as a candidate only.
-- Read the found ledger's `session_dir` line in its settlement.
-- Require the `session_dir` line to match the directory actually listed.
-- Ask the user to confirm that the recovered ledger is the intended run.
-- Resume the existing ledger after confirmation.
-- Do not start a new `clarify` or `init`.
 
 ## What to read
 
@@ -65,18 +62,13 @@ task session read <run-id> --dir <session-dir> --section settlement
   task session read <run-id> --dir <session-dir> --question <qid>
   ```
 
+- Take each party's latest `[debate]` entry for that question as its current position.
+
 - Read `task session read <run-id> --dir <session-dir>` with no flags only when auditing the whole run.
 
 Before returning a settlement, run the host adapter's `session validate`
 command with the same run and session directory. Return its grouped refusal
 unchanged; do not reconstruct or repair a failed validation in the skill.
-
-## Host mechanics
-
-Resolve `task` to `<plugin-root>/scripts/task`; the wrapper derives its
-project directory from its own location and honors `PLUGIN_ROOT` when set.
-Invoke `session validate` as `task session validate <run-id> --dir
-<session-dir>`.
 
 ## Current node
 
@@ -102,7 +94,7 @@ task session read <run-id> --dir <session-dir> --section decisions
 - For each field with one or more `AMENDMENT <field>` entries, apply the most recent new value for the rest of the run.
 - Apply amendments for every caller, not only `execute`'s own loop.
 - Skip `AMENDMENT state_machine` in this scan: `state amend` already applied it, and `state show` prints the result.
-- Require `spec`, `test`, and `review` to check `spec_override`, `test_override`, `review_override`, and `review_fix_mode` before trusting settlement values. See each skill's "Check for an override first".
+- Require `spec`, `test`, and `review` to check `spec_override`, `test_override`, `review_override`, and `review_fix_mode` before trusting settlement values.
 - Never dispatch from `spec_skill`, `test_skill`, or `review_skill`.
 - Dispatch only from the corresponding `_override` field.
 - Record `AMENDMENT spec_skill: ...`, `AMENDMENT spec_review_skill: ...`, `AMENDMENT test_skill: ...`, or `AMENDMENT review_skill: ...` after normal shape validation, but do not use those amendments for runtime dispatch.
@@ -154,3 +146,29 @@ Reject an amendment in any of these cases. Keep the last valid value:
 - Use `execute` to act on the result.
 - Use `resolve` or `debate` to handle disagreement.
 - Leave the state unchanged when nothing changes.
+
+## When `<session-dir>` is lost
+
+- If the caller has no `<session-dir>`, list `~/.bootgear/session/`.
+- Match `<run-id>.md` as a default-directory candidate.
+- Support both `init` and `init --dir <custom-path>`.
+- If the default-directory listing finds nothing, ask the user directly for the absolute `session_dir` path or where `clarify` reported it.
+- Use this direct user question as the one documented work-question exception.
+- Treat a default-directory filename match as a candidate only.
+- Read the found ledger's `session_dir` line in its settlement.
+- Require the `session_dir` line to match the directory actually listed.
+- Ask the user to confirm that the recovered ledger is the intended run.
+- Resume the existing ledger after confirmation.
+- Do not start a new `clarify` or `init`.
+
+## When the ledger file is missing
+
+- Treat a missing file at the specified path as an error.
+- Report that no active run exists in this session.
+
+## Host mechanics
+
+Resolve `task` to `<plugin-root>/scripts/task`; the wrapper derives its
+project directory from its own location and honors `PLUGIN_ROOT` when set.
+Invoke `session validate` as `task session validate <run-id> --dir
+<session-dir>`.

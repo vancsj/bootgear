@@ -6,4 +6,4 @@ disable-model-invocation: true
 
 Stable entry point for the `engine` plugin. Invoke the public `engine:clarify` skill through the `Skill` tool, passing along the user's original request.
 
-Do not duplicate or summarize `clarify`'s checklist here. When `engine`'s state machine gains a stage before `clarify`, update this delegation target, the state machine, and onboarding docs together, in the same change.
+`clarify` settles the run with the user and hands it to `execute`; `start` returns nothing itself.

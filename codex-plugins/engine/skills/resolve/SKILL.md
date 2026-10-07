@@ -7,7 +7,11 @@ Apply the settlement's per-domain `source_of_truth`.
 
 Invoke `debate` with the required settlement data when no settled source applies.
 
-Read `reference.md` § `resolve — design rationale` for design rationale.
+Hand the result back to the caller, `execute` or `debate`, as one of these outcomes:
+
+- **Decided:** a settled domain decides it. Record a `--mode resolve` entry and return the decision and the domain whose source settled it.
+- **Escalated** (called by `execute`): no settled source applies. Invoke `debate`; `debate` records the outcome and hands it back.
+- **Not settled** (called during a stuck round): no domain settles it. Report that and stop; `debate` continues toward `round_cap`.
 
 ## When to run
 
@@ -30,7 +34,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
 4. If no single domain applies, including cases where two domains conflict or no settled source covers the disagreement, follow the caller-specific rule:
 
    - **Called before `debate`:** Invoke the public `debate` skill in the same turn. Do not leave it pending. Pass only this decision-specific context:
-     - the decision in the terms `debate`'s round 1 asks each party to judge
+     - the decision, stated plainly
      - the touched domain(s) and the unsatisfied settlement condition for each
      - the full `source_of_truth` for every domain
      - `debate_threshold`, `task_type`, `goal`, and merged user, project, and task principles
@@ -49,6 +53,10 @@ Write one line in the session ledger for every disagreement `resolve` decides:
 ```text
 task session record-decision <run-id> --dir <session-dir> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
 ```
+
+During a stuck round, record the decided entry without `--question`, and state in the summary that it broke a debate stall.
+
+Pass every free-text argument (`--summary`) as its own quoted argument. Never interpolate it into one shell string.
 
 If `resolve` escalates, do not write a `resolve` entry. Require `debate` to record its outcome with `--mode debate`, `debate-capped`, or `debate-degraded`.
 

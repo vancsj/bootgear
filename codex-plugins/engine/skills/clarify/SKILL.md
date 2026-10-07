@@ -3,9 +3,18 @@ name: clarify
 description: Settle task type, approach, source-of-truth order, debate threshold, and autonomy scope; draft a goal for confirmation. Use at the start of any engine run, before execute. The only stage that asks the user work questions; recall's lost-session_dir recovery is a documented exception, not work.
 ---
 
-Ask the user work questions only in this stage. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation. Hand off to `execute` after confirmation. When compaction leaves the run identity unclear, recover `<session-dir>` and resume the existing ledger; do not start a new run.
+Run at the start of every engine run, before `execute`. Input: the user's request, directly or through `start`.
 
-Read `reference.md` § `Why clarify owns work questions` for rationale before changing this skill.
+Outcomes:
+
+- **Goal confirmed** — the settlement is written through `init` (required fields in `## Writing the settlement`), and the run is handed to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+- **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
+- **Ledger already exists** — `init` refuses; follow `## Recovery`.
+- **State machine fails validation after the fallback** — follow `## Recovery`.
+
+## Workflow
+
+Investigate the request → settle items 1–9 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, and the `leave_check` list → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 
 ## What to settle
 
@@ -17,9 +26,9 @@ Ask items in the order that fits the conversation. Use answers already implied b
    - the basis/evidence for that estimate (files read, commands run)
    - open unknowns, if any
 
-   Scale investigation depth to the request: a shallow pass is enough for trivial, bounded work, but state explicitly why deeper investigation wasn't needed rather than skipping the field. This gates on shape — non-empty, cites real artifacts — not on independently-verified truth; settlement validation checks the same way it checks other required fields.
+   Scale investigation depth to the request: a shallow pass is enough for trivial, bounded work, but state explicitly why deeper investigation wasn't needed rather than skipping the field.
 
-   This is separate from state-machine resolution (item 3): sizing the request and shaping the workflow graph are different judgments with different procedures. Do not conflate the two fields or skip one because the other was done.
+   This is separate from state-machine resolution (item 3). Do not conflate the two fields or skip one because the other was done.
 
    `execute`'s Act step reassesses scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
 
@@ -40,9 +49,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
    4. Run `task state diagram <path>` on the same resolved machine.
    5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
       For every node with `reminder.leave_check`, also list its argv verbatim, the tier it came from (built-in, project override, or per-run), and the path `transition` will run: `<plugin-root>/scripts/<argv[0]>` when that file exists and is executable, else `command -v <argv[0]>`. Flag it when `argv[0]` contains `/` or neither finds a program provided by an installed plugin. These commands run at `transition`; the user's confirmation approves them.
-   6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement.
-
-   Each v1 task type has a built-in machine. A project override wholly replaces that machine, and a per-run adjustment replaces it for this run; do not write settlement without a validated `state_machine`.
+   6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement. Do not write settlement without a validated `state_machine`.
 
 4. **Approach and principles are distinct:**
    - **approach** — record concrete workflow steps such as read the ticket, implement, and open a PR.
@@ -88,7 +95,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
    `debate_threshold`) or `threshold` (decide below-threshold choice claims
    solo and resolve/escalate only at or above the threshold). This field is read by
    `execute` after independent `spec-review`; an absent value means
-   `mandatory`. The engine validates its shape.
+   `mandatory`.
 
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
@@ -129,7 +136,7 @@ After confirmation:
    task session init <run-id> --settlement-file <file>
    ```
 
-   Treat a refusal because a ledger already exists at this path as a mid-session `clarify` rerun. Tell the user. Do not append a suffix.
+   When `init` refuses because a ledger already exists at this path, follow `## Recovery`.
 
 3. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. Use the printed `INIT <path>` line as the same absolute path that was written. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
 
@@ -139,7 +146,16 @@ Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 
-Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
+## Rules
+
+- Ask the user work questions only in this stage. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
+- Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
+
+## Recovery
+
+- **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
+- **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
+- **State machine fails validation** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
 
 ## Host mechanics
 
