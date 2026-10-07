@@ -3,7 +3,42 @@ name: spec
 description: Gather requirements, design an approach for real trade-offs, get sign-off, and derive a mechanical task breakdown — investigating current behavior, listing open questions instead of guessing, and skipping stages a small task doesn't need. Terse skeleton docs with rationale kept in a separate notes file. Runs standalone and delegates to a project-specific spec skill when one is registered. Use when requirements, a design choice, or an implementation checklist must be settled before implementation.
 ---
 
-Use this process unless an override applies. Read `reference.md` § `Five stages, not one pass` for design rationale.
+Use this process unless an override applies.
+
+## Inputs and outcomes
+
+Inputs: the ticket, bug report, or request; the codebase; in an active run,
+also `<run-id>`, `<engine-root>`, `<session-dir>`, and the stage sub-task
+label; on re-entry, the `spec-review` render and claim IDs.
+
+Hand back to the caller (`execute` in an active run, the user standalone)
+exactly one outcome:
+
+- **package** (stage 5): the requirements, design when stage 2 ran, and
+  `task.md` paths, the open interpretations or material design choices, and
+  the exact repository evidence the independent `spec-review` stage must
+  inspect.
+- **`blocked`** (stage 4): the step that could not be derived and the
+  missing or ambiguous statement; on re-entry, also the claim IDs and
+  evidence.
+- **delegated**: an override ran; it returns each stage's artifact as defined
+  in that stage's "Return the ... artifact" step.
+
+The default implementation hands back once, at stage 5, with every stage's
+artifact included. A stage's artifact is returned on its own only when an
+override handles that stage.
+
+## Workflow
+
+1. Check for an override; delegate if one applies.
+2. Stage 1: requirements.
+3. Stage 2: design, only for real trade-offs.
+4. Stage 3: completeness check; on a failure, go back to stage 2 or revise
+   requirements.
+5. Stage 4: task breakdown; on a gap, one loop back to stage 2 or 3, then
+   `blocked`.
+6. Stage 5: return the package to the caller, who runs `spec-review`.
+7. On `revise`, re-enter at stage 3 and return a refreshed package.
 
 ## Check for an override first
 
@@ -16,7 +51,7 @@ is its own sub-task that may have its own matching entry:
 1. **Active `engine` run.** If the current `<run-id>` has a session ledger, run:
 
    ```text
-   task session read <run-id> --section settlement
+   task session read <run-id> --dir <session-dir> --section settlement
    ```
 
    Read `spec_override` from the settlement, then scan the session ledger's decisions for an `AMENDMENT spec_override` entry — a later, explicit change to this field recorded mid-run. If one exists, its most recent value wins over the field just read.
@@ -26,7 +61,7 @@ is its own sub-task that may have its own matching entry:
 
    `clarify` registers this entry once per run. If it is absent, or a mapping has no matching label for the current stage, use the default for that stage. Do not search for another override.
 
-2. **Standalone invocation.** If there is no active run or session ledger, check whether the current project has a more specialized spec skill whose description matches the task. If one exists, invoke it through the `Skill` tool and stop.
+2. **Standalone invocation.** If there is no active run or session ledger, check whether the current project has a more specialized spec skill whose description matches the task. If one exists, invoke it and stop.
 
 3. **Default.** Otherwise, run the default implementation below.
 
@@ -40,6 +75,13 @@ Five stages: requirements, design, independent review package, task breakdown, a
 its own artifact via its own "Return the ... artifact" step; nothing here
 decides an open question itself. Stages 1 and 2 each write two files — see
 "Skeleton and notes" below.
+
+### Scale to the task
+
+Scale the detail, and the stages actually run, to the task:
+
+- For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, complete the review package check against `requirements.md`, derive a short `task.md`, and return the package.
+- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
 
 ### Stage 1: requirements
 
@@ -55,11 +97,10 @@ decides an open question itself. Stages 1 and 2 each write two files — see
 
    Write this as tersely as the facts allow: bullets over prose, no
    restating context already in the ticket or settlement, no padding. Keep
-   only what's specific to this task; see "Cite-not-embed" below for
+   only what's specific to this task; see "Skeleton and notes" below for
    durable rationale.
 
-   `goal` in an `engine` run is a short done-condition. `requirements.md`
-   is the fuller description that makes that done-condition checkable.
+   In an `engine` run, `requirements.md` makes the short `goal` checkable.
 
 3. **Write `requirements-notes.md`** for rationale — see "Skeleton and notes."
 
@@ -72,13 +113,13 @@ decides an open question itself. Stages 1 and 2 each write two files — see
 Only for a task whose requirements stage found real design trade-offs — an
 implementation choice with more than one reasonable shape, not a
 mechanical follow-through with one obvious path. Skip straight to the review package
-otherwise; see "Progressive disclosure." A skipped stage 2 means stage 3
+otherwise; see "Scale to the task." A skipped stage 2 means stage 3
 checks `requirements.md` instead of `design.md` — see "The completeness
 check."
 
 1. **Propose an approach.** For each open design trade-off the requirements stage named, state the options actually considered and which one this stage picks. Name what each rejected option would have cost or risked — not just that it was rejected.
 
-2. **Write `design.md`** (skeleton). What changes, where, and in what order — concrete enough that "implement this" doesn't require another design decision mid-build. Cite an existing pattern in the codebase being mirrored, rather than re-deriving a convention already settled elsewhere. Apply the same terseness as `requirements.md`: this file is what stage 3 checks against, so padding here makes the completeness check harder to satisfy honestly, not easier.
+2. **Write `design.md`** (skeleton). What changes, where, and in what order — concrete enough that "implement this" doesn't require another design decision mid-build. Cite an existing pattern in the codebase being mirrored, rather than re-deriving a convention already settled elsewhere. Apply the same terseness as `requirements.md`.
 
 3. **Write `design-notes.md`** for rationale only — see "Skeleton and notes." Keep every considered alternative and its cost in `design.md` so independent review can inspect it.
 
@@ -112,26 +153,20 @@ passed. Never runs before that, and never on a design that failed it.
    derive and the missing or ambiguous statement. Do not choose, do not
    infer the likely intent, do not call `resolve` or `debate`, and do not
    record the gap as an open question of your own; report it and stop.
-   This should not happen if stage 3's completeness check passed
-   correctly — treat it as a signal that the check missed something, not
-   as a decision for this stage to make.
 
-   Picking a physical list order for changes criterion 3 declared
-   order-independent is not a substantive option under this rule — the
-   design already said the order doesn't matter, so any order the
-   checklist prints them in is equally correct. Refusing here would
-   penalize a design for correctly declaring order-independence.
+   Ordering changes the design declared order-independent (criterion 3) is
+   not a substantive option under this rule.
 
 3. **Return the task artifact.** `task.md`'s content and suggested path,
    or the structural refusal from step 2 after the one retry is exhausted.
 
-### Re-entry from independent review
-
-When `spec-review` returns `revise`, read its render and claim IDs, address each claim in the skeleton artifacts, rerun stages 3–5, and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. A blocked return transitions the run to `failed` with the claim IDs and evidence.
-
 ### Stage 5: return review package
 
 Return the requirements, design when stage 2 ran, and `task.md` paths, the open interpretations or material design choices, and the exact repository evidence the independent `spec-review` stage must inspect. Do not call `resolve` or `debate`; the state machine owns those decisions after review.
+
+### Re-entry from independent review
+
+When `spec-review` returns `revise`, read its render and claim IDs, address each claim in the skeleton artifacts, rerun stages 3–5, and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. If stage 4 returns `blocked` on re-entry, return `blocked` with the claim IDs and evidence.
 
 ## Skeleton and notes
 
@@ -144,15 +179,17 @@ tersely as the facts allow. The notes file holds rationale, cited
 default. Considered alternatives and their costs belong in the `design.md`
 skeleton because independent review must inspect them.
 
+Terseness never excuses a missing fact: a change with no stated file,
+behavior, or order still fails "The completeness check" however short the
+document is.
+
+Cite-not-embed: when a "why" would still hold on a later, unrelated task,
+cite a `memory-ledger` entry instead of restating it, and put it in the
+`-notes.md` file, not the skeleton.
+
 The completeness check (stage 3, step 1) reads only the skeleton files,
-never a `-notes.md` file. This is structural, not a policy the check
-enforces: a fact that exists only in a notes file is invisible to the
-check and cannot satisfy or fail a criterion. So the boundary runs the
-other way — a notes file must never be the *sole* location of a
-criteria-relevant fact, or the doc's overall record misleads a later
-reader even though the gate itself can't be fooled by it. Write every
-fact the criteria test into the skeleton; the notes file may explain or
-justify it, not carry it alone.
+never a `-notes.md` file. Write every fact the criteria test into the
+skeleton; the notes file may explain or justify it, never carry it alone.
 
 ## The completeness check
 
@@ -170,8 +207,9 @@ Check each one by reading; none require an aggregate judgment:
 
 If any criterion fails, name the failing criterion and the specific change
 that fails it, and run or return to stage 2 as described in "Stage 3:
-review package," step 1. Never proceed to stage 4 on a failing check, and never
-let stage 4 make the judgment call this check exists to catch upstream.
+prepare for independent review," step 1. Never proceed to stage 4 on a
+failing check, and never let stage 4 make the judgment call this check
+exists to catch upstream.
 
 ## spec_debate_mode
 
@@ -187,14 +225,8 @@ Neither value changes the independent correctness/completeness review. They
 only control how the engine handles choice claims after that review; debate
 never bypasses a re-review.
 
-## Progressive disclosure
-
-Scale the detail, and the stages actually run, to the task:
-
-- For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, complete the review package check against `requirements.md`, derive a short `task.md`, and return the package.
-- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
-
 ## Host mechanics
 
+- Invoke a skill through the `Skill` tool.
 - Resolve the public session command to `<plugin-dir>/bin/task`.
 - Pass `<plugin-dir>` as `<engine-root>` in the handoff to this skill.
