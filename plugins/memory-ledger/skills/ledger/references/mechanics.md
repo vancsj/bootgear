@@ -20,7 +20,7 @@ ledger.py assert <slug> <aN> --why "<what settles it>" [--by NAME] | --clear
 ledger.py hash <slug> <aN>                     # h= for an answer as it stands
 ledger.py lint [--fix] [--only …]              # drift, voided sigs, folder shape, collisions
 ledger.py save [-m "…"] [--no-push] [--only …] # lint --fix, then one commit per ledger
-ledger.py audit [--json] [--filter <text>]     # Evidence lines hardcoding a home path
+ledger.py audit [--json] [--filter <text>]     # Evidence lines naming an absolute or ~ path, tool caches and system dirs excepted
 ledger.py doctor                               # python, git, config, both roots
 ledger.py rules [--init] [--only …]            # each ledger's WHAT-BELONGS.txt; --init seeds a missing one
 ledger.py resolve-roots [--json]               # where each ledger is, and whether it exists yet

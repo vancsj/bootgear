@@ -27,8 +27,9 @@ zoom-out check → `sign`, `sign --fail --output`, or `refute`; a claim narrower
 than its checks → `rival` → no hit or a different question: read both ledgers'
 `rules`, choose a ledger → `new` (with `--alt-terms`) → `save` → hand back.
 
-1. Read `references/mechanics.md` before the first command or whenever a flag,
-   path, or output shape needs checking.
+1. Run `ledger.py --help` (or `<command> --help`) for command syntax. Read
+   `references/mechanics.md` before a write command or when a flag, path, or
+   output shape needs checking.
 2. Resolve the question before reading or writing an entry.
 3. Read the selected answer and run every listed evidence check before using it.
 4. Read each ledger's rules (`rules`), then choose shared or local storage from

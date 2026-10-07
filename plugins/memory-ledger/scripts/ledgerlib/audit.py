@@ -63,10 +63,11 @@ _SYSTEM_PATH = re.compile(r"^/(?:etc|usr|bin|sbin|opt|var|Applications|Library|S
 
 
 def unportable_paths(evidence: str) -> list[str]:
-    """Every /Users/, /home/, or ~/-anything path (~/<checkout> included) and
-    every Claude Code scratchpad (/tmp/claude-<uid>/<project>/<session-uuid>/…,
-    or /private/tmp on macOS — deleted with the session, so not even this
-    machine can rerun it later), minus tool caches and system paths.
+    """Every absolute path (/Users/, /home/, /tmp/…, any other /…/) and every
+    ~/-anything path (~/<checkout> included), minus tool caches and system
+    paths. A Claude Code scratchpad (/tmp/claude-<uid>/<project>/<session-uuid>/…,
+    or /private/tmp on macOS) is deleted with the session, so not even this
+    machine can rerun it later.
     """
     candidates = {m.group(0) for m in _PATH_CANDIDATE.finditer(evidence)}
     return sorted(p for p in candidates

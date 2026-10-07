@@ -268,8 +268,9 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser("resolve-roots", help="print where each ledger is and whether it exists")
     rs.add_argument("--json", action="store_true", help="machine-readable, for setup")
 
-    au = sub.add_parser("audit", help="Evidence lines that hardcode one person's home "
-                                      "directory; --json dumps every answer for review")
+    au = sub.add_parser("audit", help="Evidence lines that name an absolute or ~ path "
+                                      "(tool caches and system dirs excepted); --json dumps "
+                                      "every answer for review")
     au.add_argument("--json", action="store_true",
                     help="dump every answer (question, claim, check) uncategorised, for a "
                          "reader to judge which ledger it belongs in")

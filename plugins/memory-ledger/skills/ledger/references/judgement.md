@@ -27,7 +27,7 @@ Each ledger's `WHAT-BELONGS.txt` (`ledger.py rules`) is the authority on what it
 6. **Prefer the question that outlives the number.** Where a tally has a reusable method inside it, the method is the shared entry and the number is the local one.
 7. **Judge the destination yourself and write.** A codebase, product or business fact goes to shared without ceremony. Ask the human only when you cannot place it — it reads general but leans on this machine, or it is about a person. Shared is append-only and published under their name.
 8. **Read both ledgers even when you write to one.** `--only` narrows and is never the default: a read covering one ledger lets you mint a question the other already answers.
-9. **Which ledger an entry belongs in has no heuristic.** `audit` asserts one thing only — an `Evidence:` line hardcoding a home path. `audit --json` dumps every answer that has a check, skipping `_about` entries, and you ask of each: could someone else, on their own machine, run this and get the same answer?
+9. **Which ledger an entry belongs in has no heuristic.** `audit` asserts one thing only — an `Evidence:` line naming an absolute or `~`-relative path other than a tool cache or system directory. `audit --json` dumps every answer that has a check, skipping `_about` entries, and you ask of each: could someone else, on their own machine, run this and get the same answer?
 
 ## Retrieving
 

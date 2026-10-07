@@ -2,19 +2,15 @@
 
 ## UNPORTABLE
 
-`ledger.py audit` reports **UNPORTABLE** only: Evidence lines containing an
-absolute path into somebody's home directory.
-
-Answer bodies are immutable, so the fix is a new answer carrying a portable
-check: `ledger.py rival <slug> --keep-evidence <aN> --evidence "…"` with a
-repo-relative path, or `--repo <name>` to name the checkout instead of embedding
-its location.
+`ledger.py audit` reports **UNPORTABLE** only: Evidence lines naming an
+absolute or `~`-relative path, except a tool's cache directory (such as
+`~/.gradle/`, `~/.m2/`, `~/.npm/`) and a system directory (`/etc/`, `/usr/`,
+`/bin/`, `/sbin/`, `/opt/`, `/var/`, `/Applications/`, `/Library/`, `/System/`).
 
 ## Classifying `audit --json`
 
-`ledger.py audit --json [--filter <text>]` dumps every answer with its question,
-claim and check, uncategorised and unranked. Work through them — `--filter` to
-take a folder at a time on a large ledger — asking one question of each:
+Work through the `audit --json` output — `--filter` to take a folder at a time
+on a large ledger — asking one question of each answer:
 
 > Could someone else, on their own machine, run this line and get the same answer?
 
