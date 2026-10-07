@@ -17,8 +17,9 @@ A skill never refers to another skill's internal file, section, heading,
 script path, or layout. The other skill owns that structure and can rename it,
 restructure it, or replace it with a project override. A caller learns a
 callee's settings by running `settings`, never by reading the callee's files.
-A skill may call another skill by name, and a plugin that does so must declare
-the callee as a dependency or bundle a copy of it.
+A skill may call another skill by name; a Claude plugin that does so must
+declare the callee as a dependency, and a Codex skill states what to do if the
+callee is missing.
 
 Every line of a skill, host adapter sections included, names another skill
 by its plain public name, without Claude `/` or Codex `$` punctuation. Only

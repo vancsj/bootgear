@@ -29,9 +29,10 @@ safety boundaries; fallbacks, such as the owning CLI being unavailable; and
 `## Host mechanics` last.
 
 ## R005 [must]
-A shipped plugin that calls another bootgear plugin's skill or command
-within this repo must declare that plugin in `dependencies` (Claude) or
-bundle a copy (Codex).
+A shipped Claude plugin that calls another bootgear plugin's skill or
+command within this repo must declare that plugin in `dependencies`. Codex
+has no dependency mechanism: a Codex skill may call a sibling plugin's skill
+without bundling it when it states what to do if that skill is missing.
 
 ## R006 [must]
 A behavior shared by the Claude and Codex plugins is covered by test cases

@@ -2,7 +2,7 @@
 
 ## Plugins and skills
 
-- Each plugin installs and works on its own. A plugin that needs another declares it (`dependencies` on Claude) or bundles a copy (Codex); it never assumes a sibling is installed.
+- Each plugin installs and works on its own. A Claude plugin that needs another declares it in `dependencies`; Codex has no dependencies, so a Codex skill that calls a sibling states what to do if the sibling is missing. A plugin never assumes a sibling is installed.
 - Reference only bootgear's own skills, plugins and tools, host built-ins, and well-known skills or plugins from outside this repo. Never name local personal skills or plugins. The local denylist can carry those names.
 - Skills call each other only through the public interface: the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns a callee's settings by running `settings`, never by reading the callee's files.
 - Built-in defaults (state machines, angles, skills) are project-free. Anything specific to one project lives in that project's `.bootgear/config/`.
