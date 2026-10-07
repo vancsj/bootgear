@@ -5,6 +5,22 @@ description: Write test cases, run them, and read or triage reports. Works stand
 
 Use this skill when a task needs test cases written, tests run, or a failure understood.
 
+Inputs: the change or requirement, or the failing output to triage. Inside an active `engine` run, also `<run-id>`, `<engine-root>`, `<session-dir>` and the sub-task label passed by `execute`.
+
+## Reporting back
+
+Report each sub-task separately:
+
+- **cases written** — location and coverage.
+- **run performed** — exact command and actual pass/fail output. State separately if it was not run.
+- **triage** — one classification per failure, with its error text or stack trace, and whether it's blocking (see "Reading and triaging reports"). Never combine failures into one conclusion.
+
+The report goes to the caller: `execute` inside an active `engine` run, the user standalone. Inside a run, this report is input to `execute`'s todo updates and goal check. `test` does not decide whether the broader task is complete.
+
+## Workflow
+
+Check for an override → write cases (if asked) → run → triage failures → report back to the caller.
+
 ## Check for an override first
 
 Before any other action:
@@ -12,7 +28,7 @@ Before any other action:
 1. If running inside an active `engine` run, read the settlement:
 
    ```text
-   task session read <run-id> --section settlement
+   task session read <run-id> --dir <session-dir> --section settlement
    ```
 
    Read `test_override`, then scan the active run's full decisions for an `AMENDMENT test_override`; the latest valid value wins.
@@ -39,21 +55,11 @@ Use only the sub-tasks required by the request:
 
    If a regression cites a `.bootgear/config/test-standard.md` rule, mark it blocking when the rule's severity is at or above `cutoff`, non-blocking (reported but not a blocker) when below. No cited rule, or no `test-standard.md`: treat as blocking.
 
-## Progressive disclosure
+### Scaling to the change
 
 For a small change, write a few cases and run the relevant tests.
 
 For a large or high-risk change, expand case coverage, run integration or end-to-end tests as well as unit tests, and triage every failure with its supporting evidence.
-
-## Reporting back
-
-Report each sub-task separately:
-
-- **cases written** — location and coverage.
-- **run performed** — exact command and actual pass/fail output. State separately if it was not run.
-- **triage** — one classification per failure, with its error text or stack trace, and whether it's blocking (see "Reading and triaging reports"). Never combine failures into one conclusion.
-
-Inside an active `engine` run, this report is input to `execute`'s todo updates and goal check. `test` does not decide whether the broader task is complete.
 
 ## Host mechanics
 

@@ -1,10 +1,5 @@
 # Ledger mechanics
 
-Command flags, git/save behaviour, ledger roots resolution, folder layout, the
-entry file format, and the resolver's output shape. Reference: nothing here
-needs a decision from you. Read it before your first `ledger.py` call this
-session, or whenever a flag, path or output shape needs checking.
-
 ## Commands
 
 ```
@@ -55,7 +50,7 @@ ledger.py selftest                             # pin the conf/hash constants
 
 ## Roots
 
-- Each ledger is a git repo. `resolve-roots` prints where yours are; missing or unset → `/memory-ledger:setup`.
+- Each ledger is a git repo. `resolve-roots` prints where yours are; missing or unset → tell the user to run the memory-ledger setup skill.
 - Defaults: `~/.memory-ledger/shared` and `~/.memory-ledger/local`.
 - Roots come from, each beating the last: `--root` / `--local-root` → `$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` → `memory.root` / `memory.local_root` in the config file → the defaults. Relative paths resolve from the caller context, including `GEAR_CALLER_CWD` on the gear route.
 - Codex writes pass `--host codex --session-id <exact-id>` and `--as codex:<exact-id>`. The exact hyphenated session ID is retained; a missing, malformed, or conflicting identity is rejected before a write.
@@ -72,10 +67,10 @@ ledger.py selftest                             # pin the conf/hash constants
   WHAT-BELONGS.txt              # what belongs in this ledger; `save` commits it
 ```
 
-- `WHAT-BELONGS.txt` is `.txt` because every `*.md` under the root is read as an entry. `rules --init` seeds the plugin's default and never overwrites an existing file.
+- Never rename `WHAT-BELONGS.txt` to `.md`: every `*.md` under the root is read as an entry. `rules --init` seeds the plugin's default and never overwrites an existing file.
 
 - Every directory has an `_about.md`, written in the commit that creates the folder: `Q: What belongs here?`, competing visions as rival answers. A local and a shared `tech/_about` are not a collision.
-- No `_meta/`. The schema and constants are this skill and `ledgerlib/constants.py`; a copy inside the ledger drifts.
+- Never create `_meta/`.
 - One slug, one home. A slug in both ledgers is an error, not a first-match: the lookup refuses and `lint` reports `TWO-HOMES`.
 - `OVERSIZE` fires past 50 direct entries; `REGROUP` from 25 up to the cap, where three or more entries share a word. Both advisory, no `--fix`.
 

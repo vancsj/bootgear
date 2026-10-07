@@ -17,7 +17,7 @@ codex exec "${ARGS[@]}" "<prompt>" < /dev/null > /dev/null 2>&1
 cat "$OUT"
 ```
 
-`--ignore-user-config --ignore-rules` skip `~/.codex/config.toml` and its plugins, hooks, and MCP servers, so no hooks fire on the call. Because the config is skipped, `BOOTGEAR_ADVISOR_CODEX_MODEL` and `BOOTGEAR_ADVISOR_CODEX_EFFORT` are how the user chooses the model and reasoning effort. Each flag is passed only when its variable is set; when unset, the flag is omitted and Codex uses its own default.
+`BOOTGEAR_ADVISOR_CODEX_MODEL` and `BOOTGEAR_ADVISOR_CODEX_EFFORT` choose the model and reasoning effort. Each flag is passed only when its variable is set; when unset, the flag is omitted and Codex uses its own default. A model or effort set in `~/.codex/config.toml` does not apply to this call.
 
 Timeout 2–3 minutes; typical runs take 30–60 seconds. `-o` writes the final message to a file; stdout carries streamed reasoning banner/tokens — always redirect it to `/dev/null` (as above) so only the final-answer file ever reaches the transcript. Never drop the redirect to "watch progress" — that's what floods context.
 
