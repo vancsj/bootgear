@@ -30,7 +30,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
 
    This is separate from state-machine resolution (item 3). Do not conflate the two fields or skip one because the other was done.
 
-   `execute`'s Act step reassesses scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
+   Later nodes reassess scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
 
 2. **Task type** — record exactly one of the four v1 values:
    - `ticket-writing` — requirement spike
@@ -68,7 +68,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
    Also settle:
    - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
    - Use the default three-party roster (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) unless the run needs custom parties. Record a custom party as `{id, label, prompt, mechanism}`; require a distinct ID and a host-supported mechanism.
-   - Resolve `debate_party_config` with `task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` or model/profile fields into settlement.
+   - Resolve `debate_party_config` with `task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` into settlement.
    - Set `convergence_policy` to `unanimous` by default.
    - Set `consented_stop_allowed` to `true` by default. Use `unanimous_convergence`, `consented_stop`, and `round_cap` as the debate outcomes. Set `consented_stop_allowed` to `false` to remove `consented_stop`. End debate only in `unanimous_convergence` or `round_cap` when `consented_stop_allowed` is `false`.
 
@@ -137,9 +137,9 @@ After confirmation:
 
    When `init` refuses because a ledger already exists at this path, follow `## Recovery`.
 
-3. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. Use the printed `INIT <path>` line as the same absolute path that was written. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
+3. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. `init` prints `INIT <ledger-file>`, the ledger file inside that directory. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
 
-4. After `init`, read `<session-dir>` back from `recall`, or parse it from `init`'s printed path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
+4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
 Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 

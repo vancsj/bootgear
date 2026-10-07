@@ -55,7 +55,7 @@ For each iteration, follow these steps:
 
 1. **Recall.** Re-read the settlement and open todos. Run `task state current <run-id> --dir <session-dir>` for this run's node and reminder. Apply the latest valid amendment from the full decisions section. Check for a `[qN]` tag with no closing entry. If one exists, resume it under the public `debate` skill before doing anything else in the iteration. Do not start new work or run goal-check with a debate genuinely open.
 
-2. **Act.** Do the current node's `reminder.do`, calling the skill it names. A node with no `reminder` (`clarify` in `ticket-to-pr.yaml`) relies on ordinary prose toward `goal`. Only when that work is about to investigate a domain fact this run does not already have from the ticket, the settlement, or this ledger — current behavior, a convention, a prior decision on the same question, not something already established earlier this run or in an earlier iteration of the same node — invoke `memory-ledger:ledger` with the question first (see "Checking and recording in memory-ledger" below) and use a settled hit instead of re-deriving it. A later iteration of the same multi-iteration node (e.g. `test-code` re-running after a fix) skips this when it has no new fact to investigate. Update todos as work starts and completes:
+2. **Act.** Do the current node's `reminder.do`, calling the skill it names. A node with no `reminder` relies on ordinary prose toward `goal`. Only when that work is about to investigate a domain fact this run does not already have from the ticket, the settlement, or this ledger — current behavior, a convention, a prior decision on the same question, not something already established earlier this run or in an earlier iteration of the same node — invoke `memory-ledger:ledger` with the question first (see "Checking and recording in memory-ledger" below) and use a settled hit instead of re-deriving it. A later iteration of the same multi-iteration node (e.g. `test-code` re-running after a fix) skips this when it has no new fact to investigate. Update todos as work starts and completes:
 
    ```text
    task session update-todo <run-id> --dir <session-dir> "<text>"
@@ -141,8 +141,6 @@ task session record-decision <run-id> --dir <session-dir> --mode solo --summary 
 
 Prefix the summary with `AMENDMENT <field>`. Name the exact settlement field being changed, such as `permitted_mutations`, `goal`, or `debate_threshold`.
 
-Split the old and new values on the first ` -> `. Require neither value to contain ` -> `. Use `becomes` or `changes to` when the real value contains that substring.
-
 Write structured old and new values in full, using the same shape a human would read back:
 
 ```text
@@ -152,7 +150,7 @@ AMENDMENT source_of_truth: {scope: ticket} -> {scope: ticket, correctness: tests
 
 Do not write a diff, a field name alone, or prose without the complete value.
 
-Change `state_machine` only with `state amend`, never `record-decision`:
+To change `state_machine`:
 
 ```text
 task state show <run-id> --dir <session-dir>
@@ -197,20 +195,11 @@ Before `close`, succeeded or failed, delete this run's review snapshots, naming 
 converge prune <slate> [<slate>...] --project-root <repo root>
 ```
 
-Call `close` exactly once when the run ends:
+Call `close` exactly once when the run ends, as the `session close` command that `transition` prints as `next`. For `failed`, set `--reason` to one of:
 
-```text
-task session close <run-id> --dir <session-dir> succeeded
-task session close <run-id> --dir <session-dir> failed --reason "<the undoable condition that was met>"
-task session close <run-id> --dir <session-dir> failed --reason "<the exhausted-stall gap, per step 5's fourth bullet>"
-task session close <run-id> --dir <session-dir> failed --reason "<the stop reason, per Fallbacks>"
-```
-
-Use one of these `failed` paths:
-
-- Use the `goal` failed condition when it was actually met.
-- Use the exhausted-stall gap when every unit of work ran out with no condition literally met.
-- Use the stop reason for a validation refusal, a missing required dependency, a rejected `session_dir` amendment, a `blocked` spec or spec-review, or a missing permission with no other path.
+- the `goal` failed condition, when it was actually met;
+- the exhausted-stall gap (step 5's fourth bullet), when every unit of work ran out with no condition literally met;
+- the stop reason (Fallbacks), for a validation refusal, a missing required dependency, a rejected `session_dir` amendment, a `blocked` spec or spec-review, or a missing permission with no other path.
 
 Send a final pitch after `close`:
 
@@ -236,8 +225,7 @@ End each of these as `failed`: call `transition --to failed`, then `close ... fa
 - **Validation refusal:** report the refusal's grouped field-level problems; that refusal is the reason.
 - **Missing required dependency:** if the task type requires a missing dependency, such as `test` for ticket-to-PR, report it once and name the dependency as the reason. Do not retry.
 - **`session_dir` amendment:** the rejected amendment is the reason.
-
-If the named override skill is not installed, report the missing skill. Do not use the general default.
+- **Missing override skill:** if the named override skill is not installed, it is a missing required dependency; report it and name it as the reason. Do not use the general default.
 
 If `memory-ledger` is missing or unconfigured, record its status marker and continue.
 

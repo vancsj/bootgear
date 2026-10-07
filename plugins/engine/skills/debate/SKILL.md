@@ -215,17 +215,13 @@ outcomes: `unanimous_convergence`, `consented_stop`, `round_cap`, or
 `degraded_convergence`. Include the question ID and the outcome's required
 positions, dissent, or absence data.
 
-Use only these mode/prefix combinations:
+Close only with these mode/prefix combinations:
 
-- `--mode debate`: `round N, party ...` or `unanimous_convergence:`
+- `--mode debate`: `unanimous_convergence:`
 - `--mode debate-capped`: `consented_stop:` or `round_cap:`
 - `--mode debate-degraded`: `degraded_convergence:`
 - `--mode scope-settled`: `scope_settled:` (closes round 0 only, see
   "Round 0: scoping")
-
-Do not begin a round entry with `unanimous_convergence:` or
-`degraded_convergence:`; begin it with
-`round N, party '<role>':`.
 
 Record at most one `debate-capped` or `debate-degraded` closing entry. Use
 exactly one `debate-capped` outcome: `consented_stop` or `round_cap`.

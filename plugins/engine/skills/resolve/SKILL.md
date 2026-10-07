@@ -10,7 +10,7 @@ Invoke `debate` with the required settlement data when no settled source applies
 Hand the result back to the caller, `execute` or `debate`, as one of these outcomes:
 
 - **Decided:** a settled domain decides it. Record a `--mode resolve` entry and return the decision and the domain whose source settled it.
-- **Escalated** (called by `execute`): no settled source applies. Invoke `debate`; `debate` records the outcome and hands it back.
+- **Escalated** (called by `execute`): no settled source applies. Invoke `debate` and hand its handback to `execute` unchanged: a closed question `debate` recorded, Refused (a factual dispute; nothing recorded; settle it with the `converge` skill), or `inconclusive` (nothing recorded).
 - **Not settled** (called during a stuck round): no domain settles it. Report that and stop; `debate` continues toward `round_cap`.
 
 ## When to run

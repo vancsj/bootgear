@@ -46,10 +46,14 @@ Call the session-ledger script. Do not hand-read its Markdown file with a genera
 
 ```text
 task session read <run-id> --dir <session-dir> --section settlement
+task session read <run-id> --dir <session-dir> --open-only
+task session read <run-id> --dir <session-dir> --last 3
 ```
 
-- Run this command through the host adapter. Read the settlement, full decisions, open todos, current state, and the last three pitches.
-- The full decisions output is required because amendments can appear anywhere in the section.
+- Run these commands through the host adapter.
+- Read `--section settlement` to obtain the task type, approach and principles, per-domain sources of truth, debate threshold and convergence policy, autonomy scope, `goal`, and run manifest.
+- Read `--open-only` to obtain unchecked todos.
+- Read `--last N` to obtain recent decisions and pitches.
 - Read the run's state machine with `task state show <run-id> --dir <session-dir>`; it prints the machine in force and its version.
 - To resume an in-progress `debate`, read the full decisions section once.
 - Find the last `[qN]` tag and use it as the current question.
