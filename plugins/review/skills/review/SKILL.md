@@ -9,7 +9,7 @@ Review a change and apply accepted feedback.
 
 Inputs: the diff, branch, or PR under review; the linked ticket, if any; the
 depth label `quick` or `full`; in an active run, also `<run-id>`,
-`<session-dir>`, the sub-task label, and `review_fix_mode`.
+`<engine-root>`, `<session-dir>`, the sub-task label, and `review_fix_mode`.
 
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
@@ -153,7 +153,9 @@ add `--since <run-id>-review-<n-1>`. Also add `--project-root <repo root>` to
 change under review. Right after `init` succeeds, record the slate so
 `execute` prunes its snapshot however the review ends:
 
-Record the slate and snapshot through the public engine session command.
+```text
+task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review slate <slate> snapshot=<sha>"
+```
 
 If `init` refuses a `--since` check, keep `--pass <n>` and stop: have
 `execute` run `resolve` for the baseline this pass reviews against, with the
@@ -217,8 +219,9 @@ that `init` printed; the caller passes the first two as
 `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>` when
 leaving `review`:
 
-Record the slate, converge directory, snapshot, and render counts through the
-public engine session command.
+```text
+task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
+```
 
 ### 6. Apply accepted feedback
 
@@ -305,4 +308,6 @@ treat any claim it left without a refuter as survived.
 
 - Use the host's engine task adapter for session and state commands.
 - Use the host's `converge` adapter and its bundled review reference files.
-- Claude's adapters are `<plugin-dir>/bin/task` and `<plugin-dir>/bin/converge`.
+- Claude's adapters are `<engine-root>/bin/task`, with `<engine-root>` from
+  `execute`'s handoff, and bare `converge` in Bash (the converge plugin's
+  `bin/` is on PATH).

@@ -15,7 +15,7 @@ Hand back to the caller the render, every claim carrying a `choice`, and exactly
 - `unconverged`: list the claims whose refute state is `unconverged`.
 - `blocked`: name the role agent that was unavailable and the claims it held. No claim is marked survived without its refuter.
 
-In the render nothing verified is dropped: below-cutoff claims go to the appendix; inconclusive, unconverged and cut-capped claims, and claims tagged with a rule listed in `cutoff.report_rules`, are always reported; `report_rules` claims are exempt from the per-lens cap.
+In the render nothing verified is dropped: below-cutoff claims go to the appendix; inconclusive and unconverged claims, and claims tagged with a rule listed in `cutoff.report_rules`, are always reported and exempt from the per-lens cap; cut-capped claims, rule-tagged or not, are reported but count against the per-lens cap.
 
 ## Workflow
 

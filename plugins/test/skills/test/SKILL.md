@@ -63,5 +63,5 @@ For a large or high-risk change, expand case coverage, run integration or end-to
 
 ## Host mechanics
 
-- Resolve the public session command to `<plugin-dir>/bin/task`.
-- Pass `<plugin-dir>` as `<engine-root>` in the handoff to this skill.
+- Resolve the public session command to `<engine-root>/bin/task`, with
+  `<engine-root>` from `execute`'s handoff.

@@ -221,10 +221,6 @@ A settlement field, set once by `clarify`, read by the engine after `spec-review
 - **`threshold`**: below-threshold choice claims are decided solo; only
   above-threshold claims are sent to `resolve` and possibly `debate`.
 
-Neither value changes the independent correctness/completeness review. They
-only control how the engine handles choice claims after that review; debate
-never bypasses a re-review.
-
 ## Host mechanics
 
 - Invoke a skill by its public name.

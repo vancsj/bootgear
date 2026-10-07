@@ -9,12 +9,12 @@ Review the artifact independently.
 
 Obtain from the caller the original request/ticket text, artifact paths, base commit, project root, `<run-id>`, and `<session-dir>`.
 
-Hand back exactly one outcome, using precedence `blocked > revise > choices > ready`:
+Hand back to the caller (`execute` in an active run, the user standalone) exactly one outcome, using precedence `blocked > revise > choices > ready`:
 
-- `blocked`: a required review role or evidence path is unavailable; return the missing role or evidence path, slate, and converge directory to the caller (`execute` in an active run, the user standalone);
-- `revise`: an artifact correction is required; return claim IDs, render path, slate, and converge directory to `spec`, which must address each claim and regenerate `task.md` when a task artifact exists before re-review;
-- `choices`: only unresolved material interpretations or design choices remain; return claim IDs, render path, slate, and converge directory to `spec-debate`;
-- `ready`: no unresolved correctness or completeness claim remains; return the render path, slate, and converge directory to the caller (`execute` in an active run, the user standalone).
+- `blocked`: a required review role or evidence path is unavailable; return the missing role or evidence path, slate, and converge directory;
+- `revise`: an artifact correction is required; return claim IDs, render path, slate, and converge directory; every claim must be addressed, and `task.md` regenerated when a task artifact exists, before re-review;
+- `choices`: only unresolved material interpretations or design choices remain; return claim IDs, render path, slate, and converge directory;
+- `ready`: no unresolved correctness or completeness claim remains; return the render path, slate, and converge directory.
 
 In an active engine run, leave only through the current state-machine branch. A `ready` result is the only result that permits implementation or final ticket delivery.
 
