@@ -80,7 +80,7 @@ sequenceDiagram
   `register`, the owner runs `heartbeat` in the background; it stamps every 3 seconds, and a
   seat is live while the stamp is under 10 seconds old. Only the owner's `--session` can
   refresh it; ownership is a string match on the session ID within the owner-only mailbox, not
-  an authentication. `heartbeat` ends with one JSON line whose `next` names the follow-up:
+  an authentication. `heartbeat` ends with a `stopped:` line and a `next:` line naming the follow-up:
   `channel_closed`, `max_age` (6180 seconds; `next` restarts it, and the seat stays live for a
   720-second restart grace meanwhile, so at most 6900 seconds in all), `signal` (SIGTERM, SIGINT or
   SIGHUP), `seat_taken` when this session does not hold the seat, or the errors

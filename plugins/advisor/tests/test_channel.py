@@ -17,18 +17,62 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1]
 CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
 
+# The suite parses JSON; OutputModeTests clears this to see the prose default.
+os.environ["BOOTGEAR_OUTPUT"] = "json"
+
 sys.path.insert(0, str(CHANNEL.parent))
 import channel as channel_module  # pyright: ignore[reportMissingImports]
 
 
-def run(root: Path, *args: str, timeout: float | None = None) -> subprocess.CompletedProcess:
+def run(root: Path, *args: str, timeout: float | None = None, output: str = "--json"
+        ) -> subprocess.CompletedProcess:
+    """Run `channel.py`; most tests parse the JSON, so it is asked for unless `output` says otherwise."""
     return subprocess.run(
-        [sys.executable, str(CHANNEL), "--root", str(root), *args],
+        [sys.executable, str(CHANNEL), "--root", str(root), *args, *([output] if output else [])],
         capture_output=True,
         text=True,
         check=False,
         timeout=timeout,
     )
+
+
+class OutputModeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+
+    def register(self, *extra: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "register", "--role", "listener",
+             "--session", "s1", *extra],
+            capture_output=True, text=True, check=False, env={**os.environ, **(env or {})})
+
+    def test_prose_is_the_default_and_ends_with_next(self) -> None:
+        result = self.register(env={"BOOTGEAR_OUTPUT": ""})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[0], "channel: 0001")
+        self.assertTrue(lines[-1].startswith("next: python3 "))
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(result.stdout)
+
+    def test_json_flag_prints_json(self) -> None:
+        payload = json.loads(self.register("--json").stdout)
+        self.assertEqual(payload["channel"], "0001")
+        self.assertIn("next", payload)
+
+    def test_environment_selects_json_and_a_flag_overrides_it(self) -> None:
+        self.assertEqual(json.loads(self.register(env={"BOOTGEAR_OUTPUT": "json"}).stdout)["channel"], "0001")
+        prose = self.register("--prose", env={"BOOTGEAR_OUTPUT": "json"})
+        self.assertTrue(prose.stdout.startswith("channel: 0002"))
+
+    def test_list_prose_shows_one_line_per_channel(self) -> None:
+        self.register()
+        listing = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "list"],
+            capture_output=True, text=True, check=False, env={**os.environ, "BOOTGEAR_OUTPUT": ""},
+        ).stdout.splitlines()
+        self.assertEqual(listing[0], "channels:")
+        self.assertTrue(listing[1].startswith("  - channel=0001 state=waiting"))
 
 
 class RegisterSchemaTests(unittest.TestCase):
@@ -212,7 +256,7 @@ class HeartbeatTests(unittest.TestCase):
     def start(self, *extra: str, session: str = "s1") -> subprocess.Popen:
         process = subprocess.Popen(
             [sys.executable, str(CHANNEL), "--root", str(self.root), "heartbeat", "--channel", "0001",
-             "--role", "listener", "--session", session, *extra],
+             "--role", "listener", "--session", session, *extra, "--json"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         self.processes.append(process)
@@ -246,7 +290,7 @@ class HeartbeatTests(unittest.TestCase):
     def test_unowned_seat_gets_seat_claimed(self) -> None:
         process = subprocess.Popen(
             [sys.executable, str(CHANNEL), "--root", str(self.root), "heartbeat", "--channel", "0001",
-             "--role", "asker", "--session", "c1"],
+             "--role", "asker", "--session", "c1", "--json"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         self.processes.append(process)
@@ -497,7 +541,7 @@ class RestartGraceTests(unittest.TestCase):
     def heartbeat(self, role: str = "asker", session: str = "c1", *extra: str) -> subprocess.Popen:
         process = subprocess.Popen(
             [sys.executable, str(CHANNEL), "--root", str(self.root), "heartbeat", "--channel", "0001",
-             "--role", role, "--session", session, "--interval", "0.1", *extra],
+             "--role", role, "--session", session, "--interval", "0.1", *extra, "--json"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         self.processes.append(process)
@@ -675,7 +719,7 @@ class ConditionalCloseTests(unittest.TestCase):
     def request(self) -> str:
         sent = subprocess.run(
             [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
-             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-"],
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-", "--json"],
             input="late request", capture_output=True, text=True, check=False, timeout=5)
         self.assertEqual(sent.returncode, 0, sent.stderr)
         return json.loads(sent.stdout)["message_id"]

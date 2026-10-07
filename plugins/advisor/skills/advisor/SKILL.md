@@ -62,9 +62,7 @@ Right after `register`, start the heartbeat in the background (see "Host mechani
 python3 "$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
 ```
 
-- It prints nothing while it runs. It ends with one JSON line carrying `next`; do what `next` says:
-  - stdout `{"stopped": ...}`: `channel_closed` (exit 0), `max_age` after 6180 seconds (exit 0; the seat stays live for a 720-second restart grace, so run `next` promptly), `signal` on SIGTERM, SIGINT or SIGHUP (exit 0), or `seat_taken` with category `seat_claimed` (exit 2) when this session does not hold the seat, at start or later.
-  - stderr `{"error": ...}` (exit 2): category `heartbeat_failed` after three failed stamps in a row (the record unreadable or missing included), `channel_missing` when the channel does not exist, `invalid_args` or `invalid_role` for a bad argument (with `example` and `commands`).
+- It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
 - Host reports the task stopped with no output, or handle lost: run `register` again with the same `SESSION_ID`, then start a new heartbeat.
 
 ### mode=listening
@@ -101,7 +99,7 @@ Never return to the human after one empty poll while claiming to still be listen
 ```sh
 while :; do
   python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
-  RECEIVE_JSON=$(python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300)
+  RECEIVE_JSON=$(python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
   RECEIVE_STATUS=$?
   if [ "$RECEIVE_STATUS" -eq 1 ]; then
     PEER_LIVE=$(printf '%s' "$RECEIVE_JSON" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["peer_live"]))')
@@ -165,9 +163,10 @@ Never echo Codex's banner, streamed reasoning, or raw request/response payload i
 
 ## Host mechanics
 
-```sh
-CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"
-```
+Set `CHANNEL_SCRIPT` to `scripts/channel.py` in this skill's directory:
+
+- Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"`.
+- Codex CLI: `CHANNEL_SCRIPT="<directory holding this SKILL.md>/scripts/channel.py"`, as an absolute path.
 
 Set `SESSION_ID` to the host's real session identifier, never an invented one; if none is available, fail.
 

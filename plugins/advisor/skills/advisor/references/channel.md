@@ -2,9 +2,10 @@
 
 Requires the `advisor` Codex CLI plugin, installed via `codex plugin add advisor@bootgear`. If missing, tell the user it isn't installed — do not silently fall back to `direct`.
 
-```sh
-CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"
-```
+`CHANNEL_SCRIPT` is `scripts/channel.py` in this skill's directory:
+
+- Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"`.
+- Codex CLI: `CHANNEL_SCRIPT="<directory holding SKILL.md>/scripts/channel.py"`, as an absolute path.
 
 Session ID: the host's real session identifier, never an invented one.
 
@@ -18,18 +19,19 @@ SESSION_ID="<this host's session id>"
 A channel is a one-time lease on two seats, kept alive by a heartbeat. The seat's owner (the session ID that registered it) runs `heartbeat`, which stamps `seen_at` every 3 seconds; a seat is live while its stamp is under 10 seconds old, or while it is inside a restart grace. Only the owner's `--session` can refresh it; `receive` only reads. A seat with no stamp is stale.
 
 - `register` prints `next`: the `heartbeat` command. Run it in the background right after `register`, and keep it until `close`. Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000` (background Bash is capped at 2 hours). Codex CLI: a terminal session left running.
-- `heartbeat` prints nothing while it runs and ends with one JSON line whose `next` says what to do; SKILL.md lists its stop and error outputs. A `max_age` stop records a 720-second restart grace on the seat: it reads live until the grace ends or the same session's next stamp clears it, so a seat stays live at most `--max-age` (default 6180 seconds) plus the 720-second grace (6900 seconds by default) past its last start. While the peer is live only through its grace, `receive` says it is restarting its heartbeat and to keep waiting. When the host reports the task stopped with no output, start a new heartbeat with the same session; after any stop other than `max_age` the seat can read stale until the new heartbeat's first stamp.
+- `heartbeat` prints nothing while it runs and ends with a `stopped:` line and a `next:` line saying what to do. A `max_age` stop records a 720-second restart grace on the seat: it reads live until the grace ends or the same session's next stamp clears it, so a seat stays live at most `--max-age` (default 6180 seconds) plus the 720-second grace (6900 seconds by default) past its last start. While the peer is live only through its grace, `receive` says it is restarting its heartbeat and to keep waiting. When the host reports the task stopped with no output, start a new heartbeat with the same session; after any stop other than `max_age` the seat can read stale until the new heartbeat's first stamp.
 - `register --channel` with the same session ID takes the seat back; any other session gets `seat_claimed`, even when the holder is stale or restarting. A closed channel refuses both.
 - `send` to a peer whose seat is stale or unowned fails with `peer_not_live`; `--kind stop` is always accepted. `receive` reports `peer_live` (`true`, `false`, or `null` when the peer seat has no owner).
-- The 10-second bound on a dead seat holds after a normal host exit and a confirmed heartbeat termination. After a crash, kill or terminal close, an orphaned heartbeat keeps the seat live up to `--max-age` plus the restart grace. A lock or disk stall longer than 10 seconds makes a live seat read stale until its next beat.
 - A busy listener counts as taken and may be absent from `list --live-for`. `list --live-for` offers only channels whose own seat is free or already held by this `--session`.
 
 `listener`/`asker` are fixed by function, not by host: the seat you register as is exactly the mode you're running (`mode=listening` registers as `listener`, `mode=asking` registers as `asker`).
 
 ## mode=listening: always register fresh
 
+Output is prose; add `--json` (or set `BOOTGEAR_OUTPUT=json`) when a script parses it.
+
 ```sh
-CHANNEL_JSON=$(python3 "$CHANNEL_SCRIPT" register --role listener --session "$SESSION_ID")
+CHANNEL_JSON=$(python3 "$CHANNEL_SCRIPT" register --role listener --session "$SESSION_ID" --json)
 CHANNEL=$(printf '%s' "$CHANNEL_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["channel"])')
 printf 'Channel: %s\n' "$CHANNEL"
 ```
@@ -42,7 +44,7 @@ No lookup, no cache — every listening invocation, including one following a re
 python3 "$CHANNEL_SCRIPT" list --live-for asker --session "$SESSION_ID"
 ```
 
-It prints `{"channels": [...], "next": ...}`, most recently updated first; `next` is the `register` command for the first channel. An empty result exits 0 with a `note` and a `next`: wait with `--wait 120` only for a listener you started yourself, or one the user said is starting; otherwise tell the user to start a listener and stop. `--wait N` returns as soon as a candidate exists; a `--wait` timeout exits `1`.
+It prints the channels, most recently updated first, then `next:`; `next` is the `register` command for the first channel. An empty result exits 0 with a `note` and a `next`; do what `next` says. `--wait N` returns as soon as a candidate exists; a `--wait` timeout exits `1`.
 
 - **One or more results** → pick the most recently updated, and claim it:
   ```sh

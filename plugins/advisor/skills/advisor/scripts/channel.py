@@ -60,6 +60,67 @@ def fail(message: str, category: str | None = None, next_step: str | None = None
     raise SystemExit(2)
 
 
+OUTPUT_MODES = ("json", "prose")
+# The fields a prose line shows for one list item; any other item prints every field.
+ITEM_KEYS = {
+    "message_id": ("message_id", "sender", "kind", "parent_id", "preview"),
+    "channel": ("channel", "state", "listener_owner", "asker_owner"),
+}
+
+
+def output_mode(args: argparse.Namespace) -> str:
+    """`--json` or `--prose`, else `BOOTGEAR_OUTPUT=json|prose`, else prose."""
+    if getattr(args, "json", False):
+        return "json"
+    if getattr(args, "prose", False):
+        return "prose"
+    configured = os.environ.get("BOOTGEAR_OUTPUT")
+    return configured if configured in OUTPUT_MODES else "prose"
+
+
+def prose_scalar(value: object) -> str:
+    return json.dumps(value) if value is None or isinstance(value, bool) else str(value)
+
+
+def prose_item(item: object) -> str:
+    if not isinstance(item, dict):
+        return prose_scalar(item)
+    for marker, keys in ITEM_KEYS.items():
+        if marker in item:
+            item = {key: item[key] for key in keys if key in item}
+            break
+    return " ".join(f"{key}={prose_scalar(value)}" for key, value in item.items() if value is not None)
+
+
+def render_prose(payload: dict[str, object]) -> str:
+    """One `key: value` line per field, lists as `- ` items, multi-line text after the short
+    fields, and `next` last."""
+    lines: list[str] = []
+    blocks: list[str] = []
+    for key, value in payload.items():
+        if key == "next":
+            continue
+        if isinstance(value, list):
+            lines.append(f"{key}:" if value else f"{key}: none")
+            lines.extend(f"  - {prose_item(item)}" for item in value)
+        elif isinstance(value, str) and "\n" in value:
+            blocks.append(f"{key}:\n{value}")
+        else:
+            lines.append(f"{key}: {prose_scalar(value)}")
+    lines.extend(blocks)
+    if "next" in payload:
+        lines.append(f"next: {payload['next']}")
+    return "\n".join(lines)
+
+
+def emit(args: argparse.Namespace, payload: dict[str, object], ensure_ascii: bool = True) -> None:
+    """Print `payload` to stdout in the selected output mode."""
+    if output_mode(args) == "json":
+        print(json.dumps(payload, ensure_ascii=ensure_ascii))
+    else:
+        print(render_prose(payload))
+
+
 def invocation(root_value: str | None) -> str:
     """This script's invocation for a `--root` value, without creating the root: an absolute
     `--root` whenever one was given or `BOOTGEAR_ADVISOR_DIR` moves it off the default."""
@@ -270,7 +331,7 @@ def print_registered(args: argparse.Namespace, root: Path, record: dict[str, obj
     output["note"] = ("run next in the background for as long as this session uses the channel; "
                       "the seat reads stale without it")
     output["next"] = heartbeat_command(args, root, str(record["channel"]))
-    print(json.dumps(output))
+    emit(args, output)
 
 
 def register(args: argparse.Namespace) -> None:
@@ -344,7 +405,7 @@ def write_state(args: argparse.Namespace, value: str, check=None) -> None:
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
-    print(json.dumps(record))
+    emit(args, record)
 
 
 def state(args: argparse.Namespace) -> None:
@@ -418,7 +479,7 @@ def status(args: argparse.Namespace) -> None:
     output = dict(record)
     output["listener_alive"] = seat_live(record, "listener")
     output["asker_alive"] = seat_live(record, "asker")
-    print(json.dumps(output))
+    emit(args, output)
 
 
 def message_files(path: Path):
@@ -485,8 +546,8 @@ def send(args: argparse.Namespace) -> None:
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
-    print(json.dumps({"message_id": message_id, "channel": args.channel,
-                      "next": receive_next(args, root, args.sender)}))
+    emit(args, {"message_id": message_id, "channel": args.channel,
+                "next": receive_next(args, root, args.sender)})
 
 
 def preview_of(body: str, words: int = PREVIEW_WORDS) -> str:
@@ -574,7 +635,7 @@ def receive(args: argparse.Namespace) -> None:
                 f"no new message for {args.recipient} on channel {args.channel} "
                 f"within {args.timeout:g}s{read} — peer heartbeat stale; tell the user instead of waiting again"
             )
-            print(json.dumps(output, ensure_ascii=False))
+            emit(args, output, ensure_ascii=False)
             raise SystemExit(1)
         if args.recipient == "asker":
             wait = ("a reply can take many minutes, so run receive again with a long "
@@ -590,7 +651,7 @@ def receive(args: argparse.Namespace) -> None:
             f"within {args.timeout:g}s{read} — {wait}"
         )
         output["next"] = f"{script} receive --channel {args.channel} --for {args.recipient} --timeout 300"
-        print(json.dumps(output, ensure_ascii=False))
+        emit(args, output, ensure_ascii=False)
         raise SystemExit(1)
     unread = next(m for m in messages if not m.get("read"))
     output["note"] = (
@@ -598,7 +659,7 @@ def receive(args: argparse.Namespace) -> None:
         "otherwise the next receive call will return it again"
     )
     output["next"] = f"{script} fetch --channel {args.channel} --message-id {unread['message_id']}"
-    print(json.dumps(output, ensure_ascii=False))
+    emit(args, output, ensure_ascii=False)
 
 
 def fetch(args: argparse.Namespace) -> None:
@@ -623,7 +684,7 @@ def fetch(args: argparse.Namespace) -> None:
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
-    print(json.dumps(output, ensure_ascii=False))
+    emit(args, output, ensure_ascii=False)
 
 
 def all_channels(root: Path) -> list[dict[str, object]]:
@@ -740,11 +801,11 @@ def heartbeat(args: argparse.Namespace) -> None:
                     output = {"stopped": stopped, "next": nexts[stopped]}
                     if stopped == "seat_taken":
                         output["category"] = "seat_claimed"
-                    print(json.dumps(output))
+                    emit(args, output)
                     raise SystemExit(2 if stopped == "seat_taken" else 0)
             pause(args.interval)
     except HeartbeatStopped:
-        print(json.dumps({"stopped": "signal", "next": nexts["signal"]}))
+        emit(args, {"stopped": "signal", "next": nexts["signal"]})
 
 
 def list_channels(args: argparse.Namespace) -> None:
@@ -761,7 +822,7 @@ def list_channels(args: argparse.Namespace) -> None:
     root = root_from(args)
 
     if not args.live_for:
-        print(json.dumps({"channels": all_channels(root)}))
+        emit(args, {"channels": all_channels(root)})
         return
 
     role = args.live_for
@@ -774,26 +835,26 @@ def list_channels(args: argparse.Namespace) -> None:
     while not (candidates := live_candidates(root, role, session_id)) and args.wait is not None:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            print(json.dumps({
+            emit(args, {
                 "channels": [],
                 "note": f"no {peer} appeared within {args.wait:g}s; tell the user to start one",
-            }))
+            })
             raise SystemExit(1)
         time.sleep(min(1.0, remaining))
 
     if candidates:
-        print(json.dumps({
+        emit(args, {
             "channels": candidates,
             "next": f"{script} register --role {role} --channel {candidates[0]['channel']} --session {session}",
-        }))
+        })
         return
-    print(json.dumps({
+    emit(args, {
         "channels": [],
         "note": f"no live {peer} found",
         "next": (f"only if you started the {peer} yourself or the user said one is starting, run "
                  f"`{script} list --live-for {role} --session {session} --wait 120`; "
                  f"otherwise tell the user to start a {peer} and stop"),
-    }))
+    })
 
 
 def add_channel(parser: argparse.ArgumentParser, required: bool = True) -> None:
@@ -802,6 +863,11 @@ def add_channel(parser: argparse.ArgumentParser, required: bool = True) -> None:
 
 def add_root(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", help="override the mailbox root")
+
+
+def add_output(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", action="store_true", help="print JSON instead of prose")
+    parser.add_argument("--prose", action="store_true", help="print prose (the default)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -813,10 +879,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_channel(register_parser, required=False)
     register_parser.add_argument("--role", required=True)
     register_parser.add_argument("--session", required=True, help="this party's session/process id")
+    add_output(register_parser)
     register_parser.set_defaults(handler=register)
 
     init_parser = subparsers.add_parser("init")
     add_channel(init_parser)
+    add_output(init_parser)
     init_parser.set_defaults(handler=lambda args: print(channel_dir(root_from(args), args.channel)))
 
     send_parser = subparsers.add_parser("send")
@@ -827,6 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
     send_parser.add_argument("--parent-id")
     send_parser.add_argument("--body-file", required=True)
     send_parser.add_argument("--cap", type=int, default=None, help=f"pending-message cap, default {DEFAULT_PENDING_CAP}")
+    add_output(send_parser)
     send_parser.set_defaults(handler=send)
 
     receive_parser = subparsers.add_parser("receive")
@@ -834,17 +903,20 @@ def build_parser() -> argparse.ArgumentParser:
     receive_parser.add_argument("--for", dest="recipient", required=True)
     receive_parser.add_argument("--timeout", type=float, default=300.0)
     receive_parser.add_argument("--poll", type=float, default=0.5)
+    add_output(receive_parser)
     receive_parser.set_defaults(handler=receive)
 
     fetch_parser = subparsers.add_parser("fetch")
     add_channel(fetch_parser)
     fetch_parser.add_argument("--message-id", required=True)
+    add_output(fetch_parser)
     fetch_parser.set_defaults(handler=fetch)
 
     state_parser = subparsers.add_parser("state")
     add_channel(state_parser)
     state_parser.add_argument("--role", required=True)
     state_parser.add_argument("--value", required=True)
+    add_output(state_parser)
     state_parser.set_defaults(handler=state)
 
     close_parser = subparsers.add_parser("close")
@@ -852,6 +924,7 @@ def build_parser() -> argparse.ArgumentParser:
     close_parser.add_argument("--role", required=True)
     close_parser.add_argument("--if-peer-stale", dest="if_peer_stale", action="store_true",
                               help="close only if the peer is not live and nothing unread waits for --role")
+    add_output(close_parser)
     close_parser.set_defaults(handler=close)
 
     heartbeat_parser = subparsers.add_parser("heartbeat")
@@ -860,16 +933,19 @@ def build_parser() -> argparse.ArgumentParser:
     heartbeat_parser.add_argument("--session", required=True, help="the session that registered the seat")
     heartbeat_parser.add_argument("--interval", type=float, default=HEARTBEAT_INTERVAL_SECONDS)
     heartbeat_parser.add_argument("--max-age", dest="max_age", type=float, default=HEARTBEAT_MAX_AGE_SECONDS)
+    add_output(heartbeat_parser)
     heartbeat_parser.set_defaults(handler=heartbeat)
 
     list_parser = subparsers.add_parser("list")
     list_parser.add_argument("--live-for", dest="live_for", default=None)
     list_parser.add_argument("--session", default=None, help="this party's session id, for the printed next step")
     list_parser.add_argument("--wait", type=float, default=None, help="seconds to wait for a live peer")
+    add_output(list_parser)
     list_parser.set_defaults(handler=list_channels)
 
     status_parser = subparsers.add_parser("status")
     add_channel(status_parser)
+    add_output(status_parser)
     status_parser.set_defaults(handler=status)
 
     return parser
