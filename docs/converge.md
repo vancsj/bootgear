@@ -60,6 +60,23 @@ flowchart LR
 - **Allocation.** The skill uses `main`, one `finder` for all lenses, `r1`, `r2` and one
   `cutter`; quick review depth drops `r2`. Each agent is spawned once and continued across
   rounds. `r2` is also the gap-hunt finder (`origin: gap-hunt`), and `r1` refutes its claims.
+  `init --refuters 1` drops `r2`.
+- **Seats.** Each seat a slate holds (`main`, `finder`, `r1`, `r2`, `cutter`; refute-only:
+  `main`, `r1`, `r2`) has a mechanism, `native_subagent` or `advisor`. `init --settlement
+  <file>` reads `converge_seats` and `advisor_roles` from the engine settlement, re-checks
+  the engine's rules (only `r2` may be `advisor`; `refuter` or `gap-hunter` needs
+  `r2: advisor`) with a byte-identical copy of the engine's `seats.py`, and records the
+  slate's `seats` and the advisor's `{roles, brief}` in the `init` event. Without
+  `--settlement`, or when the `init` event has no `seats`, every seat is `native_subagent`. An
+  `advisor` `r2` with no advisor role takes `refuter` and `gap-hunter` and a stock brief, with
+  a `NOTE`; a settlement `r2: advisor` on a slate without `r2` gets a `NOTE`, not a refusal.
+- **Advisor driver.** For an `advisor` seat, `init` and `status` print the driver: one
+  background step that sends the request over the advisor channel and starts one
+  `receive --timeout 300`, the receive budget, how to discard a late reply, the request
+  template whose SCOPE has the listener write its own events with the absolute converge path
+  and `--as r2`, and the check that ends the slate `blocked` naming the seat when a write is
+  denied or the seat's events are missing. The orchestrator never runs an advisor seat as a
+  native subagent.
 - **Angles** are rows `{id, tag, tell, asks, field?, lens?, cost?}` with tag `find`,
   `attack`, `evaluate` or `decide`; `(tag, id)` is unique. The built-in table has no `find`
   rows; callers supply them, as review does. The resolved table is builtin + `--angles`
@@ -141,5 +158,7 @@ dependency. It has no Codex plugin of its own; on Codex it ships inside
 `codex-plugins/engine`. `src/converge/` is a byte-identical copy of the package;
 `scripts/converge` sets `CONVERGE_HOST=codex` and defaults output to prose;
 `skills/converge/SKILL.md` carries the Claude body above `## Host mechanics`, and its host
-section spawns native subagents and names the script path.
+section spawns native subagents, drives advisor seats through the separately installed
+`advisor` plugin, and names the script path. Advisor drivers print the absolute
+`scripts/converge` path.
 `codex-plugins/engine/tests/test_bundle_drift.py` fails on any drift in the package.

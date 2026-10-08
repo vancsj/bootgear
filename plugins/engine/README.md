@@ -119,8 +119,10 @@ settled for that domain — the ticket for scope, the code and its tests for cur
 Only when no settled source decides does **`debate`** run. It argues choices, never facts: a
 dispute that reading code or running a check can settle goes back to `converge`. The default
 roster is three parties — the main agent, an independent reviewer and an adversarial reviewer.
-On Claude Code the adversarial reviewer asks Codex through `advisor`; on Codex both reviewers
-are native subagents. Round 0 settles scope; later rounds answer each other; the debate closes
+A reviewer runs as a native subagent or through the advisor, the other vendor's host: Codex
+on Claude Code, a Claude Code listener on Codex. `clarify` asks which roles the advisor takes
+(debate reviewer, or refuter and gap hunter on converge seat `r2`) and records them with the
+converge seats. Round 0 settles scope; later rounds answer each other; the debate closes
 by unanimous convergence, a consented stop, the round cap (10 by default), or degraded
 convergence when parties are unavailable.
 
@@ -175,9 +177,9 @@ task config    resolve layered config, such as the debate-party roster
 
 ## Setup
 
-Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/). On Claude
-Code, the adversarial debate party asks Codex through `advisor`, so the Codex CLI needs to be
-installed and signed in.
+Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/). Advisor
+roles need the other vendor's host: on Claude Code, the Codex CLI installed and signed in; on
+Codex, the `advisor` plugin and a Claude Code session listening through it.
 
 Claude Code:
 
@@ -198,10 +200,11 @@ codex plugin add engine@bootgear
 
 The Codex build bundles `spec`, `test`, `review` and `converge`. Add `memory-ledger@bootgear`
 too if you want runs to look up and record durable facts; its absence never blocks a run.
+Add `advisor@bootgear` for advisor roles; without it, `clarify` records none.
 
 Project customisation lives in `.bootgear/config/`: `principles.md`, a
 `state-machine-<task_type>.yaml` override, and layered YAML config such as
-`debate-parties.yaml`. See the [design overview](../../docs/README.md).
+`debate-parties.yaml` and `converge-seats.yaml`. See the [design overview](../../docs/README.md).
 
 ---
 

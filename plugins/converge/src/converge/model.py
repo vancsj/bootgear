@@ -110,6 +110,9 @@ class Slate:
     snapshot: str | None = None
     review_pass: int | None = None
     since: dict[str, str] | None = None
+    # Seat -> mechanism from init; a seat not recorded is native_subagent.
+    seats: dict[str, str] = field(default_factory=dict)
+    advisor: dict[str, Any] | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     claims: dict[str, Claim] = field(default_factory=dict)
     find_runs: list[dict[str, Any]] = field(default_factory=list)
@@ -121,6 +124,9 @@ class Slate:
     @property
     def initialised(self) -> bool:
         return bool(self.events)
+
+    def mechanism(self, seat: str) -> str:
+        return self.seats.get(seat, "native_subagent")
 
     def cap(self, name: str) -> int:
         return int(self.config["caps"][name])

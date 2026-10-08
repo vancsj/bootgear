@@ -7,7 +7,7 @@ description: Settle the facts behind a set of claims — find, refute and cut ea
 
 ## Use, inputs and handback
 
-Use it when a caller (another skill, or the user standalone) needs the facts behind a set of claims settled before acting. Inputs: the mode (step 1), the artifact, and for `full` the lenses and find-angle files, for `refute-only` a numbered slate; optionally a gap-hunt brief and a request for one refuter.
+Use it when a caller (another skill, or the user standalone) needs the facts behind a set of claims settled before acting. Inputs: the mode (step 1), the artifact, and for `full` the lenses and find-angle files, for `refute-only` a numbered slate; optionally a gap-hunt brief and a request for one refuter, which is `init --refuters 1`; in an engine run, the settlement file for `init --settlement`.
 
 Hand back to the caller the render, every claim carrying a `choice`, and exactly one outcome (step 8):
 
@@ -48,6 +48,8 @@ these ids:
 | C | `cutter` | every cut round of every claim (full mode only) |
 
 Refute-only mode uses main, R1 and R2.
+
+Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as in `## Host mechanics`; for an `advisor` seat, follow the driver step the CLI prints instead of spawning.
 
 - Spawn each role once and reuse it across rounds by continuing that agent; never spawn a new agent for a role that already has one.
 - Give a role agent only the artifact, its role brief from the steps below, the claims under test (id, current text, `loc`, `trigger`), its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes.
@@ -120,10 +122,12 @@ Hand back the render, every claim carrying a `choice`, and exactly one outcome: 
 - Never give a refuter a claim it filed.
 - A factual dispute is never a choice; it stays in converge.
 - Agent-id distinctness checks stop accidental self-judging, not a lying agent; a caller that needs more must run role agents it trusts.
+- When the advisor channel's heartbeat task ends, run its printed `next` at once.
 
 ## Fallbacks
 
 - If a role agent cannot be spawned or does not return, stop with outcome `blocked` (step 8). Never write an event for it.
+- If an `advisor` seat cannot be driven (the `advisor` skill is missing, it hands back no listener, or the peer goes stale), stop with outcome `blocked` naming the seat; never run that seat as a native subagent.
 - If memory-ledger is `missing`, `unconfigured` or `broken`, append `memory-ledger: <status> — <diagnostic>` to the render you hand back and continue.
 
 ## Host mechanics
@@ -131,4 +135,5 @@ Hand back the render, every claim carrying a `choice`, and exactly one outcome: 
 - Spawn each role agent once as a separate fresh native subagent with `spawn_agent`; continue that same subagent for later rounds (for example with `send_input`). Never spawn a replacement for a role that already has one: the slate's agent budget (`caps.agents`, main included) counts every distinct agent.
 - Run the CLI as `<plugin-root>/scripts/converge`, where `<plugin-root>` is this engine plugin's root; every `converge` command above means that script. Give role agents the full script path.
 - Invoke skills by their public name through the host Skill interface; the ledger skill is `memory-ledger:ledger`.
+- Invoke `advisor:advisor` (a separate plugin: `codex plugin add advisor@bootgear`); run an advisor seat's background step in a terminal session left running, with the escalation the `advisor` skill states.
 - A role agent is unavailable when its native subagent cannot be created, times out, or, in a headless run, stops on a fresh approval request. Stop with outcome `blocked` (step 8).

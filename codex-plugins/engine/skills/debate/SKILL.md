@@ -150,6 +150,7 @@ caller's review or converge slate don't count toward it.
 
 For each `debate_party_config.parties.<id>`, apply `label` and `prompt` to the
 brief, use `mechanism` when present, and omit the party when `enabled: false`.
+Append `advisor_roles.brief` to the brief of a party seated `advisor`.
 Reject an invalid configuration before dispatch.
 
 Use the configured host-supported mechanism for each enabled party. The
@@ -424,6 +425,16 @@ assessment. Do not claim that a retry occurred.
 - Resolve the public session command to `<plugin-root>/scripts/task`.
 - Resolve the public `converge` command through the host adapter.
 - Use the host-supported party dispatch mechanism; do not substitute another
-  host's mechanism.
-- A party is unavailable only when a native subagent cannot be created or
-  times out.
+  host's mechanism. Codex supports `native_subagent` and `advisor`.
+- A party whose mechanism is `native_subagent` runs as a native subagent.
+- A party whose mechanism is `advisor` asks a Claude Code listener through the
+  `advisor` skill with `--mode asking`, communication `channel` (never
+  `direct`), and its `review` task. Use the debate channel named in the run
+  ledger's `advisor channels:` decision (read through `recall`), never the `r2`
+  channel. Before each advisor request, reclaim that channel's live seat
+  through the `advisor` skill's scan and claim (`list --live-for` offers a seat
+  this session holds).
+- A party is unavailable when its native subagent cannot be created or times
+  out, or its `advisor` call fails or times out, finds no live listener on its
+  channel, or the `advisor` skill is missing. Never fall back to the other
+  channel or another mechanism.

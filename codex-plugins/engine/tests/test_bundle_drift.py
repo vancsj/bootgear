@@ -44,6 +44,15 @@ class BundleDriftTest(unittest.TestCase):
         ):
             self.assertSameBytes(source, copy)
 
+    def test_seats_copies_match_engine_source(self):
+        # Settlement validation and converge init check seats with one rule set.
+        source = CLAUDE_ENGINE / "src" / "engine" / "seats.py"
+        for copy in (
+            PLUGIN_DIR / "src" / "engine" / "seats.py",
+            CLAUDE_CONVERGE / "src" / "converge" / "seats.py",
+        ):
+            self.assertSameBytes(source, copy)
+
     def test_host_adapter_core_matches_claude_source(self):
         for name in ("host_adapter.py", "host_contracts.py", "policy.py"):
             self.assertSameBytes(

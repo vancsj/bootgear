@@ -14,7 +14,7 @@ Outcomes:
 
 ## Workflow
 
-Investigate the request → settle items 1–9 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, and the `leave_check` list → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+Investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` list, `advisor_roles`, the seat mapping, and every advisor pairing → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 
 ## What to settle
 
@@ -67,7 +67,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
 
    Also settle:
    - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
-   - Use the default three-party roster (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) unless the run needs custom parties. Record a custom party as `{id, label, prompt, mechanism}`; require a distinct ID and `native_subagent` as its mechanism.
+   - Use the default three-party roster (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) unless the run needs custom parties. Record a custom party as `{id, label, prompt, mechanism}`; require a distinct ID and a host-supported mechanism.
    - Resolve `debate_party_config` with `task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` into settlement.
    - Set `convergence_policy` to `unanimous` by default.
    - Set `consented_stop_allowed` to `true` by default. Use `unanimous_convergence`, `consented_stop`, and `round_cap` as the debate outcomes. Set `consented_stop_allowed` to `false` to remove `consented_stop`. End debate only in `unanimous_convergence` or `round_cap` when `consented_stop_allowed` is `false`.
@@ -112,6 +112,16 @@ Ask items in the order that fits the conversation. Use answers already implied b
 
    Record what this run may call. Do not record a prediction of what it will call.
 
+10. **Advisor roles and seats** — the advisor is the other vendor's host: Codex on Claude Code, a Claude Code listener on Codex. It can take any of four roles: the debate parties `independent-reviewer` and `adversarial-reviewer`, and `refuter` and `gap-hunter` on converge seat `r2`.
+   - Check availability by pairing through the `advisor` skill (`--mode asking`, communication `channel`: scan, claim, heartbeat). Keep each pairing for the run; do not run the asking workflow's close. `## Host mechanics` says which advisor uses need a listener of their own.
+   - Unavailable: show the diagnostic and offer no role that needs it.
+   - Otherwise resolve `converge-seats` without a task file: `task config resolve --name converge-seats --project-root <project-root> --json`. Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when that resolution shows `r2: native_subagent`. Ask which of the four roles the advisor takes; "no" means none.
+   - Pair one listener per chosen use that needs its own, and show every pairing in the goal confirmation. One use needs only its own listener; none needs none. Record a debate party `native_subagent`, with its role left out of `advisor_roles`, only when the user explicitly declines its listener, and show the diagnostic. While a pairing is unanswered, do not write the settlement.
+   - Write a task-layer debate-parties file setting `mechanism` for `independent-reviewer` and `adversarial-reviewer` (`advisor` when named, else `native_subagent`), and a task-layer converge-seats file whose `seats` names all five seats: `r2: advisor` when `refuter` or `gap-hunter` is named, every other seat (and `r2` otherwise) `native_subagent`; a lower layer's value survives for any seat the task layer leaves out. Resolve both with `--task-config-file` and follow each `next`.
+   - Record `advisor_roles: {roles, brief}` (brief: one line limiting the advisor to its roles) and `converge_seats` together.
+   - After `init`, record the channels: `task session record-decision <run-id> --dir <session-dir> --mode solo --summary "advisor channels: r2=<n>, debate=<m>"`, naming only the channels that exist; skip it when none does.
+   - While the run lasts, whenever a channel's heartbeat task ends, run its printed `next` at once, inside the 720-second restart grace.
+
 ## Drafting goal
 
 After settlement, draft `goal` as a short, high-level prompt. Do not write a spec or task breakdown. State:
@@ -142,7 +152,7 @@ After confirmation:
 
 4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
-Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
+Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 
@@ -162,3 +172,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 - Resolve the public `task` command to `<plugin-root>/scripts/task`.
 - Supply `<plugin-root>` as `<engine-root>` in the handoff to `execute`.
 - Supply the host's exact session identity as `<run-id>`.
+- A host-supported debate party mechanism is `native_subagent` or `advisor`.
+- Item 10: `refuter`/`gap-hunter` and the debate roles each need a listener of
+  their own, so naming both kinds pairs two listeners.
+- If the `advisor` skill is missing, tell the user and record no advisor role.

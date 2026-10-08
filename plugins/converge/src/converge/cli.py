@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
+import io
 import json
 import os
 import shlex
@@ -12,17 +14,22 @@ import tempfile
 from pathlib import Path
 from typing import Any, NoReturn
 
+import yaml
+
 from . import angles as angles_mod
 from . import config as config_mod
-from . import ledger, model, render
+from . import ledger, model, render, seats
 from .clikit import (
     Catalog,
+    Refusal,
     add_mode_flags,
     caller_cwd,
     caller_path,
+    dumps,
     emit,
     parser_class,
     refuse,
+    render_refusal,
     run,
 )
 from .model import Slate
@@ -31,7 +38,8 @@ EXIT_OK, EXIT_NO, EXIT_REFUSED = 0, 1, 2
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
-    "init": "init <slate> --dir <dir> --as main --mode full --lenses <a,b> --angles <file>",
+    "init": "init <slate> --dir <dir> --as main --mode full --lenses <a,b> --angles <file> "
+            "--settlement <file>",
     "file": "file <slate> --dir <dir> --as finder --lens <lens> --angle <angle> --origin lens "
             '--loc <path:line> --claim "<claim>" --trigger "<trigger>"',
     "find-run": "find-run <slate> --dir <dir> --as finder --lens <lens> --angle <angle> "
@@ -64,6 +72,23 @@ CATALOG = Catalog(prog="converge", examples=EXAMPLES, frequent=FREQUENT,
 
 def _refuse(problems: list[str], what: str = "refused") -> NoReturn:
     refuse(f"converge: {what}:", [("", p) for p in problems], code=EXIT_REFUSED)
+
+
+def _refuse_next(args: argparse.Namespace, message: str, problems: list[str],
+                 next_step: str) -> NoReturn:
+    """An init refusal with its example and command list, then the next step:
+    the last prose line, or the error object's `next` in JSON."""
+    buffer = io.StringIO()
+    refusal = Refusal(f"converge: {message}:", [("", p) for p in problems], code=EXIT_REFUSED)
+    with contextlib.redirect_stderr(buffer):
+        render_refusal(CATALOG, "init", refusal, args.output_mode)
+    if args.output_mode == "json":
+        error = json.loads(buffer.getvalue())
+        error["error"]["next"] = next_step
+        print(dumps(error), file=sys.stderr)
+    else:
+        sys.stderr.write(f"{buffer.getvalue()}next: {next_step}\n")
+    sys.exit(EXIT_REFUSED)
 
 
 def _step(args: argparse.Namespace, name: str, *rest: str) -> str:
@@ -203,10 +228,145 @@ def _snapshot_problems(args: argparse.Namespace) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# seats
+
+
+def _slate_seats(mode: str, refuters: int) -> tuple[str, ...]:
+    """The seats a slate of this mode and refuter count holds."""
+    held = seats.SEATS if mode == "full" else ledger.REFUTE_ONLY_SEATS
+    return tuple(seat for seat in held if refuters == 2 or seat != "r2")
+
+
+def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
+    """The init event's `seats`/`advisor` fields and the NOTE texts, from
+    --settlement; refuses a malformed or mismatched settlement before any write."""
+    if args.settlement is None:
+        return {}, []
+    fix = (f"correct converge_seats or advisor_roles in {args.settlement} so they agree, then "
+           f"rerun init; in an engine run the settlement is fixed: stop blocked and report "
+           f"this refusal")
+    try:
+        settlement = yaml.safe_load(args.settlement.read_text())
+    except (OSError, yaml.YAMLError) as exc:
+        _refuse_next(args, "invalid settlement seats",
+                     [f"--settlement {args.settlement} is unreadable: {exc}"], fix)
+    if not isinstance(settlement, dict):
+        _refuse_next(args, "invalid settlement seats",
+                     ["--settlement must be a YAML mapping (the engine settlement)"], fix)
+    roles, chosen = settlement.get("advisor_roles"), settlement.get("converge_seats")
+    shape = [*seats.roles_problems(roles), *seats.seat_problems(chosen)]
+    if shape:
+        _refuse_next(args, "invalid settlement seats", [f"{f}: {m}" for f, m in shape], fix)
+    mismatch = seats.seat_mismatch(roles, chosen)
+    if mismatch:
+        _refuse_next(args, "settlement seats do not match its advisor roles",
+                     [f"{f}: {m}" for f, m in mismatch], fix)
+    every = seats.resolved(chosen or {})
+    held = _slate_seats(args.mode, args.refuters)
+    fields: dict[str, Any] = {"seats": {seat: every[seat] for seat in held}}
+    notes = []
+    if every[seats.ADVISOR_SEAT] == "advisor":
+        if seats.ADVISOR_SEAT not in held:
+            notes.append("r2 is advisor in the settlement, but this slate has no r2; "
+                         "the advisor holds no seat on this slate")
+        else:
+            named, brief, defaulted = seats.seat_roles(roles, seats.ADVISOR_SEAT)
+            fields["advisor"] = {"roles": named, "brief": brief}
+            if defaulted:
+                notes.append("r2 is advisor with no advisor role in the settlement; it takes "
+                             f"{', '.join(named)} and the stock brief")
+    return fields, notes
+
+
+def _converge_path() -> Path:
+    """This host's converge wrapper, for a listener that does not share PATH."""
+    wrapper = "scripts" if os.environ.get("CONVERGE_HOST") == "codex" else "bin"
+    return Path(__file__).resolve().parents[2] / wrapper / "converge"
+
+
+def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
+             advisor: dict[str, Any] | None) -> list[dict[str, str]]:
+    """How the orchestrator drives each advisor seat through the advisor channel."""
+    drivers = []
+    abs_dir = ledger_dir.resolve()
+    for seat, mechanism in slate_seats.items():
+        if mechanism != "advisor":
+            continue
+        if advisor is None:
+            named, brief, _ = seats.seat_roles(None, seat)
+        else:
+            named, brief = advisor["roles"], advisor["brief"]
+        body = shlex.quote(str(abs_dir / f"{slate_id}.{seat}.request.txt"))
+        channel = 'python3 "$CHANNEL_SCRIPT"'
+        converge = shlex.quote(str(_converge_path()))
+        quoted_dir = shlex.quote(str(abs_dir))
+        drivers.append({
+            "seat": seat,
+            "step": (f'{channel} send --channel "$CHANNEL" --from asker --to listener '
+                     f"--kind request --body-file {body} && "
+                     f'{channel} receive --channel "$CHANNEL" --for asker --timeout 300'),
+            "placeholders": ("a fresh shell keeps no variables, so write the step with the "
+                             "literal channel.py path and channel number the pairing printed in "
+                             'place of "$CHANNEL_SCRIPT" and "$CHANNEL"'),
+            "then": ("do not run the while-loop next that send prints; a turn has 5 receives in "
+                     "total, the one in the step included; on receive exit 1 run that receive "
+                     "alone again; take the response whose parent_id is this send's message_id "
+                     "and fetch it; a stale peer, or no matching response after the 5th receive, "
+                     f"stops the slate blocked naming {seat}"),
+            "other_messages": ("a response whose parent_id is not this send's message_id is a "
+                               "late reply: fetch it so it stops reappearing, discard it, and run "
+                               "the same receive again without counting it toward the 5; a "
+                               "message of any other kind is a protocol error: stop the slate "
+                               f"blocked naming {seat}"),
+            "check": (f"after each reply, run converge status --json; a reply starting "
+                      f"WRITE-DENIED, or a turn whose {seat} events are absent from status, "
+                      f"stops the slate blocked naming {seat}; never redo the turn with a "
+                      f"native subagent"),
+            "request": "\n".join((
+                "TYPE: delegate",
+                (f"USER_REQUEST: You are seat {seat} ({', '.join(named)}) on converge slate "
+                 f"{slate_id}. {brief.rstrip('.')}. <role brief for this turn>"),
+                "CONTEXT: <claims under test: id, text, loc, trigger; this turn's angles>",
+                (f'SCOPE: write events only with: UV_CACHE_DIR="${{TMPDIR:-/tmp}}/converge-uv-cache" '
+                 f"{converge} <refute|file|rebut|accept> {shlex.quote(slate_id)} "
+                 f"--dir {quoted_dir} --as {seat} ...; these commands append to "
+                 f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}, which may be outside your "
+                 f"writable roots: request write permission for each such command as your host "
+                 f"requires (Codex: sandbox_permissions require_escalated); if permission is "
+                 f'denied or cannot be granted, run nothing else and reply "WRITE-DENIED {seat}: '
+                 f'<the error text>"; read any file; change nothing else; reply with every line '
+                 f"those commands print"),
+            )),
+        })
+    return drivers
+
+
+def _driver_lines(driver: dict[str, str]) -> list[str]:
+    seat = driver["seat"]
+    return [f"DRIVER {seat} step (one background step per turn): {driver['step']}",
+            f"DRIVER {seat} placeholders: {driver['placeholders']}",
+            f"DRIVER {seat} then: {driver['then']}",
+            f"DRIVER {seat} other messages: {driver['other_messages']}",
+            f"DRIVER {seat} check: {driver['check']}",
+            f"REQUEST {seat} (write to the body file before each send; fill each <...>):",
+            *driver["request"].splitlines()]
+
+
+def _reclaim_step(seat: str) -> str:
+    return (f"reclaim the advisor channel for {seat} (the {seat} channel in the run ledger's "
+            f"advisor channels decision, when there is one) through the advisor skill's channel "
+            f"pairing (--mode asking, communication channel: scan and claim, and start the "
+            f"heartbeat if none runs); it prints the channel.py path and the channel number to "
+            f"put in the driver step; keep the channel open after this slate; if it hands back "
+            f"no listener, stop blocked naming {seat}")
+
+
+# ---------------------------------------------------------------------------
 # write commands
 
 
 def cmd_init(args: argparse.Namespace) -> None:
+    seat_fields, notes = _init_seats(args)
     try:
         resolved = config_mod.resolve(args.project_root, args.config)
     except config_mod.ConfigError as exc:
@@ -223,6 +383,7 @@ def cmd_init(args: argparse.Namespace) -> None:
                              "angles": rows, "config": effective}
     if args.review_pass is not None:
         event["pass"] = args.review_pass
+    event.update(seat_fields)
     problems = _snapshot_problems(args)
     if not args.snapshot:
         if problems:
@@ -249,6 +410,17 @@ def cmd_init(args: argparse.Namespace) -> None:
         delta = f"git diff {event['since']['snapshot']} {event['snapshot']}"
         data["since"], data["diff"] = event["since"]["slate"], delta
         lines.append(f"DIFF since {event['since']['slate']}: {delta}")
+    slate_seats = event.get("seats", {})
+    drivers = _drivers(args.slate, args.dir, slate_seats, event.get("advisor"))
+    if drivers or notes:
+        data.update(seats=slate_seats, drivers=drivers, notes=notes)
+        lines.append("SEATS " + " ".join(f"{seat}={m}" for seat, m in slate_seats.items()))
+        for driver in drivers:
+            lines.extend(_driver_lines(driver))
+        lines.extend(f"NOTE {note}" for note in notes)
+    if drivers:
+        reclaim = "; ".join(_reclaim_step(driver["seat"]) for driver in drivers)
+        step = f"{reclaim}, then {step}" if step else reclaim
     emit(args.output_mode, data, lines, step)
 
 
@@ -476,12 +648,15 @@ def cmd_status(args: argparse.Namespace) -> None:
             {"slate": slate.slate_id, "mode": slate.mode, "lenses": slate.lenses,
              "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
              "phase": phase, "round": current_round, "legal_event_types": legal_events,
+             "seats": slate.seats,
+             "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor),
              "claims": claims}, indent=2))
         return
+    advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
     lines = [(f"SLATE {slate.slate_id} mode={slate.mode} lenses={','.join(slate.lenses) or '-'} "
               f"cutoff={cutoff} phase={phase} round={current_round} "
               f"claims={len(claims)} agents={len(agents)}/{slate.cap('agents')} "
-              f"legal={','.join(legal_events) or '-'}")]
+              f"legal={','.join(legal_events) or '-'} advisor={advisor or '-'}")]
     for c in claims:
         cut = (f" cut={c['cut']} cut_round={c['cut_round']} accepted={c['accepted_round'] or '-'}"
                if "cut" in c else "")
@@ -661,6 +836,10 @@ def _parser() -> argparse.ArgumentParser:
                    help="review pass number; N >= 2 uses the re-review cutoff")
     p.add_argument("--since", metavar="PREV_SLATE",
                    help="previous pass's slate; prints the git diff between the snapshots")
+    p.add_argument("--settlement", type=caller_path, metavar="FILE",
+                   help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
+    p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
+                   help="refuter seats on the slate; 1 drops r2")
     config_args(p)
 
     p = command("file", cmd_file, write=True)

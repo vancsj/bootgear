@@ -41,6 +41,7 @@ from pathlib import Path
 
 import yaml
 
+from engine import seats
 from engine.clikit import ENV_PROG, caller_path, emit, refuse
 
 PROG = "task"
@@ -347,9 +348,9 @@ TASK_TYPES = {"ticket-writing", "bug-triage", "ticket-to-pr", "pr-review"}
 ENGINE_SKILLS = {"clarify", "execute", "resolve", "debate", "recall"}
 SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
 OPTIONAL_SKILL_FIELDS = ("spec_review_skill", "spec_review_override")
-# Claude Code dispatches a debate party as a sub-agent or through the advisor
-# skill; the Codex port accepts native_subagent only.
-PARTY_MECHANISMS = ("advisor", "native_subagent")
+# Both hosts dispatch a debate party as a sub-agent or through the advisor
+# skill.
+PARTY_MECHANISMS = seats.MECHANISMS
 # Fields a `debate_party_config.parties.<id>` entry may carry in settlement.
 PARTY_CONFIG_FIELDS = frozenset({"label", "prompt", "mechanism", "enabled"})
 
@@ -491,6 +492,15 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
                     if "mechanism" in config and config["mechanism"] not in PARTY_MECHANISMS:
                         problems.append((f"debate_party_config.parties.{party_id}.mechanism",
                                          "must be one of: " + ", ".join(PARTY_MECHANISMS)))
+
+    # `codex_role`, the field's legacy form, is left unchecked so old ledgers resume.
+    advisor_roles = data.get("advisor_roles")
+    converge_seats = data.get("converge_seats")
+    shape = seats.roles_problems(advisor_roles) + seats.seat_problems(converge_seats)
+    problems.extend(shape)
+    if not shape and (party_config is None or isinstance(party_config, dict)):
+        problems.extend(seats.seat_mismatch(advisor_roles, converge_seats))
+        problems.extend(seats.party_mismatch(advisor_roles, party_config, roster))
 
     admission = data.get("debate_admission")
     if admission is not None:

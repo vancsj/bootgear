@@ -26,3 +26,4 @@
 ## Run behavior
 
 - When an advisor from a different vendor is available, it takes the refuter or adversarial role by default, unless the user says no.
+- Reviews (including spec reviews), refutations and tests cover only what an LLM caller can produce. A claim that needs a made-up or edge-case value, hand-edited state, or an environment the run never uses is not reported.

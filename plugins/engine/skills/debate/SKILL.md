@@ -149,6 +149,7 @@ caller's review or converge slate don't count toward it.
 
 For each `debate_party_config.parties.<id>`, apply `label` and `prompt` to the
 brief, use `mechanism` when present, and omit the party when `enabled: false`.
+Append `advisor_roles.brief` to the brief of a party seated `advisor`.
 Reject an invalid configuration before dispatch.
 
 Use the configured host-supported mechanism for each enabled party. The

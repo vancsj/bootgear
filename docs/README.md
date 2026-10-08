@@ -35,6 +35,7 @@ Dependencies:
 ```
 engine ──needs──> converge, spec, test, review, advisor, memory-ledger   (declared dependencies, Claude Code)
 review ──needs──> converge                       (declared dependency)
+converge ──needs──> memory-ledger, advisor       (declared dependencies)
 ```
 
 `spec`, `test` and `review` each work standalone. Each first checks the active
@@ -61,10 +62,11 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
 - Host-specific parts: manifests, hook registrations and output envelopes,
   wrapper paths (`engine`: `bin/<cmd>` on Claude, `scripts/<cmd>` on Codex), session
   identity delivery, user config directory (`~/.claude` vs `~/.codex`),
-  debate-party dispatch (Claude Code: `independent-reviewer` is a sub-agent
-  and `adversarial-reviewer` calls `advisor`, and a party mechanism is
-  `native_subagent` or `advisor`; Codex: every reviewer is a native subagent
-  and `native_subagent` is the only mechanism), and the Codex-only
+  advisor dispatch (both hosts accept the party and seat mechanisms
+  `native_subagent` and `advisor`; on Claude Code an `advisor` debate party is
+  a one-shot Codex call and an `advisor` converge seat a Codex listener over
+  `channel`; on Codex both are Claude Code listeners over `channel`, one per
+  use), and the Codex-only
   `task session recall` command.
 - Shared parts: the ledger formats, the `task` and `converge` CLIs apart
   from `session recall`, and the built-in state machines. The converge,
@@ -75,7 +77,7 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
 Parity is kept by two rules. First, a behavior shared by both hosts changes
 on both in the same change. Second, drift tests in the Codex engine package
 fail when a copy diverges from its Claude source. The tests check that the
-converge package, the `clikit.py` copies and the host adapter core files
+converge package, the `clikit.py` copies, the `seats.py` copies and the host adapter core files
 (`host_adapter.py`, `host_contracts.py`, `policy.py`) are byte-identical.
 
 ## `gear.py` CLI
@@ -127,7 +129,7 @@ file is absent, the built-in default applies.
 | `principles.md` | engine (execute, session-start hook) | Project principles, merged `[user]` → `[project]` → `[task]`; task wins a real conflict. |
 | `test-standard.md`, `review-standard.md` | test, review | Rules `## R### [severity]` with `severities:`, `cutoff:`, `iteration_cap:`; checked by `validate_standard.py`. |
 | `state-machine-<task_type>.yaml` | engine clarify | Wholly replaces the built-in machine for that task type. |
-| `<name>.yaml` (e.g. `debate-parties.yaml`, `converge.yaml`) | `task config resolve`, converge | Layered config: user file in the host config dir, then this project file, then an optional task file. Mappings merge recursively; scalars and lists replace. |
+| `<name>.yaml` (e.g. `debate-parties.yaml`, `converge-seats.yaml`, `converge.yaml`) | `task config resolve`, converge | Layered config: user file in the host config dir, then this project file, then an optional task file. Mappings merge recursively; scalars and lists replace. |
 
 ## Docs index
 

@@ -147,6 +147,10 @@ depth, lenses, angle files, and project root. The angle files are
 plus [references/design-patterns.yaml](references/design-patterns.yaml) when
 the `architecture` lens is in the depth.
 
+In an active run, write the settlement with
+`task session read <run-id> --dir <session-dir> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
+and add `--settlement <that file>` to `init`. At `quick`, add `--refuters 1`.
+
 In an active run, add `--snapshot --pass <n>` to `init`; for `<n>` ≥ 2, also
 add `--since <run-id>-review-<n-1>`. Also add `--project-root <repo root>` to
 `init`, where `<repo root>` is the top level of the work tree holding the

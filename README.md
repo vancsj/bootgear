@@ -99,8 +99,10 @@ its own `.codex-plugin`, so there is no separate Codex install.
 ## Install
 
 Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/)
-(`engine` and `converge` run through it). `engine`'s debate on Claude Code
-asks Codex through `advisor`, so it needs the Codex CLI installed and signed in.
+(`engine` and `converge` run through it). An engine run's advisor roles (a debate
+reviewer, or the converge refuter and gap hunter) go to the other vendor's host through
+`advisor`: on Claude Code they need the Codex CLI installed and signed in; on Codex, a
+Claude Code session listening through `advisor`.
 
 Each plugin installs on its own — you do not need the rest of bootgear. The table's
 "installs … with it" notes describe Claude Code's declared dependencies; Codex CLI packages
@@ -115,7 +117,7 @@ differ (see [Codex CLI](#codex-cli)).
 |---|---|
 | [memory-ledger](plugins/memory-ledger) | a ledger of settled questions, where confidence counts independent verifications instead of asserting itself |
 | [engine](plugins/engine) | an autonomous task-execution loop — start a run with `/engine:start` (Codex: `$engine:start`); installs `converge`, `spec`, `test`, `review`, `advisor` and `memory-ledger` with it |
-| [converge](plugins/converge) | settles the facts behind a findings slate: find, refute, and cut each claim with separate agents, then compute what is reported; installed automatically with `engine` and `review` |
+| [converge](plugins/converge) | settles the facts behind a findings slate: find, refute, and cut each claim with separate agents, then compute what is reported; installs `memory-ledger` and `advisor` with it, and is installed automatically with `engine` and `review` |
 | [review](plugins/review) | PR review: lens finders and a gap hunt, with every finding settled through `converge`; installs `converge` with it |
 | [spec](plugins/spec) | requirements and design for `engine`'s ticket-writing and ticket-to-pr runs; works on its own too |
 | [test](plugins/test) | test writing, running, and failure triage for `engine`'s bug-triage and ticket-to-pr runs; works on its own too |

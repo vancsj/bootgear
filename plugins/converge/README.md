@@ -56,6 +56,12 @@ continued across rounds.
 | refuter | `r2` | like `r1`; also the gap-hunt finder when the caller asks for one |
 | cutter | `cutter` | rates every surviving claim (`full` only) |
 
+Each seat runs as a native subagent unless `init --settlement <file>` seats it `advisor` from
+an engine settlement; only `r2` may be. An advisor `r2` is the other vendor's host (a Codex or
+Claude Code session listening through `advisor`): `init` and `status` print the step that sends
+it each round's request and waits for its reply, and a missing listener, denied write or missing
+event ends the slate `blocked`, never a native stand-in. `init --refuters 1` drops `r2`.
+
 The CLI enforces the separation: a claim's finder never refutes or cuts it, its refuters and
 cutters are disjoint, and only the finder may rebut or accept. Agent ids are declared, so the
 checks stop an agent accidentally judging its own work, not a lying one.
@@ -151,6 +157,8 @@ runs the CLI.
 /plugin install converge@bootgear
 ```
 
+This installs its declared dependencies with it: `memory-ledger` and `advisor`.
+
 On Codex CLI there is no separate install: converge ships inside the `engine` plugin
 (`codex plugin add engine@bootgear`).
 
@@ -180,4 +188,5 @@ Inside bootgear, `review` settles every finding through a `full` slate, `engine`
 review step on `converge gate`, and engine's `debate` takes the claims that carry a `choice`.
 If `memory-ledger` is installed, refuters consult it for deliberate decisions and converge
 records facts that outlive the artifact there; without it, converge notes its absence and
-carries on.
+carries on. In an engine run, `clarify` decides which seat the advisor holds, and every slate
+the run starts reads that decision from the settlement.

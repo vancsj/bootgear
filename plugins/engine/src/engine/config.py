@@ -11,6 +11,7 @@ from typing import Any, NoReturn
 
 import yaml
 
+from engine import seats
 from engine.clikit import caller_cwd, caller_path, emit
 
 NAME_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
@@ -61,6 +62,9 @@ def _model_report(value: Any, path: tuple[str, ...] = ()) -> list[dict[str, Any]
 # Resolved per-party fields shown to the user but never written to settlement.
 REPORT_ONLY_FIELDS = frozenset({"model", "profile"})
 SETTLE_NEXT = "write `debate_party_config` into settlement verbatim; model/profile are report-only"
+SEATS_NEXT = ("write `converge_seats` into settlement verbatim together with `advisor_roles`; "
+              "`refuter` or `gap-hunter` in `advisor_roles.roles` needs `r2: advisor`; "
+              "only `r2` may be `advisor`")
 
 
 def _debate_party_config(effective: Any) -> dict[str, Any]:
@@ -77,6 +81,17 @@ def _debate_party_config(effective: Any) -> dict[str, Any]:
         if isinstance(config, dict) else config
         for party_id, config in parties.items()
     }}
+
+
+def _converge_seats(effective: Any) -> Any:
+    """Every converge seat with its mechanism, native_subagent by default. A
+    non-mapping `seats` is returned verbatim so settlement validation refuses it."""
+    value = effective.get("seats") if isinstance(effective, dict) else None
+    if value is None:
+        return seats.resolved({})
+    if not isinstance(value, dict):
+        return value
+    return seats.resolved(value)
 
 
 def resolve(name: str, project_root: Path, user_path: Path | None,
@@ -115,6 +130,9 @@ def resolve(name: str, project_root: Path, user_path: Path | None,
     if name == "debate-parties":
         result["debate_party_config"] = _debate_party_config(effective)
         result["next"] = SETTLE_NEXT
+    if name == "converge-seats":
+        result["converge_seats"] = _converge_seats(effective)
+        result["next"] = SEATS_NEXT
     if report_models:
         result["model_report"] = _model_report(effective)
     return result
@@ -138,6 +156,13 @@ def cmd_resolve(args: argparse.Namespace) -> None:
                      f"profile={model['profile'] or '<none>'}")
     if "debate_party_config" in result:
         prose.append(f"next: {SETTLE_NEXT}")
+    if "converge_seats" in result:
+        configured = result["converge_seats"]
+        if isinstance(configured, dict):
+            prose.extend(f"SEAT      {seat} {mechanism}" for seat, mechanism in configured.items())
+        else:
+            prose.append(f"SEAT      <invalid> {configured!r}")
+        prose.append(f"next: {SEATS_NEXT}")
     # `--json` predates the output modes and keeps its indented shape.
     emit("json" if args.json else "prose", result, prose,
          json_text=json.dumps(result, indent=2, sort_keys=True))

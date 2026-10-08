@@ -42,6 +42,7 @@ from pathlib import Path
 
 import yaml
 
+from engine import seats
 from engine.clikit import ENV_PROG, caller_path, emit, refuse
 
 PROG = "task"
@@ -348,12 +349,12 @@ TASK_TYPES = {"ticket-writing", "bug-triage", "ticket-to-pr", "pr-review"}
 ENGINE_SKILLS = {"clarify", "execute", "resolve", "debate", "recall"}
 SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
 OPTIONAL_SKILL_FIELDS = ("spec_review_skill", "spec_review_override")
-
-
-# Party dispatch mechanisms this host can run.
-PARTY_MECHANISMS = ("native_subagent",)
+# Both hosts dispatch a debate party as a sub-agent or through the advisor
+# skill.
+PARTY_MECHANISMS = seats.MECHANISMS
 # Fields a `debate_party_config.parties.<id>` entry may carry in settlement.
 PARTY_CONFIG_FIELDS = frozenset({"label", "prompt", "mechanism", "enabled"})
+
 
 def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: bool) -> tuple[list[tuple[str, str]], dict]:
     try:
@@ -463,7 +464,8 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
                 if isinstance(party_id, str) and (":" in party_id or "\n" in party_id or "\r" in party_id):
                     problems.append(("debate_parties.id", "must be single-line and cannot contain ':'"))
                 if party.get("mechanism") not in PARTY_MECHANISMS:
-                    problems.append(("debate_parties.mechanism", "must be 'native_subagent'"))
+                    problems.append(("debate_parties.mechanism",
+                                     "must be one of: " + ", ".join(PARTY_MECHANISMS)))
             if len(ids) != len(set(ids)):
                 problems.append(("debate_parties", "party IDs must be unique"))
             if isinstance(roster, list):
@@ -491,6 +493,15 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
                     if "mechanism" in config and config["mechanism"] not in PARTY_MECHANISMS:
                         problems.append((f"debate_party_config.parties.{party_id}.mechanism",
                                          "must be one of: " + ", ".join(PARTY_MECHANISMS)))
+
+    # `codex_role`, the field's legacy form, is left unchecked so old ledgers resume.
+    advisor_roles = data.get("advisor_roles")
+    converge_seats = data.get("converge_seats")
+    shape = seats.roles_problems(advisor_roles) + seats.seat_problems(converge_seats)
+    problems.extend(shape)
+    if not shape and (party_config is None or isinstance(party_config, dict)):
+        problems.extend(seats.seat_mismatch(advisor_roles, converge_seats))
+        problems.extend(seats.party_mismatch(advisor_roles, party_config, roster))
 
     admission = data.get("debate_admission")
     if admission is not None:

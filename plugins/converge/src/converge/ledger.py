@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import model
+from . import model, seats
 from .model import Claim, Slate
 
 DEFAULT_DIR = Path("~/.bootgear/converge")
@@ -35,7 +35,7 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "cutoff": ("results",),
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
-    "init": ("snapshot", "pass", "since"),
+    "init": ("snapshot", "pass", "since", "seats", "advisor"),
     "file": ("lens", "angle", "depends", "rule"),
     "find-run": (),
     "angle-na": ("lens",),
@@ -225,6 +225,29 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
                             f"got {since!r}")
         if "snapshot" not in event:
             problems.append("init: `since` needs `snapshot`")
+    _validate_seats(event, mode, problems)
+
+
+# Seats a refute-only slate can hold: it has no finder and no cutter.
+REFUTE_ONLY_SEATS = ("main", "r1", "r2")
+
+
+def _validate_seats(event: dict[str, Any], mode: str | None, problems: list[str]) -> None:
+    def rename(field: str, old: str, new: str) -> str:
+        return new + field[len(old):]
+
+    slate_seats = event.get("seats")
+    if "seats" in event:
+        shape = seats.seat_problems(slate_seats)
+        problems.extend(f"{rename(f, 'converge_seats', 'seats')}: {m}" for f, m in shape)
+        if not shape and slate_seats is not None and mode == "refute-only":
+            problems.extend(f"seats: refute-only slate has no seat {seat}"
+                            for seat in slate_seats if seat not in REFUTE_ONLY_SEATS)
+    if "advisor" in event:
+        problems.extend(f"{rename(f, 'advisor_roles', 'advisor')}: {m}"
+                        for f, m in seats.roles_problems(event["advisor"]))
+        if not (isinstance(slate_seats, dict) and slate_seats.get(seats.ADVISOR_SEAT) == "advisor"):
+            problems.append("advisor: given only when seats.r2 is advisor")
 
 
 def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -492,6 +515,8 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         slate.snapshot = event.get("snapshot")
         slate.review_pass = event.get("pass")
         slate.since = event.get("since")
+        slate.seats = event.get("seats") or {}
+        slate.advisor = event.get("advisor")
     elif kind == "file":
         slate.claims[event["id"]] = Claim(
             id=event["id"], finder=event["as"], lens=event.get("lens"), angle=event.get("angle"),

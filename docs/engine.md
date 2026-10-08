@@ -57,6 +57,16 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `debate_parties`, and the resolved `debate_party_config` snapshot (party
   `label`/`prompt`/`mechanism`/`enabled` only; model and profile stay in the
   `task config resolve` report);
+- advisor settings: `advisor_roles` (`{roles, brief}`; the roles the other
+  vendor's host takes, from `independent-reviewer`, `adversarial-reviewer`,
+  `refuter` and `gap-hunter`) and `converge_seats` (each converge seat `main`,
+  `finder`, `r1`, `r2`, `cutter` mapped to `native_subagent` or `advisor`;
+  absent means all `native_subagent`). Only `r2` may be `advisor`. `refuter` or
+  `gap-hunter` needs `r2: advisor`; a named reviewer role needs that party in
+  `debate_roster`, not disabled, with `mechanism: advisor`. `session init` and
+  `session validate` refuse every violation in one message; a `codex_role`
+  string is accepted unchecked. `task config resolve --name converge-seats`
+  prints the five-seat mapping;
 - `autonomy`: `no_further_questions` and an explicit list of permitted mutations;
 - domain overrides `spec_override` / `test_override` / `review_override`, a
   skill name or a `{sub-task-label: skill}` map, optional
@@ -86,11 +96,12 @@ caller's converge render is briefed as settled fact. It then:
 - polls the enabled parties in `debate_roster` (default `main-agent`,
   `independent-reviewer`, `adversarial-reviewer`; at most five) using
   `debate_party_config`; round 1 positions are independent, later rounds answer
-  each other party. On Claude Code `independent-reviewer` is a fresh sub-agent
-  and `adversarial-reviewer` a one-shot `advisor` call asking Codex for
-  counterexamples; a party's `mechanism` is `native_subagent` or `advisor`. On
-  Codex both reviewers are native subagents and `native_subagent` is the only
-  mechanism;
+  each other party. On both hosts a party's `mechanism` is `native_subagent`
+  (a fresh sub-agent) or `advisor` (the other vendor's host). On Claude Code an
+  `advisor` party is a one-shot `advisor` call asking Codex for
+  counterexamples, and `adversarial-reviewer` without a `mechanism` uses it. On
+  Codex an `advisor` party is a Claude Code listener over `channel`, on a debate
+  channel of its own, never the converge `r2` listener's;
 - records unavailable or empty parties as `UNAVAILABLE` / `NO-RESPONSE` and
   owes one retry round per absence episode;
 - closes with one of `unanimous_convergence` (only after an angle round that
