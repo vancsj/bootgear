@@ -17,10 +17,11 @@ below the bar lands in the appendix rather than disappearing.
 ```mermaid
 flowchart LR
     D["diff + linked ticket"] --> F["finder<br/>every lens, every angle<br/>whose tell matches"]
-    F --> R["refute<br/>r1, r2"]
-    R --> G["gap hunt (full)<br/>what did every lens miss?"]
-    G --> C["cut, then cutoff"]
-    C --> O["render: reported · choices<br/>inconclusive · appendix"]
+    F --> G["gap hunt (full)<br/>what did every lens miss?"]
+    G --> E["escalate<br/>each finder widens its claims"]
+    E --> C["cut and refute<br/>cutter; r1, r2"]
+    C --> X["cutoff"]
+    X --> O["render: reported · choices<br/>inconclusive · follow-up · appendix"]
     O -->|"permitted fix applied"| D
 ```
 
@@ -39,9 +40,9 @@ How claims are refuted, rated and cut is converge's job; see its [README](../con
 | `contract` | full | a caller or consumer that a changed API, schema, CLI, event or file format breaks |
 
 `quick` runs four agents (main, finder, one refuter, cutter) and no gap hunt. `full`, the
-default, adds a second refuter, who afterwards hunts for gaps: what every lens missed, and
-whether the ticket and the diff match in both directions (asked but missing, present but
-unasked). An unlabelled call never silently gets the lighter pass.
+default, adds a second refuter, who first hunts for gaps right after the find, before any
+claim is escalated or cut: what every lens missed, and whether the ticket and the diff match
+in both directions (asked but missing, present but unasked). An unlabelled call never silently gets the lighter pass.
 
 **Find angles** are specific questions with a *tell*, the sign in the diff that makes the
 question worth asking: `changed-contract`, `removed-behavior`, `boundary-input`,
@@ -66,9 +67,9 @@ A new review loops (review, apply what the mode permits, re-review) and ends wit
 |---|---|
 | `handoff` | in an engine run whose node has a `fix` edge, the mode would apply at least one claim; review returns the fix list and applies nothing |
 | `comment_only` | in an engine run whose node has no `fix` edge; every surviving claim is reported and none applied |
-| `clean` | no reported, inconclusive or unconverged claim remains |
+| `clean` | no reported, inconclusive or blocking unconverged claim remains; follow-up claims are listed and never decide the outcome |
 | `below_cutoff` | only appendix claims remain |
-| `blocked` | a reported claim needs an acceptance, a decision or a permission that is not there, or a claim is inconclusive or unconverged |
+| `blocked` | a reported claim needs an acceptance, a decision or a permission that is not there, or a claim is inconclusive or blocking unconverged |
 | `no_progress` | the same claim came back unchanged after a fix, with no new information |
 | `iteration_cap` | the cap (default 5) ended the loop with live claims |
 

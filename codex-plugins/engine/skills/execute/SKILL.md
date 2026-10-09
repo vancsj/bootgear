@@ -110,7 +110,7 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - On `comment_only`, report the claims and take the branch that matches the reported outcome.
 - Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
 - On a `spec` return of `blocked` (a task step that cannot be derived), transition to `failed` with the missing statement as the reason.
-- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the spec-review visit number `<n>` (used only in the slate id, never as `--pass`). On `ready`, use the implementation/ticket branch; on `revise`, pass claim IDs, render path, slate, and converge directory back to `spec`; on `choices`, pass the same fields to `spec-debate`; on `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. When leaving, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
+- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the spec-review visit number `<n>` (used only in the slate id, never as `--pass`). On every outcome except `blocked`, first apply the returned `inline` fixes to the artifacts (and `task.md` when affected) with no re-review. Then, on `ready`, use the implementation/ticket branch; on `revise`, pass claim IDs, render path, slate, converge directory, and the `inline` and `follow-up` lists back to `spec`; on `choices`, pass the same fields to `spec-debate`; on `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. When leaving, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
 
 ## Checking and recording in memory-ledger
 

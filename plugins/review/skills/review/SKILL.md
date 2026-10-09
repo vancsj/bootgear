@@ -14,7 +14,8 @@ depth label `quick` or `full`; in an active run, also `<run-id>`,
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
 reported claims in rank order, `choice` claims, `inconclusive` and
-`unconverged` claims, the appendix, and killed or retracted claims with their
+`unconverged` claims, `follow-up` claims (labelled `unverified` or
+`unconverged`), the appendix, and killed or retracted claims with their
 reason.
 
 A new review ends with exactly one outcome:
@@ -26,14 +27,17 @@ A new review ends with exactly one outcome:
   Every surviving claim is reported and none is applied, whatever
   `review_fix_mode` says.
 - **`clean`:** A re-review's render, or an active run's single-pass render,
-  has no `reported` claim and no `inconclusive` or `unconverged` claim.
+  has no `reported` claim and no `inconclusive` or blocking `unconverged`
+  claim (a `reported` row with reason `unconverged`).
 - **`below_cutoff`:** The render has only appendix claims, and no
-  `inconclusive` or `unconverged` claim.
+  `inconclusive` or blocking `unconverged` claim (a `reported` row with reason
+  `unconverged`).
 - **`blocked`:** A `reported` claim needs a mutation outside the mode's
   permission — an unaccepted claim under `accepted_only`, an undecided
   `choice`, or a mutation outside `permitted_mutations` — or any
-  `inconclusive` or `unconverged` claim remains, or the `converge`
-  skill handed back `blocked`.
+  `inconclusive` or blocking `unconverged` claim (a `reported` row with
+  reason `unconverged`) remains, or the `converge` skill handed back
+  `blocked`.
 - **`no_progress`:** The loop again finds the same unchanged claim after
   trying to fix it, with no new information.
 - **`iteration_cap`:** The configured iteration cap is reached with live
@@ -42,7 +46,7 @@ A new review ends with exactly one outcome:
 
 In an active run where the current node has a `fix` edge and the fix list is
 empty, the outcome is the one the render gives: `clean`, `below_cutoff`, or
-`blocked`.
+`blocked`. `follow-up` claims never decide the outcome.
 
 Report claims from every iteration, not only the final iteration. State the
 ending outcome and iteration count. `execute` uses these fields to update its
@@ -70,9 +74,9 @@ ids) in place of the applied-feedback accounting; nothing was applied. For
 
 1. Check for an override; delegate if one applies.
 2. An apply-only request runs sub-task 6, then reports.
-3. A new review runs sub-task 1 (depth), 2 (start the slate), 3 (find,
-   refute, cut through `converge`), 4 (gap hunt, `full` only), and 5 (cutoff,
-   render, route choices).
+3. A new review runs sub-task 1 (depth), 2 (start the slate), 3 (find
+   through `converge`), 4 (gap hunt, `full` only), then converge's escalate,
+   cut and refute steps, and 5 (cutoff, render, route choices).
 4. In an active run, end with `handoff`, `comment_only`, or the render's
    outcome. Standalone, apply what the fix mode permits, re-review on a new
    slate, and repeat until one outcome applies.
@@ -125,8 +129,8 @@ Use the depth label passed by the caller, else `full`:
 
 This slate is one task: never use more than these agents on it, and reuse
 each one across rounds. The cap counts this slate only; a later debate on its
-choices has its own budget. F covers every find angle of every lens; each refuter
-takes ≥1 unused attack angle per claim per round, and R1 alone takes ≥2.
+choices has its own budget. F covers every find angle of every lens; angles
+per claim per round come from the `status --json` `plan`.
 
 Each lens's scope and finder brief is in
 [references/lenses.md](references/lenses.md).
@@ -173,11 +177,12 @@ If the project has `.bootgear/config/review-standard.md`, first write
 `cutoff: {report_rules: [<every rule ID whose severity is at or above the standard's cutoff:>]}`
 and add `--config <converge-dir>/<slate>.yaml` to `init`.
 
-### 3. Find, refute, cut
+### 3. Find, escalate, cut, refute
 
 Run the `converge` skill in `full` mode on the slate with the
 depth's agents: at `full`, two refuters (R1, R2) and the gap hunt of
-sub-task 4; at `quick`, one refuter (R1) and no gap hunt.
+sub-task 4; at `quick`, one refuter (R1) and no gap hunt. The find comes
+first, then sub-task 4, then converge's escalate, cut and refute steps.
 
 Spawn one finder, F, for every lens from sub-task 1. Give it one brief listing
 every lens with its scope and brief from `references/lenses.md` and that
@@ -196,10 +201,10 @@ and whether the outcome is `below_cutoff`.
 
 ### 4. Gap hunt
 
-`full` only; `quick` has no gap hunt. After refute of the lens claims
-converges, continue R2 as the gap-hunt finder, filing its claims with
-`--as r2` and `origin: gap-hunt`; R1 refutes them, then C cuts them through
-the same `converge` steps. Brief R2 with:
+`full` only; `quick` has no gap hunt. Right after find coverage, before any
+claim is escalated or cut, continue R2 as the gap-hunt finder, filing its
+claims with `--as r2` and `origin: gap-hunt`; they go through the same
+`converge` steps as the lens claims, with R1 refuting them. Brief R2 with:
 
 - the current `converge render` output;
 - the diff and the linked ticket;
@@ -208,9 +213,10 @@ the same `converge` steps. Brief R2 with:
 
 ### 5. Cutoff, render and choices
 
-Run the fixed cutoff action printed by the CLI after the gap-hunt claims
-converge, so it is the slate's latest state-changing event. The render is the
-findings list.
+Run the fixed cutoff action printed by the CLI after the escalate, cut and
+refute steps converge for every claim, so it is the slate's latest
+state-changing event. The render is the findings list; report its follow-up
+list with the findings, each claim labelled `unverified` or `unconverged`.
 
 Route every claim carrying a `choice`:
 
