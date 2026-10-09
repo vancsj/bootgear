@@ -27,3 +27,4 @@
 
 - When an advisor from a different vendor is available, it takes the refuter or adversarial role by default, unless the user says no.
 - Reviews (including spec reviews), refutations and tests cover only what an LLM caller can produce. A claim that needs a made-up or edge-case value, hand-edited state, or an environment the run never uses is not reported.
+- The main agent keeps reviewers, refuters, cutters, gap hunters and other judging roles independent. It gives each role only the context its task needs (the request, the artifacts, the evidence and its role brief) and never its own conclusions, hypotheses, preferred answers or another role's reasoning.
