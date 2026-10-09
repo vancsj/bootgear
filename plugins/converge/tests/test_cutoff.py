@@ -5,6 +5,9 @@ import json
 
 from conftest import Converge
 
+# A cosmetic cut carries the cutter's one-line fix.
+FIX = ("--fix", "reword it")
+
 
 def _results(cv: Converge, slate: str = "s1") -> dict[str, tuple[str, int]]:
     out = cv.ok("cutoff", slate).stdout.splitlines()
@@ -22,7 +25,7 @@ def _claim(cv: Converge, freq: str, sev: str, conf: str = "traced", diff: str = 
            origin: str = "lens", lens: str = "correctness") -> str:
     cid = cv.file(lens=lens, origin=origin, claim=f"{sev} {freq}")
     cv.quiet_round(cid, 1, ("boundary", "reachability"))
-    cv.cut_converge(cid, freq, sev, conf, diff)
+    cv.cut_converge(cid, freq, sev, conf, diff, extra=FIX if sev == "cosmetic" else ())
     return cid
 
 
@@ -86,13 +89,12 @@ def test_rereview_gap_hunt_rules(cv: Converge) -> None:
 
 
 def test_rereview_keeps_report_rules_and_first_pass_keeps_defaults(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("cutoff: {report_rules: [R002]}\n")
-    cv.init("s1", "full", "correctness,security", "orch", "--pass", "2", "--config", str(task))
+    cv.init("s1", "full", "correctness,security", "orch", "--pass", "2",
+            config={"cutoff": {"report_rules": ["R002"]}})
     cv.cover()
     tagged = cv.file(claim="partial write", extra=("--rule", "R002"))
     cv.quiet_round(tagged, 1, ("boundary", "reachability"))
-    cv.cut_converge(tagged, "contrived", "cosmetic", "inferred", "local")
+    cv.cut_converge(tagged, "contrived", "cosmetic", "inferred", "local", extra=FIX)
     assert _results(cv)[tagged][0] == "reported"
     cv.init("s2", "full", "correctness,security", "orch", "--pass", "1")
     first = json.loads(cv.path("s2").read_text().splitlines()[0])
@@ -130,19 +132,19 @@ def test_inconclusive_and_unconverged_always_reported_and_exempt(cv: Converge) -
     inc = cv.file(claim="unsure")
     cv.refute(inc, 1, "boundary", "r1", "inconclusive")
     cv.refute(inc, 1, "reachability", "r2")
-    cv.cut_converge(inc, "contrived", "cosmetic", "inferred", "trivial")
+    cv.cut_converge(inc, "contrived", "cosmetic", "inferred", "trivial", extra=FIX)
     res = _results(cv)
     assert res[inc][0] == "reported"
     assert sum(1 for r, _ in res.values() if r == "reported") == 4
 
 
 def test_cut_capped_reported(cv: Converge) -> None:
-    cv.init()
+    cv.init(config={"caps": {"cut_rounds": 3}})
     cv.cover()
     cid = cv.file()
     cv.quiet_round(cid, 1, ("boundary", "reachability"))
     for rnd, freq in ((1, "contrived"), (2, "rare"), (3, "contrived")):
-        cv.cut(cid, rnd, "cutter", freq, "cosmetic")
+        cv.cut(cid, rnd, "cutter", freq, "cosmetic", "traced", "local", *FIX)
         if rnd < 3:
             cv.rebut_cut(cid, f"rebut {rnd}")
     assert _results(cv)[cid][0] == "reported"
@@ -206,9 +208,8 @@ def test_refute_only_has_no_cutoff(cv: Converge) -> None:
 
 
 def test_report_rules_force_reporting_and_exempt_from_cap(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("cutoff:\n  report_rules: [R002]\n")
-    cv.init("s1", "full", "correctness,security", "orch", "--config", str(task))
+    cv.init("s1", "full", "correctness,security", "orch",
+            config={"cutoff": {"report_rules": ["R002"]}})
     cv.cover()
     for _ in range(3):
         _claim(cv, "common", "security")

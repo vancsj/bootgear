@@ -13,7 +13,8 @@ def _effective(cv: Converge, *args: str, env: dict[str, str] | None = None) -> d
 
 def test_defaults(cv: Converge) -> None:
     eff = _effective(cv)
-    assert eff["caps"] == {"refute_rounds": 5, "cut_rounds": 3, "per_lens": 3, "agents": 5}
+    assert eff["caps"] == {"refute_rounds": 5, "cut_rounds": 5, "per_lens": 3, "agents": 5,
+                           "angles_per_claim": 5, "batch_items": 30}
     assert eff["cutoff"]["report_if"][0] == {"severity": ["security", "data-loss"],
                                              "frequency": ["every-call", "common", "rare"]}
     assert eff["cutoff"]["report_if"][2] == {
@@ -36,7 +37,8 @@ def test_layers_merge_later_wins(cv: Converge) -> None:
     task = cv.root / "task.yaml"
     task.write_text("caps: {refute_rounds: 2}\ncutoff: {report_if: [{severity: [security]}]}\n")
     eff = _effective(cv, "--config", str(task))
-    assert eff["caps"] == {"refute_rounds": 2, "cut_rounds": 4, "per_lens": 2, "agents": 5}
+    assert eff["caps"] == {"refute_rounds": 2, "cut_rounds": 4, "per_lens": 2, "agents": 5,
+                           "angles_per_claim": 5, "batch_items": 30}
     assert eff["cutoff"]["report_if"] == [{"severity": ["security"]}]
     assert len(eff["cutoff"]["report_if_gap_hunt"]) == 2
 
@@ -74,10 +76,8 @@ def test_missing_task_config_refused(cv: Converge) -> None:
 
 
 def test_init_snapshot_ignores_later_config_edits(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("caps: {refute_rounds: 1}\n")
-    cv.init("s1", "full", "correctness", "orch", "--config", str(task))
-    task.write_text("caps: {refute_rounds: 5}\n")
+    cv.init("s1", "full", "correctness", "orch", config={"caps": {"refute_rounds": 1}})
+    (cv.root / "s1.task.yaml").write_text("caps: {refute_rounds: 5}\n")
     cv.file()
     cv.refute("F001", 1, "boundary", "r1", "downgraded", "--narrowed", "narrower")
     cv.refute("F001", 1, "reachability", "r2")

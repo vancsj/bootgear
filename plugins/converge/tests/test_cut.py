@@ -24,7 +24,7 @@ def test_accept_converges_the_latest_round(cv: Converge) -> None:
     status = cv.status()["by_id"]["F001"]
     assert status["stage"] == "cut" and status["cut"] == "open"
     assert status["cut_note"] == "awaiting accept or rebut, round 1"
-    assert "F001 cut=open" in cv.ok("converged", "s1", "--phase", "cut", code=1).stdout
+    assert "F001 phase=cut cut=open" in cv.ok("converged", "s1", "--phase", "cut", code=1).stdout
     cv.accept("F001", 1)
     status = cv.status()["by_id"]["F001"]
     assert status["cut"] == "converged" and status["accepted_round"] == 1
@@ -34,7 +34,7 @@ def test_accept_converges_the_latest_round(cv: Converge) -> None:
 
 
 def test_two_equal_rounds_without_rebut_do_not_converge(cv: Converge) -> None:
-    cv.init()
+    cv.init(legacy=True)
     cv.file()
     _survived(cv)
     cv.cut("F001", 1, CUTTER)
@@ -102,7 +102,7 @@ def test_accept_refused_on_refute_only(cv: Converge) -> None:
 
 
 def test_cap_three_rounds(cv: Converge) -> None:
-    cv.init()
+    cv.init(config={"caps": {"cut_rounds": 3}})
     cv.file()
     _survived(cv)
     for rnd, freq in ((1, "common"), (2, "rare"), (3, "every-call")):
@@ -154,7 +154,8 @@ def test_choice_required_for_survived_cross_cutting(cv: Converge) -> None:
 
 
 def test_choice_not_required_when_inconclusive(cv: Converge) -> None:
-    cv.init()
+    # The legacy rule; a steps slate needs the choice at every cut (test_cut_budget).
+    cv.init(legacy=True)
     cv.file()
     cv.refute("F001", 1, "boundary", "r1", "inconclusive")
     cv.refute("F001", 1, "reachability", "r2")

@@ -144,7 +144,7 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
     assert scope.startswith('SCOPE: write events only with: UV_CACHE_DIR="${TMPDIR:-/tmp}/converge-uv-cache" ')
     for fragment in (f"--dir {cv.dir} --as r2", f"append to {cv.dir}/s1.jsonl",
                      "request write permission", "require_escalated",
-                     'reply "WRITE-DENIED r2: <the error text>"'):
+                     'reply "WRITE-DENIED r2: <the error text>"', "|escalate|angle-na>"):
         assert fragment in scope, scope
     path = _scope_converge(scope)
     assert path.is_absolute() and path.is_file() and os.access(path, os.X_OK), path

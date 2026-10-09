@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
 from conftest import (
     BIN,
     CUT_EVIDENCE,
@@ -18,6 +19,7 @@ from conftest import (
     PLUGIN_DIR,
     R1,
     R2,
+    STEPS_OFF,
     Converge,
 )
 
@@ -39,8 +41,12 @@ def _error(cv: Converge, *args: str, code: int = 2) -> dict[str, Any]:
 
 
 def _init_args(cv: Converge, mode: str = "full", lenses: str = "correctness,security") -> list[str]:
+    # Every step off, so the slate keeps the file → refute → cut flow.
+    steps = cv.root / "steps-off.yaml"
+    steps.write_text(yaml.safe_dump({"steps": STEPS_OFF}))
     return ["init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--mode", mode,
-            "--lenses", lenses, "--angles", str(cv.angles), "--project-root", str(cv.project)]
+            "--lenses", lenses, "--angles", str(cv.angles), "--project-root", str(cv.project),
+            "--config", str(steps)]
 
 
 def _refute_args(cv: Converge, claim: str, angle: str, agent: str) -> list[str]:
@@ -100,8 +106,8 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     cut = _json(cv, *_cut_args(cv, "F001", 1))
     assert cut == {"seq": cut["seq"], "claim": "F001", "round": 1}
     assert _json(cv, "converged", "s1", "--dir", d, "--phase", "cut", code=1) == {
-        "phase": "cut", "converged": False, "pending": ["F001 cut=open cut_round=1"],
-        "next": "continue the cutter with the listed claims"}
+        "phase": "cut", "converged": False, "pending": ["F001 phase=cut cut=open"],
+        "next": "continue each claim's finder to accept or rebut the listed claims"}
     accept = _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
                    "--round", "1")
     assert accept == {"seq": accept["seq"], "claim": "F001", "round": 1}
@@ -302,7 +308,7 @@ def test_next_after_cutoff_and_converged(cv: Converge) -> None:
     assert done == "CONVERGED phase=refute\n"
     cv.cut(cid, 1, CUTTER)
     open_cut = cv.ok("converged", "s1", "--phase", "cut", code=1).stdout.splitlines()
-    assert open_cut[-1] == "next: continue the cutter with the listed claims"
+    assert open_cut[-1] == "next: continue each claim's finder to accept or rebut the listed claims"
     cv.accept(cid, 1)
     assert cv.ok("converged", "s1", "--phase", "cut").stdout.splitlines() == [
         "CONVERGED phase=cut", "next: " + _next(cv, "cutoff s1 --dir {dir}")]

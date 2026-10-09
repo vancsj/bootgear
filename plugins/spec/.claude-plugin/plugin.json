@@ -1,6 +1,6 @@
 {
   "name": "spec",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "General requirements and independent spec-review domain interface: requirements, design, ticket, review, and task-breakdown stages, scaled to the task, with open questions flagged rather than guessed. Delegates to a project's own specialized spec skill when registered.",
   "dependencies": ["converge"],
   "author": {

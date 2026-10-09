@@ -33,8 +33,10 @@ DEFAULTS: dict[str, Any] = {
         ],
         "report_rules": [],
     },
-    "caps": {"refute_rounds": 5, "cut_rounds": 3, "per_lens": 3, "agents": model.MAX_AGENTS},
+    "caps": {"refute_rounds": 5, "cut_rounds": 5, "per_lens": 3, "agents": model.MAX_AGENTS,
+             "angles_per_claim": 5, "batch_items": 30},
     "angles": {"files": [], "disable": []},
+    "steps": {"escalate": True, "early_cut": True, "gap_hunt": True},
 }
 # Replaces `report_if` and `report_if_gap_hunt` for a slate started with `--pass` >= 2;
 # `report_rules` and the other sections keep their resolved values.
@@ -53,12 +55,17 @@ REREVIEW_CUTOFF: dict[str, Any] = {
 }
 SCHEMA = {
     "cutoff": ("report_if", "report_if_gap_hunt", "report_rules"),
-    "caps": ("refute_rounds", "cut_rounds", "per_lens", "agents"),
+    "caps": ("refute_rounds", "cut_rounds", "per_lens", "agents", "angles_per_claim",
+             "batch_items"),
     "angles": ("files", "disable"),
+    "steps": ("escalate", "early_cut", "gap_hunt"),
 }
 
 
-OPTIONAL_KEYS = ("report_rules",)
+# Snapshots from before these sections and keys existed stay valid; a snapshot without
+# `steps` replays on the legacy code paths.
+OPTIONAL_SECTIONS = ("steps",)
+OPTIONAL_KEYS = ("report_rules", "angles_per_claim", "batch_items")
 
 
 class ConfigError(Exception):
@@ -126,7 +133,7 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
             problems.append(f"{label}: unknown key {key!r} (allowed: {', '.join(SCHEMA)})")
     for section, keys in SCHEMA.items():
         if section not in value:
-            if complete:
+            if complete and section not in OPTIONAL_SECTIONS:
                 problems.append(f"{label}: missing section {section!r}")
             continue
         body = value[section]
@@ -139,8 +146,9 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
         for key in keys:
             where = f"{label}: {section}.{key}"
             if key not in body:
-                # Snapshots from before report_rules existed stay valid.
-                if complete and key not in OPTIONAL_KEYS:
+                # A steps snapshot has every cap: the batch plan reads them.
+                optional = key in OPTIONAL_KEYS and not (section == "caps" and "steps" in value)
+                if complete and not optional:
                     problems.append(f"{where} is missing")
                 continue
             item = body[key]
@@ -152,6 +160,9 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
                 elif key == "agents" and item > model.MAX_AGENTS:
                     problems.append(f"{where} must be at most {model.MAX_AGENTS} "
                                     f"(agents per task, main included); got {item!r}")
+            elif section == "steps":
+                if not isinstance(item, bool):
+                    problems.append(f"{where} must be true or false; got {item!r}")
             elif not isinstance(item, list) or not all(isinstance(x, str) and x for x in item):
                 problems.append(f"{where} must be a list of non-empty strings")
     return problems

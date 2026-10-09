@@ -28,7 +28,8 @@ def test_init_snapshots_angles_and_config(cv: Converge) -> None:
     init = cv.events()[0]
     assert init["mode"] == "full"
     assert init["lenses"] == ["correctness", "security"]
-    assert init["config"]["caps"] == {"refute_rounds": 5, "cut_rounds": 3, "per_lens": 3, "agents": 5}
+    assert init["config"]["caps"] == {"refute_rounds": 5, "cut_rounds": 5, "per_lens": 3, "agents": 5,
+                                      "angles_per_claim": 5, "batch_items": 30}
     assert {"find", "attack", "evaluate", "decide"} == {a["tag"] for a in init["angles"]}
 
 

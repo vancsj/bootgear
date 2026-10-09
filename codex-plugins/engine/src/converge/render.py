@@ -64,7 +64,8 @@ def _claim_row(slate: Slate, claim: Claim, rank: int | None, extra: str) -> str:
         str(rank) if rank is not None else "-", claim.id, _cell(claim.lens), _cell(claim.loc),
         _cell(claim.text), _cell(cut.get("frequency")), _cell(cut.get("severity")),
         _cell(cut.get("confidence")), _cell(cut.get("difficulty")),
-        slate.refute_state(claim), model.cut_note(claim, slate.cap("cut_rounds")), _cell(extra),
+        slate.refute_state(claim), model.cut_note(claim, slate.cap("cut_rounds"), slate.v2),
+        _cell(extra),
     ]) + " |"
 
 
@@ -86,6 +87,14 @@ def _snapshot_lines(slate: Slate) -> list[str]:
     return lines
 
 
+def _follow_up_line(row: model.CutoffRow) -> str:
+    claim = row.claim
+    if row.reason == "unverified":
+        fix = (claim.last_cut() or {}).get("fix")
+        return f"- **{claim.id}** unverified — {claim.text} — suggested fix: {fix}"
+    return f"- **{claim.id}** unconverged — {claim.text} — angles: {_angles_used(claim)}"
+
+
 def render_full(slate: Slate) -> str:
     cutoff_state = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
     lines = [f"# converge slate `{slate.slate_id}`", "",
@@ -101,11 +110,18 @@ def render_full(slate: Slate) -> str:
             lines += [_claim_row(slate, r.claim, r.rank, r.reason) for r in reported]
         else:
             lines.append("None.")
-        choices = [r for r in rows if (r.claim.last_cut() or {}).get("choice")]
+        # Follow-up claims are unverified or unconverged below the blocking bar: they are
+        # listed in their own section only, never as findings or choices.
+        listed = [r for r in rows if r.result != "follow-up"]
+        choices = [r for r in listed if (r.claim.last_cut() or {}).get("choice")]
         lines += ["", "## Choices", ""]
         lines += [f"- **{r.claim.id}** ({r.result}) — {(r.claim.last_cut() or {}).get('choice')}"
                   for r in choices] or ["None."]
-        uncertain = [r for r in rows if slate.refute_state(r.claim) in ("inconclusive", "unconverged")]
+        if slate.v2:
+            lines += ["", "## Follow-up", ""]
+            lines += [_follow_up_line(r) for r in rows if r.result == "follow-up"] or ["None."]
+        uncertain = [r for r in listed
+                     if slate.refute_state(r.claim) in ("inconclusive", "unconverged")]
         lines += ["", "## Inconclusive / unconverged", ""]
         lines += [f"- **{r.claim.id}** {slate.refute_state(r.claim)} — {r.claim.text} — angles: "
                   f"{_angles_used(r.claim)}" for r in uncertain] or ["None."]

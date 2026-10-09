@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import dataclasses
 import io
+import itertools
 import json
 import os
 import shlex
@@ -42,9 +44,11 @@ EXAMPLES = {
             "--settlement <file>",
     "file": "file <slate> --dir <dir> --as finder --lens <lens> --angle <angle> --origin lens "
             '--loc <path:line> --claim "<claim>" --trigger "<trigger>"',
+    "escalate": 'escalate <slate> --dir <dir> --as finder --claim F001 --wider "<text>" '
+                '--evidence "<route>"',
     "find-run": "find-run <slate> --dir <dir> --as finder --lens <lens> --angle <angle> "
                 '--tell "<tell>" --searches "<searches>" --positive-control "<hit>" --result none',
-    "angle-na": "angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
+    "angle-na": "angle-na <slate> --dir <dir> --as r1 --phase refute --claim F001 "
                 '--angle <angle> --reason "<why>"',
     "refute": "refute <slate> --dir <dir> --as r1 --claim F001 --round 1 --angle <angle> "
               '--tell "<tell>" --outcome survived --evidence "<sources>" --searches "<searches>" '
@@ -65,9 +69,13 @@ EXAMPLES = {
     "config": "config validate --project-root <dir>",
     "prune": "prune <slate> <slate> --project-root <dir>",
 }
+ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
+                 '--angle <angle> --reason "<why>"')
 FREQUENT = ("file", "refute", "status", "converged")
 CATALOG = Catalog(prog="converge", examples=EXAMPLES, frequent=FREQUENT,
                   legacy_json=frozenset({"status"}))
+# A `--phase find` call's refusals show the find form of the angle-na example.
+FIND_CATALOG = dataclasses.replace(CATALOG, examples={**EXAMPLES, "angle-na": ANGLE_NA_FIND})
 
 
 def _refuse(problems: list[str], what: str = "refused") -> NoReturn:
@@ -328,7 +336,7 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                  f"{slate_id}. {brief.rstrip('.')}. <role brief for this turn>"),
                 "CONTEXT: <claims under test: id, text, loc, trigger; this turn's angles>",
                 (f'SCOPE: write events only with: UV_CACHE_DIR="${{TMPDIR:-/tmp}}/converge-uv-cache" '
-                 f"{converge} <refute|file|rebut|accept> {shlex.quote(slate_id)} "
+                 f"{converge} <refute|file|rebut|accept|escalate|angle-na> {shlex.quote(slate_id)} "
                  f"--dir {quoted_dir} --as {seat} ...; these commands append to "
                  f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}, which may be outside your "
                  f"writable roots: request write permission for each such command as your host "
@@ -476,6 +484,15 @@ def cmd_file(args: argparse.Namespace) -> None:
     emit(args.output_mode, {"id": written["id"]}, f"FILED {written['id']}")
 
 
+def cmd_escalate(args: argparse.Namespace) -> None:
+    event = _opt({"event": "escalate", "claim": args.claim},
+                 wider=args.wider, evidence=args.evidence)
+    written = _write(args, event)
+    wider = "yes" if "wider" in written else "no"
+    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "wider": wider == "yes"},
+         f"ESCALATE seq={written['seq']} {args.claim} wider={wider}")
+
+
 def cmd_find_run(args: argparse.Namespace) -> None:
     result: Any = "none" if args.result.strip() == "none" else _ids(args.result)
     written = _write(args, {"event": "find-run", "lens": args.lens, "angle": args.angle,
@@ -487,7 +504,7 @@ def cmd_find_run(args: argparse.Namespace) -> None:
 
 def cmd_angle_na(args: argparse.Namespace) -> None:
     event = _opt({"event": "angle-na", "phase": args.phase, "angle": args.angle,
-                  "reason": args.reason}, lens=args.lens)
+                  "reason": args.reason}, lens=args.lens, claim=args.claim)
     written = _write(args, event)
     emit(args.output_mode, {"seq": written["seq"], "phase": args.phase, "angle": args.angle},
          f"ANGLE-NA seq={written['seq']} phase={args.phase} angle={args.angle}")
@@ -529,7 +546,7 @@ def cmd_cut(args: argparse.Namespace) -> None:
     event = _opt({"event": "cut", "claim": args.claim, "round": args.round,
                   "frequency": args.frequency, "severity": args.severity,
                   "confidence": args.confidence, "difficulty": args.difficulty,
-                  "evidence": evidence}, choice=args.choice)
+                  "evidence": evidence}, choice=args.choice, fix=args.fix)
     written = _write(args, event)
     emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "round": args.round},
          f"CUT seq={written['seq']} {args.claim} round={args.round}")
@@ -581,13 +598,21 @@ def _claim_status(slate: Slate, claim: model.Claim) -> dict[str, Any]:
         "origin": claim.origin,
         "finder": claim.finder,
         "claim": claim.text,
-        "unused_attack_angles": [a for a in slate.angle_ids("attack") if a not in used],
+        "unused_attack_angles": (slate.remaining_angles(claim) if slate.v2 else
+                                 [a for a in slate.angle_ids("attack") if a not in used]),
     }
     if slate.mode == "full":
-        status["cut"] = slate.cut_state(claim) if slate.refute_state(claim) in model.REFUTE_DONE else "-"
+        # A steps slate cuts before refute, so its cut state shows once a cut exists.
+        shown = (slate.refute_state(claim) in model.REFUTE_DONE
+                 or (slate.v2 and claim.cut_round > 0))
+        status["cut"] = slate.cut_state(claim) if shown else "-"
         status["cut_round"] = claim.cut_round
         status["accepted_round"] = claim.accepted_round or None
-        status["cut_note"] = model.cut_note(claim, slate.cap("cut_rounds"))
+        status["cut_note"] = model.cut_note(claim, slate.cap("cut_rounds"), slate.v2)
+    if slate.v2:
+        status["escalated"] = claim.escalation is not None
+        status["parked"] = slate.parked(claim)
+        status["phase"] = slate.phase(claim)
     return status
 
 
@@ -615,11 +640,24 @@ def _legal_event_types(slate: Slate) -> list[str]:
     if slate.mode == "full" and (phase == "find" or _coverage_problems(slate)):
         legal.update({"find-run", "angle-na"})
     for claim in slate.live_claims():
+        if slate.v2:
+            claim_phase = slate.phase(claim)
+            if claim_phase == "cut":
+                legal.add("cut")
+                if claim.cut_rounds:
+                    legal.update({"accept", "rebut"})
+            elif claim_phase == "refute":
+                legal.update({"refute", "angle-na"})
+                if claim.refute_rounds:
+                    legal.add("rebut")
+            continue
         refute = slate.refute_state(claim)
         if refute not in model.REFUTE_DONE:
             legal.update({"refute", "rebut"})
         elif slate.mode == "full" and slate.cut_state(claim) not in model.CUT_DONE:
             legal.update({"cut", "accept", "rebut"})
+    if slate.v2 and model.batch_plan(slate)["escalate"]:
+        legal.add("escalate")
     if (slate.mode == "full" and not _coverage_problems(slate)
             and not slate.open_claims() and not slate.cutoff_valid):
         legal.add("cutoff")
@@ -633,7 +671,7 @@ def _unresolved_choices(slate: Slate) -> list[dict[str, str]]:
         return []
     return [{"claim": row.claim.id, "result": row.result, "choice": choice}
             for row in model.compute_cutoff(slate)
-            if (choice := (row.claim.last_cut() or {}).get("choice"))]
+            if row.result != "follow-up" and (choice := (row.claim.last_cut() or {}).get("choice"))]
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -643,14 +681,20 @@ def cmd_status(args: argparse.Namespace) -> None:
     agents = slate.agent_ids()
     phase, current_round = _status_phase(slate)
     legal_events = _legal_event_types(slate)
+    plan = model.batch_plan(slate) if slate.v2 else None
     if args.json:
-        emit(args.output_mode, {}, [], json_text=json.dumps(
-            {"slate": slate.slate_id, "mode": slate.mode, "lenses": slate.lenses,
-             "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
-             "phase": phase, "round": current_round, "legal_event_types": legal_events,
-             "seats": slate.seats,
-             "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor),
-             "claims": claims}, indent=2))
+        data: dict[str, Any] = {
+            "slate": slate.slate_id, "mode": slate.mode, "lenses": slate.lenses,
+            "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
+            "phase": phase, "round": current_round, "legal_event_types": legal_events,
+            "seats": slate.seats,
+            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor)}
+        if plan is not None:
+            data["steps"] = slate.config["steps"]
+            data["caps"] = {key: slate.cap(key) for key in ("batch_items", "angles_per_claim")}
+            data["plan"] = plan
+        data["claims"] = claims
+        emit(args.output_mode, {}, [], json_text=json.dumps(data, indent=2))
         return
     advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
     lines = [(f"SLATE {slate.slate_id} mode={slate.mode} lenses={','.join(slate.lenses) or '-'} "
@@ -663,6 +707,11 @@ def cmd_status(args: argparse.Namespace) -> None:
         reopened = " reopened" if c["reopened"] else ""
         lines.append(f"{c['id']} stage={c['stage']} refute={c['refute']} round={c['round']}"
                      f"{cut}{reopened} unused={','.join(c['unused_attack_angles']) or '-'}")
+    for step, batches in (plan or {}).items():
+        for index, batch in enumerate(batches, start=1):
+            rows = " ".join(row["claim"] + (f"x{row['angles']}" if "angles" in row else "")
+                            for row in batch)
+            lines.append(f"PLAN {step} batch={index} {rows}")
     emit(args.output_mode, {}, lines)
 
 
@@ -671,8 +720,22 @@ def cmd_converged(args: argparse.Namespace) -> None:
     if args.phase == "cut" and slate.mode == "refute-only":
         _refuse(["refute-only slate has no cut stage"])
     pending = []
+    # Claims open in the cut phase, by the agent that continues them.
+    owners: dict[str, list[str]] = {"escalate": [], "accept": [], "cut": [], "refute": []}
     for claim in slate.live_claims():
         rstate = slate.refute_state(claim)
+        if slate.v2:
+            # A parked claim is never refuted; a cut is done when no step is left.
+            if args.phase == "refute":
+                if not slate.parked(claim) and rstate not in model.REFUTE_DONE:
+                    pending.append(f"{claim.id} refute={rstate} round={claim.refute_round}")
+            elif (claim_phase := slate.phase(claim)) is not None:
+                pending.append(f"{claim.id} phase={claim_phase} cut={slate.cut_state(claim)}")
+                owner = ("escalate" if slate.needs_escalate(claim)
+                         else "accept" if claim_phase == "cut" and slate.awaits_accept(claim)
+                         else claim_phase)
+                owners[owner].append(claim.id)
+            continue
         if args.phase == "refute":
             if rstate not in model.REFUTE_DONE:
                 pending.append(f"{claim.id} refute={rstate} round={claim.refute_round}")
@@ -683,6 +746,7 @@ def cmd_converged(args: argparse.Namespace) -> None:
     data = {"phase": args.phase, "converged": not pending, "pending": pending}
     if pending:
         step = (_step(args, "status", "--json") if args.phase == "refute"
+                else _cut_step(owners) if slate.v2
                 else "continue the cutter with the listed claims")
         emit(args.output_mode, data, [f"OPEN phase={args.phase} claims={len(pending)}", *pending],
              step)
@@ -690,6 +754,17 @@ def cmd_converged(args: argparse.Namespace) -> None:
     # A converged refute phase leaves gap hunt vs cut to the caller: no step.
     emit(args.output_mode, data, f"CONVERGED phase={args.phase}",
          _step(args, "cutoff") if args.phase == "cut" else None)
+
+
+def _cut_step(owners: dict[str, list[str]]) -> str:
+    """`next:` for `converged --phase cut` on a steps slate: each open claim's agent."""
+    agents = {"escalate": "continue each claim's finder to escalate",
+              "accept": "continue each claim's finder to accept or rebut",
+              "cut": "continue the cutter with", "refute": "continue the refuters with"}
+    groups = [(agents[key], ids) for key, ids in owners.items() if ids]
+    if len(groups) == 1:
+        return f"{groups[0][0]} the listed claims"
+    return "; ".join(f"{agent} {', '.join(ids)}" for agent, ids in groups)
 
 
 def cmd_coverage(args: argparse.Namespace) -> None:
@@ -802,8 +877,8 @@ def cmd_config(args: argparse.Namespace) -> None:
 # parser
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = parser_class(CATALOG)(prog="converge", description=__doc__)
+def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
+    parser = parser_class(catalog)(prog="converge", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     def command(name: str, func: Any, *, write: bool = False, slate: bool = True,
@@ -852,6 +927,11 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--depends")
     p.add_argument("--rule")
 
+    p = command("escalate", cmd_escalate, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--wider")
+    p.add_argument("--evidence")
+
     p = command("find-run", cmd_find_run, write=True)
     for flag in ("--lens", "--angle", "--tell", "--searches", "--positive-control", "--result"):
         p.add_argument(flag, required=True)
@@ -861,6 +941,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--angle", required=True)
     p.add_argument("--reason", required=True)
     p.add_argument("--lens")
+    p.add_argument("--claim")
 
     p = command("refute", cmd_refute, write=True)
     p.add_argument("--claim", required=True)
@@ -883,6 +964,7 @@ def _parser() -> argparse.ArgumentParser:
         p.add_argument(f"--{name}", required=True)
     p.add_argument("--evidence", action="append", default=[], metavar="ANGLE=TEXT")
     p.add_argument("--choice")
+    p.add_argument("--fix")
 
     p = command("accept", cmd_accept, write=True)
     p.add_argument("--claim", required=True)
@@ -914,7 +996,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
-    run(_parser(), CATALOG, lambda a: a.command, argv)
+    raw = sys.argv[1:] if argv is None else argv
+    find = "--phase=find" in raw or any(
+        flag == "--phase" and value == "find" for flag, value in itertools.pairwise(raw))
+    catalog = FIND_CATALOG if find else CATALOG
+    run(_parser(catalog), catalog, lambda a: a.command, argv)
 
 
 if __name__ == "__main__":

@@ -22,9 +22,7 @@ def test_fifth_agent_allowed_sixth_refused(cv: Converge) -> None:
 
 
 def test_custom_cap_three(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("caps: {agents: 3}\n")
-    cv.init("s1", "full", "correctness", MAIN, "--config", str(task))
+    cv.init("s1", "full", "correctness", MAIN, config={"caps": {"agents": 3}})
     cv.file(agent=FINDER)
     cv.refute("F001", 1, "boundary", R1)
     err = cv.refute("F001", 1, "reachability", R2, code=2).stderr
@@ -43,9 +41,7 @@ def test_cap_above_five_refused_at_init(cv: Converge) -> None:
 
 
 def test_reserved_ids_do_not_count(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("caps: {agents: 3}\n")
-    cv.init("s1", "refute-only", "", MAIN, "--config", str(task))
+    cv.init("s1", "refute-only", "", MAIN, config={"caps": {"agents": 3}})
     cv.file(agent="slate", lens="", angle="", origin="slate")
     cv.refute("F001", 1, "boundary", R1)
     cv.refute("F001", 1, "reachability", R2)

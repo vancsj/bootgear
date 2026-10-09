@@ -19,7 +19,8 @@ def _full_slate(cv: Converge) -> None:
         cv.quiet_round(cid, 1, ("boundary", "reachability"))
     cv.refute(killed, 1, "positive-control", "r1", "killed")
     cv.cut_converge(reported, "common", "wrong-behavior", "reproduced", "local")
-    cv.cut_converge(appendix, "rare", "cosmetic", "traced", "trivial")
+    cv.cut_converge(appendix, "rare", "cosmetic", "traced", "trivial",
+                    extra=("--fix", "fix the typo"))
     cv.cut_converge(choice, "common", "data-loss", "traced", "cross-cutting",
                     extra=("--choice", "idempotency key or single-shot write"))
 

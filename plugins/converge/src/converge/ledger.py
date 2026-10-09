@@ -25,6 +25,7 @@ SOURCE_RE = re.compile(r"\Aledger:\S+\Z")
 REQUIRED: dict[str, tuple[str, ...]] = {
     "init": ("mode", "lenses", "angles", "config"),
     "file": ("id", "loc", "claim", "trigger", "origin"),
+    "escalate": ("claim",),
     "find-run": ("lens", "angle", "tell", "searches", "positive_control", "result"),
     "angle-na": ("phase", "angle", "reason"),
     "refute": ("claim", "round", "angle", "tell", "outcome", "evidence", "searches",
@@ -37,11 +38,12 @@ REQUIRED: dict[str, tuple[str, ...]] = {
 OPTIONAL: dict[str, tuple[str, ...]] = {
     "init": ("snapshot", "pass", "since", "seats", "advisor"),
     "file": ("lens", "angle", "depends", "rule"),
+    "escalate": ("wider", "evidence"),
     "find-run": (),
-    "angle-na": ("lens",),
+    "angle-na": ("lens", "claim"),
     "refute": ("narrowed", "source", "ledger_evidence"),
     "rebut": (),
-    "cut": ("choice",),
+    "cut": ("choice", "fix"),
     "accept": (),
     "cutoff": (),
 }
@@ -165,6 +167,7 @@ def validate_event(slate: Slate, event: dict[str, Any]) -> list[str]:
 
     handler = {
         "file": _validate_file,
+        "escalate": _validate_escalate,
         "find-run": _validate_find_run,
         "angle-na": _validate_angle_na,
         "refute": _validate_refute,
@@ -294,6 +297,35 @@ def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
         problems.append(f"lens {lens!r} is not an init lens ({', '.join(slate.lenses)})")
 
 
+def _validate_escalate(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
+    """The finder widens its claim, or confirms it, once, before any cut or refute."""
+    agent = event.get("as")
+    claim = _known_claim(slate, event, problems)
+    for key in ("wider", "evidence"):
+        if key in event:
+            _nonempty(event, key, problems)
+    if ("wider" in event) != ("evidence" in event):
+        problems.append("escalate: `wider` and `evidence` are given together")
+    if not slate.v2:
+        problems.append("escalate: this slate predates the steps config")
+        return
+    if slate.mode != "full":
+        problems.append("escalate: refute-only slates have no finder to escalate")
+        return
+    if claim is None:
+        return
+    if claim.dead:
+        problems.append(f"{claim.id} is {claim.dead}; it accepts nothing")
+        return
+    if agent != claim.finder:
+        problems.append(f"escalate: only {claim.id}'s finder {claim.finder} may escalate")
+    if claim.escalation is not None:
+        problems.append(f"escalate: {claim.id} is already escalated")
+    if claim.cut_rounds or claim.refute_round:
+        problems.append(f"escalate: {claim.id} is already cut or refuted; escalate comes "
+                        f"before the first cut and the first refute")
+
+
 def _validate_find_run(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     if event.get("as") == model.SLATE_AGENT:
         problems.append("agent 'slate' may not write find-run")
@@ -319,6 +351,8 @@ def _validate_find_run(slate: Slate, event: dict[str, Any], problems: list[str])
 def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     phase = _enum(event, "phase", model.PHASE, problems)
     _nonempty(event, "reason", problems)
+    if "claim" in event and not slate.v2:
+        problems.append("angle-na: `claim` is recorded only on slates with a steps config")
     if phase is None:
         return
     row = _angle(slate, model.PHASE_TAG[phase], event.get("angle"), problems)
@@ -327,6 +361,28 @@ def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str])
         _angle_lens(row, lens, problems)
     elif "lens" in event:
         problems.append("`lens` is only recorded for phase find")
+    if not slate.v2:
+        return
+    if phase != "refute":
+        if "claim" in event:
+            problems.append("angle-na: `claim` is only recorded for phase refute")
+        return
+    # On a steps slate a refute angle is not applicable to one claim, recorded by its refuter.
+    if "claim" not in event:
+        problems.append("angle-na: phase refute needs `claim`")
+        return
+    claim = _known_claim(slate, event, problems)
+    if claim is None:
+        return
+    if claim.dead:
+        problems.append(f"{claim.id} is {claim.dead}; it accepts nothing")
+        return
+    _roles(slate, claim, event.get("as"), "refute", problems)
+    if row is not None and row["id"] in claim.used_angles:
+        problems.append(f"angle-na: angle {row['id']!r} was already used on {claim.id}")
+    elif row is not None and row["id"] in claim.na_angles:
+        problems.append(f"angle-na: angle {row['id']!r} is already recorded not applicable "
+                        f"to {claim.id}")
 
 
 def _roles(slate: Slate, claim: Claim, agent: Any, kind: str, problems: list[str]) -> None:
@@ -365,11 +421,31 @@ def _validate_refute(slate: Slate, event: dict[str, Any], problems: list[str]) -
     if claim.dead:
         problems.append(f"{claim.id} is {claim.dead}; it accepts nothing")
         return
-    if claim.stage != "refute":
+    early_cut = slate.v2 and slate.mode == "full" and slate.step("early_cut")
+    if early_cut:
+        # Starting a round needs a done cut; events of a started round may still be written.
+        starting = claim.refute_round == 0 or (rnd is not None and rnd > claim.refute_round)
+        if starting and slate.cut_state(claim) not in model.CUT_DONE:
+            problems.append(f"refute: {claim.id} needs a converged cut first")
+    elif claim.stage != "refute":
         problems.append(f"refute: {claim.id} is in stage {claim.stage}; a rebut --stage refute reopens refute")
+    if (slate.v2 and slate.mode == "full" and slate.step("escalate")
+            and claim.refute_round == 0 and claim.escalation is None):
+        problems.append(f"refute: {claim.id} needs an escalate event first")
+    if slate.v2 and slate.parked(claim):
+        problems.append(f"refute: {claim.id} is parked (a cosmetic cut); it is never refuted")
     _roles(slate, claim, agent, "refute", problems)
     if row is not None and row["id"] in claim.used_angles:
         problems.append(f"refute: angle {row['id']!r} was already used on {claim.id}; pick an unused angle")
+    if row is not None and row["id"] in claim.na_angles:
+        problems.append(f"refute: angle {row['id']!r} is recorded not applicable to {claim.id}; "
+                        f"pick an unused angle")
+    if slate.v2 and rnd is not None:
+        per = slate.cap("angles_per_claim")
+        held = len(claim.refute_rounds.get(rnd, []))
+        if held >= per:
+            problems.append(f"refute: round {rnd} of {claim.id} already holds {held} refute "
+                            f"events (caps.angles_per_claim {per})")
     if rnd is not None:
         last = claim.refute_round
         cap = slate.cap("refute_rounds")
@@ -406,6 +482,8 @@ def _validate_rebut(slate: Slate, event: dict[str, Any], problems: list[str]) ->
         problems.append(f"rebut: {claim.id} has no refute event to rebut")
     if stage == "cut" and not claim.cut_rounds:
         problems.append(f"rebut: {claim.id} has no cut round to rebut")
+    if stage == "refute" and slate.v2 and slate.parked(claim):
+        problems.append(f"rebut: {claim.id} is parked; challenge the cut with --stage cut")
     if evidence is not None and evidence_hash(evidence) in claim.rebut_hashes[stage]:
         problems.append(f"rebut: this evidence was already given for {claim.id} stage {stage}; "
                         f"a rebut needs new evidence")
@@ -420,6 +498,13 @@ def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> N
     values = {f: _enum(event, f, model.FIELD_ENUMS[f], problems) for f in model.CUT_FIELDS}
     if "choice" in event:
         _nonempty(event, "choice", problems)
+    if "fix" in event:
+        if slate.v2:
+            _nonempty(event, "fix", problems)
+        else:
+            problems.append("cut: `fix` is recorded only on slates with a steps config")
+    elif slate.v2 and values["severity"] == model.PARK_SEVERITY:
+        problems.append(f"cut: a {model.PARK_SEVERITY} cut needs a non-empty `fix`")
     evidence = event.get("evidence")
     if not isinstance(evidence, dict) or not evidence:
         problems.append("`evidence` must map evaluate angle ids to evidence text")
@@ -442,10 +527,21 @@ def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> N
         problems.append(f"{claim.id} is {claim.dead}; it accepts nothing")
         return
     rstate = slate.refute_state(claim)
-    if rstate not in model.REFUTE_DONE:
+    if slate.v2 and slate.step("early_cut"):
+        if not slate.refute_round_complete(claim):
+            held = len(claim.refute_rounds[claim.refute_round])
+            problems.append(f"cut: {claim.id} refute round {claim.refute_round} has {held} "
+                            f"refute event(s); cut comes after a complete round (≥2)")
+    elif rstate not in model.REFUTE_DONE:
         problems.append(f"cut: {claim.id} refute state is {rstate}; cut needs refute converged, "
                         f"inconclusive or unconverged")
+    if (slate.v2 and slate.step("escalate") and not claim.cut_rounds
+            and claim.refute_round == 0 and claim.escalation is None):
+        problems.append(f"cut: {claim.id} needs an escalate event first")
     _roles(slate, claim, agent, "cut", problems)
+    if slate.v2 and slate.awaits_accept(claim):
+        problems.append(f"cut: {claim.id} round {claim.cut_round} awaits its finder; "
+                        f"the finder must accept or rebut it first")
     if rnd is not None:
         expected = claim.cut_round + 1
         cap = slate.cap("cut_rounds")
@@ -453,10 +549,15 @@ def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> N
             problems.append(f"cut: round {rnd} exceeds caps.cut_rounds {cap}")
         elif rnd != expected:
             problems.append(f"cut: {claim.id} next cut round is {expected}, got {rnd}")
-    if (rstate == "converged" and values["difficulty"] in model.CHOICE_DIFFICULTY
-            and not (isinstance(event.get("choice"), str) and event["choice"].strip())):
-        problems.append(f"cut: {claim.id} survived with difficulty {values['difficulty']}; "
-                        f"a non-empty `choice` is required")
+    has_choice = isinstance(event.get("choice"), str) and event["choice"].strip()
+    if values["difficulty"] in model.CHOICE_DIFFICULTY and not has_choice:
+        # A steps slate needs the choice at every cut; a legacy one once the claim survived.
+        if slate.v2:
+            problems.append(f"cut: {claim.id} has difficulty {values['difficulty']}; "
+                            f"a non-empty `choice` is required")
+        elif rstate == "converged":
+            problems.append(f"cut: {claim.id} survived with difficulty {values['difficulty']}; "
+                            f"a non-empty `choice` is required")
 
 
 def _validate_accept(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -524,10 +625,17 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
             trigger=event["trigger"], origin=event["origin"], depends=list(event.get("depends", [])),
             rule=event.get("rule"), filed_seq=event["seq"],
         )
+    elif kind == "escalate":
+        claim = slate.claims[event["claim"]]
+        claim.escalation = event
+        if "wider" in event:
+            claim.text = event["wider"]
     elif kind == "find-run":
         slate.find_runs.append(event)
     elif kind == "angle-na":
         slate.angle_na.append(event)
+        if "claim" in event:
+            slate.claims[event["claim"]].na_angles.add(event["angle"])
     elif kind == "refute":
         _apply_refute(slate, event)
     elif kind == "rebut":
@@ -535,7 +643,7 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         claim.rebut_hashes[event["stage"]].add(event["evidence_sha256"])
         if event["stage"] == "refute":
             claim.refute_pending = claim.refute_round
-            _back_to_refute(claim)
+            _back_to_refute(slate, claim, event["seq"])
         else:
             claim.cut_pending = claim.cut_round
         slate.cutoff_valid = False
@@ -551,8 +659,13 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         slate.cutoff_valid = True
 
 
-def _back_to_refute(claim: Claim) -> None:
+def _back_to_refute(slate: Slate, claim: Claim, seq: int) -> None:
+    """Reopen refute. A steps slate keeps the cut rounds (they count toward the cut-round
+    budget) and makes the cut stale; a legacy slate clears them."""
     claim.stage = "refute"
+    if slate.v2:
+        claim.stale_seq = seq
+        return
     claim.cut_rounds.clear()
     claim.cut_pending = 0
     claim.accepted_round = 0
@@ -579,7 +692,7 @@ def _apply_refute(slate: Slate, event: dict[str, Any]) -> None:
             if dependent.live and claim.id in dependent.depends:
                 dependent.refute_pending = dependent.refute_round
                 dependent.reopened = True
-                _back_to_refute(dependent)
+                _back_to_refute(slate, dependent, event["seq"])
 
 
 # ---------------------------------------------------------------------------

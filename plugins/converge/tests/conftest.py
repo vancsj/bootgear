@@ -9,6 +9,7 @@ uv's cache and managed-python dirs stay on the real ones so no download happens.
 from __future__ import annotations
 
 import contextlib
+import copy
 import io
 import json
 import os
@@ -18,12 +19,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 BIN = PLUGIN_DIR / "bin" / "converge"
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
 
-from converge import cli
+from converge import cli, ledger, model
+from converge import config as config_mod
 
 FIND_ANGLES = """\
 - id: changed-contract
@@ -46,6 +49,10 @@ CUT_EVIDENCE = ("--evidence", "entry-points=POST /x reaches it",
                 "--evidence", "blast-radius=one row per call",
                 "--evidence", "evidence-tier=traced a.py:10-20",
                 "--evidence", "files-touched=a.py")
+CUT_EVIDENCE_MAP = {key: text for key, _, text in
+                    (item.partition("=") for item in CUT_EVIDENCE[1::2])}
+CUT_DEFAULTS = {"frequency": "common", "severity": "wrong-behavior", "confidence": "traced",
+                "difficulty": "local"}
 
 
 def _uv_dirs() -> dict[str, str]:
@@ -65,6 +72,7 @@ UV_DIRS = _uv_dirs()
 
 # The full-depth allocation: five agent ids per slate, main included.
 MAIN, FINDER, R1, R2, CUTTER = "orch", "finder", "r1", "r2", "cutter"
+STEPS_OFF = {"escalate": False, "early_cut": False, "gap_hunt": False}
 
 
 class Converge:
@@ -135,12 +143,29 @@ class Converge:
     # -- event helpers ---------------------------------------------------
 
     def init(self, slate: str = "s1", mode: str = "full", lenses: str = "correctness,security",
-             agent: str = "orch", *extra: str) -> None:
+             agent: str = "orch", *extra: str, config: dict[str, Any] | None = None,
+             defaults: bool = False, legacy: bool = False) -> None:
+        """Init with one task config: `config` plus every step off, so a test keeps the
+        file → refute → cut flow; `defaults` keeps the steps as configured. `legacy` then
+        drops `steps` and the batch caps from the snapshot, as a slate from before them."""
+        task = copy.deepcopy(config or {})
+        if not defaults:
+            task["steps"] = {**STEPS_OFF, **task.get("steps", {})}
         args = ["--as", agent, "--mode", mode, "--project-root", str(self.project)]
         if lenses:
             args += ["--lenses", lenses]
         args += ["--angles", str(self.angles), *extra]
+        if task:
+            path = self.root / f"{slate}.task.yaml"
+            path.write_text(yaml.safe_dump(task))
+            args += ["--config", str(path)]
         self.ok("init", slate, *args)
+        if legacy:
+            events = self.events(slate)
+            del events[0]["config"]["steps"]
+            for key in ("angles_per_claim", "batch_items"):
+                del events[0]["config"]["caps"][key]
+            self.path(slate).write_text("".join(json.dumps(e) + "\n" for e in events))
 
     def file(self, slate: str = "s1", agent: str = FINDER, lens: str = "correctness",
              angle: str = "changed-contract", origin: str = "lens", claim: str = "x breaks y",
@@ -196,6 +221,19 @@ class Converge:
                 self.ok("angle-na", slate, "--as", FINDER, "--phase", "find",
                         "--angle", angle, "--lens", lens, "--reason", "no I/O in diff")
 
+    def append(self, kind: str, agent: str, slate: str = "s1", **fields: Any) -> list[str]:
+        """Append one event through the ledger, not the CLI; the problems, or [] when written."""
+        event = {"event": kind, "as": agent, **fields}
+        if kind == "cut":
+            event = {**CUT_DEFAULTS, "evidence": dict(CUT_EVIDENCE_MAP), **event}
+        if kind == "rebut":
+            event["evidence_sha256"] = ledger.evidence_hash(fields["evidence"])
+        try:
+            ledger.append(self.path(slate), slate, event)
+        except ledger.LedgerError as exc:
+            return exc.problems
+        return []
+
     # -- inspection ------------------------------------------------------
 
     def path(self, slate: str = "s1") -> Path:
@@ -213,3 +251,67 @@ class Converge:
 @pytest.fixture
 def cv(tmp_path: Path) -> Converge:
     return Converge(tmp_path)
+
+
+# -- in-memory slates for model tests ------------------------------------
+
+ATTACK_IDS = ("boundary", "reachability", "provenance", "carve-out", "dependents",
+              "deliberate", "inverse-reading", "point-in-time")
+
+
+def make_slate(attack: int = len(ATTACK_IDS), steps: dict[str, bool] | None = None,
+               legacy: bool = False, mode: str = "full", **caps: int) -> model.Slate:
+    """A replayed slate without a ledger: `attack` attack angles, the default config
+    with `steps` and `caps` overridden, or no `steps` section at all when `legacy`."""
+    cfg = copy.deepcopy(config_mod.DEFAULTS)
+    cfg["caps"].update(caps)
+    if legacy:
+        del cfg["steps"]
+    elif steps:
+        cfg["steps"].update(steps)
+    angles = [{"id": a, "tag": "attack", "tell": "t", "asks": "a"} for a in ATTACK_IDS[:attack]]
+    slate = model.Slate("m1", mode=mode, lenses=["correctness"], angles=angles, config=cfg)
+    slate.events.append({"seq": 1, "event": "init", "as": MAIN})
+    return slate
+
+
+def add_claim(slate: model.Slate, finder: str = FINDER, **fields: Any) -> model.Claim:
+    n = len(slate.claims) + 1
+    claim = model.Claim(id=model.claim_id(n), finder=finder, lens="correctness",
+                        angle="changed-contract", loc="a.py:1", original=f"claim {n}",
+                        trigger="t", origin="lens", depends=[], rule=None, filed_seq=n + 1,
+                        text=f"claim {n}", **fields)
+    slate.claims[claim.id] = claim
+    return claim
+
+
+def next_seq(slate: model.Slate) -> int:
+    seq = len(slate.events) + 1
+    slate.events.append({"seq": seq})
+    return seq
+
+
+def add_refute(slate: model.Slate, claim: model.Claim, rnd: int, angle: str,
+               outcome: str = "survived") -> dict[str, Any]:
+    event = {"seq": next_seq(slate), "event": "refute", "as": R1, "claim": claim.id,
+             "round": rnd, "angle": angle, "outcome": outcome}
+    claim.refute_rounds.setdefault(rnd, []).append(event)
+    claim.used_angles.add(angle)
+    if outcome == "downgraded":
+        claim.downgrades.append(event)
+    elif outcome in model.DEAD_OUTCOMES:
+        claim.dead = outcome
+    return event
+
+
+def add_cut(slate: model.Slate, claim: model.Claim, severity: str = "wrong-behavior",
+            frequency: str = "common", accept: bool = True, **extra: str) -> dict[str, Any]:
+    rnd = claim.cut_round + 1
+    event = {"seq": next_seq(slate), "event": "cut", "as": CUTTER, "claim": claim.id,
+             "round": rnd, "frequency": frequency, "severity": severity,
+             "confidence": "traced", "difficulty": "local", **extra}
+    claim.cut_rounds[rnd] = event
+    claim.stage = "cut"
+    if accept:
+        claim.accepted_round = rnd
+    return event

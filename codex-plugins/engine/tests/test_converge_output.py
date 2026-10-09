@@ -75,7 +75,8 @@ def test_bundled_status_keeps_finder_events_until_coverage_is_complete(tmp_path:
     status = _run(tmp_path, "status", "s1", "--dir", str(ledger), "--json")
     assert status.returncode == 0, status.stderr
     status_data = json.loads(status.stdout)
-    assert status_data["phase"] == "refute"
+    # The default steps cut a claim before it is refuted.
+    assert status_data["phase"] == "cut"
     assert {"find-run", "angle-na"} <= set(status_data["legal_event_types"])
 
 
@@ -89,8 +90,12 @@ def _ok(root: Path, *args: str, code: int = 0) -> subprocess.CompletedProcess[st
 
 
 def _full_slate(root: Path, ledger: Path) -> None:
+    # Every step off, so the slate keeps the file → refute → cut flow.
+    steps = root / "steps-off.yaml"
+    steps.write_text("steps: {escalate: false, early_cut: false, gap_hunt: false}\n")
     _ok(root, "init", "s1", "--dir", str(ledger), "--as", "orch", "--mode", "full",
-        "--lenses", "correctness", "--angles", str(ANGLES), "--project-root", str(root))
+        "--lenses", "correctness", "--angles", str(ANGLES), "--project-root", str(root),
+        "--config", str(steps))
     _ok(root, "file", "s1", "--dir", str(ledger), "--as", "finder", "--lens", "correctness",
         "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1", "--claim", "x breaks y", "--trigger", "None")
 
@@ -220,7 +225,7 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     assert converge == TASK.resolve()
     assert converge.is_file() and os.access(converge, os.X_OK)
     for fragment in (f"--dir {ledger} --as r2", "require_escalated",
-                     'reply "WRITE-DENIED r2: <the error text>"'):
+                     'reply "WRITE-DENIED r2: <the error text>"', "|escalate|angle-na>"):
         assert fragment in scope, scope
     nxt = lines[-1]
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
@@ -302,3 +307,283 @@ def test_bundled_legacy_slate_without_seats_replays(tmp_path: Path) -> None:
     assert data["seats"] == {} and data["drivers"] == []
     head = _ok(tmp_path, "status", "s1", "--dir", str(ledger)).stdout.splitlines()[0]
     assert " advisor=-" in head
+
+
+# ---------------------------------------------------------------------------
+# default steps: escalate, cut first, parking, exhaustion and follow-up
+
+THREE_ATTACK = ("angles:\n  disable: [cited-but-unread, point-in-time, absent-vs-default, "
+                "downstream-consumer, inverse-reading, carve-out, dependents, positive-control, "
+                "inherited-bounds, guarded-elsewhere, deliberate, real-referent]\n")
+
+
+def _steps_slate(root: Path, ledger: Path, *claims: str, config_text: str = THREE_ATTACK
+                 ) -> None:
+    """A slate with the default steps and, by default, three attack angles: boundary,
+    reachability, provenance."""
+    config = root / "three-attack.yaml"
+    config.write_text(config_text)
+    _ok(root, "init", "s1", "--dir", str(ledger), "--as", "orch", "--mode", "full",
+        "--lenses", "correctness", "--angles", str(ANGLES), "--project-root", str(root),
+        "--config", str(config))
+    for n, text in enumerate(claims, start=1):
+        _ok(root, "file", "s1", "--dir", str(ledger), "--as", "finder", "--lens", "correctness",
+            "--angle", "changed-contract", "--origin", "lens", "--loc", f"a.py:{n}",
+            "--claim", text, "--trigger", "None")
+
+
+def _escalate(root: Path, ledger: Path, claim: str, *extra: str, code: int = 0
+              ) -> subprocess.CompletedProcess[str]:
+    return _ok(root, "escalate", "s1", "--dir", str(ledger), "--as", "finder", "--claim", claim,
+               *extra, code=code)
+
+
+def _cut_claim(root: Path, ledger: Path, claim: str, rnd: int, severity: str, *extra: str,
+               code: int = 0) -> subprocess.CompletedProcess[str]:
+    return _ok(root, "cut", "s1", "--dir", str(ledger), "--as", "cutter", "--claim", claim,
+               "--round", str(rnd), "--frequency", "common", "--severity", severity,
+               "--confidence", "traced", "--difficulty", "local",
+               "--evidence", "entry-points=POST /x reaches it",
+               "--evidence", "blast-radius=one row per call",
+               "--evidence", "evidence-tier=traced a.py:1",
+               "--evidence", "files-touched=a.py", *extra, code=code)
+
+
+def _accept(root: Path, ledger: Path, claim: str, rnd: int) -> None:
+    _ok(root, "accept", "s1", "--dir", str(ledger), "--as", "finder", "--claim", claim,
+        "--round", str(rnd))
+
+
+def _refute_claim(root: Path, ledger: Path, claim: str, rnd: int, agent: str, angle: str,
+                  *outcome: str, code: int = 0) -> subprocess.CompletedProcess[str]:
+    return _ok(root, "refute", "s1", "--dir", str(ledger), "--as", agent, "--claim", claim,
+               "--round", str(rnd), "--angle", angle, "--tell", "tell applies",
+               "--outcome", *(outcome or ("survived",)), "--evidence", "read a.py:1",
+               "--searches", "rg x", "--positive-control", "rg y finds y", code=code)
+
+
+def _claim_status(root: Path, ledger: Path, claim: str) -> dict:
+    data = json.loads(_ok(root, "status", "s1", "--dir", str(ledger), "--json").stdout)
+    return next(row for row in data["claims"] if row["id"] == claim)
+
+
+def _cover(root: Path, ledger: Path) -> None:
+    coverage = json.loads(_ok(root, "coverage", "s1", "--dir", str(ledger), "--json").stdout)
+    for angle in coverage["lenses"]["correctness"]["missing"]:
+        _ok(root, "angle-na", "s1", "--dir", str(ledger), "--as", "finder", "--phase", "find",
+            "--lens", "correctness", "--angle", angle, "--reason", "not in this diff")
+
+
+def test_bundled_steps_escalate_cut_accept_then_refute(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "cache key ignores locale")
+    assert "F001 needs an escalate event first" in _cut_claim(
+        tmp_path, ledger, "F001", 1, "degraded", code=2).stderr
+    assert "F001 needs an escalate event first" in _refute_claim(
+        tmp_path, ledger, "F001", 1, "r1", "boundary", code=2).stderr
+    assert "wider=yes" in _escalate(tmp_path, ledger, "F001", "--wider", "every locale",
+                                    "--evidence", "a.py:1 builds the key").stdout
+    assert _claim_status(tmp_path, ledger, "F001")["phase"] == "cut"
+    assert "needs a converged cut first" in _refute_claim(
+        tmp_path, ledger, "F001", 1, "r1", "boundary", code=2).stderr
+    _cut_claim(tmp_path, ledger, "F001", 1, "degraded")
+    _accept(tmp_path, ledger, "F001", 1)
+    claim = _claim_status(tmp_path, ledger, "F001")
+    assert (claim["phase"], claim["cut"]) == ("refute", "converged")
+    _refute_claim(tmp_path, ledger, "F001", 1, "r1", "boundary", "downgraded",
+                  "--narrowed", "only for fr-CA")
+    _refute_claim(tmp_path, ledger, "F001", 1, "r2", "reachability")
+    claim = _claim_status(tmp_path, ledger, "F001")
+    assert (claim["phase"], claim["cut"]) == ("cut", "open")
+    assert "needs a converged cut first" in _refute_claim(
+        tmp_path, ledger, "F001", 2, "r1", "provenance", code=2).stderr
+    _cut_claim(tmp_path, ledger, "F001", 2, "degraded")
+    _accept(tmp_path, ledger, "F001", 2)
+    _refute_claim(tmp_path, ledger, "F001", 2, "r1", "provenance")
+    assert _claim_status(tmp_path, ledger, "F001")["refute"] == "unconverged"
+
+
+def test_bundled_steps_park_a_cosmetic_claim(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "label typo on the invoice")
+    _escalate(tmp_path, ledger, "F001")
+    assert "a cosmetic cut needs a non-empty `fix`" in _cut_claim(
+        tmp_path, ledger, "F001", 1, "cosmetic", code=2).stderr
+    _cut_claim(tmp_path, ledger, "F001", 1, "cosmetic", "--fix", "rename the label")
+    _accept(tmp_path, ledger, "F001", 1)
+    claim = _claim_status(tmp_path, ledger, "F001")
+    assert claim["parked"] is True and claim["phase"] is None
+    assert "F001 is parked" in _refute_claim(
+        tmp_path, ledger, "F001", 1, "r1", "boundary", code=2).stderr
+
+
+def test_bundled_steps_follow_up_claims_pass_the_gate(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "label typo on the invoice", "cache key ignores locale")
+    _cover(tmp_path, ledger)
+    for claim in ("F001", "F002"):
+        _escalate(tmp_path, ledger, claim)
+    _cut_claim(tmp_path, ledger, "F001", 1, "cosmetic", "--fix", "rename the label")
+    _accept(tmp_path, ledger, "F001", 1)
+    _cut_claim(tmp_path, ledger, "F002", 1, "degraded")
+    _accept(tmp_path, ledger, "F002", 1)
+    _refute_claim(tmp_path, ledger, "F002", 1, "r1", "boundary")
+    for agent, angle in (("r1", "reachability"), ("r2", "provenance")):
+        _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", agent, "--phase", "refute",
+            "--claim", "F002", "--angle", angle, "--reason", "no such path here")
+    assert _claim_status(tmp_path, ledger, "F002")["refute"] == "unconverged"
+    cutoff = _ok(tmp_path, "cutoff", "s1", "--dir", str(ledger)).stdout
+    assert "F002 follow-up rank=1 reason=unconverged" in cutoff
+    assert "F001 follow-up rank=2 reason=unverified" in cutoff
+    gate = _run(tmp_path, "gate", "s1", "--dir", str(ledger))
+    assert gate.returncode == 0, gate.stderr
+    assert "GATE ok s1" in gate.stdout
+    render = _ok(tmp_path, "render", "s1", "--dir", str(ledger)).stdout
+    follow_up = render.split("## Follow-up\n\n", 1)[1].split("\n\n", 1)[0].splitlines()
+    assert follow_up[0].startswith("- **F002** unconverged — cache key ignores locale")
+    assert follow_up[1] == ("- **F001** unverified — label typo on the invoice — "
+                            "suggested fix: rename the label")
+
+
+def _plan(root: Path, ledger: Path) -> dict:
+    return json.loads(_ok(root, "status", "s1", "--dir", str(ledger), "--json").stdout)
+
+
+def _plan_ids(batches: list[list[dict]]) -> list[list[str]]:
+    return [[row["claim"] for row in batch] for batch in batches]
+
+
+def test_bundled_steps_batch_plan_caps_batches_and_splits_angles(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "a", "b", "c",
+                 config_text=THREE_ATTACK + "caps: {batch_items: 2}\n")
+    data = _plan(tmp_path, ledger)
+    assert data["caps"] == {"batch_items": 2, "angles_per_claim": 5}
+    assert _plan_ids(data["plan"]["escalate"]) == [["F001", "F002"], ["F003"]]
+    assert data["plan"]["escalate"][0][0] == {"claim": "F001", "finder": "finder"}
+    for claim in ("F001", "F002", "F003"):
+        _escalate(tmp_path, ledger, claim)
+        _cut_claim(tmp_path, ledger, claim, 1, "degraded")
+        _accept(tmp_path, ledger, claim, 1)
+    plan = _plan(tmp_path, ledger)["plan"]
+    assert plan["escalate"] == [] and plan["cut"] == []
+    assert _plan_ids(plan["refute"]) == [["F001", "F002"], ["F003"]]
+    assert [[(row["round"], row["angles"]) for row in batch] for batch in plan["refute"]] == [
+        [(1, 1), (1, 1)], [(1, 2)]]
+
+
+def test_bundled_steps_cut_round_budget_caps_and_reports(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, config_text="caps: {cut_rounds: 2}\n")
+    _cover(tmp_path, ledger)
+    _ok(tmp_path, "file", "s1", "--dir", str(ledger), "--as", "finder", "--lens", "correctness",
+        "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
+        "--claim", "cache key ignores locale", "--trigger", "None")
+    _escalate(tmp_path, ledger, "F001")
+    for rnd, angles in ((1, ("boundary", "reachability")), (2, ("provenance", "carve-out"))):
+        _cut_claim(tmp_path, ledger, "F001", rnd, "degraded")
+        _accept(tmp_path, ledger, "F001", rnd)
+        _refute_claim(tmp_path, ledger, "F001", rnd, "r1", angles[0], "downgraded",
+                      "--narrowed", f"narrower {rnd}")
+        _refute_claim(tmp_path, ledger, "F001", rnd, "r2", angles[1])
+    claim = _claim_status(tmp_path, ledger, "F001")
+    assert (claim["cut"], claim["cut_round"]) == ("capped", 2)
+    assert "exceeds caps.cut_rounds 2" in _cut_claim(
+        tmp_path, ledger, "F001", 3, "degraded", code=2).stderr
+    _refute_claim(tmp_path, ledger, "F001", 3, "r1", "dependents")
+    _refute_claim(tmp_path, ledger, "F001", 3, "r2", "deliberate")
+    cutoff = _ok(tmp_path, "cutoff", "s1", "--dir", str(ledger)).stdout
+    assert "F001 reported rank=1 reason=cut-capped" in cutoff
+
+
+def test_bundled_steps_rule_tagged_unconverged_claim_stays_reported(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger,
+                 config_text=THREE_ATTACK + "cutoff: {report_rules: [R001]}\n")
+    _cover(tmp_path, ledger)
+    _ok(tmp_path, "file", "s1", "--dir", str(ledger), "--as", "finder", "--lens", "correctness",
+        "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
+        "--claim", "label typo on the invoice", "--trigger", "None", "--rule", "R001")
+    _escalate(tmp_path, ledger, "F001")
+    _cut_claim(tmp_path, ledger, "F001", 1, "cosmetic", "--fix", "rename the label")
+    _accept(tmp_path, ledger, "F001", 1)
+    assert _claim_status(tmp_path, ledger, "F001")["parked"] is False
+    _refute_claim(tmp_path, ledger, "F001", 1, "r1", "boundary")
+    for agent, angle in (("r1", "reachability"), ("r2", "provenance")):
+        _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", agent, "--phase", "refute",
+            "--claim", "F001", "--angle", angle, "--reason", "no such path here")
+    assert _claim_status(tmp_path, ledger, "F001")["refute"] == "unconverged"
+    cutoff = _ok(tmp_path, "cutoff", "s1", "--dir", str(ledger)).stdout
+    assert "F001 reported rank=1 reason=unconverged" in cutoff
+
+
+def test_bundled_steps_rebut_row_leaves_after_an_accepted_re_cut(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "cache key ignores locale")
+    _escalate(tmp_path, ledger, "F001")
+    _cut_claim(tmp_path, ledger, "F001", 1, "degraded")
+    _accept(tmp_path, ledger, "F001", 1)
+    _refute_claim(tmp_path, ledger, "F001", 1, "r1", "boundary", "downgraded",
+                  "--narrowed", "only for fr-CA")
+    _refute_claim(tmp_path, ledger, "F001", 1, "r2", "reachability")
+    assert _plan(tmp_path, ledger)["plan"]["rebut"] == [[{"claim": "F001", "finder": "finder"}]]
+    _cut_claim(tmp_path, ledger, "F001", 2, "degraded")
+    assert _plan_ids(_plan(tmp_path, ledger)["plan"]["rebut"]) == [["F001"]]
+    _accept(tmp_path, ledger, "F001", 2)
+    assert _plan(tmp_path, ledger)["plan"]["rebut"] == []
+
+
+def test_bundled_steps_converged_cut_names_each_claims_agent(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "a", "b", "c", "d", "e")
+    for claim in ("F001", "F002", "F003", "F004"):
+        _escalate(tmp_path, ledger, claim)
+    _cut_claim(tmp_path, ledger, "F001", 1, "degraded")
+    _accept(tmp_path, ledger, "F001", 1)
+    _cut_claim(tmp_path, ledger, "F002", 1, "degraded")
+    _cut_claim(tmp_path, ledger, "F004", 1, "degraded")
+    _ok(tmp_path, "rebut", "s1", "--dir", str(ledger), "--as", "finder", "--claim", "F004",
+        "--stage", "cut", "--evidence", "the retry path is guarded")
+    lines = _ok(tmp_path, "converged", "s1", "--dir", str(ledger), "--phase", "cut",
+                code=1).stdout.splitlines()
+    step = lines[-1]
+    assert step.startswith("next: ")
+    assert "continue the refuters with F001" in step
+    assert "continue each claim's finder to accept or rebut F002" in step
+    assert "continue the cutter with F003, F004" in step
+    assert "continue each claim's finder to escalate F005" in step
+
+
+def _example(stderr: str) -> str:
+    return next(line for line in stderr.splitlines() if line.startswith("example: "))
+
+
+def test_bundled_angle_na_refusal_shows_the_form_for_its_phase(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "cache key ignores locale")
+    find = _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", "finder", "--phase",
+               "find", "--angle", "failure-path", "--reason", "no I/O", code=2)
+    assert "--phase find --lens" in _example(find.stderr)
+    refute = _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", "r1", "--phase",
+                 "refute", "--angle", "boundary", "--reason", "no such path here", code=2)
+    assert "--phase refute --claim" in _example(refute.stderr)
+
+
+def test_bundled_angle_na_usage_refusal_follows_the_phase(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "cache key ignores locale")
+    find = _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", "finder", "--phase",
+               "find", "--lens", "correctness", "--angle", "failure-path", code=2)
+    assert "--reason" in find.stderr and "--phase find --lens" in _example(find.stderr)
+
+
+def test_bundled_steps_next_cut_round_waits_for_the_finder_answer(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    _steps_slate(tmp_path, ledger, "cache key ignores locale")
+    _escalate(tmp_path, ledger, "F001")
+    _cut_claim(tmp_path, ledger, "F001", 1, "degraded")
+    err = _cut_claim(tmp_path, ledger, "F001", 2, "degraded", code=2).stderr
+    assert "cut: F001 round 1 awaits its finder; the finder must accept or rebut it first" in err
+    _ok(tmp_path, "rebut", "s1", "--dir", str(ledger), "--as", "finder", "--claim", "F001",
+        "--stage", "cut", "--evidence", "the retry path is guarded")
+    _cut_claim(tmp_path, ledger, "F001", 2, "degraded")

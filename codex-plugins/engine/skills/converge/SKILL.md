@@ -9,23 +9,25 @@ description: Settle the facts behind a set of claims — find, refute and cut ea
 
 Use it when a caller (another skill, or the user standalone) needs the facts behind a set of claims settled before acting. Inputs: the mode (step 1), the artifact, and for `full` the lenses and find-angle files, for `refute-only` a numbered slate; optionally a gap-hunt brief and a request for one refuter, which is `init --refuters 1`; in an engine run, the settlement file for `init --settlement`.
 
-Hand back to the caller the render, every claim carrying a `choice`, and exactly one outcome (step 8):
+Hand back to the caller the render, every claim carrying a `choice`, the follow-up list (each claim labelled `unverified` or `unconverged`) with its count, and exactly one outcome (step 8):
 
-- `converged`: full mode with the reported and appendix counts; refute-only mode with the survived, inconclusive, downgraded, killed and retracted counts.
-- `unconverged`: list the claims whose refute state is `unconverged`.
+- `converged`: full mode with the reported, appendix and follow-up counts; refute-only mode with the survived, inconclusive, downgraded, killed and retracted counts.
+- `unconverged`: in full mode, list the claims reported with reason `unconverged`; in refute-only mode, list the claims whose refute state is `unconverged`.
 - `blocked`: name the role agent that was unavailable and the claims it held. No claim is marked survived without its refuter.
 
-In the render nothing verified is dropped: below-cutoff claims go to the appendix; inconclusive and unconverged claims, and claims tagged with a rule listed in `cutoff.report_rules`, are always reported and exempt from the per-lens cap; cut-capped claims, rule-tagged or not, are reported but count against the per-lens cap.
+Follow-up claims never change the outcome.
+
+In the render nothing verified is dropped: below-cutoff claims go to the appendix; inconclusive claims, blocking unconverged claims (last cut `security`, `data-loss` or `wrong-behavior` at `every-call` or `common` frequency), and claims tagged with a rule listed in `cutoff.report_rules` are always reported and exempt from the per-lens cap; cut-capped claims, rule-tagged or not, are reported but count against the per-lens cap. Follow-up claims are listed in their own section, labelled, and never presented as findings.
 
 ## Workflow
 
-- `full`: init → find (step 3) → coverage → refute rounds until converged (step 4) → optional gap hunt → cut rounds until converged (step 5) → cutoff and render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
-- `refute-only`: init and file the slate → refute rounds until converged (step 4) → render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
+- `full`: init → find and coverage (step 3) → gap hunt (step 3; on by default when R2 exists and status `steps.gap_hunt` is true, off with `init --refuters 1` or `steps.gap_hunt: false`) → escalate (step 4) → cut and refute rounds until converged (step 5) → cutoff and render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
+- `refute-only`: init and file the slate → refute rounds until converged (step 5) → render (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
 
 ## 1. Modes
 
 - `full`: the caller supplies the artifact, the lenses and absolute paths to its find-angle files. Run steps 2–8.
-- `refute-only`: the caller supplies the artifact and a numbered slate. Run steps 2, 4, 6–8; there is no find, cut, cutoff or gate.
+- `refute-only`: the caller supplies the artifact and a numbered slate. Run steps 2, 5–8; there is no find, escalate, cut, cutoff or gate.
 
 Pick a valid slate id and an absolute ledger directory. Provide the mode's
 artifact, lenses, angle files, and optional project configuration to the
@@ -36,15 +38,16 @@ the accepted shape, current phase, and next fixed action.
 
 One slate is one task. Never use more than `caps.agents` agents on it (default
 5, main included); the CLI refuses an allocation that would exceed it. Agents
-on another slate or task (a later debate) have their own budget. Allocate
-these ids:
+on another slate or task (a later debate) have their own budget. After the
+find and the gap hunt, batches come from the `plan` in the CLI's JSON status.
+Allocate these ids:
 
 | role | agent id | covers |
 |---|---|---|
 | main | `main` | orchestrator: writes `init`, and in refute-only mode the slate's `file` events as `slate` |
 | F | `finder` | every find angle of every lens |
-| R1 | `r1` | refuter: ≥1 unused attack angle per claim per round; ≥2 when it is the round's only refuter |
-| R2 | `r2` | refuter like `r1`, and the gap-hunt finder; omitted when the caller asks for one refuter |
+| R1 | `r1` | refuter: angles per claim per round from `status --json` `plan` |
+| R2 | `r2` | refuter like `r1` (angles per claim per round from `status --json` `plan`), and the gap-hunt finder; omitted when the caller asks for one refuter |
 | C | `cutter` | every cut round of every claim (full mode only) |
 
 Refute-only mode uses main, R1 and R2.
@@ -66,40 +69,34 @@ Spawn F once with one brief that lists every lens and, per lens, all its find an
 
 After F returns, run the CLI's coverage action.
 
-## 4. Refute rounds
+Gap hunt: after coverage, when the gap hunt is on, continue R2 as the fresh-eyes finder with the caller's gap-hunt brief, else the brief "what did every lens miss". It files with `--as r2 --origin gap-hunt`. Like the find, it is exempt from the batch cap. Its claims go through steps 4 and 5 like any other, with R1 alone refuting them.
 
-Repeat until the CLI reports the refute phase converged:
+## 4. Escalate
 
-1. Run the CLI's JSON status action. Live claims with `refute: open` are under
-   test.
-2. For each claim under test, choose ≥2 of its `unused_attack_angles` whose tell applies. With R1 and R2, give each refuter ≥1 of them (more when more apply); with R1 alone, give it ≥2. Declare the round's angles before continuing the refuters.
-3. Continue R1 (and R2) with its angles for every claim this round; one refuter takes many angles across many claims. The round number for a claim is its status `round` + 1.
-4. Refuter brief:
+Full mode only. For each batch of `plan.escalate`, continue each row's `finder` (F for lens claims, R2 through its driver step for gap-hunt claims). For each claim it asks "can this be more serious than filed?" and records `escalate` through the public CLI: with `--wider` and `--evidence` citing a concrete route to the worse outcome (file:line, caller or command), or without either. A wider text without a route is refused.
+
+## 5. Cut and refute rounds
+
+Full mode cuts each claim before refuting it; refute-only mode runs only the refute batches. Repeat until the CLI reports the cut phase converged (refute-only: the refute phase):
+
+1. Run the CLI's JSON status action and follow its `plan` batches in this order: `plan.rebut`, `plan.cut`, `plan.refute`.
+2. `plan.rebut`: continue each row's `finder` with its claim's last refute round. The finder may rebut only with new evidence through the public CLI. A rebut makes the cut stale, so it comes before the re-cut.
+3. `plan.cut`: the cut round number for a claim is its status `cut_round` + 1. Cutter brief:
+   - Default verdict: cut. Rate a field higher only when evidence justifies it.
+   - For each claim set `frequency`, `severity`, `confidence` and `difficulty`,
+     each backed by an applicable evaluate angle. Add a choice when the facts
+     are agreed but a remedy still needs a decision. A `cosmetic` cut needs a
+     one-line `--fix`.
+   - Record the cut through the public CLI.
+
+   Continue each row's `finder` with that round's cut values and evidence; it answers with the public CLI's `accept` or `rebut` event. Continue C with each rebuttal for the next round. A claim's cut converges when its latest round is accepted, or when C repeats the same four values after a rebut; it is capped at `caps.cut_rounds`. A claim whose converged cut is `cosmetic` is parked: it leaves the loop, is never refuted, and is listed as follow-up `unverified`; its finder may still challenge the cut with `rebut --stage cut` and new evidence.
+4. `plan.refute`: for each row, choose the printed number of the claim's `unused_attack_angles` whose tell applies. With R1 and R2, split a claim's angles between them, ≥1 each when it has ≥2. Declare the round's angles before continuing the refuters, then continue R1 (and R2) with its angles for every claim in the batch; the round number is the row's `round`. Refuter brief:
    - The claim is refuted unless the artifact's code or evidence proves it. Read every source you cite.
    - Outcomes: `killed` (false), `retracted` (its referent does not exist in the artifact), `downgraded` (true only in a narrower form), `survived` (withstood the angle, evidence cited), `inconclusive` (no available source settles it; name what would).
    - For `deliberate` and `guarded-elsewhere`: first resolve the question with the `memory-ledger:ledger` skill and re-run the entry's evidence; record `--source ledger:<slug> --ledger-evidence pass|fail`. If memory-ledger is missing, unconfigured or broken, put its diagnostic in `--evidence` and continue from the code.
    - Write one event per angle through the public CLI, including the cited
      evidence and any narrowed claim.
-5. Continue each claim's finder with claims that were killed, retracted or
-   downgraded this round. The finder may rebut only with new evidence through
-   the public CLI.
-
-Gap hunt (only when the caller asks for one and R2 exists): after refute of the lens claims converges, continue R2 as the gap-hunt finder with the caller's gap-hunt brief. It files with `--as r2 --origin gap-hunt`. Run refute rounds on its claims with R1 alone (≥2 unused angles per claim per round). Without R2 there is no gap hunt.
-
-## 5. Cut rounds
-
-Full mode only. Repeat until the CLI reports the cut phase converged:
-
-1. Its round number for a claim is the claim's status `cut_round` + 1.
-2. Cutter brief:
-   - Default verdict: cut. Rate a field higher only when evidence justifies it.
-   - For each claim set `frequency`, `severity`, `confidence` and `difficulty`,
-     each backed by an applicable evaluate angle. Add a choice when the facts
-     are agreed but a remedy still needs a decision.
-   - Record the cut through the public CLI.
-3. Continue each claim's finder with that round's cut values and evidence. The
-   finder answers with the public CLI's `accept` or `rebut` event.
-4. Continue C with each rebuttal for the next round. A claim's cut converges when its latest round is accepted, or when C repeats the same four values after a rebut; it is capped at `caps.cut_rounds`.
+   - When no attack angle left applies to a claim, record `converge angle-na --phase refute --claim <id> --angle <angle> --reason <why>` for each remaining one; the claim then closes `unconverged`.
 
 ## 6. Cutoff and render
 
