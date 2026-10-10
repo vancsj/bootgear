@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 from .store import load_entries
 
@@ -77,8 +76,6 @@ def unportable_paths(evidence: str) -> list[str]:
 def _answers(ledgers, filter_text):
     for lg in ledgers:
         for e in load_entries(lg.root, lg.kind):
-            if Path(e.slug).name == "_about":
-                continue
             if filter_text and filter_text not in e.slug \
                     and filter_text.lower() not in e.question.lower():
                 continue

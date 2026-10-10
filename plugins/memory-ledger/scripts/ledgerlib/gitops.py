@@ -66,7 +66,6 @@ def _check_unportable(lg) -> str | None:
     if lg.kind != "shared":
         return None
     flagged = [(e.slug, a.aid) for e in load_entries(lg.root, lg.kind)
-              if Path(e.slug).name != "_about"
               for a in e.answers if unportable_paths("\n".join(a.evidences))]
     if not flagged:
         return None
