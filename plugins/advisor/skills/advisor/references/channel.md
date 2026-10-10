@@ -74,7 +74,7 @@ Save `{channel, message_id}` to a receipt file (e.g. `<task-dir>/codex-pending.j
 python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300
 ```
 
-Returns the last 3 messages as `{message_id, sender, kind, parent_id?, preview}`. Match your response by `parent_id == ` your request's `message_id`, not by recency. Exit `1` with a `note` means no new message yet: a reply can take many minutes, so re-run with a long `--timeout` instead of resending. Re-run up to 12 times (300s each) before reporting the peer unavailable this round. If the listener's `state` is `busy`, keep re-running: busy waits do not count toward the 12, up to 12 of them.
+Returns the last 3 messages as `{message_id, sender, kind, parent_id?, preview}`, plus `answered` on each request addressed to you: true once you have sent a response naming it as `parent_id`. Match your response by `parent_id == ` your request's `message_id`, not by recency. Exit `1` with a `note` means no new message yet: a reply can take many minutes, so re-run with a long `--timeout` instead of resending. Re-run up to 12 times (300s each) before reporting the peer unavailable this round. If the listener's `state` is `busy`, keep re-running: busy waits do not count toward the 12, up to 12 of them.
 
 `peer_live: false` means the peer's heartbeat is stale: the output carries the note "peer heartbeat stale; tell the user instead of waiting again" and no `next`. Tell the user instead of waiting again.
 

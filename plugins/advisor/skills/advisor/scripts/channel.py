@@ -63,7 +63,7 @@ def fail(message: str, category: str | None = None, next_step: str | None = None
 OUTPUT_MODES = ("json", "prose")
 # The fields a prose line shows for one list item; any other item prints every field.
 ITEM_KEYS = {
-    "message_id": ("message_id", "sender", "kind", "parent_id", "preview"),
+    "message_id": ("message_id", "sender", "kind", "parent_id", "preview", "answered"),
     "channel": ("channel", "state", "listener_owner", "asker_owner"),
 }
 
@@ -573,6 +573,14 @@ def summarize(message: dict[str, object]) -> dict[str, object]:
     return summary
 
 
+def summarize_for(message: dict[str, object], answered: set[object]) -> dict[str, object]:
+    """`summarize`, plus whether the caller already sent a response to this request."""
+    summary = summarize(message)
+    if message.get("kind") == "request":
+        summary["answered"] = message.get("message_id") in answered
+    return summary
+
+
 def receive(args: argparse.Namespace) -> None:
     check_role(args, args.recipient, "--for")
     root = root_from(args)
@@ -627,9 +635,12 @@ def receive(args: argparse.Namespace) -> None:
     messages = [json.loads(f.read_text(encoding="utf-8")) for f in current]
     messages.sort(key=lambda m: m.get("created_at", 0), reverse=True)
     recent = messages[:HISTORY_SIZE]
+    sent = [json.loads(f.read_text(encoding="utf-8")) for f in message_files(path)]
+    answered = {m.get("parent_id") for m in sent
+                if m.get("sender") == args.recipient and m.get("kind") == "response"}
     output = {
         "new_since_call": pending,
-        "messages": [summarize(m) for m in recent],
+        "messages": [summarize_for(m, answered) for m in recent],
         "peer_live": peer_live,
     }
     script = script_command(args, root)

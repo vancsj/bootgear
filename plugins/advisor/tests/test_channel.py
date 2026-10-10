@@ -1383,6 +1383,38 @@ class ConcurrencyTests(unittest.TestCase):
         self.assertIn(record["state"], {"busy", "waiting"})
 
 
+class AnsweredRequestTests(unittest.TestCase):
+    """A listener's `receive` marks each request it got as answered once its own response exists."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def send(self, sender: str, recipient: str, kind: str, *extra: str) -> str:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", sender, "--to", recipient, "--kind", kind, *extra, "--body-file", "-"],
+            input="hello", capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        return json.loads(sent.stdout)["message_id"]
+
+    def listed(self, message_id: str) -> dict:
+        received = run(self.root, "receive", "--channel", "0001", "--for", "listener", "--timeout", "0")
+        self.assertIn(received.returncode, (0, 1), received.stderr)
+        return next(m for m in json.loads(received.stdout)["messages"] if m["message_id"] == message_id)
+
+    def test_request_without_a_response_is_not_answered(self) -> None:
+        request_id = self.send("asker", "listener", "request")
+        self.assertIs(self.listed(request_id)["answered"], False)
+
+    def test_request_with_a_response_is_answered(self) -> None:
+        request_id = self.send("asker", "listener", "request")
+        self.send("listener", "asker", "response", "--parent-id", request_id)
+        self.assertIs(self.listed(request_id)["answered"], True)
+
+
 class PairingEndToEndTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))

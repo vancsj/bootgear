@@ -84,7 +84,7 @@ Create the durable goal: *continuously poll the mailbox and process requests unt
 ```sh
 python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 5
 ```
-Read-only, safe anytime. Check the last 3 for a request from `<peer>` with no later response of yours naming it as `parent_id` — that's open; handle it in the loop below as if freshly arrived.
+Read-only, safe anytime. Check the last 3 for a request from `<peer>` with `answered: false` — that's open; handle it in the loop below as if freshly arrived. `answered: true` means you already sent a response naming it as `parent_id`.
 
 #### 4. First poll
 
