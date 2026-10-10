@@ -465,6 +465,7 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
                     problems.append(("debate_parties.id", "must be single-line and cannot contain ':'"))
                 if party.get("mechanism") not in PARTY_MECHANISMS:
                     problems.append(("debate_parties.mechanism",
+                                     f"party {party_id!r} has mechanism {party.get('mechanism')!r}; "
                                      "must be one of: " + ", ".join(PARTY_MECHANISMS)))
             if len(ids) != len(set(ids)):
                 problems.append(("debate_parties", "party IDs must be unique"))
@@ -492,7 +493,8 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
                         problems.append((f"debate_party_config.parties.{party_id}", "values must be strings or booleans"))
                     if "mechanism" in config and config["mechanism"] not in PARTY_MECHANISMS:
                         problems.append((f"debate_party_config.parties.{party_id}.mechanism",
-                                         "must be one of: " + ", ".join(PARTY_MECHANISMS)))
+                                         f"got {config['mechanism']!r}; must be one of: "
+                                         + ", ".join(PARTY_MECHANISMS)))
 
     # `codex_role`, the field's legacy form, is left unchecked so old ledgers resume.
     advisor_roles = data.get("advisor_roles")

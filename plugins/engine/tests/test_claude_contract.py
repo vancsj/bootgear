@@ -155,6 +155,19 @@ class ClaudePackageContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("debate_parties.mechanism", result.stderr)
 
+    def test_refused_mechanism_names_the_party_and_the_bad_value(self):
+        result = self._validate("debate_party_config: {}\n" + self._party("codex"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("critic", result.stderr)
+        self.assertIn("codex", result.stderr)
+
+    def test_refused_mechanism_in_party_config_names_the_bad_value(self):
+        config = ("debate_party_config:\n  parties:\n    adversarial-reviewer:\n"
+                  "      mechanism: bogus\n")
+        result = self._validate(config + self._party("advisor"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("bogus", result.stderr)
+
     def test_claude_refuses_unknown_mechanism_in_party_config(self):
         config = ("debate_party_config:\n  parties:\n    adversarial-reviewer:\n"
                   "      mechanism: bogus\n")

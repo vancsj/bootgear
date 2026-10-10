@@ -187,6 +187,20 @@ class CodexPackageContractTest(unittest.TestCase):
             self.assertIn("mechanism", result.stderr)
             self.assertIn("must be one of: advisor, native_subagent", result.stderr)
 
+    def test_codex_refused_mechanism_names_the_party_and_the_bad_value(self):
+        party = ("debate_parties:\n  - id: critic\n    label: Critic\n"
+                 "    prompt: Find counterexamples.\n    mechanism: bogus\n")
+        result = self._validate("debate_party_config: {}\n" + party)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("critic", result.stderr)
+        self.assertIn("bogus", result.stderr)
+
+    def test_codex_refused_mechanism_in_party_config_names_the_bad_value(self):
+        config = "debate_party_config:\n  parties:\n    critic:\n      mechanism: bogus\n"
+        result = self._validate(config)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("bogus", result.stderr)
+
     def test_settlement_accepts_consistent_advisor_roles_and_seats(self):
         for extra in (
             "debate_party_config: {}\n" + ALL_NATIVE,
