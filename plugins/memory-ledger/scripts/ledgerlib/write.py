@@ -38,6 +38,7 @@ from .model import (
     confidence,
     git_user,
     mainline_ref,
+    on_mainline,
     ref_state,
     render_header,
     repo_name,
@@ -570,10 +571,10 @@ def cmd_promote(args, root):
                  "`ref:` in the config / $LEDGER_REF.")
     if not a.ref_value:
         sys.exit(f"{e.slug} {a.aid} is not scoped to a ref — nothing to promote")
-    if a.ref_value == to:
+    if on_mainline(a.ref_value, to):
         sys.exit(f"{e.slug} {a.aid} is already scoped to {to}")
     for other in e.answers:
-        if other.ref_value == to and other.claim == a.claim:
+        if on_mainline(other.ref_value, to) and other.claim == a.claim:
             sys.exit(f"{e.slug} {other.aid} already says this about {to} "
                      f"(conf {other.conf:.2f}) — sign that instead")
     problems = []
