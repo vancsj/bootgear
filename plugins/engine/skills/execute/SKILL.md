@@ -20,7 +20,7 @@ Validate `recall`'s result before doing anything else.
 
 ## Workflow
 
-Pick up from `clarify` → `recall` with `<run-id>`, `<engine-root>` and `<session-dir>` → validate the settlement → loop {recall, act on the current node, transition, report, check `goal`} until the run succeeds or fails → prune review slates → `close` → final pitch.
+Pick up from `clarify` → `recall` with `<run-id>`, `<engine-root>` and `<session-dir>` → validate the settlement → loop {recall, act on the current node, transition, report, check `goal`} until the run succeeds or fails → prune review slates → final pitch → `close`.
 
 ## Settlement validation
 
@@ -202,9 +202,9 @@ Call `close` exactly once when the run ends, as the `session close` command that
 - the exhausted-stall gap (step 5's fourth bullet), when every unit of work ran out with no condition literally met;
 - the stop reason (Fallbacks), for a validation refusal, a missing required dependency, a rejected `session_dir` amendment, a `blocked` spec or spec-review, or a missing permission with no other path.
 
-Send a final pitch after `close`, naming every open `follow-up [<stage>]` todo:
+Send a final pitch before `close`, naming every open `follow-up [<stage>]` todo:
 
-- **Succeeded:** State what was done and name the closed ledger file.
+- **Succeeded:** State what was done and name the ledger file `close` will write.
 - **Failed, condition met:** State what was attempted, the genuinely undoable condition, and the change required to make it reachable.
 - **Failed, exhausted:** State what was attempted, the stuck point, and that `goal`'s failed condition does not cover it. Record this as a gap in `goal` to fix before the next run.
 - **Failed, stopped:** State what was attempted, the stop reason, and what must change before a new run.

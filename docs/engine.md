@@ -29,7 +29,7 @@ start -> clarify --(goal confirmed, settlement written)--> execute
      |              +-> spec / test / review (by public name)
      |              +-> resolve --(no settled source)--> debate
      |              +-> memory-ledger lookup / record
-     +--> succeeded | failed  ->  converge prune  ->  session close  ->  final pitch
+     +--> succeeded | failed  ->  converge prune  ->  final pitch  ->  session close
 ```
 
 - **clarify** assesses the request, fixes the task type, resolves and validates
