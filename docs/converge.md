@@ -1,8 +1,8 @@
 # converge
 
-converge settles the **facts** behind a set of claims. Separate agents find each claim, try
-to refute it, and cut it (rate how much it matters). A CLI validates every step against an
-append-only ledger and computes which claims are reported. When the facts are agreed but a
+converge settles the **facts** behind a set of claims. Separate agents find each claim, attack
+it, and cut it (rate how much it matters). A CLI validates every step against an
+append-only ledger and computes which claims are findings. When the facts are agreed but a
 decision remains, the claim carries a `choice` for `debate` (see [engine.md](engine.md)). A
 factual dispute never goes to debate.
 
@@ -10,27 +10,23 @@ factual dispute never goes to debate.
 
 | Part | Role |
 |---|---|
-| `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and validation), `model` (replayed state, refute/cut state, cutoff), `config`, `angles`, `render`, `cli` |
+| `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and common validation), `protocol` (event rules, claim state, batches, phases, cut, result), `model` (replayed slate and claims, rank), `config`, `angles`, `render`, `cli` |
 | `plugins/converge/src/converge/angles/builtin.yaml` | Built-in `attack`, `evaluate` and `decide` angles |
 | `plugins/converge/bin/converge` | Wrapper: `uv run --project <plugin-root> -m converge.cli` |
-| `plugins/converge/skills/converge/` | Orchestration skill (modes, roles, rounds, outcomes) |
+| `plugins/converge/skills/converge/` | Orchestration skill (roles, steps, outcomes) |
 | `codex-plugins/engine/` | Codex copy: `src/converge/`, `scripts/converge`, `skills/converge/` |
 
-Callers: `review` runs every finding through a `full` slate; the engine `pr-review` and
+Callers: `review` runs every finding through a slate; the engine `pr-review` and
 `ticket-to-pr` machines gate their `review` node on `converge gate`; engine `debate` hands
 factual disputes back, briefs parties with the render, and draws its closing angle round from
 the `decide` and `attack` angles.
 
-## Slates and modes
+## Slates
 
 A **slate** is one set of claims under test, and one task for the agent budget. Its id
-matches `[a-z0-9][a-z0-9._-]{0,80}`.
-
-- `full`: the caller gives lenses and find-angle files. Stages run find → gap hunt →
-  escalate → cut and refute → cutoff.
-- `refute-only`: the caller gives a numbered slate. The orchestrator files every claim as
-  agent `slate` (`origin: slate`) before the first refute. There is no find, cut, cutoff or
-  gate; the render lists refute outcomes.
+matches `[a-z0-9][a-z0-9._-]{0,80}`. The caller gives the artifact, lenses and find-angle
+files. Phases run in a fixed order: find → escalate → cut before → attack → cut after →
+cutoff → done.
 
 `init --snapshot --pass N` commits the work tree, untracked files included, through a
 temporary index and pins it at `refs/converge/<slate>`. `--since <prev>` requires
@@ -45,29 +41,32 @@ flowchart LR
   M[main: init] --> F[finder: file / find-run / angle-na]
   F --> H[r2: gap hunt]
   H --> E[finders: escalate]
-  E --> C[cutter: cut rounds]
-  C -->|accept or rebut| F
-  C --> R[refuters r1, r2: refute rounds]
-  R -->|rebut, downgrade: re-cut| C
-  R --> X[converge cutoff: computed]
-  X --> G[render, gate]
+  E --> CB[cutter: cut before]
+  CB --> A[r1 table batches, then fresh eye: attack]
+  A -->|refuted| D[finder reply, refuter verdict]
+  D --> A
+  A --> CA[cutter: cut after]
+  CB & CA -->|accept or rebut| F
+  CA --> X[converge cutoff: computed]
+  X --> G[render, gate, converged]
 ```
 
 - **Declared agent ids** (`--as`). The CLI allows at most `caps.agents` distinct ids per
-  slate (default and maximum 5), the `init` writer included; the reserved ids `slate` and
-  `converge` do not count. A claim's finder never refutes or cuts it, its refuters and
-  cutters are disjoint, the `init` writer never refutes or cuts, and only the finder may
-  `rebut` or `accept`. Ids are trusted as declared: the checks stop accidental
-  self-judging, not a lying agent.
+  slate (default and maximum 5), the `init` writer included; the reserved id `converge`
+  does not count. A claim's finder never attacks or cuts it, its refuters and cutters are
+  disjoint, and only the finder may `reply`, `rebut` or `accept`. Ids are trusted as
+  declared: the checks stop accidental self-judging, not a lying agent.
 - **Allocation.** The skill uses `main`, one `finder` for all lenses, `r1`, `r2` and one
-  `cutter`; quick review depth drops `r2`. Each agent is spawned once and continued across
-  rounds. `r2` is also the gap-hunt finder (`origin: gap-hunt`) right after find coverage,
-  and `r1` refutes its claims. `init --refuters 1` or `steps.gap_hunt: false` turns the gap
-  hunt off; it is orchestration, with no event of its own.
-- **Seats.** Each seat a slate holds (`main`, `finder`, `r1`, `r2`, `cutter`; refute-only:
-  `main`, `r1`, `r2`) has a mechanism, `native_subagent` or `advisor`. `init --settlement
-  <file>` reads `converge_seats` and `advisor_roles` from the engine settlement, re-checks
-  the engine's rules (only `r2` may be `advisor`; `refuter` or `gap-hunter` needs
+  `cutter`; quick review depth drops `r2`. Each agent is spawned once and continued for
+  the whole slate. `r2` is also the gap-hunt finder (`origin: gap-hunt`) right after find
+  coverage, and acts as finder for those claims. `init --refuters 1` or
+  `steps.gap_hunt: false` turns the gap hunt off; it is orchestration, with no event of its
+  own. `r1` runs every table batch; `r2` runs the fresh-eye batch, except on claims it filed
+  or on a slate with one refuter, where `r1` does.
+- **Seats.** Each seat a slate holds (`main`, `finder`, `r1`, `r2`, `cutter`) has a
+  mechanism, `native_subagent` or `advisor`. `init --settlement <file>` reads
+  `converge_seats` and `advisor_roles` from the engine settlement, re-checks the engine's
+  rules (only `r2` may be `advisor`; `refuter` or `gap-hunter` needs
   `r2: advisor`) with a byte-identical copy of the engine's `seats.py`, and records the
   slate's `seats` and the advisor's `{roles, brief}` in the `init` event. Without
   `--settlement`, or when the `init` event has no `seats`, every seat is `native_subagent`. An
@@ -88,87 +87,93 @@ flowchart LR
 - **Coverage.** Every applicable find angle of every lens needs a `find-run` or an
   `angle-na` with a reason.
 
-## Refute and cut
+## Steps, attack and cut
 
-- **Steps.** Config section `steps` has `escalate`, `early_cut` and `gap_hunt`, all on by
-  default; each can be turned off. A slate whose snapshot config has no `steps` section runs
-  refute before cut, without escalate, parking, angle exhaustion or follow-up.
-- **Escalate** (full mode). Once per claim, before its first cut and first refute, its finder
-  records `escalate`: a `wider` text with `evidence` citing a concrete route to the worse
-  outcome, or neither. A wider text replaces the claim text. With `steps.escalate`, a claim's
-  first cut and first refute need it.
-- **Cut rounds** (full mode). A cut is legal right after `file` or `escalate` and after any
-  complete refute round; on a steps slate a next round is refused while the latest current
-  cut awaits its finder's `accept` or rebut. The cutter sets `frequency`, `severity`, `confidence` and
-  `difficulty`, each backed by an evaluate angle. The cut is **converged** when the finder
-  `accept`s the latest round, or when the cutter repeats the same four values after a rebut.
-  It is **capped** at `caps.cut_rounds` (5), shared by first cuts and re-cuts. A `cosmetic`
-  cut carries a one-line `fix`; a `cross-cutting` or `redesign` cut carries a `choice`.
-- **Early cut.** With `steps.early_cut`, starting a refute round needs a converged or capped
-  cut. A refute rebut, a downgrade, or the reopening of a dependent makes the cut stale, keeping
-  its rounds, so the next refute round needs a re-cut; a stale cut at the cap is capped.
-- **Parking.** A claim whose cut is done and `cosmetic` and whose refute is not done is
-  parked: it is never refuted, is not open, and becomes a `follow-up` claim. A claim tagged
-  with a `cutoff.report_rules` rule is never parked. The finder contests the cut with
-  `rebut --stage cut`.
-- **Refute rounds.** Each `refute` uses an attack angle neither used on that claim nor
-  recorded not applicable to it. A round is complete at ≥2 events, or once no such angle
-  remains, and holds at most `caps.angles_per_claim` (5) events. A refuter of the claim (never
-  its finder) records a not-applicable attack angle with `angle-na --phase refute --claim`.
-  Outcomes: `killed` or `retracted` (the claim is dead and accepts nothing more),
-  `downgraded` (`narrowed` replaces the claim text), `survived`, `inconclusive`.
-- **Refute state.** A claim is **converged** when its latest complete round has no
-  `downgraded` outcome and comes after any rebut or reopen. It is **inconclusive** if that
-  round contains `inconclusive`, and **unconverged** if `caps.refute_rounds` (5) is reached
-  first or no attack angle remains unused and applicable. A kill or downgrade reopens every
-  claim that `depends` on it.
-- **Rebut.** Only the finder rebuts, and only with new evidence: a repeated evidence sha256
-  for the same claim and stage is rejected. A refute rebut sends the claim back to refute.
-- **Batch plan.** `status --json` prints `plan`: for escalate, cut, refute and rebut, the
-  eligible live claims in rank order, in batches of at most `caps.batch_items` (30) items (a
-  claim, or for refute a claim × attack angle), each row naming the claim's finder; refute
-  rows carry the claim's angles for the round. The find and the gap hunt are exempt. The CLI
-  enforces only the per-round angle cap.
+- **Steps.** Config section `steps`: `escalate` and `gap_hunt` (booleans, on by default)
+  and `cut` (`before`, `after`, `both` or `none`; default `both`).
+- **Phase gate.** `status` reports the slate's phase: the first phase, in the order above,
+  with an open item; a cut phase that `steps.cut` excludes is skipped. An event is accepted
+  only in the phase of its kind and for a claim with an open item of that phase: `escalate`
+  in escalate; `cut`, `accept` and `rebut` in the cut phase their `when` names; `attack`,
+  `reply`, `verdict` and a claim-level `angle-na` in attack. `file` is refused once any
+  `escalate`, `cut` or `attack` exists, `escalate` once any `cut` or `attack` exists. A
+  killed or unverified claim takes no attack and no after cut.
+- **Escalate.** Once per claim its finder records `escalate`: a `wider` text with
+  `evidence` citing a concrete route to the worse outcome, or neither. A wider text replaces
+  the claim text.
+- **Cut rounds.** The cutter sets `frequency`, `severity`, `confidence` and `difficulty`,
+  each backed by an evaluate angle, with `when` `before` or `after`; a before cut has
+  confidence `inferred`. Rounds count per claim and `when`. A next round is refused while
+  the latest awaits its finder's `accept` or rebut. A cut track **converges** when the
+  finder accepts the latest round, or when the round after a rebut repeats the same four
+  values; it is **capped** at `caps.cut_rounds` (5). A `cross-cutting` or `redesign` cut
+  carries a `choice`. A claim's ratings are its latest after round, else its latest before
+  round.
+- **Unverified.** With `steps.cut` `before` or `both`, a claim whose before ratings cut it
+  (by the rules below) and that has no `attack` is `unverified`: it is never attacked.
+- **Batches.** The attack angles of the snapshot, in order, form fixed table batches of
+  `caps.angles_per_claim` (5). A table batch is complete when each of its angles has an
+  `attack` or a claim-level `angle-na` on the claim. Then comes one `fresh-eye` batch:
+  free-text angles not yet used on the claim, complete after `caps.angles_per_claim` attacks
+  or one carrying `last: true`. A claim takes its next batch only when the previous one is
+  done; after the fresh-eye batch it is attack-finished.
+- **Dispute.** A batch with a `refuted` attack awaits the finder's `reply`: `decline` kills
+  the claim; `rebut` carries new evidence (a repeated evidence sha256 for the claim is
+  refused) and may carry a clarified `text`, which replaces the claim text. The refuter that
+  recorded the first refuted attack then gives a `verdict`: `agree` ends the batch;
+  `disagree` carries evidence and awaits a second `reply`, where `decline` kills the claim
+  and `rebut` makes it `disputed`.
+- **Status.** `killed`, `unverified`, `disputed` or `survived` (initial). Status only
+  moves `survived` → `disputed` → `killed`; no event lowers it.
+- **Batch plan.** `status --json` prints `plan`: one row per open item of the current
+  phase, in rank order, in batches of at most `caps.batch_items` (30). A row is
+  `{claim, action, agent_role, batch, angles}`, `action` one of `escalate`, `cut-before`,
+  `attack`, `reply`, `verdict`, `cut-after`, `accept`; a table attack row lists the batch's
+  open angles, a fresh-eye row the angles already used. The find and the gap hunt are
+  exempt.
 
 ## Ledger
 
 - One JSONL file per slate, `<dir>/<slate>.jsonl`. `--dir` defaults to
   `~/.bootgear/converge`; review runs use `<session-dir>/converge`.
 - Each line is one event `{seq, ts, event, as, ...fields}`. Types: `init`, `file`,
-  `escalate`, `find-run`, `angle-na`, `refute`, `rebut`, `cut`, `accept`, `cutoff`. `seq` is gapless
-  from 1, and `init` is written once, first. Claims get ids `F001`, `F002`, …; `loc` is
+  `escalate`, `find-run`, `angle-na`, `attack`, `reply`, `verdict`, `cut`, `rebut`, `accept`,
+  `cutoff`. `seq` is gapless from 1, and `init` is written once, first; it records the
+  refuter count (`init --refuters`, 1 or 2). Claims get ids `F001`, `F002`, …; `loc` is
   `path:line`.
 - **Write path:** take an exclusive `flock`, replay and validate the whole file, validate
   the new event against the replayed state, append one line, `fsync`. An invalid event is
   rejected whole, with every problem listed.
 - **Read path:** every command replays and validates the whole file; one malformed or
-  out-of-order line makes every command refuse it. All derived state (claim, refute and cut
-  state, rank, cutoff) is computed on replay, never stored.
+  out-of-order line makes every command refuse it. All derived state (claim status,
+  batches, cut, rank, phase) is computed on replay, never stored.
 
 ## Cutoff and gate
 
 - `converge cutoff` writes the `cutoff` event as agent `converge`; no agent can. It refuses
   while coverage is missing or any claim is open, and every replay re-checks the stored
-  results against a fresh computation.
-- **Result.** Each live claim is `reported`, `appendix` or `follow-up`. A parked claim is
-  `follow-up` (`unverified`); an unconverged claim is `follow-up` (`unconverged`) unless its
-  last cut is `security`, `data-loss` or `wrong-behavior` at `every-call` or `common`
-  frequency. Follow-up claims never block the gate. Always reported: inconclusive claims,
-  the remaining (blocking) unconverged claims, and claims whose `rule` is in
-  `cutoff.report_rules`. Cut-capped
-  claims are reported, and any other claim is reported when it matches a `report_if` rule
-  (`report_if_gap_hunt` for gap-hunt claims). A rule maps fields (the four cut fields,
-  `origin`, `lens`) to allowed values. Then `caps.per_lens` (3) moves reported claims past
-  the cap to the appendix, by rank; only the always-reported claims are exempt, so
-  cut-capped claims count toward the cap. Rank is severity, then frequency, then
-  confidence. Nothing verified is dropped.
-- A current cutoff admits only `rebut` or `refute` next, and either one makes it stale.
+  rows against a fresh computation.
+- **Cut.** Each live claim gets `cut` `yes` or `no` from its ratings. A claim with no
+  ratings is `no` (reason `cut none`). Otherwise it is `yes` when no rule of
+  `cutoff.report_if` (`report_if_gap_hunt` for gap-hunt claims) matches its ratings, or
+  when it ranks past `caps.per_lens` in its lens. A rule maps fields (the four cut fields,
+  `origin`, `lens`) to allowed values. `caps.per_lens` maps lens names to caps, with
+  `default` (50) for every other lens. Rank is severity, then frequency, then confidence,
+  then claim id. A claim whose `rule` is in `cutoff.report_rules` is never cut and takes no
+  place in its lens rank. An unverified claim is always `yes`. Killed claims are not rated.
+- **Rows.** One per claim, `{claim, status, cut, result, rank, reason}`: `result` is
+  `finding` (`cut: no`, not killed), `follow-up` (`cut: yes`) or `killed`. Follow-up claims
+  never block the gate or convergence.
 - `converge gate <slate> --dir <abs>` exits 0 only when every lens has full coverage, no
-  claim is open, and the cutoff is current. It requires an absolute `--dir`. The engine runs
-  it as the review node's `leave_check` (see [state-machine.md](state-machine.md)).
-- `render` builds Markdown from the ledger alone: reported claims, choices, inconclusive
-  and unconverged claims, follow-up claims with their label, the appendix, killed and
-  retracted claims with their reasons, and coverage.
+  claim is open, and the cutoff is current; it does not require convergence. It requires an
+  absolute `--dir`. The engine runs it as the review node's `leave_check` (see
+  [state-machine.md](state-machine.md)).
+- `converge converged` exits 0 when the slate is done and no claim is `disputed` with
+  `cut: no`; otherwise it lists the open and disputed claims.
+- `render` builds Markdown from the ledger alone: a summary line with the finding,
+  follow-up and killed counts and `converged`, then findings (status and cut), the
+  findings' choices, follow-up (status and choice), killed claims with their evidence, and
+  coverage.
 
 ## Config layers
 
@@ -176,9 +181,10 @@ flowchart LR
 (`~/.claude/converge.yaml`, or `~/.codex/converge.yaml` when `CONVERGE_HOST=codex`) <
 project (`<project-root>/.bootgear/config/converge.yaml`) < task (`--config FILE`).
 Keys: `cutoff.{report_if, report_if_gap_hunt, report_rules}`,
-`caps.{refute_rounds, cut_rounds, per_lens, agents, angles_per_claim, batch_items}`,
-`steps.{escalate, early_cut, gap_hunt}`, `angles.{files, disable}`. Unknown
-keys, bad enum values, non-positive caps and non-boolean steps are rejected. `init` snapshots the effective
+`caps.{cut_rounds, per_lens, agents, angles_per_claim, batch_items}`,
+`steps.{escalate, gap_hunt, cut}`, `angles.{files, disable}`. Unknown keys, bad enum
+values, non-positive caps, a `per_lens` that is not a map of positive caps with `default`,
+and non-boolean `escalate` or `gap_hunt` are rejected. `init` snapshots the effective
 config into the slate.
 
 ## Codex bundling

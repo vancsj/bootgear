@@ -13,10 +13,9 @@ depth label `quick` or `full`; in an active run, also `<run-id>`,
 
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
-reported claims in rank order, `choice` claims, `inconclusive` and
-`unconverged` claims, `follow-up` claims (labelled `unverified` or
-`unconverged`), the appendix, and killed or retracted claims with their
-reason.
+findings in rank order with their status, `choice` claims, follow-up claims
+with their status, and killed claims with their evidence. Return follow-up
+claims in the handback; do not record them.
 
 A new review ends with exactly one outcome:
 
@@ -24,20 +23,16 @@ A new review ends with exactly one outcome:
   mode would apply at least one claim; the `fix` node takes over. Return the
   fix list: the ids of those claims.
 - **`comment_only`:** In an active run, the current node has no `fix` edge (`machine.nodes[current].next` lacks `fix`).
-  Every surviving claim is reported and none is applied, whatever
+  Every finding is reported and none is applied, whatever
   `review_fix_mode` says.
 - **`clean`:** A re-review's render, or an active run's single-pass render,
-  has no `reported` claim and no `inconclusive` or blocking `unconverged`
-  claim (a `reported` row with reason `unconverged`).
-- **`below_cutoff`:** The render has only appendix claims, and no
-  `inconclusive` or blocking `unconverged` claim (a `reported` row with reason
-  `unconverged`).
-- **`blocked`:** A `reported` claim needs a mutation outside the mode's
-  permission — an unaccepted claim under `accepted_only`, an undecided
-  `choice`, or a mutation outside `permitted_mutations` — or any
-  `inconclusive` or blocking `unconverged` claim (a `reported` row with
-  reason `unconverged`) remains, or the `converge` skill handed back
-  `blocked`.
+  has no finding and no follow-up.
+- **`below_cutoff`:** The render has no finding and at least one follow-up.
+- **`blocked`:** A role or find coverage is missing, a finding has status
+  `disputed`, a finding needs a mutation outside the mode's permission — an
+  unaccepted claim under `accepted_only`, an undecided `choice`, or a
+  mutation outside `permitted_mutations` — or the `converge` skill handed
+  back `blocked`.
 - **`no_progress`:** The loop again finds the same unchanged claim after
   trying to fix it, with no new information.
 - **`iteration_cap`:** The configured iteration cap is reached with live
@@ -46,7 +41,7 @@ A new review ends with exactly one outcome:
 
 In an active run where the current node has a `fix` edge and the fix list is
 empty, the outcome is the one the render gives: `clean`, `below_cutoff`, or
-`blocked`. `follow-up` claims never decide the outcome.
+`blocked`.
 
 Report claims from every iteration, not only the final iteration. State the
 ending outcome and iteration count. `execute` uses these fields to update its
@@ -68,7 +63,7 @@ When applying feedback, account for every in-scope comment:
 An apply-only request (start at sub-task 6) hands back only this per-comment
 accounting; it has no loop outcome. For `handoff`, return the fix list (claim
 ids) in place of the applied-feedback accounting; nothing was applied. For
-`comment_only`, report every surviving claim as a comment, with none applied.
+`comment_only`, report every finding as a comment, with none applied.
 
 ## Workflow
 
@@ -76,7 +71,7 @@ ids) in place of the applied-feedback accounting; nothing was applied. For
 2. An apply-only request runs sub-task 6, then reports.
 3. A new review runs sub-task 1 (depth), 2 (start the slate), 3 (find
    through `converge`), 4 (gap hunt, `full` only), then converge's escalate,
-   cut and refute steps, and 5 (cutoff, render, route choices).
+   cut and attack steps, and 5 (cutoff, render, route choices).
 4. In an active run, end with `handoff`, `comment_only`, or the render's
    outcome. Standalone, apply what the fix mode permits, re-review on a new
    slate, and repeat until one outcome applies.
@@ -177,12 +172,12 @@ If the project has `.bootgear/config/review-standard.md`, first write
 `cutoff: {report_rules: [<every rule ID whose severity is at or above the standard's cutoff:>]}`
 and add `--config <converge-dir>/<slate>.yaml` to `init`.
 
-### 3. Find, escalate, cut, refute
+### 3. Find, escalate, cut, attack
 
-Run the `converge` skill in `full` mode on the slate with the
-depth's agents: at `full`, two refuters (R1, R2) and the gap hunt of
-sub-task 4; at `quick`, one refuter (R1) and no gap hunt. The find comes
-first, then sub-task 4, then converge's escalate, cut and refute steps.
+Run the `converge` skill on the slate with the depth's agents: at `full`, two
+refuters (R1, R2) and the gap hunt of sub-task 4; at `quick`, one refuter (R1)
+and no gap hunt. The find comes first, then sub-task 4, then converge's
+escalate, cut and attack steps.
 
 Spawn one finder, F, for every lens from sub-task 1. Give it one brief listing
 every lens with its scope and brief from `references/lenses.md` and that
@@ -195,16 +190,15 @@ that diff is in scope only when the diff changes that code's behaviour.
 
 If the project has `.bootgear/config/review-standard.md`, give F its rules and
 have it tag each claim that breaks one with `--rule R###`.
-A claim tagged with a rule at or above the standard's `cutoff:` is always
-reported once it survives refute; converge's cutoff decides every other claim
-and whether the outcome is `below_cutoff`.
+A claim tagged with a rule at or above the standard's `cutoff:` is never
+cut; converge's cutoff decides whether every other claim is cut.
 
 ### 4. Gap hunt
 
 `full` only; `quick` has no gap hunt. Right after find coverage, before any
 claim is escalated or cut, continue R2 as the gap-hunt finder, filing its
 claims with `--as r2` and `origin: gap-hunt`; they go through the same
-`converge` steps as the lens claims, with R1 refuting them. Brief R2 with:
+`converge` steps as the lens claims, with R1 attacking them. Brief R2 with:
 
 - the current `converge render` output;
 - the diff and the linked ticket;
@@ -213,12 +207,13 @@ claims with `--as r2` and `origin: gap-hunt`; they go through the same
 
 ### 5. Cutoff, render and choices
 
-Run the fixed cutoff action printed by the CLI after the escalate, cut and
-refute steps converge for every claim, so it is the slate's latest
-state-changing event. The render is the findings list; report its follow-up
-list with the findings, each claim labelled `unverified` or `unconverged`.
+Run the fixed cutoff action printed by the CLI once `converge status`
+reports `phase: cutoff`, so it is the slate's latest state-changing event.
+Report the render's findings, follow-ups and killed claims, each follow-up
+labelled with its status.
 
-Route every claim carrying a `choice`:
+Route every finding carrying a `choice` (a follow-up keeps its `choice` in
+the follow-up list):
 
 - In an active run: report it to the caller for the `review-debate` node. A
   factual dispute is not a choice; it stays in converge.
@@ -272,9 +267,9 @@ These do not count as acceptance:
 
 Treat unclear acceptance as `unclear`. Do not apply the comment.
 
-A claim that converge reports as survived is real, not accepted — acceptance
-means someone outside this review wants it fixed. Under
-`review_fix_mode: accepted_only`, a survived claim still needs that explicit
+A finding with status `survived` is real, not accepted — acceptance means
+someone outside this review wants it fixed. Under
+`review_fix_mode: accepted_only`, a `survived` finding still needs that explicit
 outside signal. The exception is
 `review_fix_mode: auto_within_permitted_mutations`, defined below.
 
@@ -294,13 +289,12 @@ In an active run, apply no claim in any mode; fixing happens only in the
 Re-review after an accepted fix. Do not apply a claim based only on this
 review's own report.
 
-`auto_within_permitted_mutations`: apply automatically only claims that the
-cutoff marks `reported`, whose refute state converged as `survived`, and whose
-`difficulty` is `trivial` or `local`, within the settlement's
-`permitted_mutations`. This mode adds no mutation permission. Never apply this
-way an `inconclusive`, `unconverged`, appendix or `choice` claim, or a claim
-whose `difficulty` is `cross-cutting` or `redesign`; those follow the
-`accepted_only` rule. Cross-cutting and redesign claims carry a `choice` and
+`auto_within_permitted_mutations`: apply automatically only findings with
+status `survived`, `cut: no` and `difficulty` `trivial` or `local`, within the
+settlement's `permitted_mutations`, and none when the slate's `steps.cut` is
+`none`. This mode adds no mutation permission. Never apply this way a
+`disputed`, follow-up, killed or `choice` claim, or a claim whose `difficulty`
+is `cross-cutting` or `redesign`; those follow the `accepted_only` rule. Cross-cutting and redesign findings carry a `choice` and
 go to the `review-debate` node in a run, or to the user standalone. A fix
 outside `permitted_mutations` also follows the `accepted_only` rule.
 
@@ -311,8 +305,8 @@ behavior instead: report every claim, apply none.
 ## Fallbacks
 
 If the `converge` skill hands back `blocked` (a role agent was
-unavailable), stop and report `blocked`, naming the missing role. Do not
-treat any claim it left without a refuter as survived.
+unavailable), stop and report `blocked`, naming the missing role. Claims start
+`survived`; the fresh-eye batch is mandatory.
 
 ## Host mechanics
 

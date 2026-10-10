@@ -27,7 +27,7 @@ def repo(cv: Converge, commit: bool = True) -> None:
 
 
 def init_args(cv: Converge, slate: str, *extra: str) -> list[str]:
-    return ["init", slate, "--dir", str(cv.dir), "--as", "orch", "--mode", "full",
+    return ["init", slate, "--dir", str(cv.dir), "--as", "orch",
             "--lenses", "correctness", "--project-root", str(cv.project),
             "--angles", str(cv.angles), *extra]
 
@@ -157,6 +157,28 @@ def test_since_prints_the_delta_and_uses_the_rereview_cutoff(cv: Converge) -> No
     assert f"pass: 2 · snapshot: {this}" in render
     assert f"delta since `s1`: `git diff {prev} {this}`" in render
     assert "a.py" in git(cv, "diff", "--stat", prev, this)
+
+
+def test_pass_must_be_positive(cv: Converge) -> None:
+    err = cv(*init_args(cv, "s1", "--pass", "0"), code=2).stderr
+    assert "--pass must be >= 1; got 0" in err
+    assert not cv.path("s1").exists()
+
+
+def test_first_pass_keeps_the_default_cutoff(cv: Converge) -> None:
+    cv(*init_args(cv, "s1", "--pass", "1"))
+    event = init_event(cv, "s1")
+    assert event["pass"] == 1
+    assert event["config"]["cutoff"]["report_if"][2]["severity"][-1] == "degraded"
+
+
+def test_rereview_pass_keeps_report_rules(cv: Converge) -> None:
+    task = cv.root / "task.yaml"
+    task.write_text("cutoff: {report_rules: [R002]}\n")
+    cv(*init_args(cv, "s1", "--pass", "2", "--config", str(task)))
+    cutoff = init_event(cv, "s1")["config"]["cutoff"]
+    assert cutoff["report_rules"] == ["R002"]
+    assert cutoff["report_if"][2]["severity"] == ["security", "data-loss", "wrong-behavior"]
 
 
 def test_since_refusals_name_the_failed_check(cv: Converge) -> None:

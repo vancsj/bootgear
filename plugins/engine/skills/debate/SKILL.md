@@ -102,8 +102,10 @@ Brief every party, in round 0 and every later round, with:
 - `debate_threshold` and why the decision reached `debate`
 - the run's `task_type` and `goal`
 - merged user, project, and task principles
-- the caller's converge render, when it has one, as settled facts; parties
-  argue only the choice, not the facts in the render
+- the caller's converge render, when it has one: its findings with status
+  `survived` and its killed claims are settled facts, and parties argue only
+  the choice, not those facts; its `disputed` findings and `unverified`
+  follow-ups are not settled
 
 Do not use `approach`.
 

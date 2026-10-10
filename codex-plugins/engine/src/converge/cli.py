@@ -20,7 +20,7 @@ import yaml
 
 from . import angles as angles_mod
 from . import config as config_mod
-from . import ledger, model, render, seats
+from . import ledger, model, protocol, render, seats
 from .clikit import (
     Catalog,
     Refusal,
@@ -37,10 +37,11 @@ from .clikit import (
 from .model import Slate
 
 EXIT_OK, EXIT_NO, EXIT_REFUSED = 0, 1, 2
+_MISSING = "continue the finder with the missing angles, then "
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
-    "init": "init <slate> --dir <dir> --as main --mode full --lenses <a,b> --angles <file> "
+    "init": "init <slate> --dir <dir> --as main --lenses <a,b> --angles <file> "
             "--settlement <file>",
     "file": "file <slate> --dir <dir> --as finder --lens <lens> --angle <angle> --origin lens "
             '--loc <path:line> --claim "<claim>" --trigger "<trigger>"',
@@ -48,19 +49,22 @@ EXAMPLES = {
                 '--evidence "<route>"',
     "find-run": "find-run <slate> --dir <dir> --as finder --lens <lens> --angle <angle> "
                 '--tell "<tell>" --searches "<searches>" --positive-control "<hit>" --result none',
-    "angle-na": "angle-na <slate> --dir <dir> --as r1 --phase refute --claim F001 "
+    "angle-na": "angle-na <slate> --dir <dir> --as r1 --phase attack --claim F001 "
                 '--angle <angle> --reason "<why>"',
-    "refute": "refute <slate> --dir <dir> --as r1 --claim F001 --round 1 --angle <angle> "
-              '--tell "<tell>" --outcome survived --evidence "<sources>" --searches "<searches>" '
+    "attack": "attack <slate> --dir <dir> --as r1 --claim F001 --batch 1 --angle <angle> "
+              '--tell "<tell>" --outcome clean --evidence "<evidence>" --searches "<searches>" '
               '--positive-control "<hit>"',
-    "rebut": 'rebut <slate> --dir <dir> --as finder --claim F001 --stage refute '
+    "reply": 'reply <slate> --dir <dir> --as finder --claim F001 --batch 1 --stance rebut '
              '--evidence "<new evidence>"',
-    "cut": "cut <slate> --dir <dir> --as cutter --claim F001 --round 1 --frequency common "
-           "--severity wrong-behavior --confidence traced --difficulty local "
+    "verdict": "verdict <slate> --dir <dir> --as r1 --claim F001 --batch 1 --verdict agree",
+    "cut": "cut <slate> --dir <dir> --as cutter --claim F001 --when after --round 1 "
+           "--frequency common --severity wrong-behavior --confidence traced --difficulty local "
            "--evidence <angle>=<evidence>",
-    "accept": "accept <slate> --dir <dir> --as finder --claim F001 --round 1",
+    "rebut": 'rebut <slate> --dir <dir> --as finder --claim F001 --when after '
+             '--evidence "<new evidence>"',
+    "accept": "accept <slate> --dir <dir> --as finder --claim F001 --when after --round 1",
     "status": "status <slate> --dir <dir> --json",
-    "converged": "converged <slate> --dir <dir> --phase refute",
+    "converged": "converged <slate> --dir <dir>",
     "cutoff": "cutoff <slate> --dir <dir>",
     "coverage": "coverage <slate> --dir <dir>",
     "gate": "gate <slate> --dir <abs-dir>",
@@ -71,7 +75,7 @@ EXAMPLES = {
 }
 ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
                  '--angle <angle> --reason "<why>"')
-FREQUENT = ("file", "refute", "status", "converged")
+FREQUENT = ("file", "attack", "reply", "verdict", "cut", "status", "converged")
 CATALOG = Catalog(prog="converge", examples=EXAMPLES, frequent=FREQUENT,
                   legacy_json=frozenset({"status"}))
 # A `--phase find` call's refusals show the find form of the angle-na example.
@@ -84,12 +88,14 @@ def _refuse(problems: list[str], what: str = "refused") -> NoReturn:
 
 def _refuse_next(args: argparse.Namespace, message: str, problems: list[str],
                  next_step: str) -> NoReturn:
-    """An init refusal with its example and command list, then the next step:
-    the last prose line, or the error object's `next` in JSON."""
+    """A refusal with its example and command list, then the next step: the last prose
+    line, or the error object's `next` in JSON."""
     buffer = io.StringIO()
     refusal = Refusal(f"converge: {message}:", [("", p) for p in problems], code=EXIT_REFUSED)
+    find = args.command == "angle-na" and args.phase == "find"
     with contextlib.redirect_stderr(buffer):
-        render_refusal(CATALOG, "init", refusal, args.output_mode)
+        render_refusal(FIND_CATALOG if find else CATALOG, args.command, refusal,
+                       args.output_mode)
     if args.output_mode == "json":
         error = json.loads(buffer.getvalue())
         error["error"]["next"] = next_step
@@ -122,11 +128,60 @@ def _read(args: argparse.Namespace) -> Slate:
 
 def _write(args: argparse.Namespace, event: dict[str, Any], *, create: bool = False,
            build: Any = None) -> dict[str, Any]:
+    """Append one event; a refusal ends with the slate's next step when the slate reads."""
     event = {"as": args.agent, **event} if "as" not in event else event
     try:
         return ledger.append(_path(args), args.slate, event, create=create, build=build)
     except ledger.LedgerError as exc:
-        _refuse(exc.problems)
+        if create:
+            _refuse(exc.problems)
+        try:
+            slate = ledger.read(_path(args), args.slate)
+        except ledger.LedgerError:
+            _refuse(exc.problems)
+        _refuse_next(args, "refused", exc.problems, _next_step(args, slate))
+
+
+def _written(args: argparse.Namespace, data: dict[str, Any], line: str) -> None:
+    """Print a written event's result line and the slate's next step."""
+    emit(args.output_mode, data, line, _next_step(args, _read(args)))
+
+
+# ---------------------------------------------------------------------------
+# the next step, from the slate's phase
+
+
+def _gap_hunt_open(slate: Slate) -> bool:
+    """The gap hunt may still file: it is on, the slate has r2, and no escalate, cut or attack
+    is written."""
+    return (bool(slate.config["steps"]["gap_hunt"]) and slate.init_refuters == 2
+            and not any(e["event"] in ("escalate", "cut", "attack") for e in slate.events))
+
+
+def _plan_text(slate: Slate) -> str:
+    """The plan rows grouped by agent role and action, in plan order."""
+    groups: dict[tuple[str, str], list[str]] = {}
+    for row in itertools.chain.from_iterable(model.batch_plan(slate)):
+        item = row["claim"] + (f" batch {row['batch']}" if row["batch"] is not None else "")
+        groups.setdefault((row["agent_role"], row["action"]), []).append(item)
+    return "; ".join(f"{role} {action} {', '.join(items)}"
+                     for (role, action), items in groups.items())
+
+
+def _next_step(args: argparse.Namespace, slate: Slate) -> str:
+    """The next legal action on the slate, from `protocol.slate_phase`."""
+    phase = protocol.slate_phase(slate)
+    if phase == "find":
+        return _MISSING + _step(args, "coverage")
+    if phase == "done":
+        return _step(args, "render")
+    step = (_step(args, "cutoff") if phase == "cutoff"
+            else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
+    if _gap_hunt_open(slate):
+        gap = _step(args, "file", "--as r2 --origin gap-hunt")
+        return (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
+                f"escalate, cut or attack; then {step}")
+    return step
 
 
 def _ids(text: str) -> list[str]:
@@ -239,10 +294,9 @@ def _snapshot_problems(args: argparse.Namespace) -> list[str]:
 # seats
 
 
-def _slate_seats(mode: str, refuters: int) -> tuple[str, ...]:
-    """The seats a slate of this mode and refuter count holds."""
-    held = seats.SEATS if mode == "full" else ledger.REFUTE_ONLY_SEATS
-    return tuple(seat for seat in held if refuters == 2 or seat != "r2")
+def _slate_seats(refuters: int) -> tuple[str, ...]:
+    """The seats a slate with this refuter count holds."""
+    return tuple(seat for seat in seats.SEATS if refuters == 2 or seat != "r2")
 
 
 def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
@@ -270,7 +324,7 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
         _refuse_next(args, "settlement seats do not match its advisor roles",
                      [f"{f}: {m}" for f, m in mismatch], fix)
     every = seats.resolved(chosen or {})
-    held = _slate_seats(args.mode, args.refuters)
+    held = _slate_seats(args.refuters)
     fields: dict[str, Any] = {"seats": {seat: every[seat] for seat in held}}
     notes = []
     if every[seats.ADVISOR_SEAT] == "advisor":
@@ -336,7 +390,8 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                  f"{slate_id}. {brief.rstrip('.')}. <role brief for this turn>"),
                 "CONTEXT: <claims under test: id, text, loc, trigger; this turn's angles>",
                 (f'SCOPE: write events only with: UV_CACHE_DIR="${{TMPDIR:-/tmp}}/converge-uv-cache" '
-                 f"{converge} <refute|file|rebut|accept|escalate|angle-na> {shlex.quote(slate_id)} "
+                 f"{converge} <attack|reply|verdict|file|rebut|accept|escalate|angle-na> "
+                 f"{shlex.quote(slate_id)} "
                  f"--dir {quoted_dir} --as {seat} ...; these commands append to "
                  f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}, which may be outside your "
                  f"writable roots: request write permission for each such command as your host "
@@ -387,8 +442,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.review_pass is not None and args.review_pass >= 2:
         effective = {**effective, "cutoff": {**effective["cutoff"],
                                              **copy.deepcopy(config_mod.REREVIEW_CUTOFF)}}
-    event: dict[str, Any] = {"event": "init", "mode": args.mode, "lenses": _ids(args.lenses),
-                             "angles": rows, "config": effective}
+    event: dict[str, Any] = {"event": "init", "lenses": _ids(args.lenses), "angles": rows,
+                             "config": effective, "refuters": args.refuters}
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
@@ -400,14 +455,9 @@ def cmd_init(args: argparse.Namespace) -> None:
     else:
         event = _init_snapshot(args, event, problems)
     path = _path(args)
-    step = None
-    if event["mode"] == "refute-only":
-        step = "file every slate claim: " + _step(
-            args, "file", "--as slate --origin slate --loc <path:line>",
-            '--claim "<text>" --trigger "<what reaches it>"')
-    data: dict[str, Any] = {"slate": args.slate, "mode": event["mode"], "lenses": event["lenses"],
-                            "angles": len(rows), "path": str(path)}
-    head = (f"INIT {args.slate} mode={event['mode']} lenses={','.join(event['lenses']) or '-'} "
+    data: dict[str, Any] = {"slate": args.slate, "lenses": event["lenses"], "angles": len(rows),
+                            "path": str(path)}
+    head = (f"INIT {args.slate} lenses={','.join(event['lenses']) or '-'} "
             f"angles={len(rows)} path={path}")
     for key in ("pass", "snapshot"):
         if key in event:
@@ -426,9 +476,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         for driver in drivers:
             lines.extend(_driver_lines(driver))
         lines.extend(f"NOTE {note}" for note in notes)
-    if drivers:
-        reclaim = "; ".join(_reclaim_step(driver["seat"]) for driver in drivers)
-        step = f"{reclaim}, then {step}" if step else reclaim
+    step = "; ".join(_reclaim_step(driver["seat"]) for driver in drivers) or None
     emit(args.output_mode, data, lines, step)
 
 
@@ -481,7 +529,7 @@ def cmd_file(args: argparse.Namespace) -> None:
                  lens=args.lens, angle=args.angle, rule=args.rule,
                  depends=_ids(args.depends) if args.depends else None)
     written = _write(args, event, build=lambda s: {"id": model.claim_id(len(s.claims) + 1)})
-    emit(args.output_mode, {"id": written["id"]}, f"FILED {written['id']}")
+    _written(args, {"id": written["id"]}, f"FILED {written['id']}")
 
 
 def cmd_escalate(args: argparse.Namespace) -> None:
@@ -489,8 +537,8 @@ def cmd_escalate(args: argparse.Namespace) -> None:
                  wider=args.wider, evidence=args.evidence)
     written = _write(args, event)
     wider = "yes" if "wider" in written else "no"
-    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "wider": wider == "yes"},
-         f"ESCALATE seq={written['seq']} {args.claim} wider={wider}")
+    _written(args, {"seq": written["seq"], "claim": args.claim, "wider": wider == "yes"},
+             f"ESCALATE seq={written['seq']} {args.claim} wider={wider}")
 
 
 def cmd_find_run(args: argparse.Namespace) -> None:
@@ -498,36 +546,24 @@ def cmd_find_run(args: argparse.Namespace) -> None:
     written = _write(args, {"event": "find-run", "lens": args.lens, "angle": args.angle,
                             "tell": args.tell, "searches": args.searches,
                             "positive_control": args.positive_control, "result": result})
-    emit(args.output_mode, {"seq": written["seq"], "lens": args.lens, "angle": args.angle},
-         f"FIND-RUN seq={written['seq']} lens={args.lens} angle={args.angle}")
+    _written(args, {"seq": written["seq"], "lens": args.lens, "angle": args.angle},
+             f"FIND-RUN seq={written['seq']} lens={args.lens} angle={args.angle}")
 
 
 def cmd_angle_na(args: argparse.Namespace) -> None:
     event = _opt({"event": "angle-na", "phase": args.phase, "angle": args.angle,
                   "reason": args.reason}, lens=args.lens, claim=args.claim)
     written = _write(args, event)
-    emit(args.output_mode, {"seq": written["seq"], "phase": args.phase, "angle": args.angle},
-         f"ANGLE-NA seq={written['seq']} phase={args.phase} angle={args.angle}")
-
-
-def cmd_refute(args: argparse.Namespace) -> None:
-    event = _opt({"event": "refute", "claim": args.claim, "round": args.round,
-                  "angle": args.angle, "tell": args.tell, "outcome": args.outcome,
-                  "evidence": args.evidence, "searches": args.searches,
-                  "positive_control": args.positive_control},
-                 narrowed=args.narrowed, source=args.source, ledger_evidence=args.ledger_evidence)
-    written = _write(args, event)
-    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "round": args.round,
-                            "outcome": args.outcome},
-         f"REFUTE seq={written['seq']} {args.claim} round={args.round} outcome={args.outcome}")
+    _written(args, {"seq": written["seq"], "phase": args.phase, "angle": args.angle},
+             f"ANGLE-NA seq={written['seq']} phase={args.phase} angle={args.angle}")
 
 
 def cmd_rebut(args: argparse.Namespace) -> None:
-    written = _write(args, {"event": "rebut", "claim": args.claim, "stage": args.stage,
+    written = _write(args, {"event": "rebut", "claim": args.claim, "when": args.when,
                             "evidence": args.evidence,
                             "evidence_sha256": ledger.evidence_hash(args.evidence)})
-    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "stage": args.stage},
-         f"REBUT seq={written['seq']} {args.claim} stage={args.stage}")
+    _written(args, {"seq": written["seq"], "claim": args.claim, "when": args.when},
+             f"REBUT seq={written['seq']} {args.claim} when={args.when}")
 
 
 def cmd_cut(args: argparse.Namespace) -> None:
@@ -543,29 +579,69 @@ def cmd_cut(args: argparse.Namespace) -> None:
             evidence[key] = text
     if problems:
         _refuse(problems)
-    event = _opt({"event": "cut", "claim": args.claim, "round": args.round,
+    event = _opt({"event": "cut", "claim": args.claim, "when": args.when, "round": args.round,
                   "frequency": args.frequency, "severity": args.severity,
                   "confidence": args.confidence, "difficulty": args.difficulty,
                   "evidence": evidence}, choice=args.choice, fix=args.fix)
     written = _write(args, event)
-    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "round": args.round},
-         f"CUT seq={written['seq']} {args.claim} round={args.round}")
+    _written(args,
+             {"seq": written["seq"], "claim": args.claim, "when": args.when, "round": args.round},
+             f"CUT seq={written['seq']} {args.claim} when={args.when} round={args.round}")
 
 
 def cmd_accept(args: argparse.Namespace) -> None:
-    written = _write(args, {"event": "accept", "claim": args.claim, "round": args.round})
-    emit(args.output_mode, {"seq": written["seq"], "claim": args.claim, "round": args.round},
-         f"ACCEPT seq={written['seq']} {args.claim} round={args.round}")
+    written = _write(args, {"event": "accept", "claim": args.claim, "when": args.when,
+                            "round": args.round})
+    _written(args,
+             {"seq": written["seq"], "claim": args.claim, "when": args.when, "round": args.round},
+             f"ACCEPT seq={written['seq']} {args.claim} when={args.when} round={args.round}")
+
+
+def _batch_arg(value: str) -> int | str:
+    """`--batch`: a table batch number, or `fresh-eye`."""
+    return int(value) if value.isdigit() else value
+
+
+def cmd_attack(args: argparse.Namespace) -> None:
+    event = {"event": "attack", "claim": args.claim, "batch": args.batch, "angle": args.angle,
+             "tell": args.tell, "outcome": args.outcome, "evidence": args.evidence,
+             "searches": args.searches, "positive_control": args.positive_control}
+    if args.last:
+        event["last"] = True
+    written = _write(args, event)
+    _written(args, {"seq": written["seq"], "claim": args.claim, "batch": args.batch,
+                    "angle": args.angle, "outcome": args.outcome},
+             f"ATTACK seq={written['seq']} {args.claim} batch={args.batch} angle={args.angle} "
+             f"outcome={args.outcome}")
+
+
+def cmd_reply(args: argparse.Namespace) -> None:
+    event: dict[str, Any] = {"event": "reply", "claim": args.claim, "batch": args.batch,
+                             "stance": args.stance}
+    if args.evidence is not None:
+        event.update(evidence=args.evidence, evidence_sha256=ledger.evidence_hash(args.evidence))
+    written = _write(args, _opt(event, text=args.text))
+    _written(args, {"seq": written["seq"], "claim": args.claim, "batch": args.batch,
+                    "stance": args.stance},
+             f"REPLY seq={written['seq']} {args.claim} batch={args.batch} stance={args.stance}")
+
+
+def cmd_verdict(args: argparse.Namespace) -> None:
+    event = _opt({"event": "verdict", "claim": args.claim, "batch": args.batch,
+                  "verdict": args.verdict}, evidence=args.evidence)
+    written = _write(args, event)
+    _written(args, {"seq": written["seq"], "claim": args.claim, "batch": args.batch,
+                    "verdict": args.verdict},
+             f"VERDICT seq={written['seq']} {args.claim} batch={args.batch} "
+             f"verdict={args.verdict}")
 
 
 def cmd_cutoff(args: argparse.Namespace) -> None:
     slate = _read(args)
-    if slate.mode == "refute-only":
-        _refuse(["refute-only slate has no cut stage"])
     problems = _coverage_problems(slate)
     problems.extend(f"{claim.id} is open in {phase}" for claim, phase in slate.open_claims())
     if problems:
-        _refuse(problems)
+        _refuse_next(args, "refused", problems, _next_step(args, slate))
     if not slate.cutoff_valid:
         def build(current: Slate) -> dict[str, Any]:
             return {"results": model.cutoff_results(model.compute_cutoff(current))}
@@ -573,12 +649,14 @@ def cmd_cutoff(args: argparse.Namespace) -> None:
         slate = _read(args)
     assert slate.cutoff is not None
     rows = model.compute_cutoff(slate)
+    counts = {result: sum(row.result == result for row in rows)
+              for result in ("finding", "follow-up", "killed")}
     emit(args.output_mode,
-         {"seq": slate.cutoff["seq"],
-          "rows": [{"claim": row.claim.id, "result": row.result, "rank": row.rank,
-                    "reason": row.reason} for row in rows]},
-         [f"CUTOFF seq={slate.cutoff['seq']}",
-          *(f"{row.claim.id} {row.result} rank={row.rank} reason={row.reason}" for row in rows)],
+         {"seq": slate.cutoff["seq"], "rows": model.cutoff_results(rows)},
+         [(f"CUTOFF seq={slate.cutoff['seq']} findings={counts['finding']} "
+          f"follow-up={counts['follow-up']} killed={counts['killed']}"),
+          *(f"{row.claim.id} {row.result} status={row.status} cut={row.cut} rank={row.rank} "
+            f"reason={row.reason}" for row in rows)],
          _step(args, "render"))
 
 
@@ -586,47 +664,45 @@ def cmd_cutoff(args: argparse.Namespace) -> None:
 # read commands
 
 
-def _claim_status(slate: Slate, claim: model.Claim) -> dict[str, Any]:
-    used = claim.used_angles
-    status: dict[str, Any] = {
+def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
+                  unverified: set[str]) -> dict[str, Any]:
+    batch = (protocol.next_batch(slate, claim)
+             if claim.live and claim.id not in unverified else None)
+    rating = claim.state.rating
+    return {
         "id": claim.id,
-        "stage": "dead" if claim.dead else claim.stage,
-        "refute": slate.refute_state(claim),
-        "round": claim.refute_round,
-        "reopened": claim.reopened,
+        "status": protocol.status(slate, claim, unverified),
+        "cut": "yes" if flags.get(claim.id) else "no",
+        "batch": batch,
+        "batch_state": None if batch is None else protocol.batch_state(slate, claim, batch),
         "lens": claim.lens,
         "origin": claim.origin,
         "finder": claim.finder,
         "claim": claim.text,
-        "unused_attack_angles": (slate.remaining_angles(claim) if slate.v2 else
-                                 [a for a in slate.angle_ids("attack") if a not in used]),
+        "escalated": claim.escalation is not None,
+        "rating": {f: rating[f] for f in model.CUT_FIELDS} if rating else None,
+        "unused_attack_angles": slate.remaining_angles(claim),
     }
-    if slate.mode == "full":
-        # A steps slate cuts before refute, so its cut state shows once a cut exists.
-        shown = (slate.refute_state(claim) in model.REFUTE_DONE
-                 or (slate.v2 and claim.cut_round > 0))
-        status["cut"] = slate.cut_state(claim) if shown else "-"
-        status["cut_round"] = claim.cut_round
-        status["accepted_round"] = claim.accepted_round or None
-        status["cut_note"] = model.cut_note(claim, slate.cap("cut_rounds"), slate.v2)
-    if slate.v2:
-        status["escalated"] = claim.escalation is not None
-        status["parked"] = slate.parked(claim)
-        status["phase"] = slate.phase(claim)
-    return status
 
 
-def _status_phase(slate: Slate) -> tuple[str, int]:
-    open_claims = slate.open_claims()
-    if not slate.claims:
-        phase = "find"
-    elif open_claims:
-        phase = open_claims[0][1]
-    else:
-        phase = "complete"
-    current_round = max((max(claim.refute_round, claim.cut_round)
-                         for claim in slate.claims.values()), default=0)
-    return phase, current_round
+def _claim_line(c: dict[str, Any]) -> str:
+    batch = "-" if c["batch"] is None else c["batch"]
+    return (f"{c['id']} status={c['status']} cut={c['cut']} batch={batch} "
+            f"batch_state={c['batch_state'] or '-'} escalated={'yes' if c['escalated'] else 'no'} "
+            f"unused={','.join(c['unused_attack_angles']) or '-'}")
+
+
+def _plan_lines(plan: list[list[dict[str, Any]]]) -> list[str]:
+    lines = []
+    for index, chunk in enumerate(plan, start=1):
+        for row in chunk:
+            line = f"PLAN {index} {row['claim']} {row['action']} {row['agent_role']}"
+            if row["batch"] is not None:
+                line += f" batch={row['batch']}"
+            if row["angles"]:
+                line += f" angles={','.join(row['angles'])}"
+            lines.append(line)
+    return lines
 
 
 def _coverage_problems(slate: Slate) -> list[str]:
@@ -634,137 +710,67 @@ def _coverage_problems(slate: Slate) -> list[str]:
             for lens, row in render.coverage(slate).items() if row.missing]
 
 
-def _legal_event_types(slate: Slate) -> list[str]:
-    legal = {"file"}
-    phase, _ = _status_phase(slate)
-    if slate.mode == "full" and (phase == "find" or _coverage_problems(slate)):
-        legal.update({"find-run", "angle-na"})
-    for claim in slate.live_claims():
-        if slate.v2:
-            claim_phase = slate.phase(claim)
-            if claim_phase == "cut":
-                legal.add("cut")
-                if claim.cut_rounds:
-                    legal.update({"accept", "rebut"})
-            elif claim_phase == "refute":
-                legal.update({"refute", "angle-na"})
-                if claim.refute_rounds:
-                    legal.add("rebut")
-            continue
-        refute = slate.refute_state(claim)
-        if refute not in model.REFUTE_DONE:
-            legal.update({"refute", "rebut"})
-        elif slate.mode == "full" and slate.cut_state(claim) not in model.CUT_DONE:
-            legal.update({"cut", "accept", "rebut"})
-    if slate.v2 and model.batch_plan(slate)["escalate"]:
-        legal.add("escalate")
-    if (slate.mode == "full" and not _coverage_problems(slate)
-            and not slate.open_claims() and not slate.cutoff_valid):
-        legal.add("cutoff")
-    if slate.cutoff_valid:
-        legal.add("render")
-    return sorted(legal)
-
-
 def _unresolved_choices(slate: Slate) -> list[dict[str, str]]:
-    if slate.mode != "full" or not slate.cutoff_valid:
+    if not slate.cutoff_valid:
         return []
     return [{"claim": row.claim.id, "result": row.result, "choice": choice}
             for row in model.compute_cutoff(slate)
-            if row.result != "follow-up" and (choice := (row.claim.last_cut() or {}).get("choice"))]
+            if row.result == "finding"
+            and (choice := (row.claim.state.rating or {}).get("choice"))]
 
 
 def cmd_status(args: argparse.Namespace) -> None:
     slate = _read(args)
-    claims = [_claim_status(slate, c) for c in slate.claims.values()]
+    flags, unverified = protocol.cut_flags(slate), protocol.unverified_ids(slate)
+    claims = [_claim_status(slate, c, flags, unverified) for c in slate.claims.values()]
     cutoff = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
     agents = slate.agent_ids()
-    phase, current_round = _status_phase(slate)
-    legal_events = _legal_event_types(slate)
-    plan = model.batch_plan(slate) if slate.v2 else None
+    phase = protocol.slate_phase(slate)
+    plan = model.batch_plan(slate)
+    step = _next_step(args, slate)
     if args.json:
         data: dict[str, Any] = {
-            "slate": slate.slate_id, "mode": slate.mode, "lenses": slate.lenses,
+            "slate": slate.slate_id, "lenses": slate.lenses, "refuters": slate.init_refuters,
             "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
-            "phase": phase, "round": current_round, "legal_event_types": legal_events,
+            "phase": phase, "steps": slate.config["steps"], "caps": slate.config["caps"],
+            "plan": plan,
             "seats": slate.seats,
-            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor)}
-        if plan is not None:
-            data["steps"] = slate.config["steps"]
-            data["caps"] = {key: slate.cap(key) for key in ("batch_items", "angles_per_claim")}
-            data["plan"] = plan
-        data["claims"] = claims
+            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor),
+            "claims": claims, "next": step}
         emit(args.output_mode, {}, [], json_text=json.dumps(data, indent=2))
         return
     advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
-    lines = [(f"SLATE {slate.slate_id} mode={slate.mode} lenses={','.join(slate.lenses) or '-'} "
-              f"cutoff={cutoff} phase={phase} round={current_round} "
-              f"claims={len(claims)} agents={len(agents)}/{slate.cap('agents')} "
-              f"legal={','.join(legal_events) or '-'} advisor={advisor or '-'}")]
-    for c in claims:
-        cut = (f" cut={c['cut']} cut_round={c['cut_round']} accepted={c['accepted_round'] or '-'}"
-               if "cut" in c else "")
-        reopened = " reopened" if c["reopened"] else ""
-        lines.append(f"{c['id']} stage={c['stage']} refute={c['refute']} round={c['round']}"
-                     f"{cut}{reopened} unused={','.join(c['unused_attack_angles']) or '-'}")
-    for step, batches in (plan or {}).items():
-        for index, batch in enumerate(batches, start=1):
-            rows = " ".join(row["claim"] + (f"x{row['angles']}" if "angles" in row else "")
-                            for row in batch)
-            lines.append(f"PLAN {step} batch={index} {rows}")
-    emit(args.output_mode, {}, lines)
+    lines = [(f"SLATE {slate.slate_id} lenses={','.join(slate.lenses) or '-'} "
+              f"phase={phase} cutoff={cutoff} claims={len(claims)} "
+              f"agents={len(agents)}/{slate.cap('agents')} advisor={advisor or '-'}"),
+             *map(_claim_line, claims), *_plan_lines(plan)]
+    emit(args.output_mode, {}, lines, step)
 
 
 def cmd_converged(args: argparse.Namespace) -> None:
     slate = _read(args)
-    if args.phase == "cut" and slate.mode == "refute-only":
-        _refuse(["refute-only slate has no cut stage"])
-    pending = []
-    # Claims open in the cut phase, by the agent that continues them.
-    owners: dict[str, list[str]] = {"escalate": [], "accept": [], "cut": [], "refute": []}
-    for claim in slate.live_claims():
-        rstate = slate.refute_state(claim)
-        if slate.v2:
-            # A parked claim is never refuted; a cut is done when no step is left.
-            if args.phase == "refute":
-                if not slate.parked(claim) and rstate not in model.REFUTE_DONE:
-                    pending.append(f"{claim.id} refute={rstate} round={claim.refute_round}")
-            elif (claim_phase := slate.phase(claim)) is not None:
-                pending.append(f"{claim.id} phase={claim_phase} cut={slate.cut_state(claim)}")
-                owner = ("escalate" if slate.needs_escalate(claim)
-                         else "accept" if claim_phase == "cut" and slate.awaits_accept(claim)
-                         else claim_phase)
-                owners[owner].append(claim.id)
-            continue
-        if args.phase == "refute":
-            if rstate not in model.REFUTE_DONE:
-                pending.append(f"{claim.id} refute={rstate} round={claim.refute_round}")
-        elif rstate not in model.REFUTE_DONE:
-            pending.append(f"{claim.id} refute={rstate} (cut not started)")
-        elif slate.cut_state(claim) not in model.CUT_DONE:
-            pending.append(f"{claim.id} cut={slate.cut_state(claim)} cut_round={claim.cut_round}")
-    data = {"phase": args.phase, "converged": not pending, "pending": pending}
-    if pending:
-        step = (_step(args, "status", "--json") if args.phase == "refute"
-                else _cut_step(owners) if slate.v2
-                else "continue the cutter with the listed claims")
-        emit(args.output_mode, data, [f"OPEN phase={args.phase} claims={len(pending)}", *pending],
-             step)
-        sys.exit(EXIT_NO)
-    # A converged refute phase leaves gap hunt vs cut to the caller: no step.
-    emit(args.output_mode, data, f"CONVERGED phase={args.phase}",
-         _step(args, "cutoff") if args.phase == "cut" else None)
-
-
-def _cut_step(owners: dict[str, list[str]]) -> str:
-    """`next:` for `converged --phase cut` on a steps slate: each open claim's agent."""
-    agents = {"escalate": "continue each claim's finder to escalate",
-              "accept": "continue each claim's finder to accept or rebut",
-              "cut": "continue the cutter with", "refute": "continue the refuters with"}
-    groups = [(agents[key], ids) for key, ids in owners.items() if ids]
-    if len(groups) == 1:
-        return f"{groups[0][0]} the listed claims"
-    return "; ".join(f"{agent} {', '.join(ids)}" for agent, ids in groups)
+    phase = protocol.slate_phase(slate)
+    flags = protocol.cut_flags(slate)
+    open_ids = {claim.id: claim_phase for claim, claim_phase in slate.open_claims()}
+    pending, disputed = [], []
+    for claim in slate.claims.values():
+        if claim.id in open_ids:
+            pending.append(f"{claim.id} open in {open_ids[claim.id]}")
+        elif (claim.live and claim.state.status == "disputed" and not flags[claim.id]):
+            disputed.append(claim.id)
+            pending.append(f"{claim.id} disputed cut=no")
+    done = protocol.converged(slate)
+    data = {"converged": done, "phase": phase, "pending": pending}
+    if done:
+        emit(args.output_mode, data, "CONVERGED", "end the slate with outcome converged")
+        return
+    if phase == "done":
+        step = ("end the slate with outcome unconverged; disputed findings: "
+                + ", ".join(disputed))
+    else:
+        step = _next_step(args, slate)
+    emit(args.output_mode, data, [f"OPEN phase={phase} claims={len(pending)}", *pending], step)
+    sys.exit(EXIT_NO)
 
 
 def cmd_coverage(args: argparse.Namespace) -> None:
@@ -776,7 +782,7 @@ def cmd_coverage(args: argparse.Namespace) -> None:
                      f"missing={','.join(row.missing) or '-'}")
         lines.extend(f"NA {lens} {angle_id} {reason}" for angle_id, reason in row.na.items())
     if any(row.missing for row in coverage.values()):
-        step = "continue the finder with the missing angles, then " + _step(args, "coverage")
+        step = _MISSING + _step(args, "coverage")
     else:
         step = _step(args, "status", "--json")
     emit(args.output_mode,
@@ -792,10 +798,7 @@ def cmd_gate(args: argparse.Namespace) -> None:
     if not path.is_file():
         _refuse([f"no slate {args.slate!r} in {args.dir} (expected {path})"])
     slate = _read(args)
-    if slate.mode == "refute-only":
-        _refuse(["refute-only slate has no cut stage"])
-    problems = []
-    problems.extend(_coverage_problems(slate))
+    problems = _coverage_problems(slate)
     for claim, phase in slate.open_claims():
         problems.append(f"{claim.id} is open in {phase}")
     if not slate.cutoff_valid:
@@ -803,10 +806,12 @@ def cmd_gate(args: argparse.Namespace) -> None:
     cutoff_seq = slate.cutoff["seq"] if slate.cutoff else None
     data = {"slate": args.slate, "ok": not problems, "problems": problems, "cutoff_seq": cutoff_seq}
     if problems:
-        emit(args.output_mode, data, [f"GATE fail {args.slate}", *problems])
+        emit(args.output_mode, data, [f"GATE fail {args.slate}", *problems],
+             _next_step(args, slate))
         sys.exit(EXIT_NO)
     shown = "-" if cutoff_seq is None else cutoff_seq
-    emit(args.output_mode, data, f"GATE ok {args.slate} cutoff_seq={shown}")
+    emit(args.output_mode, data, f"GATE ok {args.slate} cutoff_seq={shown}",
+         _step(args, "converged"))
 
 
 def cmd_render(args: argparse.Namespace) -> None:
@@ -902,7 +907,6 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
         p.add_argument("--project-root", type=caller_path, default=caller_cwd())
 
     p = command("init", cmd_init, write=True)
-    p.add_argument("--mode", required=True, choices=model.MODE)
     p.add_argument("--lenses", default="")
     p.add_argument("--angles", nargs="*", type=caller_path, default=[])
     p.add_argument("--snapshot", action="store_true",
@@ -943,22 +947,9 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--lens")
     p.add_argument("--claim")
 
-    p = command("refute", cmd_refute, write=True)
-    p.add_argument("--claim", required=True)
-    p.add_argument("--round", required=True, type=int)
-    for flag in ("--angle", "--tell", "--outcome", "--evidence", "--searches", "--positive-control"):
-        p.add_argument(flag, required=True)
-    p.add_argument("--narrowed")
-    p.add_argument("--source")
-    p.add_argument("--ledger-evidence")
-
-    p = command("rebut", cmd_rebut, write=True)
-    p.add_argument("--claim", required=True)
-    p.add_argument("--stage", required=True)
-    p.add_argument("--evidence", required=True)
-
     p = command("cut", cmd_cut, write=True)
     p.add_argument("--claim", required=True)
+    p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
     for name in model.CUT_FIELDS:
         p.add_argument(f"--{name}", required=True)
@@ -966,14 +957,41 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--choice")
     p.add_argument("--fix")
 
+    p = command("attack", cmd_attack, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--batch", required=True, type=_batch_arg)
+    for flag in ("--angle", "--tell", "--outcome", "--evidence", "--searches",
+                 "--positive-control"):
+        p.add_argument(flag, required=True)
+    p.add_argument("--last", action="store_true",
+                   help="close the fresh-eye batch with this attack")
+
+    p = command("reply", cmd_reply, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--batch", required=True, type=_batch_arg)
+    p.add_argument("--stance", required=True)
+    p.add_argument("--evidence")
+    p.add_argument("--text", help="the clarified claim text, with stance rebut")
+
+    p = command("verdict", cmd_verdict, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--batch", required=True, type=_batch_arg)
+    p.add_argument("--verdict", required=True)
+    p.add_argument("--evidence")
+
+    p = command("rebut", cmd_rebut, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--when", required=True)
+    p.add_argument("--evidence", required=True)
+
     p = command("accept", cmd_accept, write=True)
     p.add_argument("--claim", required=True)
+    p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
 
     p = command("status", cmd_status)
     p.add_argument("--json", action="store_true")
-    p = command("converged", cmd_converged)
-    p.add_argument("--phase", required=True, choices=("refute", "cut"))
+    command("converged", cmd_converged)
     command("cutoff", cmd_cutoff)
     command("coverage", cmd_coverage)
     command("gate", cmd_gate, dir_required=True)

@@ -14,7 +14,7 @@ project-specific knowledge; each project customizes them through
 | settlement | What `clarify` settles with the user before a run starts: task type, approach, principles, sources of truth, autonomy, `goal`, and the state machine. Written once. |
 | `goal` | The settlement's done condition: when the run has `succeeded`, and when it has `failed` because the task cannot be done. |
 | pitch | A progress report to the user, recorded in the session ledger. |
-| slate | One set of claims that `converge` tests together: find, refute, cut. |
+| slate | One set of claims that `converge` tests together: find, attack, cut. Each claim ends `survived`, `disputed`, `unverified` or `killed`, with a separate `cut` field. |
 | lens | A review perspective, such as `correctness` or `security`, with its own finder brief. |
 | find angle | One specific question a finder asks under a lens. |
 
@@ -23,8 +23,8 @@ project-specific knowledge; each project customizes them through
 | Plugin | What it is | Durable state |
 |---|---|---|
 | `engine` | Autonomous task loop: clarify once, then execute a state machine to `succeeded`/`failed`. | `~/.bootgear/session/<run-id>.md` |
-| `converge` | Settles facts behind a claim slate: find, refute, cut by separate agents; computes what is reported. | `~/.bootgear/converge/` |
-| `review` | Review domain skill: lens finders plus converge refute/cut, and applying accepted feedback. | via converge |
+| `converge` | Settles facts behind a claim slate: find, attack, cut by separate agents; computes which claims are findings. | `~/.bootgear/converge/` |
+| `review` | Review domain skill: lens finders plus converge attack and cut, and applying accepted feedback. | via converge |
 | `spec` | Requirements domain skill: requirements, design, sign-off, task breakdown. | none |
 | `test` | Testing domain skill: write, run, and triage test results. | none |
 | `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger and a machine-local ledger |

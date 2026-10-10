@@ -88,8 +88,10 @@ its domain and applies that domain's settled source. When no source decides
 it, `resolve` hands `debate` the decision, domains, full `source_of_truth`,
 threshold, `task_type`, `goal` and merged principles.
 
-`debate` argues only choices: factual disputes go back to converge, and a
-caller's converge render is briefed as settled fact. It then:
+`debate` argues only choices: factual disputes go back to converge. From a
+caller's converge render, only `survived` findings and killed claims are briefed
+as settled fact; `disputed` findings and `unverified` follow-ups are not. It
+then:
 
 - tags every entry of one question with a stable `[qN]` id, and opens with a
   round 0 on scope, principles and cutoff, closed by `scope-settled`;

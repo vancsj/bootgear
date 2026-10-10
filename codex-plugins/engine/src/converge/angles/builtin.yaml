@@ -58,7 +58,7 @@
 - id: real-referent
   tag: attack
   tell: the claim names a symbol, line or behaviour
-  asks: Does it exist in the artifact? If not, the claim is retracted.
+  asks: Does it exist in the artifact? If not, record the attack as refuted.
 
 # evaluate: evidence for a cut field
 - id: entry-points

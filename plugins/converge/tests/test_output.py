@@ -11,15 +11,16 @@ from typing import Any
 
 import yaml
 from conftest import (
+    BATCH_1,
     BIN,
     CUT_EVIDENCE,
     CUTTER,
+    DISABLED,
     FINDER,
     MAIN,
     PLUGIN_DIR,
     R1,
     R2,
-    STEPS_OFF,
     Converge,
 )
 
@@ -40,25 +41,32 @@ def _error(cv: Converge, *args: str, code: int = 2) -> dict[str, Any]:
     return json.loads(result.stderr)["error"]
 
 
-def _init_args(cv: Converge, mode: str = "full", lenses: str = "correctness,security") -> list[str]:
-    # Every step off, so the slate keeps the file → refute → cut flow.
-    steps = cv.root / "steps-off.yaml"
-    steps.write_text(yaml.safe_dump({"steps": STEPS_OFF}))
-    return ["init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--mode", mode,
-            "--lenses", lenses, "--angles", str(cv.angles), "--project-root", str(cv.project),
+def _init_args(cv: Converge, lenses: str = "correctness,security") -> list[str]:
+    steps = cv.root / "steps.yaml"
+    steps.write_text(yaml.safe_dump({"steps": {"cut": "before", "gap_hunt": False},
+                                     "angles": {"disable": DISABLED}}))
+    return ["init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--lenses", lenses,
+            "--angles", str(cv.angles), "--project-root", str(cv.project),
             "--config", str(steps)]
 
 
-def _refute_args(cv: Converge, claim: str, angle: str, agent: str) -> list[str]:
-    return ["refute", "s1", "--dir", str(cv.dir), "--as", agent, "--claim", claim, "--round", "1",
-            "--angle", angle, "--tell", "t", "--outcome", "survived", "--evidence", "e",
-            "--searches", "s", "--positive-control", "p"]
+def _file_args(cv: Converge, angle: str = "changed-contract", loc: str = "a.py:1") -> list[str]:
+    return ["file", "s1", "--dir", str(cv.dir), "--as", FINDER, "--lens", "correctness",
+            "--angle", angle, "--origin", "lens", "--loc", loc, "--claim", "c",
+            "--trigger", "t"]
 
 
 def _cut_args(cv: Converge, claim: str, rnd: int, frequency: str = "common") -> list[str]:
     return ["cut", "s1", "--dir", str(cv.dir), "--as", CUTTER, "--claim", claim,
-            "--round", str(rnd), "--frequency", frequency, "--severity", "wrong-behavior",
-            "--confidence", "traced", "--difficulty", "local", *CUT_EVIDENCE]
+            "--round", str(rnd), "--when", "before", "--frequency", frequency,
+            "--severity", "wrong-behavior", "--confidence", "inferred", "--difficulty", "local",
+            *CUT_EVIDENCE]
+
+
+def _attack_args(cv: Converge, angle: str, agent: str, batch: str, outcome: str) -> list[str]:
+    return ["attack", "s1", "--dir", str(cv.dir), "--as", agent, "--claim", "F001",
+            "--batch", batch, "--angle", angle, "--tell", "t", "--outcome", outcome,
+            "--evidence", "e", "--searches", "s", "--positive-control", "p"]
 
 
 def _next(cv: Converge, rest: str) -> str:
@@ -70,93 +78,106 @@ def _next(cv: Converge, rest: str) -> str:
 
 
 def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
-    # Through the shipped wrapper, so every subcommand runs on the plugin's own
-    # declared dependencies at least once.
+    # Through the shipped wrapper, so every subcommand runs on the plugin's own declared
+    # dependencies at least once.
     cv.use_bin = True
     d = str(cv.dir)
+    plan = _next(cv, "status s1 --dir {dir} --json")
     init = _json(cv, *_init_args(cv))
-    assert init == {"slate": "s1", "mode": "full", "lenses": ["correctness", "security"],
+    assert init == {"slate": "s1", "lenses": ["correctness", "security"],
                     "angles": init["angles"], "path": str(cv.path())}
     assert isinstance(init["angles"], int) and init["angles"] > 0
-    initial_status = _json(cv, "status", "s1", "--dir", d)
-    assert initial_status["phase"] == "find"
-    assert {"file", "find-run", "angle-na"} <= set(initial_status["legal_event_types"])
-    assert "cutoff" not in initial_status["legal_event_types"]
+    assert _json(cv, "status", "s1", "--dir", d)["phase"] == "find"
     initial_cutoff_error = _error(cv, "cutoff", "s1", "--dir", d)
     assert any("missing find angles" in item for group in initial_cutoff_error["problems"]
                for item in group["items"])
 
-    assert _json(cv, "file", "s1", "--dir", d, "--as", FINDER, "--lens", "correctness",
-                 "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
-                 "--claim", "c", "--trigger", "t") == {"id": "F001"}
+    find = "continue the finder with the missing angles, then " + _next(cv, "coverage s1 --dir {dir}")
+    assert _json(cv, *_file_args(cv)) == {"id": "F001", "next": find}
     run = _json(cv, "find-run", "s1", "--dir", d, "--as", FINDER, "--lens", "correctness",
                 "--angle", "changed-contract", "--tell", "t", "--searches", "s",
                 "--positive-control", "p", "--result", "F001")
-    assert run == {"seq": run["seq"], "lens": "correctness", "angle": "changed-contract"}
+    assert run == {"seq": run["seq"], "lens": "correctness", "angle": "changed-contract",
+                   "next": find}
     na = _json(cv, "angle-na", "s1", "--dir", d, "--as", FINDER, "--phase", "find",
                "--angle", "failure-path", "--lens", "security", "--reason", "no I/O")
-    assert na == {"seq": run["seq"] + 1, "phase": "find", "angle": "failure-path"}
-
-    for angle, agent in (("boundary", R1), ("reachability", R2)):
-        refute = _json(cv, *_refute_args(cv, "F001", angle, agent))
-        assert refute == {"seq": refute["seq"], "claim": "F001", "round": 1, "outcome": "survived"}
-    assert _json(cv, "converged", "s1", "--dir", d, "--phase", "refute") == {
-        "phase": "refute", "converged": True, "pending": []}
-
-    cut = _json(cv, *_cut_args(cv, "F001", 1))
-    assert cut == {"seq": cut["seq"], "claim": "F001", "round": 1}
-    assert _json(cv, "converged", "s1", "--dir", d, "--phase", "cut", code=1) == {
-        "phase": "cut", "converged": False, "pending": ["F001 phase=cut cut=open"],
-        "next": "continue each claim's finder to accept or rebut the listed claims"}
-    accept = _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
-                   "--round", "1")
-    assert accept == {"seq": accept["seq"], "claim": "F001", "round": 1}
-    assert _json(cv, "converged", "s1", "--dir", d, "--phase", "cut") == {
-        "phase": "cut", "converged": True, "pending": [],
-        "next": _next(cv, "cutoff s1 --dir {dir}")}
-    rebut = _json(cv, "rebut", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
-                  "--stage", "cut", "--evidence", "prod shows every call")
-    assert rebut == {"seq": rebut["seq"], "claim": "F001", "stage": "cut"}
-    _json(cv, *_cut_args(cv, "F001", 2, "every-call"))
-    _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001", "--round", "2")
-
+    assert na == {"seq": run["seq"] + 1, "phase": "find", "angle": "failure-path", "next": find}
     assert _json(cv, "coverage", "s1", "--dir", d) == {
         "lenses": {"correctness": {"ran": ["changed-contract"], "na": {},
                                    "missing": ["failure-path"]},
                    "security": {"ran": [], "na": {"failure-path": "no I/O"},
                                 "missing": ["changed-contract"]}},
-        "next": "continue the finder with the missing angles, then "
-                + _next(cv, "coverage s1 --dir {dir}")}
-    assert _json(cv, "gate", "s1", "--dir", d, code=1) == {
-        "slate": "s1", "ok": False, "cutoff_seq": None,
-        "problems": ["lens correctness has missing find angles: failure-path",
-                     "lens security has missing find angles: changed-contract",
-                     "no current cutoff (run `converge cutoff` after the last state change)"]}
-    incomplete_cutoff_error = _error(cv, "cutoff", "s1", "--dir", d)
-    assert incomplete_cutoff_error["problems"] == [{"kind": "", "items": [
-        "lens correctness has missing find angles: failure-path",
-        "lens security has missing find angles: changed-contract"]}]
+        "next": find}
     _json(cv, "find-run", "s1", "--dir", d, "--as", FINDER, "--lens", "security",
           "--angle", "changed-contract", "--tell", "t", "--searches", "s",
           "--positive-control", "p", "--result", "none")
     _json(cv, "angle-na", "s1", "--dir", d, "--as", FINDER, "--phase", "find",
           "--angle", "failure-path", "--lens", "correctness", "--reason", "no I/O")
+
+    escalate = _json(cv, "escalate", "s1", "--dir", d, "--as", FINDER, "--claim", "F001")
+    assert escalate == {"seq": escalate["seq"], "claim": "F001", "wider": False,
+                        "next": f"cut-before: cutter cut-before F001; plan: {plan}"}
+    cut = _json(cv, *_cut_args(cv, "F001", 1))
+    assert cut == {"seq": cut["seq"], "claim": "F001", "when": "before", "round": 1,
+                   "next": f"cut-before: finder accept F001; plan: {plan}"}
+    rebut = _json(cv, "rebut", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
+                  "--when", "before", "--evidence", "prod shows every call")
+    assert rebut == {"seq": rebut["seq"], "claim": "F001", "when": "before",
+                     "next": f"cut-before: cutter cut-before F001; plan: {plan}"}
+    _json(cv, *_cut_args(cv, "F001", 2, "every-call"))
+    accept = _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
+                   "--when", "before", "--round", "2")
+    attack_step = f"attack: r1 attack F001 batch 1; plan: {plan}"
+    assert accept == {"seq": accept["seq"], "claim": "F001", "when": "before", "round": 2,
+                      "next": attack_step}
+
+    assert _json(cv, "gate", "s1", "--dir", d, code=1) == {
+        "slate": "s1", "ok": False, "cutoff_seq": None,
+        "problems": ["F001 is open in attack",
+                     "no current cutoff (run `converge cutoff` after the last state change)"],
+        "next": attack_step}
+    assert _json(cv, "converged", "s1", "--dir", d, code=1) == {
+        "converged": False, "phase": "attack", "pending": ["F001 open in attack"],
+        "next": attack_step}
+    attacks = [_json(cv, *_attack_args(cv, angle, R1, "1",
+                                       "refuted" if angle == BATCH_1[0] else "clean"))
+               for angle in BATCH_1]
+    attack = attacks[-1]
+    assert attacks[0]["outcome"] == "refuted"
+    assert attack == {"seq": attack["seq"], "claim": "F001", "batch": 1, "angle": BATCH_1[-1],
+                      "outcome": "clean", "next": f"attack: finder reply F001 batch 1; plan: {plan}"}
+    reply = _json(cv, "reply", "s1", "--dir", d, "--as", FINDER, "--claim", "F001", "--batch", "1",
+                  "--stance", "rebut", "--evidence", "b.py:4 passes None")
+    assert reply == {"seq": reply["seq"], "claim": "F001", "batch": 1, "stance": "rebut",
+                     "next": f"attack: r1 verdict F001 batch 1; plan: {plan}"}
+    verdict = _json(cv, "verdict", "s1", "--dir", d, "--as", R1, "--claim", "F001",
+                    "--batch", "1", "--verdict", "agree")
+    assert verdict == {"seq": verdict["seq"], "claim": "F001", "batch": 1, "verdict": "agree",
+                       "next": f"attack: r2 attack F001 batch fresh-eye; plan: {plan}"}
+    fresh = _json(cv, *_attack_args(cv, "retry timing", R2, "fresh-eye", "clean"), "--last")
+    assert fresh["batch"] == "fresh-eye"
+    assert fresh["next"] == _next(cv, "cutoff s1 --dir {dir}")
+
     cutoff = _json(cv, "cutoff", "s1", "--dir", d)
     assert cutoff == {"seq": cutoff["seq"],
-                      "rows": [{"claim": "F001", "result": cutoff["rows"][0]["result"],
-                                "rank": 1, "reason": cutoff["rows"][0]["reason"]}],
+                      "rows": [{"claim": "F001", "status": "survived", "cut": "no",
+                                "result": "finding", "rank": 1, "reason": "report_if[1]"}],
                       "next": _next(cv, "render s1 --dir {dir}")}
     assert _json(cv, "gate", "s1", "--dir", d) == {
-        "slate": "s1", "ok": True, "problems": [], "cutoff_seq": cutoff["seq"]}
-
+        "slate": "s1", "ok": True, "problems": [], "cutoff_seq": cutoff["seq"],
+        "next": _next(cv, "converged s1 --dir {dir}")}
     rendered = _json(cv, "render", "s1", "--dir", d)
     assert rendered == {"slate": "s1", "markdown": cv.ok("render", "s1").stdout,
                         "choices": []}
-
+    assert "findings=1 follow-up=0 killed=0 converged=yes" in rendered["markdown"]
+    assert _json(cv, "converged", "s1", "--dir", d) == {
+        "converged": True, "phase": "done", "pending": [],
+        "next": "end the slate with outcome converged"}
     status = cv("status", "s1", "--dir", d, "--json", env=PIPE).stdout
     status_data = json.loads(status)
     assert status.startswith("{\n  ") and status_data["claims"][0]["id"] == "F001"
-    assert {"phase", "round", "legal_event_types"} <= set(status_data)
+    assert {"phase", "steps", "caps", "plan", "refuters", "next"} <= set(status_data)
+    assert status_data["phase"] == "done"
 
     angles = _json(cv, "angles", "--tag", "decide", "--project-root", str(cv.project))["angles"]
     assert {row["tag"] for row in angles} == {"decide"}
@@ -166,19 +187,16 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     assert {"layer", "present", "path"} <= set(validate["sources"][0])
     resolved = _json(cv, "config", "resolve", "--project-root", str(cv.project))
     assert resolved == json.loads(cv("config", "resolve", "--project-root", str(cv.project), "--json").stdout)
+    prune = cv.root / "git"
+    prune.mkdir()
+    subprocess.run(["git", "init", "-q", str(prune)], check=True)
+    assert _json(cv, "prune", "s9", "--project-root", str(prune)) == {"pruned": [],
+                                                                      "missing": ["s9"]}
 
 
 def test_pipe_default_is_prose(cv: Converge) -> None:
     result = cv(*_init_args(cv), env=PIPE)
-    assert result.stdout.startswith("INIT s1")
-
-
-def test_status_keeps_finder_events_until_coverage_is_complete(cv: Converge) -> None:
-    cv.init()
-    cv.file()
-    status = _json(cv, "status", "s1", "--dir", str(cv.dir))
-    assert status["phase"] == "refute"
-    assert {"find-run", "angle-na"} <= set(status["legal_event_types"])
+    assert result.stdout.startswith("INIT s1 lenses=correctness,security ")
 
 
 def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Path) -> None:
@@ -187,9 +205,9 @@ def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Pat
     with out.open("w") as handle:
         subprocess.run([str(BIN), "status", "s1", "--dir", str(cv.dir)], stdout=handle,
                        env={**cv.env, **PIPE}, cwd=cv.project, check=True)
-    assert out.read_text().startswith("SLATE s1 mode=full")
+    assert out.read_text().startswith("SLATE s1 lenses=")
     piped = cv("status", "s1", "--dir", str(cv.dir), "--prose", env=PIPE).stdout
-    assert piped.startswith("SLATE s1 mode=full")
+    assert piped.startswith("SLATE s1 lenses=")
     assert json.loads(cv("status", "s1", "--dir", str(cv.dir), "--json").stdout)["slate"] == "s1"
 
 
@@ -205,44 +223,41 @@ def test_both_mode_flags_refused(cv: Converge) -> None:
 
 
 def test_argparse_refusal_prose(cv: Converge) -> None:
-    err = cv("refute", "s1", "--dir", str(cv.dir), "--as", R1, code=2).stderr
+    err = cv("cut", "s1", "--dir", str(cv.dir), "--as", CUTTER, code=2).stderr
     lines = err.splitlines()
-    assert lines[0].startswith("converge refute: error: the following arguments are required: ")
+    assert lines[0].startswith("converge cut: error: the following arguments are required: ")
     assert "usage:" not in err
-    assert lines[1] == f"example: converge {cli.EXAMPLES['refute']}"
-    assert lines[2] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "refute")
-    assert lines[3:] == [f"  converge {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "refute"]
+    assert lines[1] == f"example: converge {cli.EXAMPLES['cut']}"
+    assert lines[2] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "cut")
+    assert lines[3:] == [f"  converge {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
 
 
 def test_domain_refusal_prose_keeps_first_lines(cv: Converge) -> None:
     cv.init()
-    cv.file()
-    err = cv.refused("refute", "s1", "--as", R1, "--claim", "F001", "--round", "1",
-                     "--angle", "nope", "--tell", "t", "--outcome", "survived",
-                     "--evidence", "e", "--searches", "s", "--positive-control", "p")
+    err = cv(*_file_args(cv, angle="nope"), code=2).stderr
     lines = err.splitlines()
     assert lines[:2] == ["converge: refused:",
-                         "  - unknown attack angle 'nope' (not in this slate's init snapshot)"]
-    assert lines[2] == f"example: converge {cli.EXAMPLES['refute']}"
-    assert lines[3].startswith("commands: init, file, ")
+                         "  - unknown find angle 'nope' (not in this slate's init snapshot)"]
+    assert lines[2] == f"example: converge {cli.EXAMPLES['file']}"
+    assert lines[3].startswith("commands: init, escalate, ")
 
 
 def test_domain_refusal_json_and_display_prog(cv: Converge) -> None:
     cv.init()
-    result = cv(*_refute_args(cv, "F001", "nope", R1), "--json", code=2,
+    result = cv(*_file_args(cv, angle="nope"), "--json", code=2,
                 env={**PIPE, "BOOTGEAR_PROG": "/p/scripts/converge"})
     error = json.loads(result.stderr)["error"]
-    assert error["command"] == "refute"
+    assert error["command"] == "file"
     assert error["message"] == "converge: refused:"
-    assert error["example"] == f"/p/scripts/converge {cli.EXAMPLES['refute']}"
-    assert "refute" not in error["commands"] and "init" in error["commands"]
-    assert set(error["examples"]) == {"file", "status", "converged"}
+    assert error["example"] == f"/p/scripts/converge {cli.EXAMPLES['file']}"
+    assert "file" not in error["commands"] and "init" in error["commands"]
+    assert set(error["examples"]) == set(cli.FREQUENT) - {"file"}
 
 
 def test_argparse_refusal_json(cv: Converge) -> None:
-    error = _error(cv, "init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--mode", "bogus")
+    error = _error(cv, "init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--refuters", "3")
     assert error["command"] == "init"
-    assert error["message"].startswith("converge init: error: argument --mode: invalid choice")
+    assert error["message"].startswith("converge init: error: argument --refuters: invalid choice")
     assert error["example"] == f"converge {cli.EXAMPLES['init']}"
 
 
@@ -252,16 +267,10 @@ def test_argparse_refusal_json(cv: Converge) -> None:
 
 def test_every_ledger_problem_in_one_refusal(cv: Converge) -> None:
     cv.init()
-    error = _error(cv, *_refute_args(cv, "F999", "nope", R1))
+    error = _error(cv, *_file_args(cv, angle="nope", loc="no-line"))
     assert error["problems"] == [{"kind": "", "items": [
-        "unknown claim 'F999'",
-        "unknown attack angle 'nope' (not in this slate's init snapshot)"]}]
-    err = cv.refused("refute", "s1", "--as", R1, "--claim", "F999", "--round", "1",
-                     "--angle", "nope", "--tell", "t", "--outcome", "survived",
-                     "--evidence", "e", "--searches", "s", "--positive-control", "p")
-    assert err.splitlines()[:3] == [
-        "converge: refused:", "  - unknown claim 'F999'",
-        "  - unknown attack angle 'nope' (not in this slate's init snapshot)"]
+        "`loc` must match path:line (\\A[^:\\s]+:\\d+\\Z); got 'no-line'",
+        "unknown find angle 'nope' (not in this slate's init snapshot)"]}]
 
 
 # ---------------------------------------------------------------------------
@@ -270,10 +279,10 @@ def test_every_ledger_problem_in_one_refusal(cv: Converge) -> None:
 
 def test_relative_paths_resolve_against_caller_cwd(cv: Converge) -> None:
     caller = {"GEAR_CALLER_CWD": str(cv.root)}
-    out = cv("init", "s1", "--dir", "ledgers", "--as", MAIN, "--mode", "full",
+    out = cv("init", "s1", "--dir", "ledgers", "--as", MAIN,
              "--lenses", "correctness", "--angles", "find-angles.yaml",
              "--project-root", "project", env=caller).stdout
-    assert out.startswith("INIT s1 mode=full lenses=correctness ")
+    assert out.startswith("INIT s1 lenses=correctness ")
     assert out.rstrip().endswith(f"path={cv.path()}")
     assert cv.path().is_file()
     assert "changed-contract" in {r["id"] for r in cv.events()[0]["angles"]}
@@ -291,30 +300,21 @@ def test_gate_still_refuses_relative_dir(cv: Converge) -> None:
 
 
 # ---------------------------------------------------------------------------
-# `next:` names the step after the command
+# coverage and its `next:` step
 
 
-def test_next_after_cutoff_and_converged(cv: Converge) -> None:
+def test_coverage_command(cv: Converge) -> None:
     cv.init()
-    for lens in ("correctness", "security"):
-        for angle in ("changed-contract", "failure-path"):
-            cv.ok("angle-na", "s1", "--as", FINDER, "--phase", "find", "--angle", angle,
-                  "--lens", lens, "--reason", "n/a")
     cid = cv.file()
-    open_refute = cv.ok("converged", "s1", "--phase", "refute", code=1).stdout.splitlines()
-    assert open_refute[-1] == "next: " + _next(cv, "status s1 --dir {dir} --json")
-    cv.quiet_round(cid, 1, ("boundary", "reachability"))
-    done = cv.ok("converged", "s1", "--phase", "refute").stdout
-    assert done == "CONVERGED phase=refute\n"
-    cv.cut(cid, 1, CUTTER)
-    open_cut = cv.ok("converged", "s1", "--phase", "cut", code=1).stdout.splitlines()
-    assert open_cut[-1] == "next: continue each claim's finder to accept or rebut the listed claims"
-    cv.accept(cid, 1)
-    assert cv.ok("converged", "s1", "--phase", "cut").stdout.splitlines() == [
-        "CONVERGED phase=cut", "next: " + _next(cv, "cutoff s1 --dir {dir}")]
-    cutoff = cv.ok("cutoff", "s1").stdout.splitlines()
-    assert cutoff[0].startswith("CUTOFF seq=")
-    assert cutoff[-1] == "next: " + _next(cv, "render s1 --dir {dir}")
+    cv.ok("find-run", "s1", "--as", FINDER, "--lens", "correctness",
+          "--angle", "changed-contract", "--tell", "signature changed", "--searches", "rg parse(",
+          "--positive-control", "rg def parse finds it", "--result", cid)
+    cv.ok("angle-na", "s1", "--as", FINDER, "--phase", "find", "--angle",
+          "failure-path", "--lens", "security", "--reason", "no I/O in the diff")
+    out = cv.ok("coverage", "s1").stdout
+    assert "LENS correctness ran=changed-contract na=- missing=failure-path" in out
+    assert "LENS security ran=- na=failure-path missing=changed-contract" in out
+    assert "NA security failure-path no I/O in the diff" in out
 
 
 def test_next_after_coverage(cv: Converge) -> None:
@@ -330,14 +330,27 @@ def test_next_after_coverage(cv: Converge) -> None:
         "next: " + _next(cv, "status s1 --dir {dir} --json"))
 
 
-def test_next_after_refute_only_init(cv: Converge) -> None:
-    out = cv(*_init_args(cv, mode="refute-only", lenses=""), "--json", env=PIPE).stdout
-    assert json.loads(out)["next"] == (
-        "file every slate claim: " + _next(
-            cv, 'file s1 --dir {dir} --as slate --origin slate --loc <path:line> '
-                '--claim "<text>" --trigger "<what reaches it>"'))
-    full = cv.root / "full"
-    assert "next" not in json.loads(cv(*_init_args(cv), "--dir", str(full), "--json", env=PIPE).stdout)
+# ---------------------------------------------------------------------------
+# `next:` names the step after the command
+
+
+def test_next_after_cutoff_and_converged(cv: Converge) -> None:
+    cv.ready(cut="none")
+    cv.batch_1()
+    open_attack = cv.ok("converged", "s1", code=1).stdout.splitlines()
+    assert open_attack == ["OPEN phase=attack claims=1", "F001 open in attack",
+                           "next: attack: r2 attack F001 batch fresh-eye; plan: "
+                           + _next(cv, "status s1 --dir {dir} --json")]
+    cv.fresh_eye()
+    assert cv.ok("converged", "s1", code=1).stdout.splitlines() == [
+        "OPEN phase=cutoff claims=0", "next: " + _next(cv, "cutoff s1 --dir {dir}")]
+    cutoff = cv.ok("cutoff", "s1").stdout.splitlines()
+    assert cutoff[0].startswith("CUTOFF seq=")
+    assert cutoff[-1] == "next: " + _next(cv, "render s1 --dir {dir}")
+    assert "GATE ok s1" in cv("gate", "s1", "--dir", str(cv.dir)).stdout
+    assert "## Findings" in cv.ok("render", "s1").stdout
+    assert cv.ok("converged", "s1").stdout.splitlines() == [
+        "CONVERGED", "next: end the slate with outcome converged"]
 
 
 # ---------------------------------------------------------------------------

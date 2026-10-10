@@ -1,7 +1,7 @@
 [project]
 name = "converge"
 version = "0.1.0"
-description = "Ledger CLI backing the converge plugin's find/refute/cut stages."
+description = "Ledger CLI backing the converge plugin's find, attack and cut stages."
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",

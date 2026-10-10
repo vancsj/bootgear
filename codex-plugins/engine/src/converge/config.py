@@ -33,10 +33,10 @@ DEFAULTS: dict[str, Any] = {
         ],
         "report_rules": [],
     },
-    "caps": {"refute_rounds": 5, "cut_rounds": 5, "per_lens": 3, "agents": model.MAX_AGENTS,
+    "caps": {"cut_rounds": 5, "per_lens": {"default": 50}, "agents": model.MAX_AGENTS,
              "angles_per_claim": 5, "batch_items": 30},
     "angles": {"files": [], "disable": []},
-    "steps": {"escalate": True, "early_cut": True, "gap_hunt": True},
+    "steps": {"escalate": True, "gap_hunt": True, "cut": "both"},
 }
 # Replaces `report_if` and `report_if_gap_hunt` for a slate started with `--pass` >= 2;
 # `report_rules` and the other sections keep their resolved values.
@@ -55,17 +55,12 @@ REREVIEW_CUTOFF: dict[str, Any] = {
 }
 SCHEMA = {
     "cutoff": ("report_if", "report_if_gap_hunt", "report_rules"),
-    "caps": ("refute_rounds", "cut_rounds", "per_lens", "agents", "angles_per_claim",
-             "batch_items"),
+    "caps": ("cut_rounds", "per_lens", "agents", "angles_per_claim", "batch_items"),
     "angles": ("files", "disable"),
-    "steps": ("escalate", "early_cut", "gap_hunt"),
+    "steps": ("escalate", "gap_hunt", "cut"),
 }
-
-
-# Snapshots from before these sections and keys existed stay valid; a snapshot without
-# `steps` replays on the legacy code paths.
-OPTIONAL_SECTIONS = ("steps",)
-OPTIONAL_KEYS = ("report_rules", "angles_per_claim", "batch_items")
+# When the cutter rates: before the attack, after it, both, or never.
+CUT_MODES = ("before", "after", "both", "none")
 
 
 class ConfigError(Exception):
@@ -123,8 +118,21 @@ def _rules(value: Any, where: str, problems: list[str]) -> None:
                     problems.append(f"{at}.{name}: bad value {item!r} (allowed: {choices})")
 
 
+def _per_lens(item: Any, where: str, complete: bool, problems: list[str]) -> None:
+    if not isinstance(item, dict):
+        problems.append(f"{where} must be a map; use per_lens: {{default: <n>}}")
+        return
+    for lens, cap in item.items():
+        if not isinstance(lens, str) or not lens:
+            problems.append(f"{where} keys must be non-empty strings; got {lens!r}")
+        elif not isinstance(cap, int) or isinstance(cap, bool) or cap < 1:
+            problems.append(f"{where}.{lens} must be a positive integer; got {cap!r}")
+    if complete and "default" not in item:
+        problems.append(f"{where} needs a `default` key")
+
+
 def validate_config(value: Any, label: str, complete: bool = False) -> list[str]:
-    """Problems in one layer (or, with `complete`, the effective config)."""
+    """Problems in one layer, or with `complete` in the effective config or a snapshot."""
     problems: list[str] = []
     if not isinstance(value, dict):
         return [f"{label}: top level must be a mapping"]
@@ -133,7 +141,7 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
             problems.append(f"{label}: unknown key {key!r} (allowed: {', '.join(SCHEMA)})")
     for section, keys in SCHEMA.items():
         if section not in value:
-            if complete and section not in OPTIONAL_SECTIONS:
+            if complete:
                 problems.append(f"{label}: missing section {section!r}")
             continue
         body = value[section]
@@ -146,20 +154,23 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
         for key in keys:
             where = f"{label}: {section}.{key}"
             if key not in body:
-                # A steps snapshot has every cap: the batch plan reads them.
-                optional = key in OPTIONAL_KEYS and not (section == "caps" and "steps" in value)
-                if complete and not optional:
+                if complete:
                     problems.append(f"{where} is missing")
                 continue
             item = body[key]
             if section == "cutoff" and key != "report_rules":
                 _rules(item, where, problems)
+            elif section == "caps" and key == "per_lens":
+                _per_lens(item, where, complete, problems)
             elif section == "caps":
                 if not isinstance(item, int) or isinstance(item, bool) or item < 1:
                     problems.append(f"{where} must be a positive integer; got {item!r}")
                 elif key == "agents" and item > model.MAX_AGENTS:
                     problems.append(f"{where} must be at most {model.MAX_AGENTS} "
                                     f"(agents per task, main included); got {item!r}")
+            elif section == "steps" and key == "cut":
+                if item not in CUT_MODES:
+                    problems.append(f"{where} must be one of {', '.join(CUT_MODES)}; got {item!r}")
             elif section == "steps":
                 if not isinstance(item, bool):
                     problems.append(f"{where} must be true or false; got {item!r}")
@@ -169,7 +180,7 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
 
 
 def resolve(project_root: Path, task_path: Path | None) -> dict[str, Any]:
-    """Merge the layers; raise ConfigError listing every problem."""
+    """Merge the layers onto the defaults; raise ConfigError listing every problem."""
     project_root = project_root.expanduser().resolve()
     paths: dict[str, Path | None] = {
         "user": user_path(),

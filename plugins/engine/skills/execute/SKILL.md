@@ -111,6 +111,7 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
 - On a `spec` return of `blocked` (a task step that cannot be derived), transition to `failed` with the missing statement as the reason.
 - For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the spec-review visit number `<n>` (used only in the slate id, never as `--pass`). On every outcome except `blocked`, first apply the returned `inline` fixes to the artifacts (and `task.md` when affected) with no re-review. Then, on `ready`, use the implementation/ticket branch; on `revise`, pass claim IDs, render path, slate, converge directory, and the `inline` and `follow-up` lists back to `spec`; on `choices`, pass the same fields to `spec-debate`; on `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. When leaving, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
+- After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `task session update-todo <run-id> --dir <session-dir> "follow-up [<stage>]: <claim text>"`, where `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists.
 
 ## Checking and recording in memory-ledger
 
@@ -201,7 +202,7 @@ Call `close` exactly once when the run ends, as the `session close` command that
 - the exhausted-stall gap (step 5's fourth bullet), when every unit of work ran out with no condition literally met;
 - the stop reason (Fallbacks), for a validation refusal, a missing required dependency, a rejected `session_dir` amendment, a `blocked` spec or spec-review, or a missing permission with no other path.
 
-Send a final pitch after `close`:
+Send a final pitch after `close`, naming every open `follow-up [<stage>]` todo:
 
 - **Succeeded:** State what was done and name the closed ledger file.
 - **Failed, condition met:** State what was attempted, the genuinely undoable condition, and the change required to make it reachable.

@@ -26,20 +26,20 @@ def test_seq_gapless_and_envelope(cv: Converge) -> None:
 def test_init_snapshots_angles_and_config(cv: Converge) -> None:
     cv.init()
     init = cv.events()[0]
-    assert init["mode"] == "full"
     assert init["lenses"] == ["correctness", "security"]
-    assert init["config"]["caps"] == {"refute_rounds": 5, "cut_rounds": 5, "per_lens": 3, "agents": 5,
+    assert init["refuters"] == 2
+    assert init["config"]["caps"] == {"cut_rounds": 5, "per_lens": {"default": 50}, "agents": 5,
                                       "angles_per_claim": 5, "batch_items": 30}
     assert {"find", "attack", "evaluate", "decide"} == {a["tag"] for a in init["angles"]}
 
 
 def test_init_once_and_failed_init_leaves_no_file(cv: Converge) -> None:
-    err = cv.refused("init", "bad", "--as", "orch", "--mode", "full")
-    assert "full mode needs at least one lens" in err
+    err = cv.refused("init", "bad", "--as", "orch")
+    assert "init: a slate needs at least one lens" in err
     assert not cv.path("bad").exists()
     cv.init()
     before = cv.path().read_bytes()
-    err = cv.refused("init", "s1", "--as", "orch", "--mode", "full", "--lenses", "x")
+    err = cv.refused("init", "s1", "--as", "orch", "--lenses", "x")
     assert "already initialised" in err
     assert cv.path().read_bytes() == before
 

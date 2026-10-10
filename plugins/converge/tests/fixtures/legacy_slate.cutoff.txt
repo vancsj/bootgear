@@ -1,9 +1,0 @@
-CUTOFF seq=62
-F005 reported rank=1 reason=report_if[0]
-F001 reported rank=2 reason=report_if[1]
-F008 reported rank=3 reason=cut-capped
-F004 reported rank=4 reason=inconclusive
-F007 reported rank=5 reason=unconverged
-F006 reported rank=6 reason=report_if_gap_hunt[0]
-F002 appendix rank=7 reason=no rule matched
-next: converge render legacy --dir <dir>

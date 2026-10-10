@@ -31,7 +31,7 @@ def test_codex_copy_matches_claude_file() -> None:
 def test_table_is_a_valid_config_layer() -> None:
     table = _table()
     assert validate_config(table, str(CLAUDE_CUTOFF)) == []
-    assert table["caps"] == {"per_lens": 50}
+    assert set(table) == {"cutoff"}
     assert table["cutoff"]["report_if_gap_hunt"] == table["cutoff"]["report_if"]
 
 

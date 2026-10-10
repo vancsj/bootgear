@@ -1,140 +1,98 @@
-"""`batch_plan`: live eligible claims per step, in rank order, in batches of `caps.batch_items`."""
+"""The plan: one row per open item of the current phase, in rank order, chunked by
+`caps.batch_items`; each claim's open phase; and the plan in `status --json`."""
 from __future__ import annotations
 
-from conftest import (
-    FINDER,
-    R1,
-    R2,
-    Converge,
-    add_claim,
-    add_cut,
-    add_refute,
-    make_slate,
-)
-from converge import model
+from typing import Any
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
+from converge import ledger, model
 
 
-def _ids(batches: list[list[dict]]) -> list[list[str]]:
-    return [[row["claim"] for row in batch] for batch in batches]
+def _slate(cv: Converge) -> model.Slate:
+    return ledger.read(cv.path(), "s1")
 
 
-def _escalated(claim: model.Claim) -> None:
-    claim.escalation = {"event": "escalate", "claim": claim.id}
+def _plan(cv: Converge) -> list[list[dict[str, Any]]]:
+    return model.batch_plan(_slate(cv))
 
 
-def test_legacy_slate_has_an_empty_plan() -> None:
-    slate = make_slate(legacy=True)
-    add_claim(slate)
-    assert model.batch_plan(slate) == {"escalate": [], "cut": [], "refute": [], "rebut": []}
+def _row(claim: str, action: str, role: str, batch: Any = None,
+         angles: tuple[str, ...] = ()) -> dict[str, Any]:
+    return {"claim": claim, "action": action, "agent_role": role, "batch": batch,
+            "angles": list(angles)}
 
 
-def test_escalate_rows_are_unescalated_untouched_claims() -> None:
-    slate = make_slate(batch_items=2)
-    first, second, third = add_claim(slate), add_claim(slate, finder=R2), add_claim(slate)
-    plan = model.batch_plan(slate)
-    assert _ids(plan["escalate"]) == [[first.id, second.id], [third.id]]
-    assert plan["escalate"][0][1] == {"claim": second.id, "finder": R2}
-    _escalated(first)
-    add_cut(slate, third)
-    assert _ids(model.batch_plan(slate)["escalate"]) == [[second.id]]
-    off = make_slate(steps={"escalate": False})
-    add_claim(off)
-    assert model.batch_plan(off)["escalate"] == []
-
-
-def test_cut_rows_follow_rank_order() -> None:
-    slate = make_slate()
-    low, high = add_claim(slate), add_claim(slate)
-    for claim in (low, high):
-        _escalated(claim)
-    add_cut(slate, low, "cosmetic", accept=False)
-    add_cut(slate, high, "security", accept=False)
-    assert _ids(model.batch_plan(slate)["cut"]) == [[high.id, low.id]]
-
-
-def _refute_ready(slate: model.Slate, n: int) -> list[model.Claim]:
-    claims = []
-    for _ in range(n):
-        claim = add_claim(slate)
-        _escalated(claim)
-        add_cut(slate, claim)
-        claims.append(claim)
-    return claims
-
-
-def test_refute_angles_split_the_batch() -> None:
-    slate = make_slate(attack=8)
-    _refute_ready(slate, 7)
-    batch = model.batch_plan(slate)["refute"][0]
-    assert [row["angles"] for row in batch] == [5, 5, 4, 4, 4, 4, 4]
-    assert all(row["round"] == 1 for row in batch)
-    assert set(batch[0]) == {"claim", "finder", "round", "angles"}
-
-
-def test_refute_angles_capped_per_claim_and_by_unused_angles() -> None:
-    slate = make_slate(attack=3)
-    claims = _refute_ready(slate, 2)
-    plan = model.batch_plan(slate)["refute"]
-    assert [row["angles"] for row in plan[0]] == [3, 3]
-    add_refute(slate, claims[0], 1, "boundary")
-    row = model.batch_plan(slate)["refute"][0][0]
-    assert row["claim"] == claims[0].id and row["round"] == 1 and row["angles"] == 2
-
-
-def test_many_claims_split_into_batches() -> None:
-    slate = make_slate(batch_items=30)
-    _refute_ready(slate, 40)
-    plan = model.batch_plan(slate)["refute"]
-    assert [len(batch) for batch in plan] == [30, 10]
-    assert {row["angles"] for row in plan[0]} == {1}
-    assert {row["angles"] for row in plan[1]} == {3}
-
-
-def test_next_round_after_a_complete_round() -> None:
-    slate = make_slate()
-    (claim,) = _refute_ready(slate, 1)
-    add_refute(slate, claim, 1, "boundary", "downgraded")
-    add_refute(slate, claim, 1, "reachability")
-    plan = model.batch_plan(slate)
-    assert _ids(plan["rebut"]) == [[claim.id]]
-    assert plan["refute"] == [] and _ids(plan["cut"]) == [[claim.id]]
-    add_cut(slate, claim)
-    plan = model.batch_plan(slate)
-    assert plan["refute"][0][0]["round"] == 2
-    claim.refute_pending = 1
-    assert model.batch_plan(slate)["rebut"] == []
-
-
-def test_parked_and_dead_claims_leave_the_plan() -> None:
-    slate = make_slate()
-    parked = add_claim(slate)
-    _escalated(parked)
-    add_cut(slate, parked, "cosmetic", fix="reword")
-    dead = add_claim(slate)
-    _escalated(dead)
-    add_cut(slate, dead)
-    add_refute(slate, dead, 1, "boundary", "killed")
-    plan = model.batch_plan(slate)
-    assert not any(plan.values())
-
-
-def test_refute_round_holds_at_most_angles_per_claim_events(cv: Converge) -> None:
-    cv.init(defaults=True, config={"caps": {"angles_per_claim": 2}})
+def test_escalate_rows_name_each_claims_finder(cv: Converge) -> None:
+    cv.init(config={"steps": {"cut": "both", "gap_hunt": True, "escalate": True},
+                    "angles": {"disable": DISABLED}})
     cv.file()
-    assert cv.append("escalate", FINDER, claim="F001") == []
-    cv.cut_converge("F001")
-    cv.quiet_round("F001", 1, ("boundary", "reachability"))
-    err = cv.refute("F001", 1, "provenance", R1, code=2).stderr
-    assert "refute: round 1 of F001 already holds 2 refute events (caps.angles_per_claim 2)" in err
+    assert _plan(cv) == []
+    cv.cover()
+    cv.file(agent=R2, origin="gap-hunt")
+    assert _plan(cv) == [[_row("F001", "escalate", "finder"), _row("F002", "escalate", "r2")]]
 
 
-def test_rebut_row_leaves_after_an_accepted_re_cut() -> None:
-    slate = make_slate()
-    (claim,) = _refute_ready(slate, 1)
-    add_refute(slate, claim, 1, "boundary", "downgraded")
-    add_refute(slate, claim, 1, "reachability")
-    assert _ids(model.batch_plan(slate)["rebut"]) == [[claim.id]]
-    add_cut(slate, claim, accept=False)
-    assert _ids(model.batch_plan(slate)["rebut"]) == [[claim.id]]
-    claim.accepted_round = claim.cut_round
-    assert model.batch_plan(slate)["rebut"] == []
+def test_rows_are_chunked_by_batch_items(cv: Converge) -> None:
+    cv.ready(cut="before", claims=3, escalate=False, batch_items=2)
+    assert _plan(cv) == [[_row("F001", "cut-before", "cutter"),
+                          _row("F002", "cut-before", "cutter")],
+                         [_row("F003", "cut-before", "cutter")]]
+
+
+def test_cut_rows_follow_rank_order_and_the_finder_answers(cv: Converge) -> None:
+    cv.ready(cut="before", claims=3)
+    assert cv.append("cut", CUTTER, claim="F002", round=1, when="before",
+                     confidence="inferred", severity="security") == []
+    assert cv.append("cut", CUTTER, claim="F003", round=1, when="before",
+                     confidence="inferred", severity="degraded") == []
+    assert _plan(cv) == [[_row("F002", "accept", "finder"), _row("F003", "accept", "finder"),
+                          _row("F001", "cut-before", "cutter")]]
+
+
+def test_attack_rows(cv: Converge) -> None:
+    cv.ready(claims=2)
+    assert cv.attack("F001", BATCH_1[0], outcome="refuted") == []
+    assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[1], claim="F001",
+                     reason="no time window") == []
+    assert _plan(cv) == [[_row("F001", "attack", "r1", 1, BATCH_1[2:]),
+                          _row("F002", "attack", "r1", 1, BATCH_1)]]
+    for angle in BATCH_1[2:]:
+        assert cv.attack("F001", angle) == []
+    cv.batch_1("F002")
+    assert _plan(cv) == [[_row("F001", "reply", "finder", 1),
+                          _row("F002", "attack", "r2", "fresh-eye", (*BATCH_1,))]]
+    assert cv.append("reply", FINDER, claim="F001", batch=1, stance="rebut", evidence="e",
+                     evidence_sha256=ledger.evidence_hash("e")) == []
+    assert _plan(cv)[0][0] == _row("F001", "verdict", "r1", 1)
+
+
+def test_fresh_eye_row_lists_the_angles_used(cv: Converge) -> None:
+    cv.ready()
+    cv.batch_1()
+    assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye") == []
+    assert _plan(cv) == [[_row("F001", "attack", "r2", "fresh-eye",
+                               (*BATCH_1, "retry timing"))]]
+
+
+def test_cut_after_rows_and_an_empty_plan_at_cutoff(cv: Converge) -> None:
+    cv.ready(cut="after")
+    cv.clean()
+    assert _plan(cv) == [[_row("F001", "cut-after", "cutter")]]
+    cv.rate("F001")
+    assert _plan(cv) == []
+
+
+def test_each_claims_open_phase(cv: Converge) -> None:
+    cv.ready(cut="before", claims=2)
+    cv.rate("F001", "before", frequency="common", severity="wrong-behavior")
+    slate = _slate(cv)
+    assert slate.phase(slate.claims["F001"]) == "attack"
+    assert [(c.id, phase) for c, phase in slate.open_claims()] == [("F001", "attack"),
+                                                                  ("F002", "cut-before")]
+
+
+def test_status_json_prints_the_plan(cv: Converge) -> None:
+    cv.ready(claims=2)
+    data = cv.status()
+    assert data["plan"] == _plan(cv)
+    assert data["plan"][0][0] == _row("F001", "attack", "r1", 1, BATCH_1)

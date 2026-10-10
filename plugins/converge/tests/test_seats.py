@@ -14,11 +14,8 @@ FULL_SEATS = {"main": "native_subagent", "finder": "native_subagent", "r1": "nat
               "r2": "advisor", "cutter": "native_subagent"}
 
 
-def _init_event(cv: Converge, mode: str = "full", **fields: Any) -> dict[str, Any]:
-    if mode == "full":
-        cv.init()
-    else:
-        cv.init("s1", "refute-only", "")
+def _init_event(cv: Converge, **fields: Any) -> dict[str, Any]:
+    cv.init()
     return {**cv.events()[0], **fields}
 
 
@@ -55,17 +52,7 @@ def test_init_rejects_r1_advisor(cv: Converge) -> None:
     assert any(p.startswith("seats.r1: only r2 may be advisor") for p in problems), problems
 
 
-def test_refute_only_init_rejects_finder_and_cutter_seats(cv: Converge) -> None:
-    event = _init_event(cv, "refute-only",
-                        seats={"main": "native_subagent", "finder": "native_subagent",
-                               "cutter": "native_subagent", "r2": "advisor"},
-                        advisor=ADVISOR)
-    text = "\n".join(ledger.validate_event(model.Slate("s1"), event))
-    assert "seats: refute-only slate has no seat finder" in text, text
-    assert "seats: refute-only slate has no seat cutter" in text, text
-
-
-def test_legacy_init_without_seats_replays_all_native(cv: Converge, tmp_path: Path) -> None:
+def test_init_without_seats_replays_all_native(cv: Converge, tmp_path: Path) -> None:
     event = _init_event(cv)
     assert "seats" not in event
     slate = _replay(tmp_path / "s1.jsonl", event)
@@ -88,9 +75,8 @@ def _settlement(cv: Converge, text: str) -> Path:
     return path
 
 
-def _init_args(cv: Converge, mode: str = "full", *extra: str) -> list[str]:
-    lenses = ["--lenses", "correctness"] if mode == "full" else []
-    return ["init", "s1", "--dir", str(cv.dir), "--as", "orch", "--mode", mode, *lenses,
+def _init_args(cv: Converge, *extra: str) -> list[str]:
+    return ["init", "s1", "--dir", str(cv.dir), "--as", "orch", "--lenses", "correctness",
             "--angles", str(cv.angles), "--project-root", str(cv.project), *extra]
 
 
@@ -101,7 +87,7 @@ def _line(lines: list[str], prefix: str) -> str:
 
 
 def _scope_converge(scope: str) -> Path:
-    # SCOPE: write events only with: UV_CACHE_DIR="..." <abs-converge> <refute|...> ...
+    # SCOPE: write events only with: UV_CACHE_DIR="..." <abs-converge> <attack|...> ...
     tail = scope.split('converge-uv-cache" ', 1)[1]
     return Path(tail.split(" ", 1)[0])
 
@@ -154,8 +140,8 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
 
 def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    lines = cv(*_init_args(cv, "full", "--settlement", str(settlement))).stdout.splitlines()
-    assert lines[0].startswith("INIT s1 mode=full")
+    lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
+    assert lines[0].startswith("INIT s1 lenses=correctness ")
     assert lines[1] == ("SEATS main=native_subagent finder=native_subagent r1=native_subagent "
                         "r2=advisor cutter=native_subagent")
     _assert_driver(lines, cv)
@@ -174,7 +160,7 @@ def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> N
 
 def test_init_with_advisor_settlement_json(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    data = json.loads(cv(*_init_args(cv, "full", "--settlement", str(settlement), "--json"),
+    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json"),
                          env=PIPE).stdout)
     assert data["seats"]["r2"] == "advisor"
     assert [d["seat"] for d in data["drivers"]] == ["r2"]
@@ -187,26 +173,12 @@ def test_init_with_advisor_settlement_json(cv: Converge) -> None:
 def test_init_driver_names_the_shipped_wrapper(cv: Converge) -> None:
     cv.use_bin = True
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    lines = cv(*_init_args(cv, "full", "--settlement", str(settlement))).stdout.splitlines()
+    lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
     _assert_driver(lines, cv, converge_path=BIN.resolve())
 
 
-def test_refute_only_init_with_advisor_pairs_then_files(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    lines = cv(*_init_args(cv, "refute-only", "--settlement", str(settlement))).stdout.splitlines()
-    assert lines[1] == "SEATS main=native_subagent r1=native_subagent r2=advisor"
-    _assert_driver(lines, cv)
-    nxt = lines[-1]
-    assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
-    assert nxt.endswith(", then file every slate claim: converge file s1 --dir "
-                        f"{cv.dir} --as slate --origin slate --loc <path:line> "
-                        '--claim "<text>" --trigger "<what reaches it>"'), nxt
-    assert cv.events()[0]["seats"] == {"main": "native_subagent", "r1": "native_subagent",
-                                       "r2": "advisor"}
-
-
 def _refused_lines(cv: Converge, settlement: Path) -> list[str]:
-    result = cv(*_init_args(cv, "full", "--settlement", str(settlement)), code=2)
+    result = cv(*_init_args(cv, "--settlement", str(settlement)), code=2)
     assert not cv.path().exists()
     return result.stderr.splitlines()
 
@@ -230,7 +202,7 @@ def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
 
 def test_init_refusal_json_carries_example_and_next(cv: Converge) -> None:
     settlement = _settlement(cv, "advisor_roles: {roles: [gap-hunter], brief: Act only as r2.}\n")
-    result = cv(*_init_args(cv, "full", "--settlement", str(settlement), "--json"), code=2, env=PIPE)
+    result = cv(*_init_args(cv, "--settlement", str(settlement), "--json"), code=2, env=PIPE)
     error = json.loads(result.stderr)["error"]
     assert error["message"] == "converge: settlement seats do not match its advisor roles:"
     assert error["example"].endswith("--settlement <file>")
@@ -264,7 +236,7 @@ def test_init_refuses_a_settlement_that_is_not_a_mapping(cv: Converge) -> None:
 
 def test_init_r2_advisor_without_roles_uses_defaults(cv: Converge) -> None:
     settlement = _settlement(cv, "converge_seats: {r2: advisor}\n")
-    lines = cv(*_init_args(cv, "full", "--settlement", str(settlement))).stdout.splitlines()
+    lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
     assert ("NOTE r2 is advisor with no advisor role in the settlement; it takes refuter, "
             "gap-hunter and the stock brief") in lines
     request = _line(lines, "USER_REQUEST: ")
@@ -278,7 +250,7 @@ def test_init_r2_advisor_without_roles_uses_defaults(cv: Converge) -> None:
 
 def test_init_one_refuter_notes_the_unseated_advisor(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    result = cv(*_init_args(cv, "full", "--settlement", str(settlement), "--refuters", "1"))
+    result = cv(*_init_args(cv, "--settlement", str(settlement), "--refuters", "1"))
     lines = result.stdout.splitlines()
     assert ("NOTE r2 is advisor in the settlement, but this slate has no r2; the advisor holds "
             "no seat on this slate") in lines
@@ -288,21 +260,21 @@ def test_init_one_refuter_notes_the_unseated_advisor(cv: Converge) -> None:
     assert event["seats"] == {"main": "native_subagent", "finder": "native_subagent",
                               "r1": "native_subagent", "cutter": "native_subagent"}
     assert "advisor" not in event
-    data = json.loads(cv(*_init_args(cv, "full", "--settlement", str(settlement), "--refuters", "1",
+    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--refuters", "1",
                                      "--dir", str(cv.root / "j"), "--json"), env=PIPE).stdout)
     assert data["drivers"] == [] and len(data["notes"]) == 1
 
 
 def test_init_refuters_out_of_range_is_a_usage_refusal(cv: Converge) -> None:
-    err = cv(*_init_args(cv, "full", "--refuters", "3"), code=2).stderr
+    err = cv(*_init_args(cv, "--refuters", "3"), code=2).stderr
     assert "argument --refuters: invalid choice:" in err and "(choose from 1, 2)" in err, err
     assert "example: converge init " in err
 
 
-def test_legacy_codex_role_settlement_matches_plain_init(cv: Converge) -> None:
+def test_codex_role_settlement_matches_plain_init(cv: Converge) -> None:
     settlement = _settlement(cv, 'codex_role: "adversarial reviewer"\ngoal: x\n')
-    with_file = cv(*_init_args(cv, "full", "--settlement", str(settlement))).stdout
-    plain = cv(*_init_args(cv, "full", "--dir", str(cv.root / "plain"))).stdout
+    with_file = cv(*_init_args(cv, "--settlement", str(settlement))).stdout
+    plain = cv(*_init_args(cv, "--dir", str(cv.root / "plain"))).stdout
     assert with_file.replace(str(cv.dir), "D") == plain.replace(str(cv.root / "plain"), "D")
     assert cv.events()[0]["seats"] == {seat: "native_subagent"
                                        for seat in ("main", "finder", "r1", "r2", "cutter")}
@@ -310,13 +282,13 @@ def test_legacy_codex_role_settlement_matches_plain_init(cv: Converge) -> None:
 
 def test_status_reprints_seats_and_drivers(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    cv(*_init_args(cv, "full", "--settlement", str(settlement)))
+    cv(*_init_args(cv, "--settlement", str(settlement)))
     data = json.loads(cv.ok("status", "s1", "--json").stdout)
     assert data["seats"]["r2"] == "advisor"
     assert [d["seat"] for d in data["drivers"]] == ["r2"]
     assert data["drivers"][0]["request"].startswith("TYPE: delegate\n")
     head = cv.ok("status", "s1").stdout.splitlines()[0]
-    assert head.startswith("SLATE s1 mode=full") and " advisor=r2" in head
+    assert head.startswith("SLATE s1 lenses=correctness ") and " advisor=r2" in head
 
 
 def test_status_of_a_native_slate_shows_no_advisor(cv: Converge) -> None:

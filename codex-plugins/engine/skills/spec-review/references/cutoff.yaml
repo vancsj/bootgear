@@ -6,5 +6,3 @@ cutoff:
       severity: [security, data-loss, wrong-behavior, degraded]
       frequency: [every-call, common, rare]
   report_if_gap_hunt: *report
-caps:
-  per_lens: 50

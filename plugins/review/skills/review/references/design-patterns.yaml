@@ -1,6 +1,6 @@
 # Design and architecture failure patterns: find angles for the architecture lens.
 # Rows follow converge's angle schema; `cost` is the change or failure the design
-# makes harder. A design claim with no cost scenario shown goes to the appendix.
+# makes harder. A design claim with no cost scenario shown is cut.
 
 # Boundaries and coupling
 - id: layer-leak

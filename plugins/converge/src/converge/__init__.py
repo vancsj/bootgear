@@ -1,1 +1,1 @@
-"""converge: find/refute/cut ledger CLI."""
+"""converge: find/attack/cut ledger CLI."""

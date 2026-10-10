@@ -4,15 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import model
-from .model import Claim, Slate
+from .model import Slate
 
 
 def _cell(text: str | None) -> str:
     return (text or "-").replace("|", "\\|").replace("\n", " ")
-
-
-def _angles_used(claim: Claim) -> str:
-    return ", ".join(sorted(claim.used_angles)) or "none"
 
 
 @dataclass
@@ -48,30 +44,43 @@ def _coverage_lines(slate: Slate) -> list[str]:
     return lines
 
 
-def _dead_lines(slate: Slate, kinds: tuple[str, ...]) -> list[str]:
+def _killed_lines(slate: Slate) -> list[str]:
+    """Each killed claim with the refuted attack its finder declined to rebut, and the
+    refuter's disagree evidence when the decline answered it."""
     lines = []
     for claim in slate.claims.values():
-        if claim.dead in kinds and claim.dead_event is not None:
-            ev = claim.dead_event
-            lines.append(f"- **{claim.id}** {claim.dead} by {ev['as']} ({ev['angle']}, round "
-                         f"{ev['round']}) — {claim.text} — reason: {ev['evidence']}")
+        if claim.live:
+            continue
+        batch = next(b for b, replies in claim.state.replies.items()
+                     if any(r["stance"] == "decline" for r in replies))
+        attack = next(e for e in claim.state.attacks[batch] if e["outcome"] == "refuted")
+        line = (f"- **{claim.id}** killed by {attack['as']} ({attack['angle']}, batch {batch}) "
+                f"— {_cell(claim.text)} — evidence: {_cell(attack['evidence'])}")
+        disagree = [v for v in claim.state.verdicts.get(batch, []) if v["verdict"] == "disagree"]
+        if disagree:
+            line += f" · verdict disagree: {_cell(disagree[0]['evidence'])}"
+        lines.append(line)
     return lines
 
 
-def _claim_row(slate: Slate, claim: Claim, rank: int | None, extra: str) -> str:
-    cut = claim.last_cut() or {}
-    return "| " + " | ".join([
-        str(rank) if rank is not None else "-", claim.id, _cell(claim.lens), _cell(claim.loc),
-        _cell(claim.text), _cell(cut.get("frequency")), _cell(cut.get("severity")),
-        _cell(cut.get("confidence")), _cell(cut.get("difficulty")),
-        slate.refute_state(claim), model.cut_note(claim, slate.cap("cut_rounds"), slate.v2),
-        _cell(extra),
-    ]) + " |"
+COLUMNS = ("rank", "claim", "lens", "loc", "text", *model.CUT_FIELDS, "status")
 
 
-HEADER = ("| rank | claim | lens | loc | finding | frequency | severity | confidence | "
-          "difficulty | refute | cut | note |")
-RULE = "|" + "---|" * 12
+def _table(rows: list[model.CutoffRow], with_cut: bool) -> list[str]:
+    """The Findings table (`with_cut`) or the Follow-up table, which carries each choice."""
+    extra = ("cut",) if with_cut else ("choice",)
+    columns = (*COLUMNS, *extra, "reason")
+    if not rows:
+        return ["None."]
+    lines = ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
+    for row in rows:
+        rating = row.claim.state.rating or {}
+        last = row.cut if with_cut else _cell(rating.get("choice"))
+        cells = [str(row.rank), row.claim.id, _cell(row.claim.lens), _cell(row.claim.loc),
+                 _cell(row.claim.text), *(_cell(rating.get(f)) for f in model.CUT_FIELDS),
+                 row.status, last, _cell(row.reason)]
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
 
 
 def _snapshot_lines(slate: Slate) -> list[str]:
@@ -87,90 +96,28 @@ def _snapshot_lines(slate: Slate) -> list[str]:
     return lines
 
 
-def _follow_up_line(row: model.CutoffRow) -> str:
-    claim = row.claim
-    if row.reason == "unverified":
-        fix = (claim.last_cut() or {}).get("fix")
-        return f"- **{claim.id}** unverified — {claim.text} — suggested fix: {fix}"
-    return f"- **{claim.id}** unconverged — {claim.text} — angles: {_angles_used(claim)}"
+def render(slate: Slate) -> str:
+    """The report from the cutoff rows of the current state; `cutoff:` says whether a
+    `cutoff` event records them."""
+    from .protocol import converged, slate_phase
 
-
-def render_full(slate: Slate) -> str:
     cutoff_state = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
+    rows = model.compute_cutoff(slate)
+    findings = [r for r in rows if r.result == "finding"]
+    follow_up = [r for r in rows if r.result == "follow-up"]
+    killed = [r for r in rows if r.result == "killed"]
+    choices = [r for r in findings if (r.claim.state.rating or {}).get("choice")]
     lines = [f"# converge slate `{slate.slate_id}`", "",
-             (f"mode: full · lenses: {', '.join(slate.lenses)} · claims: {len(slate.claims)} · "
-              f"cutoff: {cutoff_state}"), "", *_snapshot_lines(slate)]
-    if slate.cutoff_valid:
-        rows = model.compute_cutoff(slate)
-        reported = [r for r in rows if r.result == "reported"]
-        appendix = [r for r in rows if r.result == "appendix"]
-        lines += ["## Reported", ""]
-        if reported:
-            lines += [HEADER, RULE]
-            lines += [_claim_row(slate, r.claim, r.rank, r.reason) for r in reported]
-        else:
-            lines.append("None.")
-        # Follow-up claims are unverified or unconverged below the blocking bar: they are
-        # listed in their own section only, never as findings or choices.
-        listed = [r for r in rows if r.result != "follow-up"]
-        choices = [r for r in listed if (r.claim.last_cut() or {}).get("choice")]
-        lines += ["", "## Choices", ""]
-        lines += [f"- **{r.claim.id}** ({r.result}) — {(r.claim.last_cut() or {}).get('choice')}"
-                  for r in choices] or ["None."]
-        if slate.v2:
-            lines += ["", "## Follow-up", ""]
-            lines += [_follow_up_line(r) for r in rows if r.result == "follow-up"] or ["None."]
-        uncertain = [r for r in listed
-                     if slate.refute_state(r.claim) in ("inconclusive", "unconverged")]
-        lines += ["", "## Inconclusive / unconverged", ""]
-        lines += [f"- **{r.claim.id}** {slate.refute_state(r.claim)} — {r.claim.text} — angles: "
-                  f"{_angles_used(r.claim)}" for r in uncertain] or ["None."]
-        lines += ["", "## Appendix", ""]
-        if appendix:
-            lines += [f"<details><summary>{len(appendix)} below the cutoff</summary>", "",
-                      HEADER, RULE]
-            lines += [_claim_row(slate, r.claim, r.rank, r.reason) for r in appendix]
-            lines += ["", "</details>"]
-        else:
-            lines.append("None.")
-    else:
-        lines += ["## Live claims (no current cutoff)", ""]
-        live = sorted(slate.live_claims(), key=model.rank_key)
-        if live:
-            lines += [HEADER, RULE]
-            lines += [_claim_row(slate, c, None, "-") for c in live]
-        else:
-            lines.append("None.")
-    lines += ["", "## Killed / retracted", ""]
-    lines += _dead_lines(slate, model.DEAD_OUTCOMES) or ["None."]
+             (f"findings={len(findings)} follow-up={len(follow_up)} killed={len(killed)} "
+              f"converged={'yes' if converged(slate) else 'no'}"), "",
+             (f"lenses: {', '.join(slate.lenses)} · claims: {len(slate.claims)} · "
+              f"phase: {slate_phase(slate)} · cutoff: {cutoff_state}"), "",
+             *_snapshot_lines(slate)]
+    lines += ["## Findings", "", *_table(findings, with_cut=True)]
+    lines += ["", "## Choices", ""]
+    lines += [f"- **{r.claim.id}** ({r.result}) — {(r.claim.state.rating or {}).get('choice')}"
+              for r in choices] or ["None."]
+    lines += ["", "## Follow-up", "", *_table(follow_up, with_cut=False)]
+    lines += ["", "## Killed", "", *(_killed_lines(slate) or ["None."])]
     lines += [""] + _coverage_lines(slate)
     return "\n".join(lines) + "\n"
-
-
-def render_refute_only(slate: Slate) -> str:
-    lines = [f"# converge slate `{slate.slate_id}`", "",
-             f"mode: refute-only · claims: {len(slate.claims)}", "", *_snapshot_lines(slate)]
-    live = list(slate.live_claims())
-    downgraded = [c for c in live if c.downgrades]
-    rest = [c for c in live if not c.downgrades]
-    sections = (("Survived", "converged"), ("Inconclusive", "inconclusive"),
-                ("Unconverged", "unconverged"), ("Open", "open"))
-    for title, state in sections:
-        claims = [c for c in rest if slate.refute_state(c) == state]
-        if state == "open" and not claims:
-            continue
-        lines += [f"## {title}", ""]
-        lines += [f"- **{c.id}** {c.text} — angles: {_angles_used(c)}" for c in claims] or ["None."]
-        lines.append("")
-    lines += ["## Downgraded", ""]
-    lines += [f"- **{c.id}** {c.original} → {c.text} ({slate.refute_state(c)}) — forced by: "
-              + "; ".join(f"{d['as']} ({d['angle']}): {d['evidence']}" for d in c.downgrades)
-              for c in downgraded] or ["None."]
-    for title, kind in (("Killed", "killed"), ("Retracted", "retracted")):
-        lines += ["", f"## {title}", ""]
-        lines += _dead_lines(slate, (kind,)) or ["None."]
-    return "\n".join(lines) + "\n"
-
-
-def render(slate: Slate) -> str:
-    return render_full(slate) if slate.mode == "full" else render_refute_only(slate)

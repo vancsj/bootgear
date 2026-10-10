@@ -25,8 +25,7 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 BIN = PLUGIN_DIR / "bin" / "converge"
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
 
-from converge import cli, ledger, model
-from converge import config as config_mod
+from converge import cli, ledger
 
 FIND_ANGLES = """\
 - id: changed-contract
@@ -54,6 +53,12 @@ CUT_EVIDENCE_MAP = {key: text for key, _, text in
 CUT_DEFAULTS = {"frequency": "common", "severity": "wrong-behavior", "confidence": "traced",
                 "difficulty": "local"}
 
+# The attack angles a `ready` slate keeps, in snapshot order: exactly one table batch.
+BATCH_1 = ("cited-but-unread", "point-in-time", "provenance", "reachability", "absent-vs-default")
+DISABLED = ["downstream-consumer", "inverse-reading", "carve-out", "boundary", "dependents",
+            "positive-control", "inherited-bounds", "guarded-elsewhere", "deliberate",
+            "real-referent"]
+
 
 def _uv_dirs() -> dict[str, str]:
     env: dict[str, str] = {}
@@ -72,7 +77,6 @@ UV_DIRS = _uv_dirs()
 
 # The full-depth allocation: five agent ids per slate, main included.
 MAIN, FINDER, R1, R2, CUTTER = "orch", "finder", "r1", "r2", "cutter"
-STEPS_OFF = {"escalate": False, "early_cut": False, "gap_hunt": False}
 
 
 class Converge:
@@ -142,30 +146,34 @@ class Converge:
 
     # -- event helpers ---------------------------------------------------
 
-    def init(self, slate: str = "s1", mode: str = "full", lenses: str = "correctness,security",
-             agent: str = "orch", *extra: str, config: dict[str, Any] | None = None,
-             defaults: bool = False, legacy: bool = False) -> None:
-        """Init with one task config: `config` plus every step off, so a test keeps the
-        file → refute → cut flow; `defaults` keeps the steps as configured. `legacy` then
-        drops `steps` and the batch caps from the snapshot, as a slate from before them."""
-        task = copy.deepcopy(config or {})
-        if not defaults:
-            task["steps"] = {**STEPS_OFF, **task.get("steps", {})}
-        args = ["--as", agent, "--mode", mode, "--project-root", str(self.project)]
+    def init(self, slate: str = "s1", lenses: str = "correctness,security", agent: str = MAIN,
+             *extra: str, config: dict[str, Any] | None = None) -> None:
+        """Init a slate with `config` as its task config layer."""
+        args = ["--as", agent, "--project-root", str(self.project)]
         if lenses:
             args += ["--lenses", lenses]
         args += ["--angles", str(self.angles), *extra]
-        if task:
+        if config:
             path = self.root / f"{slate}.task.yaml"
-            path.write_text(yaml.safe_dump(task))
+            path.write_text(yaml.safe_dump(copy.deepcopy(config)))
             args += ["--config", str(path)]
         self.ok("init", slate, *args)
-        if legacy:
-            events = self.events(slate)
-            del events[0]["config"]["steps"]
-            for key in ("angles_per_claim", "batch_items"):
-                del events[0]["config"]["caps"][key]
-            self.path(slate).write_text("".join(json.dumps(e) + "\n" for e in events))
+
+    def ready(self, cut: str = "none", claims: int = 1, escalate: bool = True,
+              config: dict[str, Any] | None = None, refuters: int = 2, **caps: Any) -> list[str]:
+        """A slate whose attack angles are `BATCH_1`, with `claims` claims filed by FINDER,
+        find coverage complete and, with `escalate`, every claim escalated."""
+        task: dict[str, Any] = {"steps": {"cut": cut, "gap_hunt": False, "escalate": escalate},
+                                "angles": {"disable": DISABLED}, **(config or {})}
+        if caps:
+            task["caps"] = caps
+        self.init("s1", "correctness,security", MAIN, "--refuters", str(refuters), config=task)
+        ids = [self.file(claim=f"claim {n}") for n in range(1, claims + 1)]
+        self.cover()
+        if escalate:
+            for cid in ids:
+                assert self.append("escalate", FINDER, claim=cid) == []
+        return ids
 
     def file(self, slate: str = "s1", agent: str = FINDER, lens: str = "correctness",
              angle: str = "changed-contract", origin: str = "lens", claim: str = "x breaks y",
@@ -177,43 +185,26 @@ class Converge:
         if angle:
             args += ["--angle", angle]
         result = self.ok("file", slate, *args, *extra, code=code)
-        return result.stdout.split()[-1] if code == 0 else result.stderr
+        return result.stdout.split()[1] if code == 0 else result.stderr
 
-    def refute(self, claim: str, rnd: int, angle: str, agent: str, outcome: str = "survived",
-               *extra: str, slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
-        return self.ok("refute", slate, "--as", agent, "--claim", claim, "--round", str(rnd),
-                       "--angle", angle, "--tell", "tell applies", "--outcome", outcome,
-                       "--evidence", "read a.py:10", "--searches", "rg foo",
-                       "--positive-control", "rg bar finds bar", *extra, code=code)
-
-    def quiet_round(self, claim: str, rnd: int, angles: tuple[str, str], slate: str = "s1",
-                    outcome: str = "survived", agents: tuple[str, str] = (R1, R2)) -> None:
-        for angle, agent in zip(angles, agents, strict=True):
-            self.refute(claim, rnd, angle, agent, outcome, slate=slate)
-
-    def cut(self, claim: str, rnd: int, agent: str, frequency: str = "common",
-            severity: str = "wrong-behavior", confidence: str = "traced",
-            difficulty: str = "local", *extra: str, slate: str = "s1",
-            code: int = 0) -> subprocess.CompletedProcess[str]:
+    def cut(self, claim: str, rnd: int, agent: str = CUTTER, when: str = "after",
+            frequency: str = "common", severity: str = "wrong-behavior",
+            confidence: str = "traced", difficulty: str = "local", *extra: str,
+            slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
         return self.ok("cut", slate, "--as", agent, "--claim", claim, "--round", str(rnd),
-                       "--frequency", frequency, "--severity", severity,
+                       "--when", when, "--frequency", frequency, "--severity", severity,
                        "--confidence", confidence, "--difficulty", difficulty,
                        *CUT_EVIDENCE, *extra, code=code)
 
-    def accept(self, claim: str, rnd: int, agent: str = FINDER, slate: str = "s1",
-               code: int = 0) -> subprocess.CompletedProcess[str]:
-        return self.ok("accept", slate, "--as", agent, "--claim", claim, "--round", str(rnd), code=code)
+    def accept(self, claim: str, rnd: int, agent: str = FINDER, when: str = "after",
+               slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
+        return self.ok("accept", slate, "--as", agent, "--claim", claim, "--round", str(rnd),
+                       "--when", when, code=code)
 
-    def rebut_cut(self, claim: str, evidence: str, agent: str = FINDER, slate: str = "s1",
-                  code: int = 0) -> subprocess.CompletedProcess[str]:
-        return self.ok("rebut", slate, "--as", agent, "--claim", claim, "--stage", "cut",
+    def rebut_cut(self, claim: str, evidence: str, agent: str = FINDER, when: str = "after",
+                  slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
+        return self.ok("rebut", slate, "--as", agent, "--claim", claim, "--when", when,
                        "--evidence", evidence, code=code)
-
-    def cut_converge(self, claim: str, *values: str, slate: str = "s1", extra: tuple[str, ...] = (),
-                     cutter: str = CUTTER, finder: str = FINDER) -> None:
-        """One cut round, accepted by the claim's finder."""
-        self.cut(claim, 1, cutter, *values, *extra, slate=slate)
-        self.accept(claim, 1, finder, slate=slate)
 
     def cover(self, slate: str = "s1", lenses: tuple[str, ...] = ("correctness", "security")) -> None:
         for lens in lenses:
@@ -226,13 +217,49 @@ class Converge:
         event = {"event": kind, "as": agent, **fields}
         if kind == "cut":
             event = {**CUT_DEFAULTS, "evidence": dict(CUT_EVIDENCE_MAP), **event}
-        if kind == "rebut":
+        if kind == "rebut" and "evidence" in fields:
             event["evidence_sha256"] = ledger.evidence_hash(fields["evidence"])
         try:
             ledger.append(self.path(slate), slate, event)
         except ledger.LedgerError as exc:
             return exc.problems
         return []
+
+    def attack(self, cid: str, angle: str, agent: str = R1, batch: Any = 1,
+               outcome: str = "clean", slate: str = "s1", **extra: Any) -> list[str]:
+        return self.append("attack", agent, slate=slate, claim=cid, batch=batch, angle=angle,
+                           tell="tell applies", outcome=outcome, evidence="read a.py:10",
+                           searches="rg foo", positive_control="rg bar finds bar", **extra)
+
+    def attack_cli(self, cid: str, angle: str, *extra: str, agent: str = R1, batch: Any = 1,
+                   outcome: str = "clean", slate: str = "s1",
+                   code: int = 0) -> subprocess.CompletedProcess[str]:
+        """One `attack` through the CLI."""
+        return self.ok("attack", slate, "--as", agent, "--claim", cid, "--batch", str(batch),
+                       "--angle", angle, "--tell", "tell applies", "--outcome", outcome,
+                       "--evidence", "read a.py:10", "--searches", "rg foo",
+                       "--positive-control", "rg bar finds bar", *extra, code=code)
+
+    def batch_1(self, cid: str = "F001", refuted: tuple[str, ...] = (), agent: str = R1) -> None:
+        for angle in BATCH_1:
+            outcome = "refuted" if angle in refuted else "clean"
+            assert self.attack(cid, angle, agent=agent, outcome=outcome) == []
+
+    def fresh_eye(self, cid: str = "F001", agent: str = R2) -> None:
+        assert self.attack(cid, "retry timing", agent=agent, batch="fresh-eye", last=True) == []
+
+    def clean(self, cid: str = "F001", fresh_eye_agent: str = R2) -> None:
+        """Every batch of a `ready` slate's claim, all clean."""
+        self.batch_1(cid)
+        self.fresh_eye(cid, agent=fresh_eye_agent)
+
+    def rate(self, cid: str = "F001", when: str = "after", finder: str = FINDER,
+             **values: str) -> None:
+        """Cut round 1 of `cid` at `when` with `values`, accepted by its finder."""
+        if when == "before":
+            values.setdefault("confidence", "inferred")
+        assert self.append("cut", CUTTER, claim=cid, round=1, when=when, **values) == []
+        assert self.append("accept", finder, claim=cid, round=1, when=when) == []
 
     # -- inspection ------------------------------------------------------
 
@@ -251,67 +278,3 @@ class Converge:
 @pytest.fixture
 def cv(tmp_path: Path) -> Converge:
     return Converge(tmp_path)
-
-
-# -- in-memory slates for model tests ------------------------------------
-
-ATTACK_IDS = ("boundary", "reachability", "provenance", "carve-out", "dependents",
-              "deliberate", "inverse-reading", "point-in-time")
-
-
-def make_slate(attack: int = len(ATTACK_IDS), steps: dict[str, bool] | None = None,
-               legacy: bool = False, mode: str = "full", **caps: int) -> model.Slate:
-    """A replayed slate without a ledger: `attack` attack angles, the default config
-    with `steps` and `caps` overridden, or no `steps` section at all when `legacy`."""
-    cfg = copy.deepcopy(config_mod.DEFAULTS)
-    cfg["caps"].update(caps)
-    if legacy:
-        del cfg["steps"]
-    elif steps:
-        cfg["steps"].update(steps)
-    angles = [{"id": a, "tag": "attack", "tell": "t", "asks": "a"} for a in ATTACK_IDS[:attack]]
-    slate = model.Slate("m1", mode=mode, lenses=["correctness"], angles=angles, config=cfg)
-    slate.events.append({"seq": 1, "event": "init", "as": MAIN})
-    return slate
-
-
-def add_claim(slate: model.Slate, finder: str = FINDER, **fields: Any) -> model.Claim:
-    n = len(slate.claims) + 1
-    claim = model.Claim(id=model.claim_id(n), finder=finder, lens="correctness",
-                        angle="changed-contract", loc="a.py:1", original=f"claim {n}",
-                        trigger="t", origin="lens", depends=[], rule=None, filed_seq=n + 1,
-                        text=f"claim {n}", **fields)
-    slate.claims[claim.id] = claim
-    return claim
-
-
-def next_seq(slate: model.Slate) -> int:
-    seq = len(slate.events) + 1
-    slate.events.append({"seq": seq})
-    return seq
-
-
-def add_refute(slate: model.Slate, claim: model.Claim, rnd: int, angle: str,
-               outcome: str = "survived") -> dict[str, Any]:
-    event = {"seq": next_seq(slate), "event": "refute", "as": R1, "claim": claim.id,
-             "round": rnd, "angle": angle, "outcome": outcome}
-    claim.refute_rounds.setdefault(rnd, []).append(event)
-    claim.used_angles.add(angle)
-    if outcome == "downgraded":
-        claim.downgrades.append(event)
-    elif outcome in model.DEAD_OUTCOMES:
-        claim.dead = outcome
-    return event
-
-
-def add_cut(slate: model.Slate, claim: model.Claim, severity: str = "wrong-behavior",
-            frequency: str = "common", accept: bool = True, **extra: str) -> dict[str, Any]:
-    rnd = claim.cut_round + 1
-    event = {"seq": next_seq(slate), "event": "cut", "as": CUTTER, "claim": claim.id,
-             "round": rnd, "frequency": frequency, "severity": severity,
-             "confidence": "traced", "difficulty": "local", **extra}
-    claim.cut_rounds[rnd] = event
-    claim.stage = "cut"
-    if accept:
-        claim.accepted_round = rnd
-    return event

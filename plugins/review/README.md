@@ -10,22 +10,22 @@ from "nothing looked for".
 
 `review` splits the work. One finder looks at the diff through a set of **lenses**, each
 with its own **find angles**, and files every claim it makes into a
-[converge](../converge) slate. Separate agents refute and rate each claim, and the converge
-CLI computes which are reported. Every claim is filed before any cutoff runs, so what falls
-below the bar lands in the appendix rather than disappearing.
+[converge](../converge) slate. Separate agents attack and rate each claim, and the converge
+CLI computes which are findings. Every claim is filed before any cutoff runs, so what falls
+below the bar is cut, listed as a follow-up rather than disappearing.
 
 ```mermaid
 flowchart LR
     D["diff + linked ticket"] --> F["finder<br/>every lens, every angle<br/>whose tell matches"]
     F --> G["gap hunt (full)<br/>what did every lens miss?"]
     G --> E["escalate<br/>each finder widens its claims"]
-    E --> C["cut and refute<br/>cutter; r1, r2"]
+    E --> C["cut and attack<br/>cutter; r1, r2"]
     C --> X["cutoff"]
-    X --> O["render: reported · choices<br/>inconclusive · follow-up · appendix"]
+    X --> O["render: findings · choices<br/>follow-up · killed"]
     O -->|"permitted fix applied"| D
 ```
 
-How claims are refuted, rated and cut is converge's job; see its [README](../converge) and
+How claims are attacked, rated and cut is converge's job; see its [README](../converge) and
 [docs/converge.md](../../docs/converge.md).
 
 ## Lenses and depth
@@ -53,7 +53,7 @@ tell matches and records every other one as not applicable, so coverage is check
 
 ## Applying feedback
 
-A claim that survives converge is real, not accepted. Acceptance is per comment: an explicit
+A finding that converge leaves `survived` is real, not accepted. Acceptance is per comment: an explicit
 agreement to that comment, or that comment marked resolved as agreed. A question, no reply,
 or an overall PR approval does not count. After applying a change, `review` runs the
 affected suite and accounts for every in-scope comment as `applied`,
@@ -66,10 +66,10 @@ A new review loops (review, apply what the mode permits, re-review) and ends wit
 | Outcome | Means |
 |---|---|
 | `handoff` | in an engine run whose node has a `fix` edge, the mode would apply at least one claim; review returns the fix list and applies nothing |
-| `comment_only` | in an engine run whose node has no `fix` edge; every surviving claim is reported and none applied |
-| `clean` | no reported, inconclusive or blocking unconverged claim remains; follow-up claims are listed and never decide the outcome |
-| `below_cutoff` | only appendix claims remain |
-| `blocked` | a reported claim needs an acceptance, a decision or a permission that is not there, or a claim is inconclusive or blocking unconverged |
+| `comment_only` | in an engine run whose node has no `fix` edge; every finding is reported and none applied |
+| `clean` | no finding and no follow-up remains |
+| `below_cutoff` | no finding remains; only cut claims, listed as follow-ups |
+| `blocked` | a role or coverage is missing, a finding is `disputed`, or a finding needs an acceptance, a decision or a permission that is not there |
 | `no_progress` | the same claim came back unchanged after a fix, with no new information |
 | `iteration_cap` | the cap (default 5) ended the loop with live claims |
 
@@ -79,7 +79,7 @@ Standalone, the mode is `accepted_only`: nothing is applied without an outside s
 
 A project can commit `.bootgear/config/review-standard.md`: rules headed `## R### [severity]`
 with a `severities:` list and a `cutoff:`. The finder tags each claim that breaks a rule, and
-a surviving claim tagged with a rule at or above the cutoff is always reported.
+a claim tagged with a rule at or above the cutoff is never cut.
 
 Before its own review, `review` looks for a more specific skill: inside an `engine` run it
 reads `review_override` from the settlement (a skill name, or a map keyed by depth);

@@ -93,8 +93,8 @@ Every non-terminal node can also move to `failed`.
 `task state transition` is a hard gate, not a log: it refuses a move that is not a legal edge,
 a node entered more than its `max_visits`, or leaving a node whose `leave` condition was not
 asserted. A node can also carry a `leave_check` — a command the engine runs itself, such as
-`converge gate` on every review node, which blocks leaving until the review's findings are
-settled. You approve every `leave_check` command at `clarify`.
+`converge gate` on every review node, which passes once the review is complete, disputed
+findings included. You approve every `leave_check` command at `clarify`.
 
 | Task type | Built-in path |
 |---|---|

@@ -53,7 +53,7 @@ A shared field vocabulary does not make unrelated operations interchangeable.
 | `engine:recall` | Read settlement, amendments, todos, current node, pitches. | Current run state; read-only. |
 | `engine:resolve` | Resolve one contested decision from `source_of_truth`. | Resolved from a named source, or escalated to `engine:debate`. |
 | `engine:debate` | Scope, rounds, retries, angle round, convergence. | `unanimous_convergence`, `consented_stop`, `round_cap`, or `degraded_convergence`. |
-| `converge` | `full` or `refute-only` slate processing. | `converged`, `unconverged`, or `blocked`. |
+| `converge` | Slate processing: find, attack and cut; claim statuses `survived`, `disputed`, `unverified`, `killed`. | `converged`, `unconverged`, or `blocked`. |
 | `advisor` | `asking` (`direct`/`channel` × `rewrite`/`ask`/`review`/`delegate`) or `listening`. | One reconciled answer, or mailbox state. |
 | `memory-ledger:ledger` | Capability, resolve/show, verify, append, sign, rival, hook envelope. | Result for that operation; only write operations append. |
 | `memory-ledger:setup` | Dependency check, roots, config wiring, optional remote, audit. | One result per requested check or mutation. |
