@@ -450,7 +450,7 @@ def _written(slate: Slate, kinds: tuple[str, ...]) -> bool:
 
 def _batch(event: dict[str, Any], problems: list[str]) -> int | str | None:
     value = event.get("batch")
-    if value == FRESH_EYE or (isinstance(value, int) and not isinstance(value, bool) and value >= 1):
+    if _valid_batch(value):
         return value
     problems.append(f"`batch` must be a positive integer or {FRESH_EYE}; got {value!r}")
     return None
@@ -553,7 +553,7 @@ def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str])
     ledger.nonempty(event, "reason", problems)
     if phase is None:
         return
-    row = ledger.angle(slate, model.PHASE_TAG[phase], event.get("angle"), problems)
+    row = ledger.angle(slate, phase, event.get("angle"), problems)
     if phase == "find":
         lens = ledger.nonempty(event, "lens", problems)
         ledger.angle_lens(row, lens, problems)

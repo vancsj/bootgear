@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
-from converge import ledger, model
+from converge import ledger, model, protocol
 
 
 def _slate(cv: Converge) -> model.Slate:
@@ -13,7 +13,7 @@ def _slate(cv: Converge) -> model.Slate:
 
 
 def _plan(cv: Converge) -> list[list[dict[str, Any]]]:
-    return model.batch_plan(_slate(cv))
+    return protocol.batch_plan(_slate(cv))
 
 
 def _row(claim: str, action: str, role: str, batch: Any = None,
@@ -86,7 +86,7 @@ def test_each_claims_open_phase(cv: Converge) -> None:
     cv.ready(cut="before", claims=2)
     cv.rate("F001", "before", frequency="common", severity="wrong-behavior")
     slate = _slate(cv)
-    assert slate.phase(slate.claims["F001"]) == "attack"
+    assert protocol.claim_phase(slate, slate.claims["F001"]) == "attack"
     assert [(c.id, phase) for c, phase in slate.open_claims()] == [("F001", "attack"),
                                                                   ("F002", "cut-before")]
 

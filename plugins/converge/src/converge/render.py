@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import model
+from . import model, protocol
 from .model import Slate
 
 
@@ -102,7 +102,7 @@ def render(slate: Slate) -> str:
     from .protocol import converged, slate_phase
 
     cutoff_state = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
-    rows = model.compute_cutoff(slate)
+    rows = protocol.compute_cutoff(slate)
     findings = [r for r in rows if r.result == "finding"]
     follow_up = [r for r in rows if r.result == "follow-up"]
     killed = [r for r in rows if r.result == "killed"]

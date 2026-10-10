@@ -161,7 +161,7 @@ def _gap_hunt_open(slate: Slate) -> bool:
 def _plan_text(slate: Slate) -> str:
     """The plan rows grouped by agent role and action, in plan order."""
     groups: dict[tuple[str, str], list[str]] = {}
-    for row in itertools.chain.from_iterable(model.batch_plan(slate)):
+    for row in itertools.chain.from_iterable(protocol.batch_plan(slate)):
         item = row["claim"] + (f" batch {row['batch']}" if row["batch"] is not None else "")
         groups.setdefault((row["agent_role"], row["action"]), []).append(item)
     return "; ".join(f"{role} {action} {', '.join(items)}"
@@ -645,15 +645,15 @@ def cmd_cutoff(args: argparse.Namespace) -> None:
         _refuse_next(args, "refused", problems, _next_step(args, slate))
     if not slate.cutoff_valid:
         def build(current: Slate) -> dict[str, Any]:
-            return {"results": model.cutoff_results(model.compute_cutoff(current))}
+            return {"results": protocol.cutoff_results(protocol.compute_cutoff(current))}
         _write(args, {"event": "cutoff", "as": model.CONVERGE_AGENT}, build=build)
         slate = _read(args)
     assert slate.cutoff is not None
-    rows = model.compute_cutoff(slate)
+    rows = protocol.compute_cutoff(slate)
     counts = {result: sum(row.result == result for row in rows)
               for result in ("finding", "follow-up", "killed")}
     emit(args.output_mode,
-         {"seq": slate.cutoff["seq"], "rows": model.cutoff_results(rows)},
+         {"seq": slate.cutoff["seq"], "rows": protocol.cutoff_results(rows)},
          [(f"CUTOFF seq={slate.cutoff['seq']} findings={counts['finding']} "
           f"follow-up={counts['follow-up']} killed={counts['killed']}"),
           *(f"{row.claim.id} {row.result} status={row.status} cut={row.cut} rank={row.rank} "
@@ -715,7 +715,7 @@ def _unresolved_choices(slate: Slate) -> list[dict[str, str]]:
     if not slate.cutoff_valid:
         return []
     return [{"claim": row.claim.id, "result": row.result, "choice": choice}
-            for row in model.compute_cutoff(slate)
+            for row in protocol.compute_cutoff(slate)
             if row.result == "finding"
             and (choice := (row.claim.state.rating or {}).get("choice"))]
 
@@ -727,7 +727,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     cutoff = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
     agents = slate.agent_ids()
     phase = protocol.slate_phase(slate)
-    plan = model.batch_plan(slate)
+    plan = protocol.batch_plan(slate)
     step = _next_step(args, slate)
     if args.json:
         data: dict[str, Any] = {

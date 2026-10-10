@@ -31,7 +31,6 @@ FIELD_ENUMS: dict[str, tuple[str, ...]] = {
 }
 # Fields a cutoff rule may constrain; `lens` values are free-form.
 RULE_FIELDS: dict[str, tuple[str, ...] | None] = {**FIELD_ENUMS, "origin": ORIGIN, "lens": None}
-PHASE_TAG = {"find": "find", "attack": "attack"}
 CHOICE_DIFFICULTY = ("cross-cutting", "redesign")
 
 ID_RE = re.compile(r"\A[a-z0-9][a-z0-9._-]{0,80}\Z")
@@ -136,17 +135,13 @@ class Slate:
         spent = claim.used_angles | claim.na_angles
         return [a for a in self.angle_ids("attack") if a not in spent]
 
-    def phase(self, claim: Claim) -> str | None:
-        """The first phase in which the claim has an open item, or None."""
-        from .protocol import claim_phase
-
-        return claim_phase(self, claim)
-
     def open_claims(self) -> list[tuple[Claim, str]]:
         """Claims with an open item, with the first phase it is open in."""
+        from .protocol import claim_phase
+
         result = []
         for claim in self.claims.values():
-            phase = self.phase(claim)
+            phase = claim_phase(self, claim)
             if phase is not None:
                 result.append((claim, phase))
         return result
@@ -186,21 +181,3 @@ class CutoffRow:
     result: str
     rank: int
     reason: str
-
-
-def compute_cutoff(slate: Slate) -> list[CutoffRow]:
-    from .protocol import compute_cutoff
-
-    return compute_cutoff(slate)
-
-
-def cutoff_results(rows: list[CutoffRow]) -> list[dict[str, Any]]:
-    from .protocol import cutoff_results
-
-    return cutoff_results(rows)
-
-
-def batch_plan(slate: Slate) -> list[list[dict[str, Any]]]:
-    from .protocol import batch_plan
-
-    return batch_plan(slate)
