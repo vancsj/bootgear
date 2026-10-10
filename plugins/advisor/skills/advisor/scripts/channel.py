@@ -472,6 +472,11 @@ def seat_live(record: dict[str, object], role: str) -> bool | None:
     return seat_fresh(record, role) or seat_restarting(record, role)
 
 
+def seat_busy(record: dict[str, object], role: str) -> bool:
+    """Whether `role` last set the channel to busy: it is working on a request, not silent."""
+    return record.get("state") == "busy" and record.get("state_role") == role
+
+
 def status(args: argparse.Namespace) -> None:
     root = root_from(args)
     path = channel_dir(root, args.channel)
@@ -637,9 +642,13 @@ def receive(args: argparse.Namespace) -> None:
             )
             emit(args, output, ensure_ascii=False)
             raise SystemExit(1)
-        if args.recipient == "asker":
+        if args.recipient == "asker" and seat_busy(peer_record, peer):
+            wait = ("the listener is busy on this request, so keep waiting: run receive again "
+                    "with --timeout 300; busy waits do not count toward the 12 quiet waits, "
+                    "up to 12 of them")
+        elif args.recipient == "asker":
             wait = ("a reply can take many minutes, so run receive again with a long "
-                    "--timeout (e.g. 300) instead of giving up or resending; up to 5 "
+                    "--timeout (e.g. 300) instead of giving up or resending; up to 12 "
                     "waits of 300s before reporting the peer unavailable")
         else:
             wait = ("a request can come at any time, so run receive again with a long "

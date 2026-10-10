@@ -1493,9 +1493,19 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertIn("no new message for asker", output["note"])
         self.assertIn("many minutes", output["note"])
         self.assertIn("instead of giving up or resending", output["note"])
-        self.assertIn("up to 5 waits of 300s", output["note"])
+        self.assertIn("up to 12 waits of 300s", output["note"])
         self.assertIn(f"receive --channel {self.channel} --for asker --timeout 300", output["next"])
         return output
+
+    def test_busy_listener_extends_the_wait(self) -> None:
+        run(self.root, "state", "--channel", self.channel, "--role", "listener", "--value", "busy")
+        result = self._receive()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertIs(output["peer_live"], True)
+        self.assertIn("the listener is busy on this request", output["note"])
+        self.assertIn("busy waits do not count toward the 12 quiet waits", output["note"])
+        self.assertNotIn("up to 12 waits", output["note"])
 
     def test_empty_inbox_says_no_new_message(self) -> None:
         output = self._assert_no_new(self._receive())
@@ -1718,7 +1728,7 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertIs(output["peer_live"], False)
         self.assertIn("no new message for asker", output["note"])
         self.assertIn("peer heartbeat stale; tell the user instead of waiting again", output["note"])
-        self.assertNotIn("up to 5 waits", output["note"])
+        self.assertNotIn("up to 12 waits", output["note"])
         self.assertNotIn("next", output)
 
     def test_stale_peer_with_new_message_still_points_at_fetch(self) -> None:
