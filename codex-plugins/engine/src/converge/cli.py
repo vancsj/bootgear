@@ -380,7 +380,8 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                                "the same receive again without counting it toward the 5; a "
                                "message of any other kind is a protocol error: stop the slate "
                                f"blocked naming {seat}"),
-            "check": (f"after each reply, run converge status --json; a reply starting "
+            "check": (f"after each reply, run converge status {shlex.quote(slate_id)} "
+                      f"--dir {quoted_dir} --json; a reply starting "
                       f"WRITE-DENIED, or a turn whose {seat} events are absent from status, "
                       f"stops the slate blocked naming {seat}; never redo the turn with a "
                       f"native subagent"),

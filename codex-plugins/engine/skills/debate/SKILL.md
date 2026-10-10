@@ -434,8 +434,8 @@ assessment. Do not claim that a retry occurred.
   `direct`), and its `review` task. Use the debate channel named in the run
   ledger's `advisor channels:` decision (read through `recall`), never the `r2`
   channel. Before each advisor request, reclaim that channel's live seat
-  through the `advisor` skill's scan and claim (`list --live-for` offers a seat
-  this session holds).
+  through the `advisor` skill's scan and claim (the scan offers a seat this session
+  holds).
 - A party is unavailable when its native subagent cannot be created or times
   out, or its `advisor` call fails or times out, finds no live listener on its
   channel, or the `advisor` skill is missing. Never fall back to the other

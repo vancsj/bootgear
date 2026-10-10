@@ -118,8 +118,9 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
         assert fragment in other, other
     assert ".sent" not in other
     check = _line(lines, "DRIVER r2 check: ")
-    for fragment in ("converge status --json", "WRITE-DENIED", "absent from status",
-                     "blocked naming r2", "never redo the turn with a native subagent"):
+    for fragment in ("converge status s1 --dir ", "--json; a reply starting", "WRITE-DENIED",
+                     "absent from status", "blocked naming r2",
+                     "never redo the turn with a native subagent"):
         assert fragment in check, check
     head = lines.index(_line(lines, "REQUEST r2 (write to the body file before each send"))
     assert lines[head + 1] == "TYPE: delegate"
