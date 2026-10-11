@@ -21,7 +21,8 @@ ASKING = [
     "codex-plugins/engine/skills/debate/SKILL.md",
 ]
 HANDBACK_ONLY = ["plugins/converge/skills/converge/SKILL.md"]
-HARD_GATE = "production, outward-send and irreversible actions are never sent to"
+HARD_GATE = ("production change, outward send, irreversible action, goal sign-off, "
+             "or permitted mutations are never sent to")
 MARKER = "no-deputy:not-installed"
 
 

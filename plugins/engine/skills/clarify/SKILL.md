@@ -20,7 +20,7 @@ Investigate the request → settle items 1–10 (state machine validated and dia
 
 Ask items in the order that fits the conversation. Use answers already implied by the conversation. Do not force a questionnaire.
 
-Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` skill with the question, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and ask the user. On `answered`, use the answer and keep its cited slugs for `init`. On `escalate`, ask the user. Item 7 (permitted mutations) and the goal sign-off are never sent to the deputy, and production, outward-send and irreversible actions are never sent to it.
+Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` skill with the question, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and ask the user. On `answered`, use the answer and keep its cited slugs for `init`. On `escalate`, ask the user. Item 7 (permitted mutations) and the goal sign-off are never sent to the deputy, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it.
 
 1. **Request assessment** — investigate the request before settling task type or anything else; do not accept the first framing uncritically. Inspect the ticket/request text, the relevant implementation path, and existing tests or validation for related behavior. Record as settlement field `request_assessment`:
    - observed scope and affected surfaces

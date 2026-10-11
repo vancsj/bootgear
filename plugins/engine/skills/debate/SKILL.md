@@ -111,7 +111,7 @@ Do not use `approach`.
 
 When `resolve` supplied `deputy_slugs`, include them in the brief as the user's past decisions the debate starts from. Each party states, for every entry, whether it still applies; a party that departs from an entry gives its reason, recorded with its position. Make no second deputy ask in that case.
 
-When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production, outward-send and irreversible actions are never sent to it), pass its cited slugs the same way. If its `source` is `assertion`, hand that answer back to the caller without dispatching parties. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
+When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it), pass its cited slugs the same way. If its `source` is `assertion`, hand that answer back to the caller without dispatching parties. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
 
 ## Question id
 

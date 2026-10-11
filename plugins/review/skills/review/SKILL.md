@@ -222,7 +222,7 @@ the follow-up list):
   factual dispute is not a choice; it stays in converge.
 - Standalone: report it to the user.
 - A deputy-answered choice is named in the report to the user, with its cited slugs.
-  Production, outward-send and irreversible actions are never sent to `deputy:ask`.
+  Production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to `deputy:ask`.
 
 In an active run, record the slate, the converge dir and the `snapshot=<sha>`
 that `init` printed; the caller passes the first two as
