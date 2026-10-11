@@ -1,6 +1,6 @@
 {
   "name": "memory-ledger",
-  "version": "4.13.4",
+  "version": "4.14.0",
   "description": "Append-only ledger of settled questions, rival answers, and evidence, signed per AI session.",
   "author": {
     "name": "vancsj",
