@@ -43,6 +43,9 @@ sys.path.insert(0, str(SCRIPTS))
 import ledger as ledger_cli
 from ledgerlib import clikit
 
+# `new` signs with this id when the host did not set one.
+os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "rules-test-session")
+
 
 def _git_repo(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)

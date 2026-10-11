@@ -6,12 +6,13 @@
 Claude: `ledger.py = ${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py`
 Codex: `ledger.py = ${PLUGIN_ROOT}/scripts/ledger`
 
-ledger.py resolve "<claim or question>" [--in <folder>] [--only shared|local]
-ledger.py show <slug>                          # answers, conf, evidence, sigs, recorded output
+ledger.py resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
+ledger.py show <slug> [--data]                 # answers, conf, evidence, sigs, recorded output; --data as JSON
 ledger.py list [--filter <text>] [--all] [--only …]
 ledger.py new <slug> (--shared|--local) --q --claim --because --evidence [--evidence …] [--ref <branch>] [--alt-terms]
 ledger.py rival <slug> --claim --because --evidence [--evidence …] [--keep-evidence aN] [--ref <branch>]
 ledger.py add-evidence <slug> <aN> --evidence "…"   # append a check
+ledger.py vote --question "…" --claim "…" --evidence "…" [--only deputy]   # add checks to the answer with that claim on a similar question; exit 1 with NO-VOTE when none
 ledger.py promote <slug> <aN> [--to <ref>]     # branch claim → mainline, as a NEW answer
 ledger.py set-repo <slug> <aN> <repo>          # name the checkout its checks run in
 ledger.py sign <slug> <aN> [--fail --output "<failing output>"]
@@ -34,7 +35,7 @@ ledger.py selftest                             # pin the conf/hash constants
 - `assert` pins an answer at `1.00` on a human's ruling and writes an `Asserted:` line naming who and why; `--clear` lifts it. The line is outside `h=`, so neither voids a signature.
 - `promote` adds an answer scoped to the repo's mainline — from `origin/HEAD`, overridable by `ref:` / `$LEDGER_REF` / `--to` — and leaves the branch answer and its signatures intact.
 - A connector check is written `<Tool>: <what to ask it>`. It is not run and not judged, so name the tool and its inputs in full.
-- `resolve`, `list`, `lint`, `audit` and `save` take `--only shared|local|deputy`. The deputy root is opened only when named (`--only deputy`, or `new --deputy`). Every slug-addressed command — `show`, `hash`, `sign`, `refute`, `promote`, `rival`, `set-repo`, `add-evidence`, `assert` — looks the slug up across the opened ledgers and takes no ledger flag.
+- `resolve`, `list`, `lint`, `audit` and `save` take `--only shared|local|deputy`. The deputy root is opened only when named (`--only deputy`, or `new --deputy`). Slug-addressed commands — `show`, `hash`, `sign`, `refute`, `promote`, `rival`, `set-repo`, `add-evidence`, `assert` — look the slug up across the opened ledgers; `--only` narrows the lookup. `resolve --all` prints every match with no score-gap cut and no folder limits. `resolve --data` and `show --data` return the matches and the answers as JSON; `--json` keeps the prose envelope.
 - `new` with no ledger flag, while more than one ledger is open, is refused. Pass exactly one of `--shared`, `--local` or `--deputy`. A kind whose root is not open is refused, never filed in another ledger.
 - `new` requires `--shared` or `--local`; there is no default.
 - `doctor` first when anything is off.

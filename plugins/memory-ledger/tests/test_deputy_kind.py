@@ -4,6 +4,7 @@ Every run is a subprocess against temp ledger roots; nothing here touches a real
 """
 from __future__ import annotations
 
+import os
 import json
 import shutil
 import subprocess
@@ -13,6 +14,8 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
+# `new` signs with this id when the host did not set one.
+os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-kind-test-session")
 sys.path.insert(0, str(PLUGIN / "scripts"))
 
 from ledgerlib import constants  # noqa: E402

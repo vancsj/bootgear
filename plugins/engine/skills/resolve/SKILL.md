@@ -33,7 +33,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
 
 4. If no single domain applies, including cases where two domains conflict or no settled source covers the disagreement, follow the caller-specific rule:
 
-   - **Called before `debate`:** First call `deputy:ask` for the decision (production, outward-send and irreversible actions are never sent to it). If it answers from an assertion, that answer is the decision: record it as `solo` with the assertion's slug, and do not invoke `debate`. If it escalates, keep only its cited slugs that appear in its candidate list, and pass them to `debate` as `deputy_slugs`, labelled as the user's past decisions the debate starts from. If `deputy` is not installed, record `no-deputy:not-installed` and pass no `deputy_slugs`. Then invoke the public `debate` skill in the same turn. Do not leave it pending. Pass only this decision-specific context:
+   - **Called before `debate`:** First call `deputy:ask` for the decision (production, outward-send and irreversible actions are never sent to it). If its `source` is `assertion`, that answer is the decision: record it as `solo` with the assertion's slug, and do not invoke `debate`. If it escalates, keep only its cited slugs that appear in its candidate list, and pass them to `debate` as `deputy_slugs`, labelled as the user's past decisions the debate starts from. If `deputy` is not installed, record `no-deputy:not-installed` and pass no `deputy_slugs`. Then invoke the public `debate` skill in the same turn. Do not leave it pending. Pass only this decision-specific context:
      - the decision, stated plainly
      - the touched domain(s) and the unsatisfied settlement condition for each
      - the full `source_of_truth` for every domain
