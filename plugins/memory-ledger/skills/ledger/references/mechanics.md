@@ -112,4 +112,5 @@ ledger.py resolve "which package manager do we install with"
 Order: `EXACT` (slug hit, following any `USE:` redirect) → `UNKNOWN` (query terms in no entry) →
 `FOLDER` blocks of candidates, the top one's answers inline → `MINT`. An `EXACT` hit stops there
 and prints nothing else; otherwise `MINT` prints even alongside candidates. The candidate list is
-cut at the largest score gap and always keeps at least two.
+cut at the largest score gap and always keeps at least two. `--all` prints every match with no
+score-gap cut and no folder limits; use it when a caller must see the full set.

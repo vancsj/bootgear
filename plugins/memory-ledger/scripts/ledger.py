@@ -122,6 +122,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="flag answers not touched in this many days. Marks, never hides: "
                         "a candidate withheld for being old is one a session cannot see it "
                         "already has, so it writes the question again")
+    r.add_argument("--all", dest="show_all", action="store_true",
+                   help="print every match, skipping the score-gap cut and the folder and "
+                        "per-folder limits")
     r.add_argument("--in", dest="scope", metavar="FOLDER",
                    help="search only this folder, recomputing term weights within it. "
                         "Opt-in only: never infer the scope from the question — a wrong "

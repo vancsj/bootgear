@@ -37,7 +37,7 @@ def slug_for(question: str) -> str:
 
 
 def matching_slugs(deputy_root: Path, question: str) -> list[str]:
-    r = ledger(deputy_root, "resolve", question, "--only", "deputy")
+    r = ledger(deputy_root, "resolve", question, "--all", "--only", "deputy")
     slugs: list[str] = []
     for line in r.stdout.splitlines():
         m = EXACT.match(line) or HIT.match(line)
@@ -64,7 +64,6 @@ def candidates(deputy_root: Path, question: str, limit: int) -> int:
         print()
     if len(slugs) > limit:
         print(f"CUT {len(slugs) - limit} more matching entries not shown")
-    print("NOTE the resolver keeps matches above its largest score gap; weaker matches may be hidden")
     return 0
 
 

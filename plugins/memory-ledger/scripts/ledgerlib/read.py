@@ -115,7 +115,11 @@ def cmd_resolve(args, root):
     scored = [(sc, e) for sc, e in ((score(e.tokens()), e) for e in entries)
               if sc >= FUZZY_FLOOR]
     if scored:
-        ranked = cut_candidates(sorted(scored, key=lambda s: -s[0]))
+        ordered = sorted(scored, key=lambda s: -s[0])
+        # --all keeps every match: no score-gap cut and no folder or per-folder caps.
+        ranked = ordered if args.show_all else cut_candidates(ordered)
+        folder_cap = len(ranked) if args.show_all else RESOLVE_MAX_FOLDERS
+        per_folder_cap = len(ranked) if args.show_all else RESOLVE_MAX_PER_FOLDER
         # Grouped by folder, but NOT filtered by folder. Routing to a single
         # folder first is unreliable when the target entry does not exist yet, and
         # a stage-1 miss is unrecoverable: the second stage searches a folder that
@@ -131,23 +135,23 @@ def cmd_resolve(args, root):
         for sc, e in ranked:
             by_folder.setdefault((e.kind, str(Path(e.slug).parent)), []).append((sc, e))
         order = sorted(by_folder, key=lambda f: -by_folder[f][0][0])
-        for key in order[:RESOLVE_MAX_FOLDERS]:
+        for key in order[:folder_cap]:
             kind, f = key
             rows = by_folder[key]
             where = f"  [{kind}]" if kind and len(ledgers) > 1 else ""
             print(f"FOLDER   {f}/{where}   {len(rows)} candidate(s), best {rows[0][0]:.2f}")
-            for sc, e in rows[:RESOLVE_MAX_PER_FOLDER]:
+            for sc, e in rows[:per_folder_cap]:
                 hit = len(query_set & e.tokens())
                 q = e.question if len(e.question) <= 92 else e.question[:91] + "…"
                 print(f"   {sc:.2f} ({hit}/{asked})  {e.slug}{tag_of(e, ledgers)}")
                 print(f"               Q: {q}")
-            if len(rows) > RESOLVE_MAX_PER_FOLDER:
-                print(f"   … {len(rows) - RESOLVE_MAX_PER_FOLDER} more in {f}/ "
+            if len(rows) > per_folder_cap:
+                print(f"   … {len(rows) - per_folder_cap} more in {f}/ "
                       f"— `ledger.py list --filter {f}`")
-        if len(order) > RESOLVE_MAX_FOLDERS:
-            rest = sum(len(by_folder[k]) for k in order[RESOLVE_MAX_FOLDERS:])
+        if len(order) > folder_cap:
+            rest = sum(len(by_folder[k]) for k in order[folder_cap:])
             print(f"         … {rest} weaker candidate(s) in "
-                  f"{len(order) - RESOLVE_MAX_FOLDERS} more folder(s)")
+                  f"{len(order) - folder_cap} more folder(s)")
         # The top candidate inline, so a session that only wants to know
         # whether the question is settled needs one call rather than four
         # (resolve, read the file, pick the answer, read its Evidence).

@@ -55,11 +55,17 @@ class DeputyTest(unittest.TestCase):
                                "--because", WHY, "--options", "uv or pip", "--stakes", "low",
                                "--session-ledger", str(session))
 
-    def test_candidates_says_the_resolver_may_hide_weaker_matches(self) -> None:
-        self.record()
-        code, out, _ = self.run_deputy("candidates", QUESTION)
-        self.assertEqual(code, 0)
-        self.assertIn("weaker matches may be hidden", out)
+    def test_candidates_lists_every_similar_entry_and_no_hidden_note(self) -> None:
+        questions = [QUESTION, "Should new scripts pin dependencies with uv?",
+                     "Should scripts run with pip?", "Should new scripts be shell?",
+                     "Should the repo lock with uv?", "Should scripts use a venv?"]
+        for question in questions:
+            self.assertEqual(self.record(question=question)[0], 0)
+        code, out, err = self.run_deputy("candidates", QUESTION)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.count("CANDIDATE decisions/"), len(questions), out)
+        self.assertNotIn("CUT", out)
+        self.assertNotIn("NOTE", out)
 
     def test_record_does_not_run_shell_text_from_the_answer(self) -> None:
         target = self.base / "pwned"
