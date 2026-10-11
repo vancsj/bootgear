@@ -1441,6 +1441,90 @@ class ParentIdValidationTests(unittest.TestCase):
         self.assertEqual(json.loads(refused.stderr)["category"], "unknown_parent_id")
 
 
+class ReceiveHeartbeatReminderTests(unittest.TestCase):
+    """`receive` tells the caller to restart its own heartbeat when its seat is not fresh.
+
+    Table (own seat / pending message / peer seat -> expected `next`):
+      fresh / no / live        -> receive only
+      stale / no / live        -> heartbeat, then receive
+      restarting / no / live   -> heartbeat, then receive
+      stale / yes / live       -> fetch, then heartbeat
+      fresh / yes / live       -> fetch only
+      stale / no / stale       -> heartbeat only
+    """
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def receive(self) -> subprocess.CompletedProcess:
+        return run(self.root, "receive", "--channel", "0001", "--for", "listener", "--timeout", "0")
+
+    def send_request(self) -> None:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-"],
+            input="question", capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+
+    def heartbeat(self) -> str:
+        return f"heartbeat --channel 0001 --role listener --session s1"
+
+    def test_fresh_seat_gets_receive_only(self) -> None:
+        result = self.receive()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotIn("heartbeat --channel", payload["next"])
+        self.assertIn("receive --channel 0001 --for listener", payload["next"])
+
+    def test_stale_seat_gets_heartbeat_before_receive(self) -> None:
+        age_seat(self.root, "listener", 600)
+        result = self.receive()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        next_text = json.loads(result.stdout)["next"]
+        self.assertIn(self.heartbeat(), next_text)
+        self.assertLess(next_text.index("heartbeat --channel"), next_text.index("receive --channel"))
+
+    def test_restarting_seat_gets_heartbeat_before_receive(self) -> None:
+        age_seat(self.root, "listener", 600)
+        set_fields(self.root, listener_restart_until=time.time() + 100)
+        result = self.receive()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        next_text = json.loads(result.stdout)["next"]
+        self.assertIn(self.heartbeat(), next_text)
+        self.assertLess(next_text.index("heartbeat --channel"), next_text.index("receive --channel"))
+
+    def test_stale_seat_with_pending_message_gets_fetch_then_heartbeat(self) -> None:
+        self.send_request()
+        age_seat(self.root, "listener", 600)
+        result = self.receive()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        next_text = json.loads(result.stdout)["next"]
+        self.assertIn("fetch --channel 0001 --message-id", next_text)
+        self.assertIn(self.heartbeat(), next_text)
+        self.assertLess(next_text.index("fetch"), next_text.index("heartbeat --channel"))
+
+    def test_fresh_seat_with_pending_message_gets_fetch_only(self) -> None:
+        self.send_request()
+        result = self.receive()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        next_text = json.loads(result.stdout)["next"]
+        self.assertIn("fetch --channel 0001 --message-id", next_text)
+        self.assertNotIn("heartbeat --channel", next_text)
+
+    def test_stale_own_seat_and_stale_peer_gets_heartbeat_only(self) -> None:
+        age_seat(self.root, "listener", 600)
+        age_seat(self.root, "asker", 600)
+        result = self.receive()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn("tell the user", payload["note"])
+        self.assertIn(self.heartbeat(), payload["next"])
+        self.assertNotIn("receive --channel", payload["next"])
+
+
 class ConcurrencyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))

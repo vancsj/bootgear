@@ -309,6 +309,19 @@ def receive_next(args: argparse.Namespace, root: Path, role: str) -> str:
     return f"start receiving for {role}: synchronous `{receive}`, or infinite background polling `while :; do {receive}; done &`"
 
 
+def heartbeat_reminder(args: argparse.Namespace, root: Path, record: dict[str, object]) -> str | None:
+    """The restart line for the caller's own heartbeat, or None while its seat is fresh.
+
+    The seat owner is the session that registered it, so the command names the same session."""
+    role = args.recipient
+    owner = record.get(f"{role}_owner")
+    if seat_fresh(record, role) or owner is None:
+        return None
+    seat = argparse.Namespace(root=args.root, role=role, session=owner)
+    return ("your heartbeat is not running: start it in a new background session first: "
+            f"{heartbeat_command(seat, root, args.channel)}")
+
+
 def heartbeat_command(args: argparse.Namespace, root: Path, channel: str) -> str:
     """The `heartbeat` invocation for this seat, with `--interval`/`--max-age` when not the default."""
     command = (f"{script_command(args, root)} heartbeat --channel {channel} "
@@ -666,11 +679,14 @@ def receive(args: argparse.Namespace) -> None:
     script = script_command(args, root)
     if pending == 0:
         read = "; the messages listed were already read" if recent else ""
+        reminder = heartbeat_reminder(args, root, peer_record)
         if peer_live is False:
             output["note"] = (
                 f"no new message for {args.recipient} on channel {args.channel} "
                 f"within {args.timeout:g}s{read} — peer heartbeat stale; tell the user instead of waiting again"
             )
+            if reminder:
+                output["next"] = reminder
             emit(args, output, ensure_ascii=False)
             raise SystemExit(1)
         if args.recipient == "asker" and seat_busy(peer_record, peer):
@@ -690,7 +706,8 @@ def receive(args: argparse.Namespace) -> None:
             f"no new message for {args.recipient} on channel {args.channel} "
             f"within {args.timeout:g}s{read} — {wait}"
         )
-        output["next"] = f"{script} receive --channel {args.channel} --for {args.recipient} --timeout 300"
+        receive_again = f"{script} receive --channel {args.channel} --for {args.recipient} --timeout 300"
+        output["next"] = f"{reminder}\nthen run: {receive_again}" if reminder else receive_again
         emit(args, output, ensure_ascii=False)
         raise SystemExit(1)
     unread = next(m for m in messages if not m.get("read"))
@@ -698,7 +715,9 @@ def receive(args: argparse.Namespace) -> None:
         "fetch each unread message by its message_id to mark it read — "
         "otherwise the next receive call will return it again"
     )
-    output["next"] = f"{script} fetch --channel {args.channel} --message-id {unread['message_id']}"
+    fetch = f"{script} fetch --channel {args.channel} --message-id {unread['message_id']}"
+    reminder = heartbeat_reminder(args, root, peer_record)
+    output["next"] = f"{fetch}\nthen: {reminder}" if reminder else fetch
     emit(args, output, ensure_ascii=False)
 
 
