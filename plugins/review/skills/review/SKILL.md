@@ -215,9 +215,14 @@ labelled with its status.
 Route every finding carrying a `choice` (a follow-up keeps its `choice` in
 the follow-up list):
 
+- Before routing, call `deputy:ask` for the choice. The answer is advisory and
+  never counts as acceptance. If `deputy` is not installed, record
+  `no-deputy:not-installed` and route the choice as usual.
 - In an active run: report it to the caller for the `review-debate` node. A
   factual dispute is not a choice; it stays in converge.
 - Standalone: report it to the user.
+- A deputy-answered choice is named in the report to the user, with its cited slugs.
+  Production, outward-send and irreversible actions are never sent to `deputy:ask`.
 
 In an active run, record the slate, the converge dir and the `snapshot=<sha>`
 that `init` printed; the caller passes the first two as
@@ -230,9 +235,11 @@ task session record-decision <run-id> --dir <session-dir> --mode solo --summary 
 
 ### 6. Apply accepted feedback
 
-Apply only comments accepted under `Acceptance` in `Rules`. After applying a
-change, run the suite that `test` would select for the affected code and
-report the result.
+Apply only comments accepted under `Acceptance` in `Rules`. Before a fix that
+needs acceptance, call `deputy:ask`; its answer is advisory and never counts as
+acceptance. If `deputy` is not installed, record `no-deputy:not-installed` and
+ask the user as usual. After applying a change, run the suite that `test` would
+select for the affected code and report the result.
 
 ## Iterate to closure
 

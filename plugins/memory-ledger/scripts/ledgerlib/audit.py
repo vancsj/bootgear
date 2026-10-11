@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import re
 
+from .constants import LOCAL_ONLY_KINDS
 from .store import load_entries
 
 # Any absolute or `~`-relative path. A relative path (no leading `/` or `~`)
@@ -106,7 +107,7 @@ def cmd_audit(args, root=None):
     for lg, e, a in rows:
         # In the local ledger an absolute home path is portable enough — that
         # ledger never leaves the machine it describes.
-        if lg.kind == "local":
+        if lg.kind in LOCAL_ONLY_KINDS:
             continue
         paths = unportable_paths("\n".join(a.evidences))
         if not paths:

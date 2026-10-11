@@ -93,6 +93,22 @@ ledger.py new <folder>/_about --local --q "What belongs here?" \
   --claim "…" --because "…" --evidence "…"
 ```
 
+### 3a. Create the deputy ledger
+
+Only if `doctor` reported the deputy root missing or not a git repo. Confirm the
+path first (default `~/.memory-ledger/deputy`), then:
+
+```
+mkdir -p <deputy-root> && cd <deputy-root> && git init -q .
+printf '.ledger-cache.json\n' > .gitignore
+ledger.py rules --init --only deputy
+ledger.py rules --only deputy
+ledger.py new decisions/_about --deputy --q "What belongs here?" \
+  --claim "…" --because "…" --evidence "…"
+```
+
+The deputy root has no remote. Do not add one.
+
 Mirror only the top-level folders the user actually needs; an empty ledger with
 three speculative folders is three orphan charters. One is usually enough to
 start. The local charter should say what makes a fact local — true of this

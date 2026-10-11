@@ -10,7 +10,8 @@ import os
 import sys
 from pathlib import Path
 
-from .constants import DEFAULT_LOCAL_ROOT, DEFAULT_SHARED_ROOT, KINDS, LOCAL, SHARED
+from .constants import (DEFAULT_DEPUTY_ROOT, DEFAULT_KINDS, DEFAULT_LOCAL_ROOT,
+                        DEFAULT_SHARED_ROOT, DEPUTY, KINDS, LOCAL, SHARED)
 from .context import InvocationContext, contextual_path
 from .identity import resolve_identity
 
@@ -88,7 +89,8 @@ class Ledger:
 
 def resolve_roots(shared_override: str | None = None,
                   local_override: str | None = None,
-                  context: InvocationContext | None = None) -> dict[str, Path]:
+                  context: InvocationContext | None = None,
+                  deputy_override: str | None = None) -> dict[str, Path]:
     """Where each ledger lives. `memory.root` keeps naming the shared one.
 
     The existing key is not renamed: where `memory.root` or `$LEDGER_ROOT` is
@@ -101,27 +103,36 @@ def resolve_roots(shared_override: str | None = None,
               or cfg.get("root") or DEFAULT_SHARED_ROOT)
     local = (local_override or os.environ.get("LEDGER_LOCAL_ROOT")
              or cfg.get("local_root") or DEFAULT_LOCAL_ROOT)
-    return {SHARED: contextual_path(shared, context), LOCAL: contextual_path(local, context)}
+    deputy = (deputy_override or os.environ.get("LEDGER_DEPUTY_ROOT")
+              or cfg.get("deputy_root") or DEFAULT_DEPUTY_ROOT)
+    return {SHARED: contextual_path(shared, context), LOCAL: contextual_path(local, context),
+            DEPUTY: contextual_path(deputy, context)}
 
 
 def open_ledgers(shared_override: str | None = None, local_override: str | None = None,
                  only: str | None = None,
-                 context: InvocationContext | None = None) -> list[Ledger]:
+                 context: InvocationContext | None = None,
+                 deputy_override: str | None = None,
+                 with_deputy: bool = False) -> list[Ledger]:
     """The ledgers that exist on disk, shared first.
 
     A configured root that is not there is skipped rather than fatal, so a
     machine that has only ever had the shared ledger keeps working untouched and
     `setup` is what turns the second one on.
     """
-    roots = resolve_roots(shared_override, local_override, context)
+    roots = resolve_roots(shared_override, local_override, context, deputy_override)
     if roots[SHARED] == roots[LOCAL]:
         sys.exit(f"shared and local ledger roots are the same path ({roots[SHARED]}) — "
                  f"they must be separate repos, or the shared one can never gain a remote "
                  f"without publishing local-only history. Run /memory-ledger:setup.")
-    out = [Ledger(k, roots[k]) for k in KINDS
-           if (only is None or k == only) and roots[k].is_dir()]
+    if roots[DEPUTY] in (roots[SHARED], roots[LOCAL]):
+        sys.exit(f"deputy ledger root is the same path as the shared or local root ({roots[DEPUTY]}) — "
+                 f"the deputy ledger must be its own repo, or personal decisions reach the team's history. "
+                 f"Run /memory-ledger:setup.")
+    kinds = (DEFAULT_KINDS + ((DEPUTY,) if with_deputy else ())) if only is None else (only,)
+    out = [Ledger(k, roots[k]) for k in kinds if roots[k].is_dir()]
     if not out:
-        want = ", ".join(f"{k}={roots[k]}" for k in KINDS if only is None or k == only)
+        want = ", ".join(f"{k}={roots[k]}" for k in kinds)
         sys.exit(f"no ledger root found ({want}) — run /memory-ledger:setup")
     return out
 

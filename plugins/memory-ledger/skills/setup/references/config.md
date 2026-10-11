@@ -12,4 +12,6 @@ directory-local `.memory-ledger/config.yaml` beats the home one, and `.bootgear/
 is read second at both levels. If the file exists, show a diff of the `memory:`
 block rather than the whole file, and preserve everything else.
 `$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` override it; `--root` / `--local-root`
-override those.
+override those. The deputy root (`memory.deputy_root`, default
+`~/.memory-ledger/deputy`) is set the same way with `$LEDGER_DEPUTY_ROOT` and
+`--deputy-root`.

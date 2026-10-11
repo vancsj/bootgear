@@ -153,7 +153,7 @@ says how much company you are in, and the check decides.
 
 ---
 
-## Two ledgers
+## Ledgers
 
 ```mermaid
 flowchart TD
@@ -228,17 +228,18 @@ Install the plugin, then run `/memory-ledger:setup` (Codex: `$memory-ledger:setu
 repositories — the config file, the host instructions file, a git remote, a push — needs your
 explicit yes.
 
-Roots default to `~/.memory-ledger/shared` and `~/.memory-ledger/local`, and are configured in
-`~/.memory-ledger/config.yaml`:
+Roots default to `~/.memory-ledger/shared`, `~/.memory-ledger/local` and `~/.memory-ledger/deputy`,
+and are configured in `~/.memory-ledger/config.yaml`:
 
 ```yaml
 memory:
   root: <the shared ledger's path>
   local_root: <the local ledger's path>
+  deputy_root: <the deputy ledger's path>
 ```
 
-`$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` override the file; `--root` / `--local-root` override
-those.
+`$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` / `$LEDGER_DEPUTY_ROOT` override the file; `--root` /
+`--local-root` / `--deputy-root` override those.
 
 ---
 

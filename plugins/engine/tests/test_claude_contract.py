@@ -311,7 +311,8 @@ class ClaudePackageContractTest(unittest.TestCase):
         manifest = json.loads(
             (PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text()
         )
-        self.assertEqual(manifest["dependencies"], ["converge", "spec", "test", "review", "advisor", "memory-ledger"])
+        self.assertEqual(manifest["dependencies"],
+                         ["converge", "spec", "test", "review", "advisor", "memory-ledger", "deputy"])
 
     def test_compaction_recall_uses_session_start_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]

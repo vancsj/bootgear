@@ -59,6 +59,7 @@ CHECKS = (
             "plugins/engine",
             "plugins/converge",
             "plugins/review",
+            "plugins/deputy",
             "codex-plugins/engine",
         ),
     ),
@@ -97,6 +98,10 @@ CHECKS = (
     Check(
         "pytest-advisor",
         ("python", "-m", "pytest", "plugins/advisor/tests"),
+    ),
+    Check(
+        "pytest-deputy",
+        ("python", "-m", "pytest", "plugins/deputy/tests"),
     ),
 )
 

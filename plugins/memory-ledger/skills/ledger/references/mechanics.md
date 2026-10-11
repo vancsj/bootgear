@@ -34,7 +34,8 @@ ledger.py selftest                             # pin the conf/hash constants
 - `assert` pins an answer at `1.00` on a human's ruling and writes an `Asserted:` line naming who and why; `--clear` lifts it. The line is outside `h=`, so neither voids a signature.
 - `promote` adds an answer scoped to the repo's mainline — from `origin/HEAD`, overridable by `ref:` / `$LEDGER_REF` / `--to` — and leaves the branch answer and its signatures intact.
 - A connector check is written `<Tool>: <what to ask it>`. It is not run and not judged, so name the tool and its inputs in full.
-- `resolve`, `list`, `lint`, `audit` and `save` take `--only shared|local`. Every slug-addressed command — `show`, `hash`, `sign`, `refute`, `promote`, `rival`, `set-repo`, `add-evidence` — looks the slug up across both ledgers and takes no ledger flag.
+- `resolve`, `list`, `lint`, `audit` and `save` take `--only shared|local|deputy`. The deputy root is opened only when named (`--only deputy`, or `new --deputy`). Every slug-addressed command — `show`, `hash`, `sign`, `refute`, `promote`, `rival`, `set-repo`, `add-evidence`, `assert` — looks the slug up across the opened ledgers and takes no ledger flag.
+- `new` with no ledger flag, while more than one ledger is open, is refused. Pass exactly one of `--shared`, `--local` or `--deputy`. A kind whose root is not open is refused, never filed in another ledger.
 - `new` requires `--shared` or `--local`; there is no default.
 - `doctor` first when anything is off.
 - Output mode: prose is the default for every stdout sink; `--json` or `--prose` on any command overrides, followed by `BOOTGEAR_OUTPUT=json|prose` when no flag is present. The Codex `scripts/ledger` wrapper defaults to prose. `--json` on `doctor`, `audit` and `resolve-roots` keeps its own shape and exit codes. Refusals follow the selected mode and name the command's example and the other commands.

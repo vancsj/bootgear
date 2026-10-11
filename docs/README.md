@@ -27,7 +27,7 @@ project-specific knowledge; each project customizes them through
 | `review` | Review domain skill: lens finders plus converge attack and cut, and applying accepted feedback. | via converge |
 | `spec` | Requirements domain skill: requirements, design, sign-off, task breakdown. | none |
 | `test` | Testing domain skill: write, run, and triage test results. | none |
-| `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger and a machine-local ledger |
+| `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger, a machine-local ledger and a deputy ledger |
 | `advisor` | Pairs Claude Code and Codex CLI through a file mailbox, or makes a one-shot Codex call. | mailbox files |
 
 Dependencies:

@@ -30,6 +30,7 @@ from ledgerlib.config import locate, open_ledgers
 from ledgerlib.context import InvocationContext
 from ledgerlib.constants import (
     CLAIM_MAX_WORDS,
+    DEFAULT_DEPUTY_ROOT,
     DEFAULT_LOCAL_ROOT,
     DEFAULT_SHARED_ROOT,
     KINDS,
@@ -98,6 +99,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--local-root", dest="local_root", metavar="PATH",
                    help=f"local ledger root (default: memory.local_root / "
                         f"$LEDGER_LOCAL_ROOT / {DEFAULT_LOCAL_ROOT})")
+    p.add_argument("--deputy-root", dest="deputy_root", metavar="PATH",
+                   help=f"deputy ledger root (default: memory.deputy_root / "
+                        f"$LEDGER_DEPUTY_ROOT / {DEFAULT_DEPUTY_ROOT})")
     p.add_argument("--host", choices=("standalone", "claude", "codex", "gear"),
                    help="host adapter supplying context and signer identity")
     p.add_argument("--session-id", dest="session_id", metavar="ID",
@@ -109,7 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
         # one ledger would let a session mint a question the other one already
         # answers, which is the single failure the resolver exists to prevent.
         p_.add_argument("--only", choices=KINDS, metavar="LEDGER",
-                        help="restrict to one ledger (shared|local); both by default")
+                        help="restrict to one ledger (shared|local|deputy); shared and local "
+                             "by default, the deputy ledger only when named")
 
     r = sub.add_parser("resolve", help="claim text → existing entry or minted slug")
     r.add_argument("text")
@@ -157,6 +162,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "append-only, so ask the human first")
     n.add_argument("--local", action="store_true",
                    help="file in the local ledger — this machine's paths, config and setup")
+    n.add_argument("--deputy", action="store_true",
+                   help="file in the deputy ledger — your past decisions, read by the deputy; "
+                        "opens that root for this call")
+    only_arg(n)
     authoring_args(n)
 
     v = sub.add_parser("rival", help="add a contradicting answer to an existing entry")
@@ -169,10 +178,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="carry over the checks from an existing answer you still agree "
                         "with; repeatable. They are kept ahead of your new ones")
     authoring_args(v)
+    only_arg(v)
 
 
     sh = sub.add_parser("show", help="print one entry: answers, conf, evidence, sigs, debate")
     sh.add_argument("slug")
+    only_arg(sh)
     sh.add_argument("--stale-after", dest="stale_after", type=int, metavar="DAYS",
                     help="flag answers not touched in this many days")
 
@@ -235,6 +246,7 @@ def build_parser() -> argparse.ArgumentParser:
     at.add_argument("answer")
     at.add_argument("--why", help="what settles it — a decision, an intent, a system that no "
                                   "longer exists to be queried. Recorded in the entry")
+    only_arg(at)
     at.add_argument("--by", metavar="NAME",
                     help="who ruled (default: git config user.name). A human, never a "
                          "session: a signature says a check was re-run, an assertion says "
@@ -299,7 +311,9 @@ def _dispatch(args) -> int:
         return cmd_doctor(args) or 0
 
     args.ledgers = open_ledgers(args.root, args.local_root,
-                                only=getattr(args, "only", None), context=args.context)
+                                only=getattr(args, "only", None), context=args.context,
+                                deputy_override=args.deputy_root,
+                                with_deputy=getattr(args, "deputy", False))
     fn = {"resolve": cmd_resolve, "new": cmd_new, "rival": cmd_rival, "hash": cmd_hash,
           "show": cmd_show, "list": cmd_list,
           "sign": cmd_sign, "refute": cmd_refute, "promote": cmd_promote, "lint": cmd_lint,

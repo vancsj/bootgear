@@ -178,10 +178,17 @@ FALLBACK_REF = "origin/main"
 MAINLINE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
-SHARED, LOCAL = "shared", "local"
+SHARED, LOCAL, DEPUTY = "shared", "local", "deputy"
 
 
-KINDS = (SHARED, LOCAL)
+KINDS = (SHARED, LOCAL, DEPUTY)
+
+# The kinds a command opens unless `--only` names one. The deputy root is opened
+# only by a command that selects it.
+DEFAULT_KINDS = (SHARED, LOCAL)
+
+# Kinds whose entries never leave this machine, so a machine path in them is fine.
+LOCAL_ONLY_KINDS = (LOCAL, DEPUTY)
 
 
 # A dot-directory of the tool's own, never inside a source tree. Where someone
@@ -192,6 +199,9 @@ DEFAULT_SHARED_ROOT = "~/.memory-ledger/shared"
 
 
 DEFAULT_LOCAL_ROOT = "~/.memory-ledger/local"
+
+
+DEFAULT_DEPUTY_ROOT = "~/.memory-ledger/deputy"
 
 
 CACHE_NAME = ".ledger-cache.json"

@@ -6,8 +6,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from .config import KINDS, pick, resolve_roots
-from .constants import FUZZY_FLOOR, RESOLVE_MAX_FOLDERS, RESOLVE_MAX_PER_FOLDER
+from .config import pick, resolve_roots
+from .constants import FUZZY_FLOOR, KINDS, RESOLVE_MAX_FOLDERS, RESOLVE_MAX_PER_FOLDER
 from .gitops import _git
 from .model import Answer, band, confidence, split_evidence
 from .scoring import build_scorer, cut_candidates, mint_slug, normalize, query_coverage
@@ -262,7 +262,7 @@ def cmd_resolve_roots(args, root=None):
     necessarily exists, and a command whose whole job is reporting a missing root
     cannot be one that exits on a missing root.
     """
-    roots = resolve_roots(args.root, args.local_root, args.context)
+    roots = resolve_roots(args.root, args.local_root, args.context, args.deputy_root)
     rows = []
     for kind in KINDS:
         pth = roots[kind]

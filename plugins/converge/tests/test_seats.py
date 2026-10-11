@@ -301,4 +301,4 @@ def test_status_of_a_native_slate_shows_no_advisor(cv: Converge) -> None:
 
 def test_manifest_declares_advisor_dependency() -> None:
     manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text())
-    assert manifest["dependencies"] == ["memory-ledger", "advisor"]
+    assert manifest["dependencies"] == ["memory-ledger", "advisor", "deputy"]

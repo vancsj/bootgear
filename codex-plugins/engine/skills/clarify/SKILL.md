@@ -20,6 +20,8 @@ Investigate the request → settle items 1–10 (state machine validated and dia
 
 Ask items in the order that fits the conversation. Use answers already implied by the conversation. Do not force a questionnaire.
 
+Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` skill with the question, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and ask the user. On `answered`, use the answer and keep its cited slugs for `init`. On `escalate`, ask the user. Item 7 (permitted mutations) and the goal sign-off are never sent to the deputy, and production, outward-send and irreversible actions are never sent to it.
+
 1. **Request assessment** — investigate the request before settling task type or anything else; do not accept the first framing uncritically. Inspect the ticket/request text, the relevant implementation path, and existing tests or validation for related behavior. Record as settlement field `request_assessment`:
    - observed scope and affected surfaces
    - a coarse size estimate (`small`/`medium`/`large`)
@@ -63,7 +65,7 @@ Ask items in the order that fits the conversation. Use answers already implied b
 
    Adjust domains to the task type. Omit an implementation-approach domain for bug triage when it is not needed.
 
-6. **Debate threshold** — use reversibility and blast radius by default unless the user gives other axes. Decide reversible, narrow decisions solo. Escalate decisions that are hard to reverse or broad in effect through `resolve`, then `debate` if `resolve` cannot settle them.
+6. **Debate threshold** — use reversibility and blast radius by default unless the user gives other axes. Decide reversible, narrow decisions solo. Escalate decisions that are hard to reverse or broad in effect through `resolve`, then `debate` if `resolve` cannot settle them. Never send this item to `deputy:ask`: the deputy has no threshold to judge against.
 
    Also settle:
    - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
@@ -159,6 +161,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 ## Rules
 
 - Ask the user work questions only in this stage. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
+- After `init`, record each deputy-answered item in the run ledger as a `solo` decision that names its cited slugs (`task session record-decision … --mode solo`). Do not write it to the deputy ledger. Only the user's own answers go to `deputy:record`.
 - Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
 
 ## Recovery

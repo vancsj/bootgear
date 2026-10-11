@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from .config import config_candidates, load_config, resolve_roots
-from .constants import DEFAULT_LOCAL_ROOT, DEFAULT_SHARED_ROOT, KINDS
+from .constants import DEFAULT_KINDS, DEFAULT_LOCAL_ROOT, DEFAULT_SHARED_ROOT, DEPUTY
 from .context import InvocationContext
 from .rules import rules_path, rules_problem, seed_hint
 
@@ -50,16 +50,16 @@ def capability_status(context: InvocationContext | None = None,
     context = context or InvocationContext.from_environment()
     config = next((path for path in config_candidates(context) if path.is_file()), None)
     roots = resolve_roots(shared_override, local_override, context)
-    if roots[KINDS[0]] == roots[KINDS[1]]:
+    if roots[DEFAULT_KINDS[0]] == roots[DEFAULT_KINDS[1]]:
         return "broken"
-    if not roots[KINDS[0]].is_dir() or not (roots[KINDS[0]] / ".git").exists():
-        if not config and not any(roots[kind].exists() for kind in KINDS):
+    if not roots[DEFAULT_KINDS[0]].is_dir() or not (roots[DEFAULT_KINDS[0]] / ".git").exists():
+        if not config and not any(roots[kind].exists() for kind in DEFAULT_KINDS):
             return "unconfigured"
         return "broken"
-    local = roots[KINDS[1]]
+    local = roots[DEFAULT_KINDS[1]]
     if local.exists() and (not local.is_dir() or not (local / ".git").exists()):
         return "broken"
-    if not any(roots[kind].is_dir() for kind in KINDS):
+    if not any(roots[kind].is_dir() for kind in DEFAULT_KINDS):
         return "unconfigured" if config is None else "broken"
     return "configured"
 
@@ -99,10 +99,10 @@ def cmd_doctor(args, root=None):
                            f"({DEFAULT_SHARED_ROOT}, {DEFAULT_LOCAL_ROOT}). Looked in: "
                            + ", ".join(str(c) for c in config_candidates(context)), machine_rows))
 
-    roots = resolve_roots(args.root, args.local_root, context)
-    if roots[KINDS[0]] == roots[KINDS[1]]:
+    roots = resolve_roots(args.root, args.local_root, context, args.deputy_root)
+    if roots[DEFAULT_KINDS[0]] == roots[DEFAULT_KINDS[1]]:
         states.append(_row(FAIL, "roots", "shared and local resolve to the same path", machine_rows))
-    for kind in KINDS:
+    for kind in DEFAULT_KINDS:
         p = roots[kind]
         if not p.is_dir():
             states.append(_row(WARN if kind == "local" else FAIL, f"{kind} ledger",
@@ -138,7 +138,7 @@ def cmd_doctor(args, root=None):
                                f"{rules} missing — {seed_hint(kind, prog)}", machine_rows))
 
     ignored = []
-    for kind in KINDS:
+    for kind in DEFAULT_KINDS:
         p = roots[kind]
         gi = p / ".gitignore"
         if p.is_dir() and (not gi.is_file() or ".ledger-cache.json" not in
@@ -151,6 +151,16 @@ def cmd_doctor(args, root=None):
     else:
         states.append(_row(OK, "cache ignored", ".ledger-cache.json ignored in every ledger", machine_rows))
 
+    # The deputy root is optional: a missing or plain one is a warning, and it never
+    # changes the capability status, which is shared and local only.
+    deputy = roots[DEPUTY]
+    if not deputy.is_dir():
+        states.append(_row(WARN, "deputy ledger", f"{deputy} does not exist — the deputy "
+                                                  f"has no decisions to answer from", machine_rows))
+    elif not (deputy / ".git").exists():
+        states.append(_row(WARN, "deputy ledger", f"{deputy} is not a git repository",
+                           machine_rows))
+
     fails = sum(1 for s in states if s == FAIL)
     warns = sum(1 for s in states if s == WARN)
     capability = capability_status(context, args.root, args.local_root)
@@ -161,7 +171,7 @@ def cmd_doctor(args, root=None):
         print(json.dumps({
             "capability": "memory-ledger",
             "status": status,
-            "roots": {kind: str(roots[kind]) for kind in KINDS},
+            "roots": {kind: str(roots[kind]) for kind in DEFAULT_KINDS},
             "config": str(cfg_path) if cfg_path else None,
             "failures": [f"{row['label']}: {row['detail']}" for row in rows if row["state"] == "FAIL"],
             "warnings": [f"{row['label']}: {row['detail']}" for row in rows

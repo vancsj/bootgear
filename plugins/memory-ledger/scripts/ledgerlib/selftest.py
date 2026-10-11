@@ -365,5 +365,24 @@ def cmd_selftest(args, root):
         bad += not got
         print(f"{'ok  ' if got else 'FAIL'}  {got!s:<5}  (want True)   {label}")
 
+    # The third root. The default open set must exclude it, or every read would
+    # reach the deputy ledger; `--only deputy` must open it, or it is unreachable.
+    from .config import open_ledgers
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        for name in ("shared", "local", "deputy"):
+            (base / name).mkdir()
+        roots = dict(shared_override=str(base / "shared"), local_override=str(base / "local"),
+                     deputy_override=str(base / "deputy"))
+        default_kinds = [lg.kind for lg in open_ledgers(**roots)]
+        deputy_kinds = [lg.kind for lg in open_ledgers(only="deputy", **roots)]
+    for label, got, want in [
+            ("deputy: the default open set excludes the deputy root", default_kinds,
+             ["shared", "local"]),
+            ("deputy: --only deputy opens the deputy root", deputy_kinds, ["deputy"])]:
+        ok = got == want
+        bad += not ok
+        print(f"{'ok  ' if ok else 'FAIL'}  {got!s:<22} (want {want})  {label}")
+
     print(f"\n{'all anchors hold' if not bad else str(bad) + ' FAILED'}")
     return 1 if bad else 0

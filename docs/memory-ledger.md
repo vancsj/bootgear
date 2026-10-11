@@ -24,7 +24,9 @@ append-only: a local fact committed to a repo that later gains a remote cannot b
 
 - **Roots.** First set wins, per ledger: `--root`/`--local-root`, then
   `$LEDGER_ROOT`/`$LEDGER_LOCAL_ROOT`, then `memory.root`/`memory.local_root` in the config
-  file, then `~/.memory-ledger/shared` and `~/.memory-ledger/local`. Relative paths resolve
+  file, then `~/.memory-ledger/shared` and `~/.memory-ledger/local`. The deputy root
+  (`--deputy-root`, `$LEDGER_DEPUTY_ROOT`, `memory.deputy_root`, default
+  `~/.memory-ledger/deputy`) is opened only when a command names it. Relative paths resolve
   from the caller's cwd.
 - **Config file.** The first that exists of `./.memory-ledger/config.yaml`,
   `./.bootgear/config.yaml`, `~/.memory-ledger/config.yaml`, `~/.bootgear/config.yaml`. Flat

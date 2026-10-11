@@ -18,7 +18,7 @@ Each claim ends with a status and a separate `cut` field (`yes`/`no`):
 
 A finding is a claim with `cut: no` that is not killed. A follow-up is a claim with `cut: yes`: listed in its own section with its status, never presented as a finding. Killed claims are listed with their evidence. Nothing verified is dropped.
 
-Hand back to the caller the render, every finding carrying a `choice`, the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8):
+Hand back to the caller the render, every finding carrying a `choice`, the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8). The caller asks `deputy:ask` for each choice, and production, outward-send and irreversible actions are never sent to it; this handback does not change:
 
 - `converged`: no finding is `disputed`; give the finding, follow-up and killed counts.
 - `unconverged`: list the `disputed` findings.

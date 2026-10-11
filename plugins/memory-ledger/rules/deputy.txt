@@ -1,0 +1,9 @@
+What belongs in the deputy ledger
+
+This WHAT-BELONGS.txt is this ledger's rule file. The deputy reads it before it answers from this ledger, so editing it changes what the deputy is told. It is .txt because every .md file under the ledger root is read as an entry.
+
+Belongs here: a decision you made yourself, as a question and its answer, with the context and the reason you gave; a rule you pinned with `assert`, stated as the answer you want the deputy to give. Each entry must say what the question was, what you answered, and why.
+
+Does not belong here: a decision a team or another person made; a fact about the world that no one decided; secrets, credentials, personal data about anyone else; a one-off answer you would not repeat.
+
+The deputy ledger is private to this machine's user. It is a git repo with no remote, and nothing here is pushed.

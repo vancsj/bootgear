@@ -1,0 +1,5 @@
+[plugin]
+name = "deputy"
+
+[commands.deputy]
+exec = ["python3", "scripts/deputy.py"]

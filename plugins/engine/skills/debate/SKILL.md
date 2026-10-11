@@ -109,6 +109,10 @@ Brief every party, in round 0 and every later round, with:
 
 Do not use `approach`.
 
+When `resolve` supplied `deputy_slugs`, include them in the brief as cited deputy entries whose relevance is not confirmed. Each party states, for every cited entry, whether it applies, and the rejected entries are recorded with the party's position. Make no second deputy ask in that case.
+
+When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production, outward-send and irreversible actions are never sent to it), pass its cited slugs the same way, and never record the answer as acceptance. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
+
 ## Question id
 
 Before round 1, ask the public session interface for a stable question ID.

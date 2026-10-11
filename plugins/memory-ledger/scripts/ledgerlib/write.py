@@ -12,7 +12,7 @@ import os
 import sys
 from datetime import date
 
-from .config import LOCAL, SHARED, Ledger, locate, pick, resolve_you
+from .config import DEPUTY, LOCAL, SHARED, Ledger, locate, pick, resolve_you
 from .constants import (
     FALLBACK_REF,
     MAINLINE_CANDIDATES,
@@ -87,14 +87,17 @@ def target_ledger(args) -> Ledger:
     the only moment anyone still knows which kind of fact this is.
     """
     ledgers = args.ledgers
-    if len(ledgers) == 1:
+    chosen = [kind for kind, on in ((SHARED, args.shared), (LOCAL, args.local),
+                                    (DEPUTY, getattr(args, "deputy", False))) if on]
+    if not chosen and len(ledgers) == 1:
         return ledgers[0]
-    if args.shared == args.local:          # both set, or neither
-        sys.exit("say which ledger: --shared (the team can read it, forever) or --local "
-                 "(this machine only). Shared is append-only — ask the human before "
-                 "filing anything machine-specific, path-specific or personal there.")
-    return pick(ledgers, SHARED if args.shared else LOCAL,
-                getattr(args, "context", None))
+    if len(chosen) != 1:                   # none, or more than one
+        sys.exit("say which ledger: --shared (the team can read it, forever), --local "
+                 "(this machine only), or --deputy (your past decisions for the deputy). "
+                 "Shared is append-only — ask the human before filing anything "
+                 "machine-specific, path-specific or personal there.")
+    # No fallback: a kind whose root is not open is refused, never filed elsewhere.
+    return pick(ledgers, chosen[0], getattr(args, "context", None))
 
 
 def _scope_lines(args) -> tuple[str | None, str | None]:

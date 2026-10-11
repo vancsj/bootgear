@@ -15,7 +15,8 @@ from .audit import unportable_paths
 from .clikit import refuse
 from .config import Ledger
 from .context import InvocationContext
-from .constants import BROKEN_EVIDENCE, CLAIM_MAX_WORDS, DUPLICATE_GATE, FUZZY_FLOOR
+from .constants import (BROKEN_EVIDENCE, CLAIM_MAX_WORDS, DUPLICATE_GATE, FUZZY_FLOOR,
+                        LOCAL_ONLY_KINDS)
 from .model import machine_path
 from .scoring import build_scorer, cut_candidates, normalize
 from .store import all_index, tag_of
@@ -71,7 +72,7 @@ def is_shell_shaped(cmd: str) -> bool:
 
 
 def _unportable(evidences, kind: str | None) -> list[tuple[int, str, list[str]]]:
-    if kind == "local":
+    if kind in LOCAL_ONLY_KINDS:
         return []
     offending = [(i, ev, unportable_paths(ev)) for i, ev in enumerate(evidences, 1)]
     return [(i, ev, p) for i, ev, p in offending if p]
@@ -116,7 +117,7 @@ def repo_problem(repo: str | None, kind: str | None = None, force: bool = False,
     `local_option` offers the local ledger only where the writer still picks one —
     `rival` and `set-repo` act on an entry wherever it already lives.
     """
-    if kind == "local" or force or not machine_path(repo):
+    if kind in LOCAL_ONLY_KINDS or force or not machine_path(repo):
         return None
     local = ", write to the local ledger instead (--local)," if local_option else ","
     return (f"Repo: {repo.strip()} is a machine path, which only this machine can resolve. "
