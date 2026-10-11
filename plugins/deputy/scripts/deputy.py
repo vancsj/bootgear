@@ -7,6 +7,7 @@ gear command. Every write runs `save --only deputy`, and the deputy root must ha
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -16,8 +17,6 @@ from pathlib import Path
 
 GEAR = Path(os.environ.get("GEAR_PY") or Path(__file__).resolve().parents[3] / "cli" / "gear.py")
 DEFAULT_LIMIT = 8
-HIT = re.compile(r"^\s+\d+\.\d+ \(\d+/\d+\)\s+(\S+)\s*$")
-EXACT = re.compile(r"^EXACT\s+(\S+)")
 
 
 def ledger(deputy_root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -28,22 +27,19 @@ def ledger(deputy_root: Path, *args: str) -> subprocess.CompletedProcess:
                           capture_output=True, text=True)
 
 
-def normal(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", text.lower())).strip()
-
-
 def slug_for(question: str) -> str:
     return "decisions/" + (re.sub(r"[^a-z0-9]+", "-", question.lower()).strip("-")[:60] or "question")
 
 
 def matching_slugs(deputy_root: Path, question: str) -> list[str]:
-    r = ledger(deputy_root, "resolve", question, "--all", "--only", "deputy")
-    slugs: list[str] = []
-    for line in r.stdout.splitlines():
-        m = EXACT.match(line) or HIT.match(line)
-        if m and m.group(1) not in slugs:
-            slugs.append(m.group(1))
-    return slugs
+    """Matching slugs: the exact slug first, then the candidates best score first."""
+    r = ledger(deputy_root, "resolve", question, "--all", "--data", "--only", "deputy")
+    if r.returncode != 0:
+        sys.exit(r.stdout + r.stderr)
+    data = json.loads(r.stdout)
+    rows = sorted(data["candidates"], key=lambda row: -row["score"])
+    slugs = [data["exact"]] if data["exact"] else []
+    return slugs + [row["slug"] for row in rows if row["slug"] != data["exact"]]
 
 
 def show(deputy_root: Path, slug: str) -> str:
@@ -67,21 +63,6 @@ def candidates(deputy_root: Path, question: str, limit: int) -> int:
     return 0
 
 
-def question_of(text: str) -> str | None:
-    for line in text.splitlines():
-        if line.startswith("Q: "):
-            return line[3:]
-    return None
-
-
-def first_claim(text: str) -> str | None:
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith("## ") and i + 1 < len(lines):
-            return lines[i + 1].strip()
-    return None
-
-
 def refuse_remote(deputy_root: Path) -> str | None:
     r = subprocess.run(["git", "-C", str(deputy_root), "remote"], capture_output=True, text=True)
     if r.stdout.strip():
@@ -94,12 +75,33 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     if problem := refuse_remote(deputy_root):
         print(f"REFUSED {problem}", file=sys.stderr)
         return 2
-    existing = [s for s in matching_slugs(deputy_root, question)
-                if normal(question_of(show(deputy_root, s)) or "") == normal(question)]
-    for slug in existing:
-        if normal(first_claim(show(deputy_root, slug)) or "") == normal(claim):
-            print(f"UNCHANGED {slug}")
-            return 0
+    # The check counts occurrences of the answer in the session ledger and requires at
+    # least as many as there are now. A second answer in the same session raises the
+    # count, so its check text differs and memory-ledger takes it as another vote.
+    # The answer and the path are quoted, so the answer text never reaches the shell as code.
+    text = session_ledger.read_text(encoding="utf-8") if session_ledger.is_file() else ""
+    count = sum(1 for line in text.splitlines() if claim in line)
+    if count == 0:
+        print(f"REFUSED the session ledger {session_ledger} does not contain the answer",
+              file=sys.stderr)
+        return 2
+    evidence = (f'test "$(grep -cF -- {shlex.quote(claim)} {shlex.quote(str(session_ledger))})"'
+                f" -ge {count}")
+    # memory-ledger adds the check as a vote when a similar question has this claim.
+    r = ledger(deputy_root, "vote", "--question", question, "--claim", claim,
+               "--evidence", evidence, "--only", "deputy")
+    if r.returncode not in (0, 1):
+        print(r.stdout + r.stderr, file=sys.stderr)
+        return r.returncode
+    if r.returncode == 0:
+        outcome = [line for line in r.stdout.splitlines()
+                   if line.startswith(("VOTED ", "UNCHANGED "))][-1]
+        if outcome.startswith("VOTED "):
+            return save(deputy_root, outcome)
+        print(outcome)
+        return 0
+    existing = [line.split()[1] for line in r.stdout.splitlines()
+                if line.startswith("SAME-QUESTION ")]
     base = slug_for(question)
     slug = base if not existing else f"{base}-newer-{len(existing) + 1}"
     newer = f" Newer than {existing[-1]}." if existing else ""
@@ -107,9 +109,6 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     # A changed answer to a recorded question is deliberate, so memory-ledger's
     # near-duplicate refusal is passed on purpose.
     extra = ["--anyway"] if existing else []
-    # The check is built here, with the answer and the path quoted, so the answer
-    # text never reaches the shell as code.
-    evidence = f"grep -qF -- {shlex.quote(claim)} {shlex.quote(str(session_ledger))}"
     r = ledger(deputy_root, "new", slug, "--deputy", "--q", question, "--claim", claim,
                "--because", because_line, "--evidence", evidence, *extra)
     if r.returncode != 0:

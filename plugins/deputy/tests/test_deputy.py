@@ -5,6 +5,7 @@ Each run goes through the gear route to memory-ledger; nothing here touches a re
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -48,19 +49,43 @@ class DeputyTest(unittest.TestCase):
             code = deputy.main(["--deputy-root", str(self.root), *argv])
         return code, out.getvalue(), err.getvalue()
 
-    def record(self, claim: str = CLAIM, question: str = QUESTION) -> tuple[int, str, str]:
-        session = self.base / "session.md"
-        session.write_text(f"decision: {claim}\n", encoding="utf-8")
+    def record(self, claim: str = CLAIM, question: str = QUESTION,
+               session: str = "session.md") -> tuple[int, str, str]:
+        session_file = self.base / session
+        session_file.write_text(f"decision: {claim}\n", encoding="utf-8")
         return self.run_deputy("record", "--question", question, "--claim", claim,
                                "--because", WHY, "--options", "uv or pip", "--stakes", "low",
-                               "--session-ledger", str(session))
+                               "--session-ledger", str(session_file))
+
+    def test_identical_answer_from_a_new_session_adds_a_vote(self) -> None:
+        self.assertEqual(self.record(session="first.md")[0], 0)
+        code, out, err = self.record(session="second.md")
+        self.assertEqual(code, 0, err)
+        self.assertIn("VOTED decisions/", out)
+        self.assertIn("n=2", out)
+        self.assertEqual(len(list(self.root.rglob("*.md"))), 1)
+
+    def test_similar_question_with_the_same_answer_adds_a_vote(self) -> None:
+        self.assertEqual(self.record()[0], 0)
+        code, out, err = self.record(question="Should I run scripts with uv?", session="second.md")
+        self.assertEqual(code, 0, err)
+        self.assertIn("VOTED decisions/should-new-scripts-run-with-uv a1 n=2", out)
+        self.assertEqual(len(list(self.root.rglob("*.md"))), 1)
+
+    def test_similar_question_with_a_different_answer_writes_a_new_entry(self) -> None:
+        self.assertEqual(self.record()[0], 0)
+        code, out, err = self.record(claim="Scripts run with pip",
+                                     question="Should I run scripts with uv?", session="second.md")
+        self.assertEqual(code, 0, err)
+        self.assertIn("NEW decisions/", out)
+        self.assertEqual(len(list(self.root.rglob("*.md"))), 2)
 
     def test_candidates_lists_every_similar_entry_and_no_hidden_note(self) -> None:
         questions = [QUESTION, "Should new scripts pin dependencies with uv?",
                      "Should scripts run with pip?", "Should new scripts be shell?",
                      "Should the repo lock with uv?", "Should scripts use a venv?"]
-        for question in questions:
-            self.assertEqual(self.record(question=question)[0], 0)
+        for i, question in enumerate(questions):
+            self.assertEqual(self.record(claim=f"{CLAIM} variant {i}", question=question)[0], 0)
         code, out, err = self.run_deputy("candidates", QUESTION)
         self.assertEqual(code, 0, err)
         self.assertEqual(out.count("CANDIDATE decisions/"), len(questions), out)
@@ -71,6 +96,22 @@ class DeputyTest(unittest.TestCase):
         target = self.base / "pwned"
         self.record(claim=f'x"; touch {target}; echo "')
         self.assertFalse(target.exists())
+
+    def test_matching_slugs_sorts_by_score_and_puts_the_exact_slug_first(self) -> None:
+        printed = json.dumps({"exact": None, "mint": "q", "candidates": [
+            {"slug": "decisions/weak", "score": 0.2},
+            {"slug": "decisions/strong", "score": 0.9},
+            {"slug": "other/assertion", "score": 0.85},
+        ]})
+        fake = subprocess.CompletedProcess([], 0, stdout=printed, stderr="")
+        with unittest.mock.patch.object(deputy, "ledger", return_value=fake):
+            self.assertEqual(deputy.matching_slugs(self.root, "q"),
+                             ["decisions/strong", "other/assertion", "decisions/weak"])
+            exact = json.dumps({"exact": "decisions/strong", "mint": "q", "candidates": [
+                {"slug": "decisions/weak", "score": 0.2}]})
+            fake.stdout = exact
+            self.assertEqual(deputy.matching_slugs(self.root, "q"),
+                             ["decisions/strong", "decisions/weak"])
 
     def test_candidates_escalates_when_the_root_is_absent(self) -> None:
         shutil.rmtree(self.root)
@@ -101,6 +142,30 @@ class DeputyTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("UNCHANGED", out)
         self.assertEqual(len(list(self.root.rglob("*.md"))), 1)
+
+    def test_repeat_answer_in_the_same_session_adds_a_vote(self) -> None:
+        self.assertEqual(self.record()[0], 0)
+        session = self.base / "session.md"
+        session.write_text(f"decision: {CLAIM}\ndecision: {CLAIM}\n", encoding="utf-8")
+        argv = ["record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
+                "--options", "uv or pip", "--stakes", "low", "--session-ledger", str(session)]
+        code, out, err = self.run_deputy(*argv)
+        self.assertEqual(code, 0, err)
+        self.assertIn("VOTED decisions/", out)
+        self.assertIn("n=2", out)
+        code, out, err = self.run_deputy(*argv)
+        self.assertEqual(code, 0, err)
+        self.assertIn("UNCHANGED", out)
+
+    def test_record_refuses_an_answer_missing_from_the_session_ledger(self) -> None:
+        session = self.base / "session.md"
+        session.write_text("decision: something else\n", encoding="utf-8")
+        code, _, err = self.run_deputy("record", "--question", QUESTION, "--claim", CLAIM,
+                                       "--because", WHY, "--options", "uv or pip",
+                                       "--stakes", "low", "--session-ledger", str(session))
+        self.assertEqual(code, 2)
+        self.assertIn("does not contain the answer", err)
+        self.assertEqual(list(self.root.rglob("*.md")), [])
 
     def test_different_answer_writes_a_newer_entry_beside_the_old_one(self) -> None:
         self.assertEqual(self.record()[0], 0)

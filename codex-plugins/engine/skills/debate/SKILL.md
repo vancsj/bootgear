@@ -110,9 +110,9 @@ Brief every party, in round 0 and every later round, with:
 
 Do not use `approach`.
 
-When `resolve` supplied `deputy_slugs`, include them in the brief as cited deputy entries whose relevance is not confirmed. Each party states, for every cited entry, whether it applies, and the rejected entries are recorded with the party's position. Make no second deputy ask in that case.
+When `resolve` supplied `deputy_slugs`, include them in the brief as the user's past decisions the debate starts from. Each party states, for every entry, whether it still applies; a party that departs from an entry gives its reason, recorded with its position. Make no second deputy ask in that case.
 
-When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production, outward-send and irreversible actions are never sent to it), pass its cited slugs the same way, and never record the answer as acceptance. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
+When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production, outward-send and irreversible actions are never sent to it), pass its cited slugs the same way. If it answers from an assertion, hand that answer back to the caller without dispatching parties. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
 
 ## Question id
 

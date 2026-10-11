@@ -48,6 +48,7 @@ from ledgerlib.write import (
     cmd_hash,
     cmd_new,
     cmd_promote,
+    cmd_vote,
     cmd_refute,
     cmd_rival,
     cmd_set_repo,
@@ -63,6 +64,7 @@ EXAMPLES = {
            '--evidence "<check>" --local',
     "rival": 'rival <slug> --claim "<claim>" --because "<why>" --evidence "<check>"',
     "show": "show <slug>",
+    "vote": 'vote --question "<question>" --claim "<claim>" --evidence "<check>" --only deputy',
     "list": "list --filter <text>",
     "refute": 'refute <slug> a1 <signer-id> --output "<contradicting output>"',
     "hash": "hash <slug> a1",
@@ -87,7 +89,7 @@ CATALOG = Catalog(prog="ledger.py", examples=EXAMPLES, frequent=FREQUENT,
                   own_json=frozenset({"resolve-roots", "audit", "doctor"}),
                   capture=frozenset(EXAMPLES))
 # Writes whose next step is committing them.
-SAVE_NEXT = {"new", "rival", "sign", "refute", "promote", "add-evidence", "assert",
+SAVE_NEXT = {"new", "rival", "sign", "refute", "promote", "add-evidence", "vote", "assert",
              "set-repo"}
 
 
@@ -122,6 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="flag answers not touched in this many days. Marks, never hides: "
                         "a candidate withheld for being old is one a session cannot see it "
                         "already has, so it writes the question again")
+    r.add_argument("--data", action="store_true",
+                   help="the matches as data: exact slug and candidates with scores")
     r.add_argument("--all", dest="show_all", action="store_true",
                    help="print every match, skipping the score-gap cut and the folder and "
                         "per-folder limits")
@@ -187,6 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
     sh = sub.add_parser("show", help="print one entry: answers, conf, evidence, sigs, debate")
     sh.add_argument("slug")
     only_arg(sh)
+    sh.add_argument("--data", action="store_true",
+                    help="the answers as data: claim, conf, votes, evidence")
     sh.add_argument("--stale-after", dest="stale_after", type=int, metavar="DAYS",
                     help="flag answers not touched in this many days")
 
@@ -233,10 +239,20 @@ def build_parser() -> argparse.ArgumentParser:
     # promote writes an answer now, so it signs one — same as new and rival.
     pr.add_argument("--as", dest="as_", help="signer id (default: this session)")
 
+    vt = sub.add_parser("vote", help="add checks to the recorded answer that has this claim on "
+                                     "a similar question; exits 1 with NO-VOTE when none does")
+    vt.add_argument("--question", required=True)
+    vt.add_argument("--claim", required=True)
+    only_arg(vt)
+    vt.add_argument("--evidence", required=True, action="append", metavar="CHECK",
+                    help="a check you can execute; repeatable")
+    vt.add_argument("--force", action="store_true",
+                    help="append a check that hardcodes a personal path anyway")
     ae = sub.add_parser("add-evidence",
                         help="append a check to an existing answer; voids no signature")
     ae.add_argument("slug")
     ae.add_argument("answer")
+    only_arg(ae)
     ae.add_argument("--evidence", required=True, action="append", metavar="CHECK",
                     help="a check you can execute; repeatable. Append only — there is no "
                          "command that edits or removes one")
@@ -321,7 +337,8 @@ def _dispatch(args) -> int:
           "show": cmd_show, "list": cmd_list,
           "sign": cmd_sign, "refute": cmd_refute, "promote": cmd_promote, "lint": cmd_lint,
           "save": cmd_save, "audit": cmd_audit, "set-repo": cmd_set_repo,
-          "add-evidence": cmd_add_evidence, "assert": cmd_assert, "rules": cmd_rules}[args.cmd]
+          "add-evidence": cmd_add_evidence, "vote": cmd_vote, "assert": cmd_assert,
+          "rules": cmd_rules}[args.cmd]
     # A slug names exactly one entry, so the ledger that holds it is a lookup and
     # never a flag. Only `new` — where the entry does not exist yet — has to be
     # told, which is why that is the one command carrying --shared/--local.

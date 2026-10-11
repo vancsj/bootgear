@@ -8,6 +8,7 @@ fixed one — `--keep-evidence` brings across the checks that still hold.
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from datetime import date
@@ -15,6 +16,7 @@ from datetime import date
 from .config import DEPUTY, LOCAL, SHARED, Ledger, locate, pick, resolve_you
 from .constants import (
     FALLBACK_REF,
+    FUZZY_FLOOR,
     MAINLINE_CANDIDATES,
     OUTPUT_PREFIX,
     OUTPUT_RE,
@@ -46,7 +48,8 @@ from .model import (
     split_evidence,
 )
 from .rules import warn_missing_rules
-from .store import Entry, add_cache_row, find_entry
+from .scoring import build_scorer, normalize
+from .store import Entry, add_cache_row, all_index, find_entry
 
 PORTABILITY = "hardcoded personal path"
 REPO_PATH = "Repo: is a machine path"
@@ -274,6 +277,46 @@ def cmd_add_evidence(args, root):
           f"{void} voided (unchanged), h={a.hash}")
     print("     standing signatures carry the depth they verified at; a new signature "
           "records the full set.")
+
+
+def cmd_vote(args, root):
+    """Add checks to a recorded answer whose claim matches on a similar question.
+
+    The similar questions are the ones `resolve` scores above its floor. Prints
+    `VOTED`/`UNCHANGED` for the answer it voted on. Otherwise prints one
+    `SAME-QUESTION` line per entry that asks the same question, then `NO-VOTE`,
+    and exits 1 so the caller can write a new entry.
+    """
+    claim_key, question_key = normalize(args.claim), normalize(args.question)
+    entries = all_index(args.ledgers)
+    score = build_scorer(set(question_key), entries)
+    matched, same_question = None, []
+    for c in entries:
+        if score(c.tokens()) < FUZZY_FLOOR:
+            continue
+        lg_root = pick(args.ledgers, c.kind).root if c.kind else root
+        e = find_entry(lg_root, c.slug, c.kind)
+        if normalize(e.question) == question_key:
+            same_question.append(e.slug)
+        for a in e.answers:
+            if matched is None and not a.asserted and normalize(a.claim) == claim_key:
+                matched = (e, a, lg_root)
+    if matched is None:
+        for slug in same_question:
+            print(f"SAME-QUESTION {slug}")
+        print("NO-VOTE no similar question has an answer with this claim")
+        return 1
+    e, a, lg_root = matched
+    evidence = [f"Evidence: {ev}" for ev in args.evidence]
+    if all(ln in a.evidences for ln in evidence):
+        print(f"UNCHANGED {e.slug} {a.aid}")
+        return 0
+    cmd_add_evidence(argparse.Namespace(**{**vars(args), "slug": e.slug, "answer": a.aid,
+                                           "force": getattr(args, "force", False)}), lg_root)
+    after = find_entry(lg_root, e.slug, e.kind)
+    votes = len(next(x for x in after.answers if x.aid == a.aid).evidences)
+    print(f"VOTED {e.slug} {a.aid} n={votes}")
+    return 0
 
 
 def cmd_new(args, root):

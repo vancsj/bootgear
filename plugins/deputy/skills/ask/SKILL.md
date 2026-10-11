@@ -24,9 +24,9 @@ Answer a question the way the user would, from their own past decisions. Return 
    - **unrelated**: it does not answer this question.
    Judge by meaning, not by matching words.
 6. Check the rules, in order:
-   - **Assertion below the threshold.** If an assertion covers the question and the stakes are below `debate_threshold`, return `answered` at confidence `1.00` with that assertion's slug. Do not weigh decisions against it.
-   - **Assertion at or above the threshold.** Do not answer. Return `escalate` with reason `assertion-at-or-above-threshold`, and list the assertion's slug as context.
-   - **Decisions.** Answer only when at least 3 cited cases agree with the answer and none conflicts. Confidence is that count of agreeing cases. Otherwise return `escalate`.
+   - **Assertion.** If an assertion covers the question, return `answered` at confidence `1.00` with that assertion's slug, at any stakes. Do not weigh decisions against it.
+   - **Decisions, below the threshold.** Answer only when the agreeing answers carry at least 3 votes in total and none conflicts. A vote is one `Evidence:` line on an agreeing answer. Confidence is that total vote count. Otherwise return `escalate`.
+   - **Decisions, at or above the threshold.** Do not answer from votes. Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
 7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
 8. Return `answered` with: the answer, the confidence, the cited agreeing slugs, the conflicting slugs if any, and one line of reasoning.
 

@@ -17,8 +17,9 @@ Write one decision for the user's answer.
 
 1. Run `python3 <plugin-dir>/scripts/deputy.py record --question "<question>" --claim "<answer>" --because "<reason>" --options "<options>" --stakes "<stakes>" --session-ledger "<session-ledger-file>"`. Pass every free-text value as its own quoted argument.
 2. Read the output:
-   - `UNCHANGED <slug>`: the same answer is already recorded. Nothing was written.
-   - `NEW <slug>`: a decision was written and saved.
+   - `VOTED <slug> n=<count>`: a similar question already has this answer. One vote was added to it; `n` is the vote count.
+   - `UNCHANGED <slug>`: this same session ledger's check is already on that answer. Nothing was written.
+   - `NEW <slug>`: a different answer was written as a new entry, beside any recorded answer to the question.
    - `REFUSED`: the root has a remote, or the write failed. Report the message and stop.
 
 ## Rules

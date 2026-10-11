@@ -69,8 +69,32 @@ def render_answer_brief(a: Answer, width: int = 240,
     return out
 
 
+def print_resolve_json(args, ledgers) -> None:
+    """The matches as data: the exact slug, then the candidates best score first.
+
+    Same selection as the prose output: the score floor, then the score-gap cut unless
+    `--all` is given. Folder grouping is not part of the data.
+    """
+    entries = all_index(ledgers)
+    query_set = set(normalize(args.text))
+    minted = mint_slug(args.text)
+    exact = next((e.slug for e in entries
+                  if Path(e.slug).name == minted or e.slug == args.text.strip()), None)
+    score = build_scorer(query_set, entries)
+    scored = sorted(((sc, e) for sc, e in ((score(e.tokens()), e) for e in entries)
+                     if sc >= FUZZY_FLOOR), key=lambda s: -s[0])
+    ranked = scored if args.show_all else cut_candidates(scored)
+    rows = [{"slug": e.slug, "score": round(sc, 4), "hits": len(query_set & e.tokens()),
+             "asked": len(query_set), "kind": e.kind, "question": e.question}
+            for sc, e in ranked]
+    print(json.dumps({"exact": exact, "candidates": rows, "mint": minted},
+                     ensure_ascii=False, indent=2))
+
+
 def cmd_resolve(args, root):
     ledgers = args.ledgers
+    if getattr(args, "data", False):
+        return print_resolve_json(args, ledgers)
     query_tokens = normalize(args.text)
     query_set = set(query_tokens)
     print(f'RESOLVE  "{args.text}"')
@@ -177,6 +201,27 @@ def cmd_resolve(args, root):
               "unpublished later. Each ledger's rules: ledger.py rules.")
 
 
+def print_entry_json(e: Entry) -> None:
+    """The entry's answers as data: the same figures `show` prints, one object per answer."""
+    answers = []
+    for a in e.answers:
+        yes, no, void = a.tally()
+        counted = confidence(a.independent(), no)
+        answers.append({
+            "aid": a.aid,
+            "claim": a.claim,
+            "conf": 1.00 if a.asserted else counted,
+            "asserted": a.asserted,
+            "yes": yes,
+            "no": no,
+            "void": void,
+            "independent": a.independent(),
+            "evidence": [line.removeprefix("Evidence: ") for line in a.evidences],
+        })
+    print(json.dumps({"slug": e.slug, "question": e.question, "alt_terms": e.alt_terms,
+                      "redirect": e.redirect, "answers": answers}, ensure_ascii=False, indent=2))
+
+
 def cmd_show(args, root):
     """Read one entry.
 
@@ -185,6 +230,8 @@ def cmd_show(args, root):
     verify goes unsigned.
     """
     e = find_entry(root, args.slug)
+    if getattr(args, "data", False):
+        return print_entry_json(e)
     print(f"# {e.slug}")
     print(f"Q: {e.question}")
     if e.alt_terms:
