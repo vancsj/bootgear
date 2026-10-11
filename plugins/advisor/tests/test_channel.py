@@ -1352,8 +1352,8 @@ class SendLivenessTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 output = json.loads(result.stdout)
                 self.assertIn(f"--for {sender} --timeout 300", output["next"])
-                self.assertIn("synchronous", output["next"])
-                self.assertIn("infinite background polling", output["next"])
+                self.assertIn("before running", output["next"])
+                self.assertNotIn("infinite background polling", output["next"])
         self.assertEqual(len(self.messages()), 2)
 
     def test_busy_heartbeating_listener_accepts_a_request(self) -> None:
@@ -1523,6 +1523,35 @@ class ReceiveHeartbeatReminderTests(unittest.TestCase):
         self.assertIn("tell the user", payload["note"])
         self.assertIn(self.heartbeat(), payload["next"])
         self.assertNotIn("receive --channel", payload["next"])
+
+
+class ReceiveMisuseWordingTests(unittest.TestCase):
+    """The text an agent copies must not suggest a loop that re-receives without fetching."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-"],
+            input="question", capture_output=True, text=True, check=False,
+        )
+        self.request_id = json.loads(sent.stdout)["message_id"]
+
+    def test_fetch_next_does_not_suggest_a_bare_while_loop(self) -> None:
+        result = run(self.root, "fetch", "--channel", "0001", "--message-id", self.request_id)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        next_text = json.loads(result.stdout)["next"]
+        self.assertNotIn("while :;", next_text)
+        self.assertNotIn("infinite", next_text)
+        self.assertIn("receive", next_text)
+
+    def test_receive_note_says_fetch_before_receiving_again(self) -> None:
+        result = run(self.root, "receive", "--channel", "0001", "--for", "listener", "--timeout", "0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        note = json.loads(result.stdout)["note"]
+        self.assertIn("before calling receive again", note)
 
 
 class ConcurrencyTests(unittest.TestCase):
@@ -1743,8 +1772,8 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertEqual(fetched.returncode, 0, fetched.stderr)
         output = json.loads(fetched.stdout)
         self.assertIn(f"--for asker --timeout 300", output["next"])
-        self.assertIn("synchronous", output["next"])
-        self.assertIn("infinite background polling", output["next"])
+        self.assertIn("before running", output["next"])
+        self.assertNotIn("infinite background polling", output["next"])
 
     def test_timed_wait_expires_with_the_note(self) -> None:
         result = run(self.root, "receive", "--channel", self.channel, "--for", "asker",

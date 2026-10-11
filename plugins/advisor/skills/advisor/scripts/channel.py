@@ -306,7 +306,8 @@ def script_command(args: argparse.Namespace, root: Path) -> str:
 def receive_next(args: argparse.Namespace, root: Path, role: str) -> str:
     """Tell the caller how to keep receiving after a message changes the inbox."""
     receive = f"{script_command(args, root)} receive --channel {args.channel} --for {role} --timeout 300"
-    return f"start receiving for {role}: synchronous `{receive}`, or infinite background polling `while :; do {receive}; done &`"
+    return (f"fetch and answer each message before running `{receive}` again; "
+            "a receive call with a message still unread returns it at once")
 
 
 def heartbeat_reminder(args: argparse.Namespace, root: Path, record: dict[str, object]) -> str | None:
@@ -712,8 +713,8 @@ def receive(args: argparse.Namespace) -> None:
         raise SystemExit(1)
     unread = next(m for m in messages if not m.get("read"))
     output["note"] = (
-        "fetch each unread message by its message_id to mark it read — "
-        "otherwise the next receive call will return it again"
+        "fetch each unread message by its message_id to mark it read before calling receive again — "
+        "a receive call with a message still unread returns it at once"
     )
     fetch = f"{script} fetch --channel {args.channel} --message-id {unread['message_id']}"
     reminder = heartbeat_reminder(args, root, peer_record)

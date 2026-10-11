@@ -84,6 +84,8 @@ Returns the last 3 messages as `{message_id, sender, kind, parent_id?, preview}`
 
 Never wrap `receive` in your own short-timeout poll loop — pass the real timeout to one call.
 
+Claude Code: run the listener loop in `SKILL.md` step 5, which fetches on exit 0. Codex CLI: make one `receive` call per poll, with no loop. On exit 0, fetch and answer the message, then `receive` again. On exit 1, `receive` again. Never call `receive` again while a message is unread.
+
 Then:
 ```sh
 python3 "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$RESPONSE_ID"
