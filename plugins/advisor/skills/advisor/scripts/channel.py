@@ -22,6 +22,7 @@ DEFAULT_ROOT = Path.home() / ".bootgear" / "advisor"
 ROLES = {"listener", "asker"}
 KINDS = {"request", "response", "stop"}
 CHANNEL_PATTERN = re.compile(r"^[0-9]{4,}$")
+MESSAGE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 DEFAULT_PENDING_CAP = 2
 PREVIEW_WORDS = 10
 HISTORY_SIZE = 3
@@ -491,6 +492,16 @@ def message_files(path: Path):
     return sorted((path / "messages").glob("*.json"))
 
 
+def is_request_between(path: Path, message_id: str, sender: str, recipient: str) -> bool:
+    """True when `message_id` is a request on this channel from `sender` to `recipient`."""
+    message_path = path / "messages" / f"{message_id}.json"
+    if not message_path.exists():
+        return False
+    message = json.loads(message_path.read_text(encoding="utf-8"))
+    return (message.get("kind") == "request" and message.get("sender") == sender
+            and message.get("recipient") == recipient)
+
+
 def send(args: argparse.Namespace) -> None:
     check_role(args, args.sender, "--from")
     check_role(args, args.recipient, "--to")
@@ -500,6 +511,8 @@ def send(args: argparse.Namespace) -> None:
         refuse(args, f"invalid --kind {args.kind!r}: must be request, response, or stop")
     if args.kind == "response" and not args.parent_id:
         refuse(args, "--kind response requires --parent-id")
+    if args.parent_id is not None and not MESSAGE_ID_PATTERN.fullmatch(args.parent_id):
+        refuse(args, f"invalid --parent-id {args.parent_id!r}: use the message_id receive printed")
     if args.body_file == "-" and sys.stdin.isatty():
         refuse(args, "--body-file - requires piped input")
 
@@ -522,6 +535,13 @@ def send(args: argparse.Namespace) -> None:
                 f"{args.recipient} on channel {args.channel} has no live heartbeat",
                 category="peer_not_live",
                 next_step=f"tell the user the {args.recipient} is gone; a new {args.recipient} has to start and pair",
+            )
+        if args.parent_id is not None and not is_request_between(
+                path, args.parent_id, sender=args.recipient, recipient=args.sender):
+            fail(
+                f"no request {args.parent_id} from {args.recipient} to {args.sender} on channel {args.channel}",
+                category="unknown_parent_id",
+                next_step="reply with the message_id of a request you received on this channel",
             )
         pending = [
             f for f in message_files(path)

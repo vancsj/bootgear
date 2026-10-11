@@ -66,6 +66,8 @@ REQUEST
 
 `send` rejects at the pending cap (default 2). If rejected, `receive` first — don't raise the cap.
 
+`--parent-id` must be the 32-character `message_id` of a request the peer sent you on this channel. Otherwise `send` refuses with `invalid_args` (bad format) or `unknown_parent_id` (no such request) and writes nothing.
+
 Save `{channel, message_id}` to a receipt file (e.g. `<task-dir>/codex-pending.json`) before waiting — a long wait can cross a compaction boundary. Delete it once read.
 
 ## Receive
@@ -91,9 +93,11 @@ python3 "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$RESPONSE_ID"
 ```sh
 python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 5
 ```
-Your response already listed (by `parent_id`), whatever the exit code → `fetch` it, don't resend. Not there → resume normal `receive` polling. This assumes the same process. After a restart the same session ID runs `register` again, then starts a new `heartbeat`.
+Your response already listed (by `parent_id`), whatever the exit code → `fetch` it, don't resend. Nothing unread and no response listed → resume normal `receive` polling. This assumes the same process. After a restart the same session ID runs `register` again, then starts a new `heartbeat`.
 
-Closed channel, malformed message, or wrong `parent_id` → protocol error, not a guess.
+Your outstanding requests are the `message_id`s in your receipt file. An unread reply whose `parent_id` matches one of them is a real reply: `fetch` it and keep waiting for the rest. An unread reply whose `parent_id` matches none of them → protocol error: `fetch` it (that marks it read, so `receive` stops returning at once), tell the user, and stop waiting. Do not keep polling.
+
+Closed channel or malformed message → protocol error, not a guess.
 
 ## Close
 

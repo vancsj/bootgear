@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -1328,8 +1329,12 @@ class SendLivenessTests(unittest.TestCase):
 
     def test_response_to_stale_asker_is_refused(self) -> None:
         run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+        request = json.loads(self.send("asker", "listener").stdout)["message_id"]
         age_seat(self.root, "asker", 600)
-        self.assert_refused(self.send("listener", "asker", "response", "--parent-id", "abc"))
+        refused = self.send("listener", "asker", "response", "--parent-id", request)
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json.loads(refused.stderr)["category"], "peer_not_live")
+        self.assertEqual(len(self.messages()), 1)
 
     def test_stop_is_accepted_by_a_stale_or_unowned_recipient(self) -> None:
         age_seat(self.root, "listener", 600)
@@ -1365,6 +1370,75 @@ class SendLivenessTests(unittest.TestCase):
         result = self.send("asker", "listener")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.messages()), 1)
+
+
+class ParentIdValidationTests(unittest.TestCase):
+    """`send --parent-id` must name a request the responder was sent on this channel."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+        self.request = self.send("asker", "listener", "request")
+
+    def send(self, sender: str, recipient: str, kind: str, *extra: str) -> str:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", sender, "--to", recipient, "--kind", kind, *extra, "--body-file", "-"],
+            input="hello", capture_output=True, text=True, check=False,
+        )
+        return sent
+
+    def respond(self, parent_id: str) -> subprocess.CompletedProcess:
+        return self.send("listener", "asker", "response", "--parent-id", parent_id)
+
+    def message_count(self) -> int:
+        return len(list((self.root / "channels" / "0001" / "messages").glob("*.json")))
+
+    def test_valid_parent_id_is_accepted(self) -> None:
+        request_id = json.loads(self.request.stdout)["message_id"]
+        result = self.respond(request_id)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_malformed_parent_id_is_refused_before_anything_is_written(self) -> None:
+        before = self.message_count()
+        for bad in ("abc", "078da7b2-4e46-4f4d-88aa-f110f2c006", "A" * 32, "g" * 32, ""):
+            with self.subTest(parent_id=bad):
+                result = self.respond(bad)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(json.loads(result.stderr)["category"], "invalid_args")
+                self.assertEqual(self.message_count(), before)
+
+    def test_well_formed_parent_id_naming_no_message_is_refused(self) -> None:
+        before = self.message_count()
+        result = self.respond(uuid.uuid4().hex)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stderr)["category"], "unknown_parent_id")
+        self.assertEqual(self.message_count(), before)
+
+    def test_parent_id_naming_a_message_the_responder_did_not_receive_is_refused(self) -> None:
+        # A request the listener sent to the asker is not a request the listener can answer.
+        other = self.send("listener", "asker", "request")
+        other_id = json.loads(other.stdout)["message_id"]
+        before = self.message_count()
+        result = self.respond(other_id)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stderr)["category"], "unknown_parent_id")
+        self.assertEqual(self.message_count(), before)
+
+    def test_parent_id_from_another_channel_is_refused(self) -> None:
+        listener = run(self.root, "register", "--role", "listener", "--session", "s2")
+        channel = json.loads(listener.stdout)["channel"]
+        run(self.root, "register", "--channel", channel, "--role", "asker", "--session", "c2")
+        result = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0002",
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-"],
+            input="other", capture_output=True, text=True, check=False,
+        )
+        other_id = json.loads(result.stdout)["message_id"]
+        refused = self.respond(other_id)
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json.loads(refused.stderr)["category"], "unknown_parent_id")
 
 
 class ConcurrencyTests(unittest.TestCase):
