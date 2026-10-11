@@ -65,7 +65,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Adjust domains to the task type. Omit an implementation-approach domain for bug triage when it is not needed.
 
-6. **Debate threshold** — use reversibility and blast radius by default unless the user gives other axes. Decide reversible, narrow decisions solo. Escalate decisions that are hard to reverse or broad in effect through `resolve`, then `debate` if `resolve` cannot settle them. Never send this item to `deputy:ask`: the deputy has no threshold to judge against.
+6. **Debate threshold** — a decision that `resolve` cannot settle goes to `debate` when any of these holds: (a) undoing it takes more than one revert, or it changes shared state; (b) it reaches more than one person or customer; (c) it touches money, legal, security or data-loss; (d) any of (a) to (c) is unknown. Otherwise it is solo: reversible by one revert, confined to one component or file, and none of (a) to (d) applies. Record each answer with the decision. A `resolve` settled by a source of truth is always solo. Never send this item to `deputy:ask`: the deputy has no threshold to judge against.
 
    Also settle:
    - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
