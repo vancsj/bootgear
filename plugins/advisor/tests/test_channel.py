@@ -231,6 +231,25 @@ class LivenessTests(unittest.TestCase):
         self.assertEqual(record["state"], "closed")
 
 
+class StatusReadOnlyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+
+    def test_status_on_missing_channel_leaves_no_directory(self) -> None:
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        missing = run(self.root, "status", "--channel", "7777")
+        self.assertEqual(missing.returncode, 2, missing.stderr)
+        self.assertEqual(json.loads(missing.stderr)["error"], "channel does not exist: 7777")
+        self.assertFalse((self.root / "channels" / "7777").exists())
+
+    def test_status_on_missing_channel_does_not_move_next_number(self) -> None:
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "status", "--channel", "7777")
+        run(self.root, "register", "--role", "asker", "--session", "c1")
+        numbers = sorted(p.name for p in (self.root / "channels").iterdir())
+        self.assertEqual(numbers, ["0001", "0002"])
+
+
 def wait_until(condition, timeout: float = 5.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

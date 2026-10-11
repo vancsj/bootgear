@@ -479,7 +479,7 @@ def seat_busy(record: dict[str, object], role: str) -> bool:
 
 def status(args: argparse.Namespace) -> None:
     root = root_from(args)
-    path = channel_dir(root, args.channel)
+    path = channel_dir(root, args.channel, create=False)
     record = read_channel_record(path)
     output = dict(record)
     output["listener_alive"] = seat_live(record, "listener")
