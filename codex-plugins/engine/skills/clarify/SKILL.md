@@ -102,7 +102,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
    Write:
-   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage.
+   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `pr-review` run records `review_skill` alone.
      - **Bare `<skill-name>`** when the override or its absence names one skill. Use the override, or the general default (`spec`, `test`, `review`) when absent.
      - **`{sub-task-label: <skill-name>}` mapping** when the override is a mapping. Mirror it exactly.
 
