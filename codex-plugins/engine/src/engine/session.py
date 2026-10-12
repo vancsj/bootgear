@@ -348,12 +348,33 @@ def _check_no_embedded_heading(body: str, label: str) -> None:
 TASK_TYPES = {"ticket-writing", "bug-triage", "ticket-to-pr", "pr-review"}
 ENGINE_SKILLS = {"clarify", "execute", "resolve", "debate", "recall"}
 SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
+# The state-machine nodes that call each skill field.
+SKILL_FIELD_NODES = {
+    "spec_skill": ("spec",),
+    "test_skill": ("test-code", "e2e-test", "triage"),
+    "review_skill": ("review",),
+}
 OPTIONAL_SKILL_FIELDS = ("spec_review_skill", "spec_review_override")
 # Both hosts dispatch a debate party as a sub-agent or through the advisor
 # skill.
 PARTY_MECHANISMS = seats.MECHANISMS
 # Fields a `debate_party_config.parties.<id>` entry may carry in settlement.
 PARTY_CONFIG_FIELDS = frozenset({"label", "prompt", "mechanism", "enabled"})
+
+
+def _required_skill_fields(machine_text) -> set[str]:
+    # Without a readable machine, no node can show which skills are unused, so all are required.
+    nodes = set()
+    if isinstance(machine_text, str):
+        try:
+            machine = yaml.safe_load(machine_text)
+        except yaml.YAMLError:
+            machine = None
+        if isinstance(machine, dict) and isinstance(machine.get("nodes"), dict):
+            nodes = set(machine["nodes"])
+    if not nodes:
+        return set(SKILL_FIELDS)
+    return {field for field, field_nodes in SKILL_FIELD_NODES.items() if nodes & set(field_nodes)}
 
 
 def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: bool) -> tuple[list[tuple[str, str]], dict]:
@@ -368,11 +389,12 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
     required = {
         "task_type", "request_assessment", "approach", "principles", "source_of_truth",
         "debate_threshold", "debate_round_cap", "convergence_policy",
-        "consented_stop_allowed", "debate_party_config", *SKILL_FIELDS,
+        "consented_stop_allowed", "debate_party_config",
         "debate_roster", "review_fix_mode", "autonomy", "goal", "state_machine",
         "session_dir",
     }
     if strict:
+        required |= _required_skill_fields(data.get("state_machine"))
         for field in sorted(required - data.keys()):
             problems.append((field, "is required for strict execution validation"))
 
