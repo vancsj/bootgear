@@ -130,6 +130,49 @@ class ClaudePackageContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("contains unsupported fields", result.stderr)
 
+    def _machine_validate(self, nodes: str, skills: str):
+        settlement = (
+            "task_type: pr-review\napproach: fixture\nprinciples: none\n"
+            "goal:\n  succeeded: done\n  failed: never\n"
+            f"state_machine: |\n  name: fixture\n  nodes:\n{nodes}"
+            "request_assessment: fixture\nsource_of_truth:\n  scope: fixture\n"
+            "debate_threshold: fixture\ndebate_round_cap: 1\n"
+            "convergence_policy: unanimous\nconsented_stop_allowed: true\n"
+            "debate_party_config: {}\n"
+            f"{skills}"
+            "review_fix_mode: accepted_only\n"
+            "autonomy:\n  no_further_questions: true\n  permitted_mutations: [run tests]\n"
+            f"debate_roster: {ROSTER}\n"
+        )
+        with tempfile.TemporaryDirectory(prefix="engine-skill-fields-") as tmp:
+            path = Path(tmp) / "settlement.txt"
+            path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n")
+            return subprocess.run(
+                [str(TASK), "session", "validate", "skill-run", "--dir", tmp,
+                 "--settlement-file", str(path), "--prose"],
+                capture_output=True, text=True, check=False,
+            )
+
+    def test_strict_validation_requires_skill_fields_only_for_nodes_present(self):
+        review_only = (
+            "    clarify:\n      next: [review]\n"
+            "    review:\n      next: [succeeded]\n"
+            "    succeeded:\n      terminal: true\n"
+            "    failed:\n      terminal: true\n"
+        )
+        result = self._machine_validate(review_only, "review_skill: review\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        spec_node = (
+            "    clarify:\n      next: [spec]\n"
+            "    spec:\n      next: [succeeded]\n"
+            "    succeeded:\n      terminal: true\n"
+            "    failed:\n      terminal: true\n"
+        )
+        result = self._machine_validate(spec_node, "review_skill: review\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("spec_skill", result.stderr)
+
     def test_resolved_party_config_json_names_the_next_step(self):
         payload = self._resolve_parties("parties:\n  critic:\n    label: Critic\n")
         self.assertIn("debate_party_config", payload["next"])
