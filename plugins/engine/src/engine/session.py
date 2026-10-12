@@ -350,7 +350,7 @@ SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
 # The state-machine nodes that call each skill field.
 SKILL_FIELD_NODES = {
     "spec_skill": ("spec",),
-    "test_skill": ("test-code", "e2e-test"),
+    "test_skill": ("test-code", "e2e-test", "triage"),
     "review_skill": ("review",),
 }
 OPTIONAL_SKILL_FIELDS = ("spec_review_skill", "spec_review_override")

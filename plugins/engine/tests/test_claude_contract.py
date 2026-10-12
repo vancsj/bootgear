@@ -173,6 +173,20 @@ class ClaudePackageContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("spec_skill", result.stderr)
 
+    def test_strict_validation_requires_test_skill_for_triage_node(self):
+        triage_node = (
+            "    clarify:\n      next: [triage]\n"
+            "    triage:\n      next: [succeeded]\n"
+            "    succeeded:\n      terminal: true\n"
+            "    failed:\n      terminal: true\n"
+        )
+        result = self._machine_validate(triage_node, "review_skill: review\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("test_skill", result.stderr)
+
+        result = self._machine_validate(triage_node, "test_skill: test\nreview_skill: review\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_resolved_party_config_json_names_the_next_step(self):
         payload = self._resolve_parties("parties:\n  critic:\n    label: Critic\n")
         self.assertIn("debate_party_config", payload["next"])
