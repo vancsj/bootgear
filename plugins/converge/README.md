@@ -64,10 +64,14 @@ so the checks stop an agent accidentally judging its own work, not a lying one.
 Every claim meets every **attack angle** — `boundary`, `reachability`, `guarded-elsewhere`,
 `positive-control`, `real-referent` and ten more ship built in (`converge angles --tag attack`
 lists them) — in fixed batches of `caps.angles_per_claim` (5). An angle whose tell does not
-apply is recorded not applicable. A last **fresh-eye** batch follows: `r2` is told which angles
-were used (`used` on its plan row) and attacks with up to five of its own. A one-line name without edge whitespace is accepted,
-including a fixed angle recorded not applicable; a name already used on the same claim is refused; names outside the fixed set are listed by
-`status` as `adhoc_angles`.
+apply is recorded not applicable. A last **fresh-eye** batch follows: `r2` is told which angles were used (`used` on its plan
+row) and attacks with up to five of its own. A new name is accepted if it is one printable
+line without leading or trailing whitespace, including a fixed angle recorded not applicable;
+a name already used on the same claim is refused. `status` reports per claim `fixed_remaining`
+(fixed angles neither attacked nor not applicable; empty means the fixed set is covered, and
+the fresh-eye batch still runs), `na_reasons` (each not-applicable angle with its reason), and
+`fresh_eye` (the fresh-eye names attacked on the claim). Names outside the fixed set are listed
+slate-wide as `adhoc_angles`, each with its claim and seq.
 
 A refuted batch opens a dispute. The finder rebuts with new evidence (the CLI hashes it and
 rejects a repeat), optionally clarifying the claim text, or declines. The refuter then agrees

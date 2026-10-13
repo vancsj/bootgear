@@ -14,7 +14,7 @@ from . import ledger, model
 from .model import Claim, Slate
 
 FRESH_EYE = "fresh-eye"
-FRESH_EYE_RULE = ("fixed set covered by table batches; any new angle name allowed; "
+FRESH_EYE_RULE = ("fixed set covered by table batches; any new one-line name without edge whitespace allowed; "
                   "a name already used on this claim is refused")
 WHEN = ("before", "after")
 ATTACK_OUTCOME = ("clean", "refuted")

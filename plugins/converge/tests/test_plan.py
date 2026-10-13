@@ -83,7 +83,7 @@ def test_fresh_eye_row_has_empty_angles_and_used_list(cv: Converge) -> None:
     assert row["angles"] == []
     assert row["used"] == [*BATCH_1, "retry timing"]
     assert row["rule"] == (
-        "fixed set covered by table batches; any new angle name allowed; "
+        "fixed set covered by table batches; any new one-line name without edge whitespace allowed; "
         "a name already used on this claim is refused")
 
 
