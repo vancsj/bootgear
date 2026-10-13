@@ -20,12 +20,12 @@ sys.path.insert(0, str(PLUGIN / "scripts"))
 # Subprocess ledger calls sign with this id when the host did not set one.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
 
-import deputy  # noqa: E402
+import deputy
 
 QUESTION = "Should new scripts run with uv?"
 PARAPHRASE = "Should I run scripts with uv?"
 CLAIM = "Scripts run with uv run --script"
-CANDIDATE = re.compile(r"^CANDIDATE (\S+)$", re.M)
+CANDIDATE = re.compile(r"^CANDIDATE (\S+)$", re.MULTILINE)
 
 
 class RoundTripTest(unittest.TestCase):

@@ -21,7 +21,7 @@ sys.path.insert(0, str(PLUGIN / "scripts"))
 # Subprocess ledger calls sign with this id when the host did not set one.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
 
-import deputy  # noqa: E402
+import deputy
 
 QUESTION = "Should new scripts run with uv?"
 CLAIM = "Scripts run with uv run --script"
@@ -122,9 +122,9 @@ class DeputyTest(unittest.TestCase):
     def test_candidates_fails_loudly_when_gear_is_not_found(self) -> None:
         self.record()
         missing = self.base / "no-such-cli" / "gear.py"
-        with unittest.mock.patch.object(deputy, "GEAR", missing):
-            with self.assertRaises(SystemExit) as cm:
-                self.run_deputy("candidates", QUESTION)
+        with unittest.mock.patch.object(deputy, "GEAR", missing), \
+                self.assertRaises(SystemExit) as cm:
+            self.run_deputy("candidates", QUESTION)
         self.assertIn("gear.py not found", str(cm.exception))
 
     def test_candidates_prints_the_matching_entry_in_full(self) -> None:

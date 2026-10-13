@@ -24,7 +24,7 @@ def ledger(deputy_root: Path, *args: str) -> subprocess.CompletedProcess:
         sys.exit(f"gear.py not found at {GEAR}; set GEAR_PY to the bootgear cli/gear.py path")
     return subprocess.run([sys.executable, str(GEAR), "memory-ledger", "ledger",
                            "--deputy-root", str(deputy_root), *args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, check=False)
 
 
 def slug_for(question: str) -> str:
@@ -64,7 +64,8 @@ def candidates(deputy_root: Path, question: str, limit: int) -> int:
 
 
 def refuse_remote(deputy_root: Path) -> str | None:
-    r = subprocess.run(["git", "-C", str(deputy_root), "remote"], capture_output=True, text=True)
+    r = subprocess.run(["git", "-C", str(deputy_root), "remote"], capture_output=True, text=True,
+                       check=False)
     if r.stdout.strip():
         return f"the deputy root {deputy_root} has a git remote; the deputy ledger is local only"
     return None
