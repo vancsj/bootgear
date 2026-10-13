@@ -65,8 +65,9 @@ class Claim:
     text: str = ""
     escalation: dict[str, Any] | None = None
     used_angles: set[str] = field(default_factory=set)
-    # Attack angles a refuter recorded as not applicable to this claim.
+    # Attack angles a refuter recorded as not applicable to this claim, with the reason.
     na_angles: set[str] = field(default_factory=set)
+    na_reasons: dict[str, str] = field(default_factory=dict)
 
     @property
     def live(self) -> bool:

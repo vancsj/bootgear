@@ -201,6 +201,35 @@ def test_fresh_eye_angle_is_free_text_not_used_before(cv: Converge) -> None:
         "F001", " ", agent=R2, batch="fresh-eye")
 
 
+def test_fresh_eye_accepts_na_angle_and_literal_name(cv: Converge) -> None:
+    cv.ready()
+    assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
+                     reason="no time window in the claim") == []
+    for angle in BATCH_1[1:]:
+        assert cv.attack("F001", angle) == []
+    assert cv.attack("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
+    assert cv.attack("F001", "fresh-eye", agent=R2, batch="fresh-eye") == []
+    seq = next(event["seq"] for event in cv.events() if event.get("angle") == "fresh-eye")
+    assert cv.status()["adhoc_angles"] == [{"angle": "fresh-eye", "claim": "F001", "seq": seq}]
+
+
+def test_status_lists_adhoc_names_slate_wide(cv: Converge) -> None:
+    cv.ready(claims=2)
+    cv.batch_1("F001")
+    cv.batch_1("F002")
+    assert cv.attack("F001", "novel-name", agent=R2, batch="fresh-eye") == []
+    assert cv.attack("F002", "novel-name", agent=R2, batch="fresh-eye") == []
+    seqs = {event["claim"]: event["seq"] for event in cv.events()
+            if event.get("angle") == "novel-name"}
+    assert cv.status()["adhoc_angles"] == [
+        {"angle": "novel-name", "claim": "F001", "seq": seqs["F001"]},
+        {"angle": "novel-name", "claim": "F002", "seq": seqs["F002"]}]
+    [adhoc] = [line for line in cv.ok("status", "s1").stdout.splitlines()
+               if line.startswith("ADHOC ")]
+    assert adhoc == (f"ADHOC novel-name claim=F001 seq={seqs['F001']}, "
+                     f"novel-name claim=F002 seq={seqs['F002']}")
+
+
 def test_attacker_is_not_the_finder_the_orchestrator_or_a_cutter(cv: Converge) -> None:
     cv.ready(cut="before")
     assert _cut(cv, "before") == []

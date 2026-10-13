@@ -114,8 +114,10 @@ flowchart LR
 - **Batches.** The attack angles of the snapshot, in order, form fixed table batches of
   `caps.angles_per_claim` (5). A table batch is complete when each of its angles has an
   `attack` or a claim-level `angle-na` on the claim. Then comes one `fresh-eye` batch:
-  free-text angles not yet used on the claim, complete after `caps.angles_per_claim` attacks
-  or one carrying `last: true`. A claim takes its next batch only when the previous one is
+  free-text angle names not yet used on the claim, complete after `caps.angles_per_claim`
+  attacks or one carrying `last: true`. A fixed angle recorded not applicable on the claim
+  may be attacked there. Any name is accepted; a name outside the fixed set is listed by
+  `status` as `adhoc_angles`. A claim takes its next batch only when the previous one is
   done; after the fresh-eye batch it is attack-finished.
 - **Dispute.** A batch with a `refuted` attack awaits the finder's `reply`: `decline` kills
   the claim; `rebut` carries new evidence (a repeated evidence sha256 for the claim is
@@ -128,9 +130,13 @@ flowchart LR
 - **Batch plan.** `status --json` prints `plan`: one row per open item of the current
   phase, in rank order, in batches of at most `caps.batch_items` (30). A row is
   `{claim, action, agent_role, batch, angles}`, `action` one of `escalate`, `cut-before`,
-  `attack`, `reply`, `verdict`, `cut-after`, `accept`; a table attack row lists the batch's
-  open angles, a fresh-eye row the angles already used. The find and the gap hunt are
-  exempt.
+  `attack`, `reply`, `verdict`, `cut-after`, `accept`. A table attack row lists the batch's
+  open angles. A fresh-eye row has `angles: []`, `used` (the angles attacked on the claim)
+  and `rule`. The find and the gap hunt are exempt.
+- **Angles in status.** Each claim reports `fixed_remaining` (fixed angles neither attacked
+  nor not applicable) and `na_reasons` (each not-applicable angle with its reason). The
+  slate reports `adhoc_angles`: every fresh-eye attack whose name is outside the fixed set,
+  with its claim and seq.
 
 ## Ledger
 

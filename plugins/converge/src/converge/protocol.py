@@ -14,6 +14,8 @@ from . import ledger, model
 from .model import Claim, Slate
 
 FRESH_EYE = "fresh-eye"
+FRESH_EYE_RULE = ("fixed set covered by table batches; any new angle name allowed; "
+                  "a name already used on this claim is refused")
 WHEN = ("before", "after")
 ATTACK_OUTCOME = ("clean", "refuted")
 STANCE = ("rebut", "decline")
@@ -141,6 +143,16 @@ def used_angles(claim: Claim) -> list[str]:
     events = sorted((e for batch in claim.state.attacks.values() for e in batch),
                     key=lambda e: e["seq"])
     return [e["angle"] for e in events]
+
+
+def adhoc_angles(slate: Slate) -> list[dict[str, Any]]:
+    """Fresh-eye attacks on any claim naming an angle outside the fixed set, in write order."""
+    fixed = set(slate.angle_ids("attack"))
+    rows = [{"angle": event["angle"], "claim": claim.id, "seq": event["seq"]}
+            for claim in slate.claims.values()
+            for event in claim.state.attacks.get(FRESH_EYE, [])
+            if event["angle"] not in fixed]
+    return sorted(rows, key=lambda row: row["seq"])
 
 
 def fresh_eye_role(slate: Slate, claim: Claim) -> str:
@@ -772,7 +784,9 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     elif kind == "angle-na":
         slate.angle_na.append(event)
         if "claim" in event:
-            slate.claims[event["claim"]].na_angles.add(event["angle"])
+            claim = slate.claims[event["claim"]]
+            claim.na_angles.add(event["angle"])
+            claim.na_reasons[event["angle"]] = event["reason"]
     else:
         _apply_claim_event(slate.claims[event["claim"]], event)
     if any(track.rounds for claim in slate.claims.values() for track in claim.state.cuts.values()):
@@ -856,9 +870,15 @@ def converged(slate: Slate) -> bool:
 
 
 def _plan_row(claim: Claim, action: str, role: str, batch: int | str | None = None,
-              angles: list[str] | None = None) -> dict[str, Any]:
-    return {"claim": claim.id, "action": action, "agent_role": role, "batch": batch,
-            "angles": angles or []}
+              angles: list[str] | None = None, used: list[str] | None = None,
+              rule: str | None = None) -> dict[str, Any]:
+    row: dict[str, Any] = {"claim": claim.id, "action": action, "agent_role": role,
+                           "batch": batch, "angles": angles or []}
+    if used is not None:
+        row["used"] = used
+    if rule is not None:
+        row["rule"] = rule
+    return row
 
 
 def _claim_rows(slate: Slate, claim: Claim, phase: str) -> dict[str, Any]:
@@ -875,7 +895,7 @@ def _claim_rows(slate: Slate, claim: Claim, phase: str) -> dict[str, Any]:
     if state == "open":
         if batch == FRESH_EYE:
             return _plan_row(claim, "attack", fresh_eye_role(slate, claim), batch,
-                             used_angles(claim))
+                             used=used_angles(claim), rule=FRESH_EYE_RULE)
         assert isinstance(batch, int)
         return _plan_row(claim, "attack", "r1", batch, open_angles(slate, claim, batch))
     if state == "awaiting-verdict":

@@ -200,9 +200,10 @@ def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
                       "agents=4/5 advisor=-")
     assert out[1:] == [
         (f"F001 status=survived cut=no batch=1 batch_state=open escalated=yes "
-        f"unused={','.join(BATCH_1[1:])}"),
+        f"fixed_remaining={','.join(BATCH_1[1:])}"),
         ("F002 status=unverified cut=yes batch=- batch_state=- escalated=yes "
-        f"unused={','.join(BATCH_1)}"),
+        f"fixed_remaining={','.join(BATCH_1)}"),
+        "ADHOC -",
         f"PLAN 1 F001 attack r1 batch=1 angles={','.join(BATCH_1[1:])}",
         f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
     data = cv.status()
@@ -213,9 +214,10 @@ def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
     assert data["plan"] == [[{"claim": "F001", "action": "attack", "agent_role": "r1",
                               "batch": 1, "angles": list(BATCH_1[1:])}]]
     assert {key: data["by_id"]["F001"][key]
-            for key in ("status", "cut", "batch", "batch_state", "unused_attack_angles")} == {
+            for key in ("status", "cut", "batch", "batch_state", "fixed_remaining")} == {
         "status": "survived", "cut": "no", "batch": 1, "batch_state": "open",
-        "unused_attack_angles": list(BATCH_1[1:])}
+        "fixed_remaining": list(BATCH_1[1:])}
+    assert data["adhoc_angles"] == []
     assert data["by_id"]["F002"]["status"] == "unverified"
     assert data["next"] == f"attack: r1 attack F001 batch 1; plan: {_plan(cv)}"
 

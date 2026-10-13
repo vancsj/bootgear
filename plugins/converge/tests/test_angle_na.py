@@ -18,9 +18,20 @@ def test_refuter_records_a_not_applicable_angle(cv: Converge) -> None:
     assert _na(cv, R1, BATCH_1[0]) == []
     claim = ledger.read(cv.path(), "s1").claims["F001"]
     assert claim.na_angles == {BATCH_1[0]}
-    assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["unused_attack_angles"]
+    assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["fixed_remaining"]
     assert (f"attack: angle {BATCH_1[0]!r} is recorded not applicable to F001"
             in cv.attack("F001", BATCH_1[0], agent=R2))
+
+
+def test_status_shows_na_reason_beside_fixed_angle(cv: Converge) -> None:
+    cv.ready()
+    assert _na(cv, R1, BATCH_1[0], reason="no time window") == []
+    claim = cv.status()["by_id"]["F001"]
+    assert claim["na_reasons"] == {BATCH_1[0]: "no time window"}
+    assert BATCH_1[0] not in claim["fixed_remaining"]
+    [line] = [line for line in cv.ok("status", "s1").stdout.splitlines()
+              if line.startswith("F001 ")]
+    assert line.endswith(f"na[{BATCH_1[0]}]=no time window")
 
 
 def test_roles_and_shape(cv: Converge) -> None:
@@ -55,7 +66,7 @@ def test_angle_na_command_takes_a_claim(cv: Converge) -> None:
     out = cv.ok("angle-na", "s1", "--as", R1, "--phase", "attack", "--claim", "F001",
                 "--angle", BATCH_1[0], "--reason", "no boundary in a constant").stdout
     assert out.startswith("ANGLE-NA seq=") and f"phase=attack angle={BATCH_1[0]}" in out
-    assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["unused_attack_angles"]
+    assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["fixed_remaining"]
 
 
 def test_refusal_without_claim_shows_the_attack_example(cv: Converge) -> None:

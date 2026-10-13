@@ -682,15 +682,22 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
         "claim": claim.text,
         "escalated": claim.escalation is not None,
         "rating": {f: rating[f] for f in model.CUT_FIELDS} if rating else None,
-        "unused_attack_angles": slate.remaining_angles(claim),
+        "fixed_remaining": slate.remaining_angles(claim),
+        "na_reasons": claim.na_reasons,
     }
 
 
 def _claim_line(c: dict[str, Any]) -> str:
     batch = "-" if c["batch"] is None else c["batch"]
+    na = " ".join(f"na[{angle}]={reason}" for angle, reason in c["na_reasons"].items())
     return (f"{c['id']} status={c['status']} cut={c['cut']} batch={batch} "
             f"batch_state={c['batch_state'] or '-'} escalated={'yes' if c['escalated'] else 'no'} "
-            f"unused={','.join(c['unused_attack_angles']) or '-'}")
+            f"fixed_remaining={','.join(c['fixed_remaining']) or '-'}" + (f" {na}" if na else ""))
+
+
+def _adhoc_line(rows: list[dict[str, Any]]) -> str:
+    return "ADHOC " + (", ".join(f"{row['angle']} claim={row['claim']} seq={row['seq']}"
+                                 for row in rows) or "-")
 
 
 def _plan_lines(plan: list[list[dict[str, Any]]]) -> list[str]:
@@ -728,6 +735,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     agents = slate.agent_ids()
     phase = protocol.slate_phase(slate)
     plan = protocol.batch_plan(slate)
+    adhoc = protocol.adhoc_angles(slate)
     step = _next_step(args, slate)
     if args.json:
         data: dict[str, Any] = {
@@ -737,14 +745,14 @@ def cmd_status(args: argparse.Namespace) -> None:
             "plan": plan,
             "seats": slate.seats,
             "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor),
-            "claims": claims, "next": step}
+            "claims": claims, "adhoc_angles": adhoc, "next": step}
         emit(args.output_mode, {}, [], json_text=json.dumps(data, indent=2))
         return
     advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
     lines = [(f"SLATE {slate.slate_id} lenses={','.join(slate.lenses) or '-'} "
               f"phase={phase} cutoff={cutoff} claims={len(claims)} "
               f"agents={len(agents)}/{slate.cap('agents')} advisor={advisor or '-'}"),
-             *map(_claim_line, claims), *_plan_lines(plan)]
+             *map(_claim_line, claims), _adhoc_line(adhoc), *_plan_lines(plan)]
     emit(args.output_mode, {}, lines, step)
 
 

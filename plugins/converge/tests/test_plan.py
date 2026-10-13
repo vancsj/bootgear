@@ -22,6 +22,15 @@ def _row(claim: str, action: str, role: str, batch: Any = None,
             "angles": list(angles)}
 
 
+def _fresh_row(claim: str, role: str, used: tuple[str, ...]) -> dict[str, Any]:
+    return {"claim": claim, "action": "attack", "agent_role": role, "batch": "fresh-eye",
+            "angles": [], "used": list(used)}
+
+
+def _strip_rule(plan: list[list[dict[str, Any]]]) -> list[list[dict[str, Any]]]:
+    return [[{k: v for k, v in row.items() if k != "rule"} for row in chunk] for chunk in plan]
+
+
 def test_escalate_rows_name_each_claims_finder(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "both", "gap_hunt": True, "escalate": True},
                     "angles": {"disable": DISABLED}})
@@ -59,19 +68,28 @@ def test_attack_rows(cv: Converge) -> None:
     for angle in BATCH_1[2:]:
         assert cv.attack("F001", angle) == []
     cv.batch_1("F002")
-    assert _plan(cv) == [[_row("F001", "reply", "finder", 1),
-                          _row("F002", "attack", "r2", "fresh-eye", (*BATCH_1,))]]
+    assert _strip_rule(_plan(cv)) == [[_row("F001", "reply", "finder", 1),
+                                       _fresh_row("F002", "r2", BATCH_1)]]
     assert cv.append("reply", FINDER, claim="F001", batch=1, stance="rebut", evidence="e",
                      evidence_sha256=ledger.evidence_hash("e")) == []
     assert _plan(cv)[0][0] == _row("F001", "verdict", "r1", 1)
 
 
-def test_fresh_eye_row_lists_the_angles_used(cv: Converge) -> None:
+def test_fresh_eye_row_has_empty_angles_and_used_list(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
     assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye") == []
-    assert _plan(cv) == [[_row("F001", "attack", "r2", "fresh-eye",
-                               (*BATCH_1, "retry timing"))]]
+    [[row]] = _plan(cv)
+    assert row["angles"] == []
+    assert row["used"] == [*BATCH_1, "retry timing"]
+    assert row["rule"]
+
+
+def test_status_fixed_remaining_empty_is_not_nothing_to_attack(cv: Converge) -> None:
+    cv.ready()
+    cv.batch_1()
+    assert cv.status()["by_id"]["F001"]["fixed_remaining"] == []
+    assert _strip_rule(_plan(cv)) == [[_fresh_row("F001", R2, BATCH_1)]]
 
 
 def test_cut_after_rows_and_an_empty_plan_at_cutoff(cv: Converge) -> None:
