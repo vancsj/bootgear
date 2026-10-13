@@ -562,7 +562,7 @@ def _validate_find_run(slate: Slate, event: dict[str, Any], problems: list[str])
 def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     """A find angle not applicable to a lens, or an attack angle not applicable to one claim."""
     phase = ledger.enum(event, "phase", model.PHASE, problems)
-    ledger.nonempty(event, "reason", problems)
+    ledger.one_line(event, "reason", problems)
     if phase is None:
         return
     row = ledger.angle(slate, phase, event.get("angle"), problems)
@@ -602,7 +602,10 @@ def _validate_attack(slate: Slate, event: dict[str, Any], problems: list[str]) -
         elif not isinstance(event["last"], bool):
             problems.append(f"attack: `last` must be true or false; got {event['last']!r}")
     if batch == FRESH_EYE:
-        angle = ledger.nonempty(event, "angle", problems)
+        angle = ledger.one_line(event, "angle", problems)
+        if angle is not None and angle != angle.strip():
+            problems.append("attack: `angle` must not start or end with whitespace")
+            angle = None
     else:
         row = ledger.angle(slate, "attack", event.get("angle"), problems)
         angle = row["id"] if row is not None else None

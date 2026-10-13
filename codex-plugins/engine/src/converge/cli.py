@@ -683,6 +683,7 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
         "escalated": claim.escalation is not None,
         "rating": {f: rating[f] for f in model.CUT_FIELDS} if rating else None,
         "fixed_remaining": slate.remaining_angles(claim),
+        "fresh_eye": [e["angle"] for e in claim.state.attacks.get(protocol.FRESH_EYE, [])],
         "na_reasons": claim.na_reasons,
     }
 
@@ -690,9 +691,11 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
 def _claim_line(c: dict[str, Any]) -> str:
     batch = "-" if c["batch"] is None else c["batch"]
     na = " ".join(f"na[{angle}]={reason}" for angle, reason in c["na_reasons"].items())
+    fresh = f" fresh-eye={','.join(c['fresh_eye'])}" if c["fresh_eye"] else ""
     return (f"{c['id']} status={c['status']} cut={c['cut']} batch={batch} "
             f"batch_state={c['batch_state'] or '-'} escalated={'yes' if c['escalated'] else 'no'} "
-            f"fixed_remaining={','.join(c['fixed_remaining']) or '-'}" + (f" {na}" if na else ""))
+            f"fixed_remaining={','.join(c['fixed_remaining']) or '-'}{fresh}"
+            + (f" {na}" if na else ""))
 
 
 def _adhoc_line(rows: list[dict[str, Any]]) -> str:

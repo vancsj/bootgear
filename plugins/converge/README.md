@@ -65,8 +65,8 @@ Every claim meets every **attack angle** — `boundary`, `reachability`, `guarde
 `positive-control`, `real-referent` and ten more ship built in (`converge angles --tag attack`
 lists them) — in fixed batches of `caps.angles_per_claim` (5). An angle whose tell does not
 apply is recorded not applicable. A last **fresh-eye** batch follows: `r2` is told which angles
-were used (`used` on its plan row) and attacks with up to five of its own. Any name is accepted,
-including a fixed angle recorded not applicable; names outside the fixed set are listed by
+were used (`used` on its plan row) and attacks with up to five of its own. A one-line name without edge whitespace is accepted,
+including a fixed angle recorded not applicable; a name already used on the same claim is refused; names outside the fixed set are listed by
 `status` as `adhoc_angles`.
 
 A refuted batch opens a dispute. The finder rebuts with new evidence (the CLI hashes it and

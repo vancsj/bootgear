@@ -116,7 +116,7 @@ flowchart LR
   `attack` or a claim-level `angle-na` on the claim. Then comes one `fresh-eye` batch:
   free-text angle names not yet used on the claim, complete after `caps.angles_per_claim`
   attacks or one carrying `last: true`. A fixed angle recorded not applicable on the claim
-  may be attacked there. Any name is accepted; a name outside the fixed set is listed by
+  may be attacked there. A one-line name without edge whitespace is accepted; a name outside the fixed set is listed by
   `status` as `adhoc_angles`. A claim takes its next batch only when the previous one is
   done; after the fresh-eye batch it is attack-finished.
 - **Dispute.** A batch with a `refuted` attack awaits the finder's `reply`: `decline` kills

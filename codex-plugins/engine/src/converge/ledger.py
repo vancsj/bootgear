@@ -84,6 +84,15 @@ def nonempty(event: dict[str, Any], key: str, problems: list[str]) -> str | None
     return value
 
 
+def one_line(event: dict[str, Any], key: str, problems: list[str]) -> str | None:
+    """A non-empty string that status prints on one line."""
+    value = nonempty(event, key, problems)
+    if value is not None and not value.isprintable():
+        problems.append(f"`{key}` must be one printable line")
+        return None
+    return value
+
+
 def enum(event: dict[str, Any], key: str, allowed: tuple[str, ...], problems: list[str]) -> str | None:
     value = event.get(key)
     if value not in allowed:

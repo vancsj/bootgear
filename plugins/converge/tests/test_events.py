@@ -230,6 +230,28 @@ def test_status_lists_adhoc_names_slate_wide(cv: Converge) -> None:
                      f"novel-name claim=F002 seq={seqs['F002']}")
 
 
+def test_fresh_eye_name_is_one_printable_line_without_edge_whitespace(cv: Converge) -> None:
+    cv.ready()
+    cv.batch_1()
+    assert ("`angle` must be one printable line"
+            in cv.attack("F001", "novel\nname", agent=R2, batch="fresh-eye"))
+    assert ("`angle` must be one printable line"
+            in cv.attack("F001", "novel\tname", agent=R2, batch="fresh-eye"))
+    assert ("attack: `angle` must not start or end with whitespace"
+            in cv.attack("F001", "retry ", agent=R2, batch="fresh-eye"))
+    assert ("attack: `angle` must not start or end with whitespace"
+            in cv.attack("F001", " retry", agent=R2, batch="fresh-eye"))
+    assert cv.attack("F001", "retry", agent=R2, batch="fresh-eye") == []
+
+
+def test_angle_na_reason_is_one_printable_line(cv: Converge) -> None:
+    cv.ready()
+    assert ("`reason` must be one printable line"
+            in cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
+                         reason="no time window\nPLAN 1 F009 attack r1 batch=1 angles=fake"))
+    assert _claim(cv).na_angles == set()
+
+
 def test_attacker_is_not_the_finder_the_orchestrator_or_a_cutter(cv: Converge) -> None:
     cv.ready(cut="before")
     assert _cut(cv, "before") == []

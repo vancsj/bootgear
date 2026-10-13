@@ -34,6 +34,19 @@ def test_status_shows_na_reason_beside_fixed_angle(cv: Converge) -> None:
     assert line.endswith(f"na[{BATCH_1[0]}]=no time window")
 
 
+def test_status_shows_a_fresh_eye_attack_on_a_not_applicable_angle(cv: Converge) -> None:
+    cv.ready()
+    assert _na(cv, R1, BATCH_1[0], reason="no time window") == []
+    for angle in BATCH_1[1:]:
+        assert cv.attack("F001", angle) == []
+    assert cv.attack("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
+    claim = cv.status()["by_id"]["F001"]
+    assert claim["fresh_eye"] == [BATCH_1[0]]
+    [line] = [line for line in cv.ok("status", "s1").stdout.splitlines()
+              if line.startswith("F001 ")]
+    assert f"fresh-eye={BATCH_1[0]} na[{BATCH_1[0]}]=no time window" in line
+
+
 def test_roles_and_shape(cv: Converge) -> None:
     cv.ready(cut="before")
     assert cv.append("cut", CUTTER, claim="F001", round=1, when="before",
