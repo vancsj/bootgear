@@ -19,7 +19,7 @@ Q: What belongs here?
 
 ## a1 · Browser automation notes.  conf 0.30 · checked 2026-10-10
 Because: Keeps the browser checks in one place.
-Evidence: ls ~/Code/team-memory/tech/browser
+Evidence: ls ~/Repos/team-memory/tech/browser
 """
 
 
@@ -34,7 +34,7 @@ class CharterPortability(TempLedgerCase):
         result = self.run_ledger("audit")
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("UNPORTABLE  tech/_about a1", result.stdout)
-        self.assertIn("~/Code/team-memory/tech/browser", result.stdout)
+        self.assertIn("~/Repos/team-memory/tech/browser", result.stdout)
 
     def test_the_save_time_check_reports_a_charter(self) -> None:
         self.write_charter()
