@@ -15,14 +15,17 @@ matches the diff (`find-angles.yaml`, plus `design-patterns.yaml` for
 | `simplicity` | full | Unnecessary abstraction, unreachable branches, excess complexity, reinvented utilities. | Find code the change could drop or shrink with the same behavior. |
 | `contract` | full | Public API, schema, CLI, event and file-format surfaces; callers and consumers. | Find a caller or consumer that the changed surface breaks or leaves unstated. |
 
-## Evaluation fields for design claims
+## Cut dimensions per lens
 
-Cutters score `architecture` claims from the design-pattern catalog with these
-meanings instead of the correctness ones.
+The cutter rates each claim's `impact`, `size` and `reach`, `rate` when its
+lens policy counts it, and `difficulty` after the attack, deciding each value
+by the tests `converge angles --tag evaluate` prints. Per lens:
 
-| Field | Correctness | Design |
-|---|---|---|
-| `frequency` | How often the trigger runs. | How often the area changes: `git log` churn of the files. |
-| `severity` | User or data impact. | Cost of reversal once other code builds on it. |
-| `confidence` | Reproduced or traced. | Cost scenario shown in this repo, versus argued. |
-| `difficulty` | Fix effort. | Fix effort now versus later. |
+| Lens | Meaning |
+|---|---|
+| `correctness` | `impact` from the wrong result; `size` counts users or records whose result changes; `rate` counts call sites or production queries that reach the trigger (`call-site-count`, `prod-traffic`). |
+| `tests` | `impact` and `reach` of the behavior no test would catch breaking. |
+| `security` | `reach: crafted` when only input an attacker supplies reaches the trigger. |
+| `contract` | `impact: clarity` when the changed surface leaves a caller's contract unstated. |
+| `architecture` | `rate` counts the commits touching the claim's files in the last 90 days (`git log` churn, the `file-churn` angle); `impact` from the cost scenario shown in this repo. |
+| `simplicity` | `impact` is `clarity` or `cosmetic` unless the extra code returns a wrong result. |

@@ -16,11 +16,19 @@ Each claim ends with a status and a separate `cut` field (`yes`/`no`):
 - `killed`: its finder declined to rebut a refutation.
 - `unverified`: cut before the attack, so never attacked.
 
-A finding is a claim with `cut: no` that is not killed. A follow-up is a claim with `cut: yes`: listed in its own section with its status, never presented as a finding. Killed claims are listed with their evidence. Nothing verified is dropped.
+The cutoff gives each claim one result:
 
-Hand back to the caller the render, every finding carrying a `choice`, the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8). The caller asks `deputy:ask` for each choice, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it; this handback does not change:
+- `finding`: `cut: no`, reported.
+- `fix-now`: `cut: no`; a `survived` claim whose accepted after cut carries a cheap patch. The caller applies the patch and records `fix-check` (step 6).
+- `fixed`: a `fix-now` claim whose `fix-check` passed.
+- `follow-up`: `cut: yes`; listed in its own section with its status, never presented as a finding.
+- `killed`: listed with its evidence.
 
-- `converged`: no finding is `disputed`; give the finding, follow-up and killed counts.
+Nothing verified is dropped.
+
+Hand back to the caller the render, every finding carrying a `choice`, the `fix-now` claims with their patches (`converge render --json` `fix_now`), the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8). The caller asks `deputy:ask` for each choice, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it; this handback does not change:
+
+- `converged`: no finding is `disputed`; give the finding, fix-now, fixed, follow-up and killed counts.
 - `unconverged`: list the `disputed` findings.
 - `blocked`: name the role agent or seat that was unavailable and the claims it held. No claim is settled without its refuter.
 
@@ -28,7 +36,7 @@ Follow-up claims never change the outcome.
 
 ## Workflow
 
-init (step 1) → find and coverage (step 3) → gap hunt (step 3; on when R2 exists and `steps.gap_hunt` is true) → escalate (step 4; on when `steps.escalate` is true) → cut before, attack, cut after until `converge status` reports `phase: cutoff` (step 5) → cutoff, render, gate and `converged` (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
+init (step 1) → find and coverage (step 3) → gap hunt (step 3; on when R2 exists and `steps.gap_hunt` is true) → escalate (step 4; on when `steps.escalate` is true) → cut before, attack, cut after until `converge status` reports `phase: cutoff` (step 5) → cutoff, render, gate and `converged`, then the caller's `fix-check` per `fix-now` claim (step 6) → mint memory-ledger facts (step 7) → hand back (step 8).
 
 `steps.cut` picks the cut passes: `before`, `after`, `both` (default) or `none`.
 
@@ -51,7 +59,7 @@ One slate is one task. Never use more than `caps.agents` agents on it (default 5
 Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as in `## Host mechanics`; for an `advisor` seat, follow the driver step the CLI prints instead of spawning.
 
 - Spawn each role once and reuse it across the slate by continuing that agent; never spawn a new agent for a role that already has one.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test (id, current text, `loc`, `trigger`), its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes.
 
 ## 3. Find
 
@@ -60,6 +68,11 @@ Spawn F once with one brief that lists every lens and, per lens, all its find an
 1. For each lens, for each angle whose tell matches the artifact: search, run
    a positive control, then file each claim and record the run through the
    public CLI. Its refusal output owns event shape and dependency checks.
+   File each claim with `--evidence` (the output or file:line hops it rests
+   on) and `--tier`:
+   - `reproduced`: you ran a command or test and quote output showing the trigger;
+   - `traced`: no run, and you cite file:line for every hop from the entry point to the effect;
+   - `inferred`: any other basis.
 2. For every other angle of the lens, record the CLI's not-applicable event
    with the reason the tell is absent.
 
@@ -76,11 +89,19 @@ For each batch of escalate rows, continue each row's finder (F for lens claims, 
 Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON status action and, for each batch of its `plan`, continue each row's `agent_role` with the row's claims, batch and angles.
 
 1. Cut rows (`cut-before`, `cut-after`). Cutter brief:
-   - Default verdict: cut. Rate a field higher only when evidence justifies it.
-   - For each claim set `frequency`, `severity`, `confidence` and `difficulty`,
-     each backed by an applicable evaluate angle. Before the attack,
-     `confidence` is `inferred`. Add a choice when the facts are agreed but a
-     remedy still needs a decision.
+   - Default verdict: cut. Rate a value higher only when evidence justifies it.
+   - For each claim set `impact`, `size` and `reach`, and `rate` (an integer
+     count) when the CLI requires it for the claim's lens; after the attack
+     also set `difficulty`. Back each with an applicable evaluate angle and
+     decide each value by the `<value>: <test>` lines that
+     `converge angles --tag evaluate` prints.
+   - After the attack, `trivial` or `local` needs the fix as a unified diff
+     that touches only the claim's `loc` file and its tests, passed as
+     `--patch "$(cat fix.diff)"`, with `--callers none` and
+     `--migration none`; the CLI measures the patch and refuses a class it
+     does not earn. Otherwise set `cross-cutting` or `redesign`.
+   - Add `--choice` naming the options when the facts are agreed but a remedy
+     still needs a decision; the CLI refuses a cut that needs one without it.
    - Record the cut through the public CLI.
 
    For `accept` rows, continue the claim's finder with that round's cut values and evidence; it answers with `accept`, or `rebut` with new evidence. Continue C with each rebuttal for the next round.
@@ -96,6 +117,8 @@ Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON statu
 
 Run the cutoff, render and gate actions the CLI prints, then `converge converged`: `CONVERGED` picks outcome `converged`, `OPEN` picks `unconverged` with the disputed findings it lists.
 
+For each `fix-now` claim, the caller that applies its patch runs the tests and checks, starts a one-round re-review slate whose brief asks only for problems the patch introduces, and records `converge fix-check <slate> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <re-review slate>`. `pass` needs passing checks and a re-review slate with a current cutoff and no finding; on `fail` the caller reverts the patch. Then rerun the cutoff: `pass` gives `fixed`, `fail` returns the claim to finding or follow-up.
+
 ## 7. Memory-ledger
 
 After cutoff, mint facts that hold beyond this artifact through the `memory-ledger:ledger` skill, each with a runnable check. These are conventions, root causes, and the deliberate decisions behind follow-up or killed claims.
@@ -106,7 +129,7 @@ Hand back the render, every finding carrying a `choice`, and exactly one outcome
 
 ## Rules
 
-- As main, write only `init`. Never write `attack`, `reply`, `verdict`, `cut`, `rebut` or `accept`: refuters write `attack` and `verdict`, finders `escalate`, `reply`, `rebut` and `accept`, the cutter `cut`.
+- As main, write only `init`, and `fix-check` for a patch the caller applied. Never write `attack`, `reply`, `verdict`, `cut`, `rebut` or `accept`: refuters write `attack` and `verdict`, finders `escalate`, `reply`, `rebut` and `accept`, the cutter `cut`.
 - Never give a role agent another role's reasoning.
 - Never give a refuter a claim it filed.
 - A factual dispute is never a choice; it stays in converge.

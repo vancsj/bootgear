@@ -65,15 +65,18 @@ A new review loops (review, apply what the mode permits, re-review) and ends wit
 
 | Outcome | Means |
 |---|---|
-| `handoff` | in an engine run whose node has a `fix` edge, the mode would apply at least one claim; review returns the fix list and applies nothing |
-| `comment_only` | in an engine run whose node has no `fix` edge; every finding is reported and none applied |
-| `clean` | no finding and no follow-up remains |
-| `below_cutoff` | no finding remains; only cut claims, listed as follow-ups |
-| `blocked` | a role or coverage is missing, a finding is `disputed`, or a finding needs an acceptance, a decision or a permission that is not there |
+| `handoff` | in an engine run whose node has a `fix` edge, the mode would apply at least one claim, or revert a `fix-now` patch whose fix-check failed; review returns the fix list and applies nothing |
+| `comment_only` | in an engine run whose node has no `fix` edge; every finding and `fix-now` claim is reported and none applied |
+| `clean` | no finding, no `fix-now` claim and no follow-up remains |
+| `below_cutoff` | no finding and no `fix-now` claim remains; only cut claims, listed as follow-ups |
+| `blocked` | a role or coverage is missing, a finding is `disputed`, or a finding or `fix-now` claim needs an acceptance, a decision or a permission that is not there |
 | `no_progress` | the same claim came back unchanged after a fix, with no new information |
 | `iteration_cap` | the cap (default 5) ended the loop with live claims |
 
-Standalone, the mode is `accepted_only`: nothing is applied without an outside signal.
+Under `auto_within_permitted_mutations`, the engine's `fix` node applies only `fix-now`
+claims, each by its converge patch, and the next review pass re-reviews just those patches
+and records their fix-check. Standalone, the mode is `accepted_only`: nothing is applied
+without an outside signal, and `fix-now` claims are reported with the findings.
 
 ## Project standard and overrides
 

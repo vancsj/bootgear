@@ -10,7 +10,7 @@ factual dispute never goes to debate.
 
 | Part | Role |
 |---|---|
-| `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and common validation), `protocol` (event rules, claim state, batches, phases, cut, result), `model` (replayed slate and claims, rank), `config`, `angles`, `render`, `cli` |
+| `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and common validation), `protocol` (event rules, claim state, batches, phases, cut, result), `model` (replayed slate and claims, rank), `effort` (patch size), `config`, `angles`, `render`, `cli` |
 | `plugins/converge/src/converge/angles/builtin.yaml` | Built-in `attack`, `evaluate` and `decide` angles |
 | `plugins/converge/bin/converge` | Wrapper: `uv run --project <plugin-root> -m converge.cli` |
 | `plugins/converge/skills/converge/` | Orchestration skill (roles, steps, outcomes) |
@@ -31,7 +31,9 @@ cutoff → done.
 `init --snapshot --pass N` commits the work tree, untracked files included, through a
 temporary index and pins it at `refs/converge/<slate>`. `--since <prev>` requires
 `pass = prev.pass + 1`, records the previous snapshot and prints the `git diff` between the
-two. From pass 2, a stricter built-in cutoff replaces `report_if` and `report_if_gap_hunt`.
+two. From pass 2, `cutoff.rereview.lenses` is laid over `cutoff.lenses`: for each lens it
+names, its rule lists replace that lens's, and the lens keeps its other lists; a lens with no
+table of its own starts from `default`.
 `converge prune` deletes the refs; engine `execute` prunes them before closing a run.
 
 ## Roles and angles
@@ -101,16 +103,33 @@ flowchart LR
 - **Escalate.** Once per claim its finder records `escalate`: a `wider` text with
   `evidence` citing a concrete route to the worse outcome, or neither. A wider text replaces
   the claim text.
-- **Cut rounds.** The cutter sets `frequency`, `severity`, `confidence` and `difficulty`,
-  each backed by an evaluate angle, with `when` `before` or `after`; a before cut has
-  confidence `inferred`. Rounds count per claim and `when`. A next round is refused while
-  the latest awaits its finder's `accept` or rebut. A cut track **converges** when the
-  finder accepts the latest round, or when the round after a rebut repeats the same four
-  values; it is **capped** at `caps.cut_rounds` (5). A `cross-cutting` or `redesign` cut
-  carries a `choice`. A claim's ratings are its latest after round, else its latest before
-  round.
-- **Unverified.** With `steps.cut` `before` or `both`, a claim whose before ratings cut it
-  (by the rules below) and that has no `attack` is `unverified`: it is never attacked.
+- **File.** A claim carries `loc`, `claim`, `trigger`, `evidence` and `tier`
+  (`reproduced`, `traced` or `inferred`), plus optional `rule` and `depends`.
+- **Cut dimensions.** Every cut sets `impact` (`security`, `data-loss`, `wrong-output`,
+  `clarity`, `cosmetic`), `size` (`many`, `one`), `reach` (`normal`, `crafted`,
+  `unreachable`) and `rate` (an integer `>= 0`, required when the lens policy has a
+  `rate_at_least` rule, else stored as 0); an after cut also sets `difficulty` (`trivial`,
+  `local`, `cross-cutting`, `redesign`). Evidence maps evaluate angles to text, and the
+  angles cover every rated field; each enum-valued evaluate angle carries a test per value.
+- **Patch.** An after cut may carry `patch` (a unified diff), `callers` (`none`, `changed`)
+  and `migration` (`none`, `needed`); a before cut carries no `difficulty` and no `patch`.
+  `effort.measure` counts the non-test files, test files (a root-relative path matching
+  `cutoff.cheap.test_globs`) and changed lines, and refuses a rename, a binary diff or an
+  unparsable patch. `trivial` and `local` need a patch within `cutoff.cheap.files`,
+  `lines` and `tests` whose non-test files are all the claim's loc file, with
+  `callers: none` and `migration: none`; a patch within `trivial_lines` must be typed
+  `trivial`.
+- **Choice.** An after cut needs a `choice` when the lens's `choice_if` matches, or, while
+  `cutoff.cheap.enabled` is true, when `difficulty` is `cross-cutting` or `redesign`.
+- **Cut rounds.** Rounds count per claim and `when`. A next round is refused while the
+  latest awaits its finder's `accept` or rebut. A cut track **converges** when the finder
+  accepts the latest round, or when the round after a rebut repeats the same values; it is
+  **capped** at `caps.cut_rounds` (5). A claim's ratings are its latest after round, else
+  its latest before round.
+- **Gate 1.** With `steps.cut` `before` or `both`, a claim is attacked when its rule is in
+  `cutoff.report_rules`, it has no before rating, or its lens's `attack_if` matches the
+  before rating with its tier, lens and origin. Otherwise, with no `attack`, it is
+  `unverified`: it is never attacked.
 - **Batches.** The attack angles of the snapshot, in order, form fixed table batches of
   `caps.angles_per_claim` (5). A table batch is complete when each of its angles has an
   `attack` or a claim-level `angle-na` on the claim. Then comes one `fresh-eye` batch:
@@ -133,10 +152,11 @@ flowchart LR
   `attack`, `reply`, `verdict`, `cut-after`, `accept`. A table attack row lists the batch's
   open angles. A fresh-eye row has `angles: []`, `used` (the angles attacked on the claim)
   and `rule`. The find and the gap hunt are exempt.
-- **Angles in status.** Each claim reports `fixed_remaining` (fixed angles neither attacked
-  nor not applicable) and `na_reasons` (each not-applicable angle with its reason). The
-  slate reports `adhoc_angles`: every fresh-eye attack whose name is outside the fixed set,
-  with its claim and seq.
+- **Claim status.** `status --json` reports per claim its `loc`, `trigger`, `evidence`,
+  `tier`, rating, stored `result` and `fix_check` (`pass`, `fail` or `none`), plus
+  `fixed_remaining` (fixed angles neither attacked nor not applicable) and `na_reasons`
+  (each not-applicable angle with its reason). The slate reports `adhoc_angles`: every
+  fresh-eye attack whose name is outside the fixed set, with its claim and seq.
 
 ## Ledger
 
@@ -144,7 +164,7 @@ flowchart LR
   `~/.bootgear/converge`; review runs use `<session-dir>/converge`.
 - Each line is one event `{seq, ts, event, as, ...fields}`. Types: `init`, `file`,
   `escalate`, `find-run`, `angle-na`, `attack`, `reply`, `verdict`, `cut`, `rebut`, `accept`,
-  `cutoff`. `seq` is gapless from 1, and `init` is written once, first; it records the
+  `cutoff`, `fix-check`. `seq` is gapless from 1, and `init` is written once, first; it records the
   refuter count (`init --refuters`, 1 or 2). Claims get ids `F001`, `F002`, …; `loc` is
   `path:line`.
 - **Write path:** take an exclusive `flock`, replay and validate the whole file, validate
@@ -159,39 +179,55 @@ flowchart LR
 - `converge cutoff` writes the `cutoff` event as agent `converge`; no agent can. It refuses
   while coverage is missing or any claim is open, and every replay re-checks the stored
   rows against a fresh computation.
-- **Cut.** Each live claim gets `cut` `yes` or `no` from its ratings. A claim with no
-  ratings is `no` (reason `cut none`). Otherwise it is `yes` when no rule of
-  `cutoff.report_if` (`report_if_gap_hunt` for gap-hunt claims) matches its ratings, or
-  when it ranks past `caps.per_lens` in its lens. A rule maps fields (the four cut fields,
-  `origin`, `lens`) to allowed values. `caps.per_lens` maps lens names to caps, with
-  `default` (50) for every other lens. Rank is severity, then frequency, then confidence,
-  then claim id. A claim whose `rule` is in `cutoff.report_rules` is never cut and takes no
-  place in its lens rank. An unverified claim is always `yes`. Killed claims are not rated.
+- **Policy.** `cutoff.lenses` maps a lens to `attack_if`, `report_if` and `choice_if` rule
+  lists, with `default` for every other lens. A rule maps `impact`, `size`, `reach`,
+  `difficulty`, `tier`, `status`, `origin` or `lens` to allowed values, and `rate_at_least`
+  to a minimum `rate`; it matches when every key holds.
+- **Gate 2.** Each live claim gets one result, first match first: `finding` when its rule is
+  in `cutoff.report_rules` or it has no rating (reason `cut none`); `fixed` when its
+  `fix-check` passed; `fix-now` when it has no `fix-check`, `cutoff.cheap.enabled` is true,
+  its status is `survived`, and its latest after cut is `trivial` or `local` and accepted by
+  its finder; `finding` when the lens's `report_if` matches its ratings, tier, lens, origin
+  and status; otherwise `follow-up`. After a failed `fix-check` the claim is a finding or
+  follow-up by `report_if`, with reason `fix-check failed`. An unverified claim is a
+  follow-up. Killed claims are not rated.
+- **Cap.** Live claims rank by impact, reach, size, `rate` descending, tier, then claim id.
+  A finding past its lens's `caps.per_lens` (`default` 50) is a follow-up; a `report_rules`
+  finding takes no slot.
 - **Rows.** One per claim, `{claim, status, cut, result, rank, reason}`: `result` is
-  `finding` (`cut: no`, not killed), `follow-up` (`cut: yes`) or `killed`. Follow-up claims
-  never block the gate or convergence.
+  `finding`, `fix-now`, `fixed`, `follow-up` or `killed`; `cut` is `yes` only for a
+  follow-up. Follow-up claims never block the gate or convergence.
+- **Fix-check.** After the cutoff, the caller records `fix-check` once per `fix-now` claim,
+  as any agent but its finder: `outcome` `pass` or `fail`, `evidence`, and `review_slate`,
+  the slate that re-reviewed only the patch, required for `pass`. Before writing `pass`, the
+  CLI reads that slate from the same `--dir` and refuses unless it has a current cutoff no
+  older than this slate's last `cutoff` event before its first `fix-check`, and no claim
+  with `cut: no` that is not killed. The event makes the cutoff stale.
 - `converge gate <slate> --dir <abs>` exits 0 only when every lens has full coverage, no
   claim is open, and the cutoff is current; it does not require convergence. It requires an
   absolute `--dir`. The engine runs it as the review node's `leave_check` (see
   [state-machine.md](state-machine.md)).
 - `converge converged` exits 0 when the slate is done and no claim is `disputed` with
   `cut: no`; otherwise it lists the open and disputed claims.
-- `render` builds Markdown from the ledger alone: a summary line with the finding,
-  follow-up and killed counts and `converged`, then findings (status and cut), the
-  findings' choices, follow-up (status and choice), killed claims with their evidence, and
-  coverage.
+- `render` builds Markdown from the ledger alone: a summary line
+  `fix-now= fixed= findings= follow-up= killed=` and `converged`, then sections Findings,
+  Fix now and Fixed (with each patch's changed lines), Choices, Follow-up, Killed (with
+  their evidence) and Coverage. `render --json` adds `fix_now`: each `fix-now` claim with
+  its patch.
 
 ## Config layers
 
-`converge.yaml` layers deep-merge, later winning: built-in defaults < user
-(`~/.claude/converge.yaml`, or `~/.codex/converge.yaml` when `CONVERGE_HOST=codex`) <
-project (`<project-root>/.bootgear/config/converge.yaml`) < task (`--config FILE`).
-Keys: `cutoff.{report_if, report_if_gap_hunt, report_rules}`,
+`converge.yaml` layers deep-merge, later winning: built-in defaults < caller
+(`init --defaults FILE`, a calling skill's policy) < user (`~/.claude/converge.yaml`, or
+`~/.codex/converge.yaml` when `CONVERGE_HOST=codex`) < project
+(`<project-root>/.bootgear/config/converge.yaml`) < task (`--config FILE`).
+Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 `caps.{cut_rounds, per_lens, agents, angles_per_claim, batch_items}`,
-`steps.{escalate, gap_hunt, cut}`, `angles.{files, disable}`. Unknown keys, bad enum
-values, non-positive caps, a `per_lens` that is not a map of positive caps with `default`,
-and non-boolean `escalate` or `gap_hunt` are rejected. `init` snapshots the effective
-config into the slate.
+`steps.{escalate, gap_hunt, cut}`, `angles.{files, disable}`. `cutoff.cheap` holds
+`enabled` (default true), `files` (1), `lines` (10), `trivial_lines` (3), `tests` (1) and
+`test_globs`. Unknown keys, bad enum values, non-positive caps, a `per_lens` or
+`cutoff.lenses` without `default`, and non-boolean `escalate`, `gap_hunt` or
+`cheap.enabled` are rejected. `init` snapshots the effective config into the slate.
 
 ## Codex bundling
 

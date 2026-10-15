@@ -11,21 +11,23 @@ unchallenged.
 
 converge separates the parties. One agent finds each claim, different agents try to refute
 it, another rates how much it matters, and none of them sees another role's reasoning. A CLI
-validates every step against an append-only ledger and **computes** which claims are
-findings, so no agent types "finding" into existence.
+validates every step against an append-only ledger and **computes** each claim's result, so
+no agent types "finding" into existence.
 
 ```mermaid
 flowchart LR
     F["finder<br/>files claims"] --> G["gap hunt<br/>r2 files what every lens missed"]
     G --> E["escalate<br/>each finder may widen its claim"]
     E --> CB["cut before<br/>cutter rates each claim"]
-    CB -->|"cut"| U["unverified<br/>follow-up, never attacked"]
+    CB -->|"skip"| U["unverified<br/>follow-up, never attacked"]
     CB --> A["attack<br/>batches of 5 angles, then fresh eye"]
     A -->|"refuted"| D["dispute<br/>finder rebuts or declines"]
     D --> A
     A --> CA["cut after<br/>cutter re-rates"]
     CA --> X["converge cutoff<br/>computed, not typed"]
     X --> O["render · gate"]
+    X -->|"fix-now"| FC["fix-check<br/>caller applies the patch, re-reviews it"]
+    FC --> X
 ```
 
 Default verdicts point against the claim: an attack defaults to refuted, a cut defaults to cut. A
@@ -91,32 +93,65 @@ Status only gets worse, `survived` → `disputed` → `killed`; a later clean ba
 
 ## Cut: rate each claim
 
-First each finder may **escalate** its claim once: a wider text, accepted only with evidence
-citing a concrete route to the worse outcome. The cutter then sets four fields per claim, each
-backed by an **evaluate angle**:
+The finder files each claim with its `trigger`, its `evidence` and a `tier`: `reproduced`
+(a quoted run shows the trigger), `traced` (file:line for every hop from the entry point to
+the effect) or `inferred`. Each finder may then **escalate** its claim once: a wider text,
+accepted only with evidence citing a concrete route to the worse outcome.
+
+The cutter rates each claim, every value backed by an **evaluate angle** whose test for that
+value it quotes:
 
 | Field | Values |
 |---|---|
-| `severity` | `security`, `data-loss`, `wrong-behavior`, `degraded`, `cosmetic` |
-| `frequency` | `every-call`, `common`, `rare`, `contrived` |
-| `confidence` | `reproduced`, `traced`, `inferred` |
-| `difficulty` | `trivial`, `local`, `cross-cutting`, `redesign` |
+| `impact` | `security`, `data-loss`, `wrong-output`, `clarity`, `cosmetic` |
+| `size` | `many` (at least 2 users or records get a changed result), `one` |
+| `reach` | `normal` (a documented caller with valid input), `crafted` (only attacker-supplied input), `unreachable` |
+| `rate` | the integer count an evaluate angle with field `rate` asks for; required only when the lens policy has a `rate_at_least` rule, otherwise 0 |
+| `difficulty` | `trivial`, `local`, `cross-cutting`, `redesign`; after the attack only |
+
+An after cut also carries the fix as a unified diff (`--patch`), `--callers none|changed` and
+`--migration none|needed`. `trivial` and `local` need a patch whose non-test files are only
+the claim's loc file, within `cutoff.cheap` (`files`, `lines`, `tests`), with
+`callers: none` and `migration: none`; a patch within `trivial_lines` is `trivial`. The CLI
+measures the patch itself and refuses a rename, a binary diff or an unparsable patch. A cut
+carries a `choice` when the lens's `choice_if` matches, or, while `cutoff.cheap.enabled` is
+true, when `difficulty` is `cross-cutting` or `redesign`.
 
 The finder, the party with the opposite stake, answers each round with `accept` or a rebut.
 A cut converges on accept, or when the cutter repeats the same values after a rebut; it is
-capped at `caps.cut_rounds` (5). When the facts are agreed but a fix still needs a decision,
-the claim carries a `choice`, handed on for a decision and never argued as a fact.
+capped at `caps.cut_rounds` (5).
 
-`steps.cut` says when the cutter rates: `before` the attack (confidence at most `inferred`;
-a claim cut here is `unverified` and never attacked), `after` it, `both` (the default; the
-second cut may cut a claim the first kept), or `none`.
+`steps.cut` says when the cutter rates: `before` the attack, `after` it, `both` (the
+default) or `none`.
 
-`converge cutoff` then gives every claim its `cut` (`yes` or `no`) from its latest ratings:
-`yes` when no `report_if` rule matches, or when it ranks past `caps.per_lens` in its lens
-(default 50 per lens), ranked by severity, then frequency, then confidence. A claim whose rule
-is in `cutoff.report_rules` is never cut and takes no place in its lens rank. Claims with
-`cut: no` are **findings**; claims with `cut: yes` are **follow-up**, listed with their status
-and never blocking. The slate has **converged** when no finding is `disputed`.
+---
+
+## Gates and results
+
+**Gate 1** runs on the before cut: a claim is attacked when its lens's `attack_if` matches
+its ratings and tier, or its rule is in `cutoff.report_rules`; otherwise it is `unverified`
+and never attacked.
+
+**Gate 2** runs in `converge cutoff` on the latest ratings and status, first match first:
+
+| Result | When |
+|---|---|
+| `finding` | the claim's rule is in `cutoff.report_rules` |
+| `fixed` | its `fix-check` passed |
+| `fix-now` | `cutoff.cheap.enabled`, `survived`, and an accepted after cut typed `trivial` or `local` |
+| `finding` | the lens's `report_if` matches |
+| `follow-up` | otherwise, and every `unverified` claim |
+| `killed` | the finder declined to rebut |
+
+A rule maps `impact`, `size`, `reach`, `difficulty`, `tier`, `status`, `origin` or `lens` to
+allowed values, and `rate_at_least` to a minimum `rate`. A finding past `caps.per_lens` in its
+lens rank (impact, reach, size, rate, tier) becomes a follow-up. Follow-ups are listed and
+never block. The slate has **converged** when no finding is `disputed`.
+
+The caller applies each `fix-now` patch, re-reviews only that patch in a new slate, and
+records `fix-check` with `pass` (naming that slate, which must hold no finding) or `fail`.
+After a failed fix-check the caller reverts the patch, and the claim is a finding or
+follow-up by `report_if`.
 
 ---
 
@@ -138,15 +173,16 @@ angle-na    record why a find angle, or an attack angle on one claim, does not a
 attack      record one attack angle's outcome on a claim
 reply       the finder rebuts or declines a refuted batch
 verdict     the refuter agrees or disagrees with the rebut
-cut         record a claim's four cut fields, before or after the attack
+cut         rate a claim, before or after the attack; an after cut carries the patch
 accept      the finder accepts a cut round
 rebut       the finder answers a cut round with new evidence
-status      phase, plan, and each claim's status, cut and open batch
+fix-check   the caller records whether an applied fix-now patch passed its re-review
+status      phase, plan, and each claim's status, trigger, evidence, tier, result and fix-check
 converged   whether the finished slate has no disputed finding
 coverage    which find angles are still unaccounted for
 cutoff      compute each claim's status, cut and result
 gate        exit 0 only with full coverage, no open claim, a current cutoff
-render      Markdown report built from the ledger alone
+render      Markdown report built from the ledger alone; --json adds the fix-now patches
 angles      list the resolved angle table
 config      validate or resolve the layered configuration
 prune       delete the snapshot refs of finished slates
@@ -174,15 +210,22 @@ On Codex CLI there is no separate install: converge ships inside the `engine` pl
 (`codex plugin add engine@bootgear`).
 
 Ledgers are one JSONL file per slate under `~/.bootgear/converge/` unless `--dir` says
-otherwise. Configuration layers deep-merge, later winning: built-in defaults, then the user
-file (`~/.claude/converge.yaml`, or `~/.codex/converge.yaml` on Codex), then the project's
-`.bootgear/config/converge.yaml`, then a task file passed with `--config`:
+otherwise. Configuration layers deep-merge, later winning: built-in defaults, then a calling
+skill's file passed with `init --defaults`, then the user file (`~/.claude/converge.yaml`, or
+`~/.codex/converge.yaml` on Codex), then the project's `.bootgear/config/converge.yaml`, then
+a task file passed with `--config`:
 
 ```yaml
 cutoff:
-  report_if: [...]          # field → allowed values; a match is a finding
-  report_if_gap_hunt: [...] # stricter rules for gap-hunt claims
   report_rules: [...]       # claim rules that are always findings
+  lenses:                   # per lens, else `default`; a rule maps fields to allowed values
+    default:
+      attack_if: [...]      # gate 1: attack the claim
+      report_if: [...]      # gate 2: report it as a finding
+      choice_if: [...]      # the after cut needs a choice
+  rereview:
+    lenses: {...}           # from --pass 2, replaces the named lists of a lens
+  cheap: {enabled: true, files: 1, lines: 10, trivial_lines: 3, tests: 1, test_globs: [...]}
 caps:
   cut_rounds: 5
   per_lens: {default: 50}   # add a lens key to cap that lens differently

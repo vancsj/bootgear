@@ -13,26 +13,30 @@ depth label `quick` or `full`; in an active run, also `<run-id>`,
 
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
-findings in rank order with their status, `choice` claims, follow-up claims
-with their status, and killed claims with their evidence. Return follow-up
-claims in the handback; do not record them.
+findings in rank order with their status, `fix-now` claims with their patches
+(`converge render --json` `fix_now`) and any `fix-check` recorded on them,
+`choice` claims, follow-up claims with their status, and killed claims with
+their evidence. Return follow-up claims in the handback; do not record them.
 
 A new review ends with exactly one outcome:
 
 - **`handoff`:** In an active run, the current node has a `fix` edge (`machine.nodes[current].next` includes `fix`) and the
-  mode would apply at least one claim; the `fix` node takes over. Return the
-  fix list: the ids of those claims.
+  mode would apply at least one claim, or revert a patch whose `fix-check`
+  failed; this holds for a render whose only claims to apply are `fix-now`
+  claims. The `fix` node takes over. Return the fix list: the ids of those
+  claims, each marked `apply` or `revert`.
 - **`comment_only`:** In an active run, the current node has no `fix` edge (`machine.nodes[current].next` lacks `fix`).
-  Every finding is reported and none is applied, whatever
+  Every finding and `fix-now` claim is reported and none is applied, whatever
   `review_fix_mode` says.
 - **`clean`:** A re-review's render, or an active run's single-pass render,
-  has no finding and no follow-up.
-- **`below_cutoff`:** The render has no finding and at least one follow-up.
+  has no finding, no `fix-now` claim and no follow-up.
+- **`below_cutoff`:** The render has no finding, no `fix-now` claim and at
+  least one follow-up.
 - **`blocked`:** A role or find coverage is missing, a finding has status
-  `disputed`, a finding needs a mutation outside the mode's permission — an
-  unaccepted claim under `accepted_only`, an undecided `choice`, or a
-  mutation outside `permitted_mutations` — or the `converge` skill handed
-  back `blocked`.
+  `disputed`, a finding or `fix-now` claim needs a mutation outside the mode's
+  permission — an unaccepted claim under `accepted_only`, an undecided
+  `choice`, or a mutation outside `permitted_mutations` — or the `converge`
+  skill handed back `blocked`.
 - **`no_progress`:** The loop again finds the same unchanged claim after
   trying to fix it, with no new information.
 - **`iteration_cap`:** The configured iteration cap is reached with live
@@ -41,7 +45,8 @@ A new review ends with exactly one outcome:
 
 In an active run where the current node has a `fix` edge and the fix list is
 empty, the outcome is the one the render gives: `clean`, `below_cutoff`, or
-`blocked`.
+`blocked`. Standalone, `fix-now` claims are reported with the findings and
+none is applied.
 
 Report claims from every iteration, not only the final iteration. State the
 ending outcome and iteration count. `execute` uses these fields to update its
@@ -143,8 +148,11 @@ Choose the slate id and the converge dir:
 Initialize the slate through the public `converge` command with the selected
 depth, lenses, angle files, and project root. The angle files are
 [references/find-angles.yaml](references/find-angles.yaml) for every depth,
-plus [references/design-patterns.yaml](references/design-patterns.yaml) when
-the `architecture` lens is in the depth.
+plus [references/design-patterns.yaml](references/design-patterns.yaml) and
+[references/evaluate-angles.yaml](references/evaluate-angles.yaml) when the
+`architecture` lens is in the depth. Pass the absolute path of
+[references/cutoff.yaml](references/cutoff.yaml), the per-lens cutoff
+policy, as `--defaults` to `init`.
 
 In an active run, write the settlement with
 `task session read <run-id> --dir <session-dir> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
@@ -186,7 +194,9 @@ lens's find angles from the angle files of sub-task 2, plus the actual diff
 
 For `<n>` ≥ 2, also give F the `git diff` command `init` printed and the
 previous slate's `converge render` output as settled context. A claim outside
-that diff is in scope only when the diff changes that code's behaviour.
+that diff is in scope only when the diff changes that code's behaviour. When
+the previous pass's `fix` node applied `fix-now` patches, this pass is their
+one-round re-review: tell F to report only problems those patches introduce.
 
 If the project has `.bootgear/config/review-standard.md`, give F its rules and
 have it tag each claim that breaks one with `--rule R###`.
@@ -223,6 +233,18 @@ the follow-up list):
 - Standalone: report it to the user.
 - A deputy-answered choice is named in the report to the user, with its cited slugs.
   Production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to `deputy:ask`.
+
+When the previous pass's `fix` node applied `fix-now` patches, record a
+`fix-check` on the previous slate for each, as its main agent, after this
+slate's cutoff:
+
+```text
+converge fix-check <previous slate> --dir <converge-dir> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <slate>
+```
+
+Record `pass` only when the `fix` node's tests and checks passed and this
+slate holds no finding; otherwise record `fail`, and the claim goes in the fix
+list marked `revert`. Then rerun `converge cutoff` on the previous slate.
 
 In an active run, record the slate, the converge dir and the `snapshot=<sha>`
 that `init` printed; the caller passes the first two as
@@ -296,14 +318,16 @@ In an active run, apply no claim in any mode; fixing happens only in the
 Re-review after an accepted fix. Do not apply a claim based only on this
 review's own report.
 
-`auto_within_permitted_mutations`: apply automatically only findings with
-status `survived`, `cut: no` and `difficulty` `trivial` or `local`, within the
-settlement's `permitted_mutations`, and none when the slate's `steps.cut` is
-`none`. This mode adds no mutation permission. Never apply this way a
-`disputed`, follow-up, killed or `choice` claim, or a claim whose `difficulty`
-is `cross-cutting` or `redesign`; those follow the `accepted_only` rule. Cross-cutting and redesign findings carry a `choice` and
-go to the `review-debate` node in a run, or to the user standalone. A fix
-outside `permitted_mutations` also follows the `accepted_only` rule.
+`auto_within_permitted_mutations`: apply automatically only `fix-now`
+claims, each by its patch, within the settlement's `permitted_mutations`.
+This mode adds no mutation permission. Never apply this way a finding, or a
+`disputed`, follow-up, killed or `choice` claim; those follow the
+`accepted_only` rule. Findings with a `choice` go to the `review-debate` node
+in a run, or to the user standalone. A `fix-now` patch outside
+`permitted_mutations` also follows the `accepted_only` rule. The `fix` node
+applies the patches and runs the tests and checks; the next review pass is
+their re-review and records `fix-check` (sub-task 5). After a failed
+`fix-check`, the `fix` node reverts that claim's patch.
 
 Without an active run there is no settlement and no `permitted_mutations` to
 stay within — a standalone caller selecting this mode gets `accepted_only`
