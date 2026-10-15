@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import copy
 import dataclasses
 import io
 import itertools
@@ -44,7 +43,8 @@ EXAMPLES = {
     "init": "init <slate> --dir <dir> --as main --lenses <a,b> --angles <file> "
             "--settlement <file>",
     "file": "file <slate> --dir <dir> --as finder --lens <lens> --angle <angle> --origin lens "
-            '--loc <path:line> --claim "<claim>" --trigger "<trigger>"',
+            '--loc <path:line> --claim "<claim>" --trigger "<trigger>" --evidence "<evidence>" '
+            "--tier <tier>",
     "escalate": 'escalate <slate> --dir <dir> --as finder --claim F001 --wider "<text>" '
                 '--evidence "<route>"',
     "find-run": "find-run <slate> --dir <dir> --as finder --lens <lens> --angle <angle> "
@@ -58,11 +58,13 @@ EXAMPLES = {
              '--evidence "<new evidence>"',
     "verdict": "verdict <slate> --dir <dir> --as r1 --claim F001 --batch 1 --verdict agree",
     "cut": "cut <slate> --dir <dir> --as cutter --claim F001 --when after --round 1 "
-           "--frequency common --severity wrong-behavior --confidence traced --difficulty local "
+           "--impact wrong-output --size one --reach normal --difficulty local "
            "--evidence <angle>=<evidence>",
     "rebut": 'rebut <slate> --dir <dir> --as finder --claim F001 --when after '
              '--evidence "<new evidence>"',
     "accept": "accept <slate> --dir <dir> --as finder --claim F001 --when after --round 1",
+    "fix-check": 'fix-check <slate> --dir <dir> --as main --claim F001 --outcome pass '
+                 '--evidence "<checks run and their result>" --review-slate <slate>',
     "status": "status <slate> --dir <dir> --json",
     "converged": "converged <slate> --dir <dir>",
     "cutoff": "cutoff <slate> --dir <dir>",
@@ -432,7 +434,7 @@ def _reclaim_step(seat: str) -> str:
 def cmd_init(args: argparse.Namespace) -> None:
     seat_fields, notes = _init_seats(args)
     try:
-        resolved = config_mod.resolve(args.project_root, args.config)
+        resolved = config_mod.resolve(args.project_root, args.config, args.defaults)
     except config_mod.ConfigError as exc:
         _refuse(exc.problems, "invalid configuration")
     effective = resolved["effective"]
@@ -441,10 +443,10 @@ def cmd_init(args: argparse.Namespace) -> None:
     except angles_mod.AngleError as exc:
         _refuse(exc.problems, "invalid angles")
     if args.review_pass is not None and args.review_pass >= 2:
-        effective = {**effective, "cutoff": {**effective["cutoff"],
-                                             **copy.deepcopy(config_mod.REREVIEW_CUTOFF)}}
+        effective = config_mod.rereview(effective)
     event: dict[str, Any] = {"event": "init", "lenses": _ids(args.lenses), "angles": rows,
-                             "config": effective, "refuters": args.refuters}
+                             "config": effective, "refuters": args.refuters,
+                             "project_root": resolved["project_root"]}
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
@@ -526,7 +528,8 @@ def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
 
 def cmd_file(args: argparse.Namespace) -> None:
     event = _opt({"event": "file", "loc": args.loc, "claim": args.claim,
-                  "trigger": args.trigger, "origin": args.origin},
+                  "trigger": args.trigger, "evidence": args.evidence, "tier": args.tier,
+                  "origin": args.origin},
                  lens=args.lens, angle=args.angle, rule=args.rule,
                  depends=_ids(args.depends) if args.depends else None)
     written = _write(args, event, build=lambda s: {"id": model.claim_id(len(s.claims) + 1)})
@@ -581,9 +584,10 @@ def cmd_cut(args: argparse.Namespace) -> None:
     if problems:
         _refuse(problems)
     event = _opt({"event": "cut", "claim": args.claim, "when": args.when, "round": args.round,
-                  "frequency": args.frequency, "severity": args.severity,
-                  "confidence": args.confidence, "difficulty": args.difficulty,
-                  "evidence": evidence}, choice=args.choice, fix=args.fix)
+                  "impact": args.impact, "size": args.size, "reach": args.reach,
+                  "evidence": evidence},
+                 rate=args.rate, difficulty=args.difficulty, patch=args.patch,
+                 callers=args.callers, migration=args.migration, choice=args.choice)
     written = _write(args, event)
     _written(args,
              {"seq": written["seq"], "claim": args.claim, "when": args.when, "round": args.round},
@@ -650,15 +654,74 @@ def cmd_cutoff(args: argparse.Namespace) -> None:
         slate = _read(args)
     assert slate.cutoff is not None
     rows = protocol.compute_cutoff(slate)
-    counts = {result: sum(row.result == result for row in rows)
-              for result in ("finding", "follow-up", "killed")}
+    counts = render.counts(rows)
     emit(args.output_mode,
          {"seq": slate.cutoff["seq"], "rows": protocol.cutoff_results(rows)},
-         [(f"CUTOFF seq={slate.cutoff['seq']} findings={counts['finding']} "
-          f"follow-up={counts['follow-up']} killed={counts['killed']}"),
+         [f"CUTOFF seq={slate.cutoff['seq']} {counts}",
           *(f"{row.claim.id} {row.result} status={row.status} cut={row.cut} rank={row.rank} "
             f"reason={row.reason}" for row in rows)],
          _step(args, "render"))
+
+
+def _fix_baseline(slate: Slate) -> dict[str, Any] | None:
+    """The last `cutoff` event written before the slate's first `fix-check`, else its latest."""
+    baseline = None
+    for event in slate.events:
+        if event["event"] == "fix-check":
+            break
+        if event["event"] == "cutoff":
+            baseline = event
+    return baseline
+
+
+def _review_problems(args: argparse.Namespace, slate: Slate) -> tuple[list[str], bool]:
+    """Every failed check of `--review-slate`, and whether it holds findings: it reads from
+    the same --dir, has a current cutoff no older than this slate's last cutoff before its
+    first fix-check, and reports no claim with `cut: no` that is not killed."""
+    name = args.review_slate
+    try:
+        path = ledger.slate_path(args.dir, name)
+    except ledger.LedgerError as exc:
+        return [f"--review-slate: {p}" for p in exc.problems], False
+    if not path.is_file():
+        return [f"--review-slate: no slate {name!r} in {args.dir}"], False
+    try:
+        review = ledger.read(path, name)
+    except ledger.LedgerError as exc:
+        return [f"--review-slate: slate {name!r} is unreadable: " + "; ".join(exc.problems)], False
+    if not review.cutoff_valid or review.cutoff is None:
+        cutoff = CATALOG.command(f"cutoff {shlex.quote(name)} --dir {shlex.quote(str(args.dir))}")
+        return [f"--review-slate: slate {name!r} has no current cutoff; run {cutoff}"], False
+    problems = []
+    baseline = _fix_baseline(slate)
+    if baseline is not None and review.cutoff["ts"] < baseline["ts"]:
+        problems.append(f"--review-slate: slate {name!r}'s cutoff ({review.cutoff['ts']}) is older "
+                        f"than {args.slate}'s cutoff seq={baseline['seq']} ({baseline['ts']}), "
+                        f"its last before the first fix-check; re-review the patch")
+    found = [row["claim"] for row in review.cutoff["results"]
+             if row["cut"] == "no" and row["result"] != "killed"]
+    if found:
+        problems.append(f"--review-slate: slate {name!r} holds findings ({', '.join(found)}); "
+                        f"the patch fails check 7")
+    return problems, bool(found)
+
+
+def cmd_fix_check(args: argparse.Namespace) -> None:
+    if args.outcome == "pass" and args.review_slate is not None and args.review_slate != args.slate:
+        slate = _read(args)
+        problems, found = _review_problems(args, slate)
+        if problems:
+            fail = _step(args, "fix-check", f"--as {args.agent} --claim {args.claim} "
+                         '--outcome fail --evidence "<the findings>"')
+            step = (f"record --outcome fail and revert the patch: {fail}" if found
+                    else "re-review only the patch in a new slate, run its cutoff, then rerun "
+                         "fix-check")
+            _refuse_next(args, "refused", problems, step)
+    written = _write(args, _opt({"event": "fix-check", "claim": args.claim,
+                                 "outcome": args.outcome, "evidence": args.evidence},
+                                review_slate=args.review_slate))
+    _written(args, {"seq": written["seq"], "claim": args.claim, "outcome": args.outcome},
+             f"FIX-CHECK seq={written['seq']} {args.claim} outcome={args.outcome}")
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +733,8 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
     batch = (protocol.next_batch(slate, claim)
              if claim.live and claim.id not in unverified else None)
     rating = claim.state.rating
+    stored = {row["claim"]: row["result"] for row in (slate.cutoff or {}).get("results", [])}
+    result = {"result": stored[claim.id]} if claim.id in stored else {}
     return {
         "id": claim.id,
         "status": protocol.status(slate, claim, unverified),
@@ -680,11 +745,18 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
         "origin": claim.origin,
         "finder": claim.finder,
         "claim": claim.text,
+        "loc": claim.loc,
+        "trigger": claim.trigger,
+        "evidence": claim.evidence,
+        "tier": claim.tier,
         "escalated": claim.escalation is not None,
-        "rating": {f: rating[f] for f in model.CUT_FIELDS} if rating else None,
+        "rating": ({f: rating.get(f) for f in (*model.CUT_FIELDS, *model.AFTER_FIELDS)}
+                   if rating else None),
         "fixed_remaining": slate.remaining_angles(claim),
         "fresh_eye": [e["angle"] for e in claim.state.attacks.get(protocol.FRESH_EYE, [])],
         "na_reasons": claim.na_reasons,
+        **result,
+        "fix_check": claim.fix_check["outcome"] if claim.fix_check else "none",
     }
 
 
@@ -692,7 +764,7 @@ def _claim_line(c: dict[str, Any]) -> str:
     batch = "-" if c["batch"] is None else c["batch"]
     na = " ".join(f"na[{angle}]={reason}" for angle, reason in c["na_reasons"].items())
     fresh = f" fresh-eye={','.join(c['fresh_eye'])}" if c["fresh_eye"] else ""
-    return (f"{c['id']} status={c['status']} cut={c['cut']} batch={batch} "
+    return (f"{c['id']} status={c['status']} cut={c['cut']} tier={c['tier']} batch={batch} "
             f"batch_state={c['batch_state'] or '-'} escalated={'yes' if c['escalated'] else 'no'} "
             f"fixed_remaining={','.join(c['fixed_remaining']) or '-'}{fresh}"
             + (f" {na}" if na else ""))
@@ -830,8 +902,11 @@ def cmd_render(args: argparse.Namespace) -> None:
     slate = _read(args)
     markdown = render.render(slate)
     if args.output_mode == "json":
+        fix_now = [{"claim": row.claim.id, "patch": (row.claim.state.rating or {})["patch"]}
+                   for row in protocol.compute_cutoff(slate) if row.result == "fix-now"]
         emit(args.output_mode, {"slate": args.slate, "markdown": markdown,
-                                "choices": _unresolved_choices(slate)}, [])
+                                "choices": _unresolved_choices(slate),
+                                "claims": render.claim_inputs(slate), "fix_now": fix_now}, [])
         return
     sys.stdout.write(markdown)
 
@@ -874,6 +949,7 @@ def cmd_angles(args: argparse.Namespace) -> None:
     for row in rows:
         extra = "".join(f" {k}={row[k]}" for k in ("field", "lens") if k in row)
         lines.append(f"{row['tag']} {row['id']}{extra} — tell: {row['tell']} — asks: {row['asks']}")
+        lines.extend(f"  {value}: {test}" for value, test in row.get("values", {}).items())
     emit(args.output_mode, {"angles": rows}, lines)
 
 
@@ -924,13 +1000,15 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--snapshot", action="store_true",
                    help="pin a work-tree snapshot commit at refs/converge/<slate>")
     p.add_argument("--pass", dest="review_pass", type=int, metavar="N",
-                   help="review pass number; N >= 2 uses the re-review cutoff")
+                   help="review pass number; N >= 2 lays cutoff.rereview.lenses over cutoff.lenses")
     p.add_argument("--since", metavar="PREV_SLATE",
                    help="previous pass's slate; prints the git diff between the snapshots")
     p.add_argument("--settlement", type=caller_path, metavar="FILE",
                    help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
     p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
                    help="refuter seats on the slate; 1 drops r2")
+    p.add_argument("--defaults", type=caller_path, metavar="FILE",
+                   help="caller-layer converge.yaml, below the user layer: a skill's cutoff tables")
     config_args(p)
 
     p = command("file", cmd_file, write=True)
@@ -939,6 +1017,12 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--loc", required=True)
     p.add_argument("--claim", required=True)
     p.add_argument("--trigger", required=True)
+    p.add_argument("--evidence", required=True,
+                   help="the command output or file:line hops the claim rests on")
+    p.add_argument("--tier", required=True, metavar="{reproduced,traced,inferred}",
+                   help="reproduced: you ran a command or test and quote output showing the "
+                        "trigger; traced: no run, and you cite file:line for every hop from the "
+                        "entry point to the effect; inferred: any other basis")
     p.add_argument("--origin", required=True)
     p.add_argument("--depends")
     p.add_argument("--rule")
@@ -963,11 +1047,21 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--claim", required=True)
     p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
-    for name in model.CUT_FIELDS:
-        p.add_argument(f"--{name}", required=True)
+    for name in ("impact", "size", "reach"):
+        p.add_argument(f"--{name}", required=True, metavar=f"{{{','.join(model.FIELD_ENUMS[name])}}}")
+    p.add_argument("--rate", type=int,
+                   help="the count an evaluate angle with field rate asks for (converge angles "
+                        "--tag evaluate --angles <file>); required when the claim's lens policy "
+                        "has a rate_at_least rule, else 0")
+    p.add_argument("--difficulty", metavar=f"{{{','.join(model.DIFFICULTY)}}}",
+                   help="after cuts only")
+    p.add_argument("--patch", help="the fix as a unified diff; after cuts only")
+    p.add_argument("--callers", metavar="{none,changed}",
+                   help="whether the fix changes a signature, output format or config key")
+    p.add_argument("--migration", metavar="{none,needed}",
+                   help="whether the fix needs a data or interface migration")
     p.add_argument("--evidence", action="append", default=[], metavar="ANGLE=TEXT")
     p.add_argument("--choice")
-    p.add_argument("--fix")
 
     p = command("attack", cmd_attack, write=True)
     p.add_argument("--claim", required=True)
@@ -1000,6 +1094,15 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--claim", required=True)
     p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
+
+    p = command("fix-check", cmd_fix_check, write=True)
+    p.add_argument("--claim", required=True)
+    p.add_argument("--outcome", required=True, metavar="{pass,fail}",
+                   help="pass: the patch passed the tests and checks and the review slate "
+                        "holds no finding; fail: it did not, and the patch is reverted")
+    p.add_argument("--evidence", required=True, help="the checks run and their result")
+    p.add_argument("--review-slate", metavar="SLATE",
+                   help="the slate that re-reviewed only the patch; required with pass")
 
     p = command("status", cmd_status)
     p.add_argument("--json", action="store_true")

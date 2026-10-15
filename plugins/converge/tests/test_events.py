@@ -27,8 +27,6 @@ def _cut(cv: Converge, when: str | None, rnd: int = 1, cid: str = "F001", agent:
     fields: dict[str, Any] = {"claim": cid, "round": rnd, **extra}
     if when is not None:
         fields["when"] = when
-    if when == "before":
-        fields.setdefault("confidence", "inferred")
     return cv.append("cut", agent, **fields)
 
 
@@ -59,7 +57,7 @@ def _rating(cv: Converge) -> dict[str, Any]:
 
 def test_event_kinds() -> None:
     assert model.EVENTS == ("init", "file", "escalate", "find-run", "angle-na", "attack", "reply",
-                            "verdict", "cut", "rebut", "accept", "cutoff")
+                            "verdict", "cut", "rebut", "accept", "cutoff", "fix-check")
 
 
 def test_filed_claim_starts_survived(cv: Converge) -> None:
@@ -111,6 +109,26 @@ def test_events_need_init(cv: Converge) -> None:
 
 
 # -- file and escalate ------------------------------------------------------------
+
+
+def test_file_needs_evidence_and_tier(cv: Converge) -> None:
+    cv.init()
+    err = cv.refused("file", "s1", "--as", FINDER, "--lens", "correctness",
+                     "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
+                     "--claim", "c", "--trigger", "t")
+    assert "the following arguments are required: --evidence, --tier" in err
+    assert "--tier <tier>" in err
+    err = cv.file(tier="guessed", code=2)
+    assert "`tier` must be one of reproduced, traced, inferred; got 'guessed'" in err
+    fields = {"id": "F001", "loc": "a.py:1", "claim": "c", "trigger": "t", "origin": "lens",
+              "lens": "correctness", "angle": "changed-contract"}
+    problems = cv.append("file", FINDER, **fields)
+    assert "file: missing required field `evidence`" in problems
+    assert "file: missing required field `tier`" in problems
+    problems = cv.append("file", FINDER, **fields, evidence=" ", tier="traced")
+    assert problems == ["`evidence` must be a non-empty string"]
+    assert cv.file(tier="reproduced") == "F001"
+    assert cv.events()[-1]["tier"] == "reproduced"
 
 
 def test_file_origin_is_lens_or_gap_hunt(cv: Converge) -> None:
@@ -359,22 +377,14 @@ def test_cut_accept_and_rebut_need_when(cv: Converge) -> None:
     assert "rebut: missing required field `when`" in _rebut(cv, "e", when=None)
 
 
-def test_before_cut_confidence_is_inferred(cv: Converge) -> None:
+def test_cut_values_and_evidence(cv: Converge) -> None:
     cv.ready(cut="before")
-    assert ("cut: a before cut has confidence inferred; got 'traced'"
-            in _cut(cv, "before", confidence="traced"))
-    assert _cut(cv, "before", confidence="inferred") == []
-
-
-def test_cut_values_and_choice(cv: Converge) -> None:
-    cv.ready(cut="before")
-    assert ("cut: F001 has difficulty redesign; a non-empty `choice` is required"
-            in _cut(cv, "before", difficulty="redesign"))
-    assert "`severity` must be one of" in " ".join(_cut(cv, "before", severity="huge"))
-    assert "cut: no evidence for `difficulty`" in " ".join(
+    assert "`impact` must be one of" in " ".join(_cut(cv, "before", impact="huge"))
+    assert "`reach` must be one of" in " ".join(_cut(cv, "before", reach="far"))
+    assert "cut: no evidence for `size`" in " ".join(
         _cut(cv, "before", evidence={"entry-points": "x", "blast-radius": "y",
-                                     "evidence-tier": "z"}))
-    assert _cut(cv, "before", difficulty="redesign", choice="split or patch") == []
+                                     "files-touched": "z"}))
+    assert _cut(cv, "before", choice="split or patch") == []
 
 
 def test_finder_answers_a_cut_round_before_the_next(cv: Converge) -> None:
@@ -394,7 +404,7 @@ def test_finder_answers_a_cut_round_before_the_next(cv: Converge) -> None:
     assert ("accept: F001 before cut round 1 was rebutted; answer the next cut round"
             in cv.append("accept", FINDER, claim="F001", round=1, when="before"))
     assert "cut: F001 next before cut round is 2, got 3" in _cut(cv, "before", rnd=3)
-    assert _cut(cv, "before", rnd=2, severity="degraded") == []
+    assert _cut(cv, "before", rnd=2, impact="cosmetic") == []
     assert cv.append("accept", FINDER, claim="F001", round=2, when="before") == []
     assert ("accept: F001 before cut round 2 is already accepted"
             in cv.append("accept", FINDER, claim="F001", round=2, when="before"))
@@ -404,39 +414,39 @@ def test_cut_rounds_and_cap_count_per_when(cv: Converge) -> None:
     cv.ready(cut="both", cut_rounds=2)
     assert _cut(cv, "before") == []
     assert _rebut(cv, "e1") == []
-    assert _cut(cv, "before", rnd=2, severity="data-loss") == []
+    assert _cut(cv, "before", rnd=2, impact="data-loss") == []
     assert "cut: round 3 exceeds caps.cut_rounds 2" in _cut(cv, "before", rnd=3)
-    assert _rating(cv)["severity"] == "data-loss"
-    assert model.rank_key(_claim(cv))[0] == model.SEVERITY.index("data-loss")
+    assert _rating(cv)["impact"] == "data-loss"
+    assert model.rank_key(_claim(cv))[0] == model.IMPACT.index("data-loss")
     cv.batch_1()
     cv.fresh_eye()
     assert "cut: F001 next after cut round is 1, got 2" in _cut(cv, "after", rnd=2)
-    assert _cut(cv, "after", severity="security") == []
+    assert _cut(cv, "after", impact="security") == []
     assert cv.append("accept", FINDER, claim="F001", round=1, when="after") == []
     state = _state(cv)
     assert sorted(state.cuts["before"].rounds) == [1, 2]
     assert sorted(state.cuts["after"].rounds) == [1]
     assert state.cuts["after"].accepted == 1
-    assert _rating(cv)["severity"] == "security" and state.cutters == {CUTTER}
-    assert model.rank_key(_claim(cv))[0] == model.SEVERITY.index("security")
+    assert _rating(cv)["impact"] == "security" and state.cutters == {CUTTER}
+    assert model.rank_key(_claim(cv))[0] == model.IMPACT.index("security")
 
 
 def test_rebut_needs_new_evidence(cv: Converge) -> None:
     cv.ready(cut="before", cut_rounds=3)
     assert _cut(cv, "before") == []
     assert _rebut(cv, "e1") == []
-    assert _cut(cv, "before", rnd=2, severity="degraded") == []
+    assert _cut(cv, "before", rnd=2, impact="cosmetic") == []
     assert ("rebut: this evidence was already given for F001; a rebut needs new evidence"
             in _rebut(cv, "e1"))
 
 
 def test_cut_commands_take_when(cv: Converge) -> None:
     cv.ready(cut="before")
-    out = cv.cut("F001", 1, when="before", confidence="inferred").stdout
+    out = cv.cut("F001", 1, when="before").stdout
     assert out.startswith("CUT seq=") and out.splitlines()[0].endswith("F001 when=before round=1")
     out = cv.rebut_cut("F001", "the retry path reaches it", when="before").stdout
     assert out.startswith("REBUT seq=") and out.splitlines()[0].endswith("F001 when=before")
-    cv.cut("F001", 2, when="before", frequency="rare", confidence="inferred")
+    cv.cut("F001", 2, when="before", impact="cosmetic")
     out = cv.accept("F001", 2, when="before").stdout
     assert out.startswith("ACCEPT seq=") and out.splitlines()[0].endswith("F001 when=before round=2")
     err = cv.refused("rebut", "s1", "--as", FINDER, "--claim", "F001", "--evidence", "x")

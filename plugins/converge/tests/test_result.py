@@ -60,57 +60,48 @@ def _results(cv: Converge) -> dict[str, tuple[str, str]]:
 
 
 def test_default_rules_and_rank(cv: Converge) -> None:
-    a, b, c, d, e, f, g = _build(
+    a, b, c, d, e, f = _build(
         cv,
-        {"frequency": "rare", "severity": "security"},
-        {"frequency": "common", "severity": "wrong-behavior"},
-        {"frequency": "rare", "severity": "wrong-behavior"},
-        {"frequency": "contrived", "severity": "degraded", "confidence": "reproduced"},
-        {"frequency": "every-call", "severity": "cosmetic", "confidence": "reproduced"},
-        {"frequency": "contrived", "severity": "data-loss"},
-        {"frequency": "rare", "severity": "degraded", "confidence": "reproduced"},
+        {"impact": "security"},
+        {"impact": "data-loss", "reach": "crafted"},
+        {"impact": "wrong-output", "reach": "unreachable"},
+        {"impact": "cosmetic"},
+        {"impact": "clarity"},
+        {"impact": "wrong-output", "size": "many"},
     )
     rows = _rows(cv)
-    assert {cid: (rows[cid]["result"], rows[cid]["reason"]) for cid in (a, b, g)} == {
-        a: ("finding", "report_if[0]"), b: ("finding", "report_if[1]"),
-        g: ("finding", "report_if[2]")}
-    assert {rows[cid]["result"] for cid in (c, d, e, f)} == {"follow-up"}
-    assert {rows[cid]["reason"] for cid in (c, d, e, f)} == {"no rule matched"}
-    assert [rows[cid]["rank"] for cid in (a, f, b, c, g, d, e)] == [1, 2, 3, 4, 5, 6, 7]
+    assert {rows[cid]["reason"] for cid in (a, b, f)} == {"report_if[0]"}
+    assert {rows[cid]["result"] for cid in (a, b, f)} == {"finding"}
+    assert {rows[cid]["result"] for cid in (c, d, e)} == {"follow-up"}
+    assert {rows[cid]["reason"] for cid in (c, d, e)} == {"no rule matched"}
+    assert [rows[cid]["rank"] for cid in (a, b, f, c, e, d)] == [1, 2, 3, 4, 5, 6]
     assert rows[a] == {"claim": a, "status": "survived", "cut": "no", "result": "finding",
                        "rank": 1, "reason": "report_if[0]"}
     assert rows[c]["cut"] == "yes"
 
 
-def test_gap_hunt_rules(cv: Converge) -> None:
-    a, b, c = _build(
-        cv,
-        {"origin": "gap-hunt", "frequency": "rare", "severity": "wrong-behavior",
-         "confidence": "reproduced"},
-        {"origin": "gap-hunt", "frequency": "common", "severity": "cosmetic"},
-        {"origin": "gap-hunt", "frequency": "rare", "severity": "data-loss"},
-    )
-    assert _results(cv) == {a: ("follow-up", "no rule matched"),
-                            b: ("finding", "report_if_gap_hunt[0]"),
-                            c: ("finding", "report_if_gap_hunt[1]")}
+def test_origin_rules(cv: Converge) -> None:
+    lenses = {"default": {"report_if": [{"origin": ["gap-hunt"], "impact": ["cosmetic"]}]}}
+    gap, plain = _build(cv, {"origin": "gap-hunt", "impact": "cosmetic"}, {"impact": "cosmetic"},
+                        config={"cutoff": {"lenses": lenses}})
+    assert _results(cv) == {gap: ("finding", "report_if[0]"),
+                            plain: ("follow-up", "no rule matched")}
 
 
 def test_rereview_pass_rules(cv: Converge) -> None:
-    degraded, wrong = _build(
-        cv,
-        {"frequency": "rare", "severity": "degraded", "confidence": "reproduced"},
-        {"frequency": "rare", "severity": "wrong-behavior", "confidence": "reproduced"},
-        extra=("--pass", "2"))
-    assert _results(cv) == {degraded: ("follow-up", "no rule matched"),
-                            wrong: ("finding", "report_if[2]")}
+    rereview = {"lenses": {"default": {"report_if": [{"impact": ["security"]}]}}}
+    wrong, security = _build(cv, {"impact": "wrong-output"}, {"impact": "security"},
+                             config={"cutoff": {"rereview": rereview}}, extra=("--pass", "2"))
+    assert _results(cv) == {wrong: ("follow-up", "no rule matched"),
+                            security: ("finding", "report_if[0]")}
 
 
 def test_report_rules_report_a_claim_below_the_rules(cv: Converge) -> None:
     tagged, other, plain = _build(
         cv,
-        {"rule": "R002", "frequency": "contrived", "severity": "degraded"},
-        {"rule": "R003", "frequency": "contrived", "severity": "degraded"},
-        {"frequency": "contrived", "severity": "degraded"},
+        {"rule": "R002", "impact": "cosmetic"},
+        {"rule": "R003", "impact": "cosmetic"},
+        {"impact": "cosmetic"},
         config={"cutoff": {"report_rules": ["R002"]}})
     assert _results(cv) == {tagged: ("finding", "report_rules[R002]"),
                             other: ("follow-up", "no rule matched"),
@@ -118,16 +109,16 @@ def test_report_rules_report_a_claim_below_the_rules(cv: Converge) -> None:
 
 
 def test_report_rules_default_empty(cv: Converge) -> None:
-    (tagged,) = _build(cv, {"rule": "R002", "frequency": "contrived", "severity": "degraded"})
+    (tagged,) = _build(cv, {"rule": "R002", "impact": "cosmetic"})
     assert _results(cv) == {tagged: ("follow-up", "no rule matched")}
 
 
 def test_report_rules_claim_is_exempt_from_the_per_lens_cap(cv: Converge) -> None:
     top, tagged, past = _build(
         cv,
-        {"frequency": "common", "severity": "security"},
-        {"rule": "R002", "frequency": "contrived", "severity": "degraded"},
-        {"frequency": "common", "severity": "wrong-behavior"},
+        {"impact": "security"},
+        {"rule": "R002", "impact": "cosmetic"},
+        {"impact": "wrong-output"},
         config={"cutoff": {"report_rules": ["R002"]}, "caps": {"per_lens": {"default": 1}}})
     assert _results(cv) == {top: ("finding", "report_if[0]"),
                             tagged: ("finding", "report_rules[R002]"),
@@ -137,20 +128,19 @@ def test_report_rules_claim_is_exempt_from_the_per_lens_cap(cv: Converge) -> Non
 def test_report_rules_claims_take_no_cap_slot(cv: Converge) -> None:
     ids = _build(
         cv,
-        *({"rule": "R002", "frequency": "common", "severity": "security"} for _ in range(2)),
-        *({"frequency": "common", "severity": "wrong-behavior"} for _ in range(2)),
+        *({"rule": "R002", "impact": "security"} for _ in range(2)),
+        *({"impact": "wrong-output"} for _ in range(2)),
         config={"cutoff": {"report_rules": ["R002"]}, "caps": {"per_lens": {"default": 2}}})
     results = _results(cv)
     assert [results[cid] for cid in ids] == [("finding", "report_rules[R002]")] * 2 + [
-        ("finding", "report_if[1]")] * 2
+        ("finding", "report_if[0]")] * 2
 
 
 def test_per_lens_cap_ranks_within_the_lens(cv: Converge) -> None:
     ids = _build(
         cv,
-        *({"frequency": "common", "severity": sev}
-          for sev in ("wrong-behavior", "security", "data-loss", "security")),
-        {"lens": "security", "frequency": "common", "severity": "wrong-behavior"},
+        *({"impact": impact} for impact in ("wrong-output", "security", "data-loss", "security")),
+        {"lens": "security", "impact": "wrong-output"},
         config={"caps": {"per_lens": {"default": 3}}})
     results = _results(cv)
     assert results[ids[0]] == ("follow-up", "per-lens cap 3 (correctness)")
@@ -159,9 +149,9 @@ def test_per_lens_cap_ranks_within_the_lens(cv: Converge) -> None:
 
 def test_killed_unverified_and_cut_none_rows(cv: Converge) -> None:
     cv.ready(cut="before", claims=3)
-    cv.rate("F001", "before", frequency="common", severity="wrong-behavior")
-    cv.rate("F002", "before", frequency="common", severity="wrong-behavior")
-    cv.rate("F003", "before", frequency="rare", severity="wrong-behavior")
+    cv.rate("F001", "before", impact="wrong-output")
+    cv.rate("F002", "before", impact="wrong-output")
+    cv.rate("F003", "before", impact="cosmetic")
     cv.batch_1("F001", refuted=(BATCH_1[0],))
     assert cv.append("reply", FINDER, claim="F001", batch=1, stance="decline") == []
     cv.clean("F002")
@@ -184,7 +174,7 @@ def test_cut_none_rows_are_findings(cv: Converge) -> None:
 
 
 def test_cutoff_closes_the_slate(cv: Converge) -> None:
-    _build(cv, {"frequency": "common", "severity": "security"})
+    _build(cv, {"impact": "security"})
     assert protocol.slate_phase(_slate(cv)) == "cutoff"
     assert _write_cutoff(cv) == []
     slate = _slate(cv)
@@ -194,7 +184,7 @@ def test_cutoff_closes_the_slate(cv: Converge) -> None:
 
 
 def test_cutoff_is_invalid_after_a_later_event(cv: Converge) -> None:
-    _build(cv, {"frequency": "common", "severity": "security"})
+    _build(cv, {"impact": "security"})
     assert _write_cutoff(cv) == []
     assert cv.append("find-run", FINDER, lens="correctness", angle="failure-path", tell="t",
                      searches="s", positive_control="p", result="none") == []
@@ -212,14 +202,14 @@ def test_cutoff_refused_with_open_claims(cv: Converge) -> None:
 
 
 def test_cutoff_refused_from_an_agent(cv: Converge) -> None:
-    _build(cv, {"frequency": "common", "severity": "security"})
+    _build(cv, {"impact": "security"})
     results = protocol.cutoff_results(protocol.compute_cutoff(_slate(cv)))
     problems = cv.append("cutoff", MAIN, results=results)
     assert "cutoff is computed by `converge cutoff` only; it is rejected from --as input" in problems
 
 
 def test_cutoff_results_must_match_the_recompute(cv: Converge) -> None:
-    _build(cv, {"frequency": "common", "severity": "security"})
+    _build(cv, {"impact": "security"})
     results = protocol.cutoff_results(protocol.compute_cutoff(_slate(cv)))
     results[0]["result"] = "follow-up"
     problems = cv.append("cutoff", model.CONVERGE_AGENT, results=results)
@@ -227,7 +217,7 @@ def test_cutoff_results_must_match_the_recompute(cv: Converge) -> None:
 
 
 def test_hand_edited_cutoff_is_refused_on_replay(cv: Converge) -> None:
-    _build(cv, {"frequency": "rare", "severity": "wrong-behavior"})
+    _build(cv, {"impact": "cosmetic"})
     assert _write_cutoff(cv) == []
     lines = cv.path().read_text().splitlines()
     event = json.loads(lines[-1])
@@ -263,7 +253,7 @@ def test_converged_needs_the_cutoff(cv: Converge) -> None:
 def test_a_disputed_finding_is_not_converged(cv: Converge) -> None:
     cv.ready(cut="after")
     _dispute(cv)
-    cv.rate("F001", frequency="common", severity="security")
+    cv.rate("F001", impact="security")
     assert _write_cutoff(cv) == []
     assert _rows(cv)["F001"]["status"] == "disputed"
     assert not protocol.converged(_slate(cv))
@@ -272,7 +262,7 @@ def test_a_disputed_finding_is_not_converged(cv: Converge) -> None:
 def test_a_disputed_follow_up_is_converged(cv: Converge) -> None:
     cv.ready(cut="after")
     _dispute(cv)
-    cv.rate("F001", frequency="rare", severity="cosmetic")
+    cv.rate("F001", impact="cosmetic")
     assert _write_cutoff(cv) == []
     assert (_rows(cv)["F001"]["status"], _rows(cv)["F001"]["cut"]) == ("disputed", "yes")
     assert protocol.converged(_slate(cv))

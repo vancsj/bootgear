@@ -192,8 +192,7 @@ def _phase(cv: Converge) -> str:
 
 
 def _cut_round(cv: Converge, when: str) -> None:
-    confidence = "inferred" if when == "before" else "traced"
-    assert cv.append("cut", CUTTER, claim="F001", round=1, when=when, confidence=confidence) == []
+    assert cv.append("cut", CUTTER, claim="F001", round=1, when=when) == []
     assert cv.append("accept", FINDER, claim="F001", round=1, when=when) == []
 
 

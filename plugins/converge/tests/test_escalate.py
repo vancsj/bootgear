@@ -71,8 +71,7 @@ def test_no_cut_or_attack_before_every_claim_is_escalated(cv: Converge) -> None:
     cv.cover()
     assert cv.append("escalate", FINDER, claim="F001") == []
     assert ("cut: the slate is in phase escalate; cut needs phase cut-before"
-            in cv.append("cut", CUTTER, claim="F001", round=1, when="before",
-                         confidence="inferred"))
+            in cv.append("cut", CUTTER, claim="F001", round=1, when="before"))
     assert ("attack: the slate is in phase escalate; attack needs phase attack"
             in cv.attack("F001", BATCH_1[0]))
     assert cv.append("escalate", FINDER, claim="F002") == []

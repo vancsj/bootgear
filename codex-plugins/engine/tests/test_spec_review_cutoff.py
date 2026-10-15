@@ -32,24 +32,39 @@ def test_table_is_a_valid_config_layer() -> None:
     table = _table()
     assert validate_config(table, str(CLAUDE_CUTOFF)) == []
     assert set(table) == {"cutoff"}
-    assert table["cutoff"]["report_if_gap_hunt"] == table["cutoff"]["report_if"]
+    assert set(table["cutoff"]) == {"cheap", "lenses"}
+    assert table["cutoff"]["cheap"] == {"enabled": False}
+    assert set(table["cutoff"]["lenses"]) == {"default"}
 
 
 @pytest.mark.parametrize(
-    ("severity", "frequency", "confidence", "reported"),
+    ("impact", "reach", "attacked"),
     [
-        ("degraded", "common", "traced", True),
-        ("data-loss", "rare", "traced", False),
-        ("data-loss", "rare", "reproduced", True),
-        ("cosmetic", "every-call", "reproduced", False),
+        ("clarity", "normal", True),
+        ("wrong-output", "crafted", True),
+        ("security", "unreachable", False),
+        ("cosmetic", "normal", False),
     ],
 )
-def test_table_reports(severity: str, frequency: str, confidence: str, reported: bool) -> None:
-    values: dict[str, str | None] = {
-        "severity": severity,
-        "frequency": frequency,
-        "confidence": confidence,
-    }
-    for key in ("report_if", "report_if_gap_hunt"):
-        rules = _table()["cutoff"][key]
-        assert any(rule_matches(rule, values) for rule in rules) is reported
+def test_table_attacks(impact: str, reach: str, attacked: bool) -> None:
+    values = {"impact": impact, "reach": reach, "size": "one", "rate": 0, "tier": "traced",
+              "lens": "requirements", "origin": "lens"}
+    rules = _table()["cutoff"]["lenses"]["default"]["attack_if"]
+    assert any(rule_matches(rule, values) for rule in rules) is attacked
+
+
+@pytest.mark.parametrize(
+    ("impact", "reach", "status", "reported"),
+    [
+        ("clarity", "normal", "survived", True),
+        ("data-loss", "crafted", "disputed", True),
+        ("wrong-output", "unreachable", "survived", False),
+        ("cosmetic", "normal", "survived", False),
+    ],
+)
+def test_table_reports(impact: str, reach: str, status: str, reported: bool) -> None:
+    values = {"impact": impact, "reach": reach, "status": status, "size": "one", "rate": 0,
+              "tier": "traced", "difficulty": "trivial", "lens": "requirements",
+              "origin": "gap-hunt"}
+    rules = _table()["cutoff"]["lenses"]["default"]["report_if"]
+    assert any(rule_matches(rule, values) for rule in rules) is reported

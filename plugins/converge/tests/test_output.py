@@ -16,6 +16,7 @@ from conftest import (
     CUT_EVIDENCE,
     CUTTER,
     DISABLED,
+    FILE_ARGS,
     FINDER,
     MAIN,
     PLUGIN_DIR,
@@ -53,13 +54,13 @@ def _init_args(cv: Converge, lenses: str = "correctness,security") -> list[str]:
 def _file_args(cv: Converge, angle: str = "changed-contract", loc: str = "a.py:1") -> list[str]:
     return ["file", "s1", "--dir", str(cv.dir), "--as", FINDER, "--lens", "correctness",
             "--angle", angle, "--origin", "lens", "--loc", loc, "--claim", "c",
-            "--trigger", "t"]
+            "--trigger", "t", *FILE_ARGS]
 
 
-def _cut_args(cv: Converge, claim: str, rnd: int, frequency: str = "common") -> list[str]:
+def _cut_args(cv: Converge, claim: str, rnd: int, impact: str = "wrong-output") -> list[str]:
     return ["cut", "s1", "--dir", str(cv.dir), "--as", CUTTER, "--claim", claim,
-            "--round", str(rnd), "--when", "before", "--frequency", frequency,
-            "--severity", "wrong-behavior", "--confidence", "inferred", "--difficulty", "local",
+            "--round", str(rnd), "--when", "before", "--impact", impact, "--size", "one",
+            "--reach", "normal",
             *CUT_EVIDENCE]
 
 
@@ -124,7 +125,7 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
                   "--when", "before", "--evidence", "prod shows every call")
     assert rebut == {"seq": rebut["seq"], "claim": "F001", "when": "before",
                      "next": f"cut-before: cutter cut-before F001; plan: {plan}"}
-    _json(cv, *_cut_args(cv, "F001", 2, "every-call"))
+    _json(cv, *_cut_args(cv, "F001", 2, "security"))
     accept = _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
                    "--when", "before", "--round", "2")
     attack_step = f"attack: r1 attack F001 batch 1; plan: {plan}"
@@ -161,14 +162,15 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     cutoff = _json(cv, "cutoff", "s1", "--dir", d)
     assert cutoff == {"seq": cutoff["seq"],
                       "rows": [{"claim": "F001", "status": "survived", "cut": "no",
-                                "result": "finding", "rank": 1, "reason": "report_if[1]"}],
+                                "result": "finding", "rank": 1, "reason": "report_if[0]"}],
                       "next": _next(cv, "render s1 --dir {dir}")}
     assert _json(cv, "gate", "s1", "--dir", d) == {
         "slate": "s1", "ok": True, "problems": [], "cutoff_seq": cutoff["seq"],
         "next": _next(cv, "converged s1 --dir {dir}")}
     rendered = _json(cv, "render", "s1", "--dir", d)
     assert rendered == {"slate": "s1", "markdown": cv.ok("render", "s1").stdout,
-                        "choices": []}
+                        "choices": [], "fix_now": [], "claims": [{"id": "F001", "trigger": "t",
+                                                   "evidence": FILE_ARGS[1], "tier": "traced"}]}
     assert "findings=1 follow-up=0 killed=0 converged=yes" in rendered["markdown"]
     assert _json(cv, "converged", "s1", "--dir", d) == {
         "converged": True, "phase": "done", "pending": [],

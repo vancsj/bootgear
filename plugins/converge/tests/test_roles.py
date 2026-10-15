@@ -7,7 +7,7 @@ from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
 
 def test_finder_cannot_cut_own_claim(cv: Converge) -> None:
     cv.ready(cut="before")
-    err = cv.cut("F001", 1, FINDER, when="before", confidence="inferred", code=2).stderr
+    err = cv.cut("F001", 1, FINDER, when="before", code=2).stderr
     assert "cut: finder filed F001 and may not cut it" in err
 
 
@@ -15,7 +15,7 @@ def test_orchestrator_never_attacks_or_cuts(cv: Converge) -> None:
     cv.ready(cut="before")
     assert ("attack: orch wrote init; the orchestrator never writes attack"
             in cv.attack("F001", BATCH_1[0], agent=MAIN))
-    err = cv.cut("F001", 1, MAIN, when="before", confidence="inferred", code=2).stderr
+    err = cv.cut("F001", 1, MAIN, when="before", code=2).stderr
     assert "the orchestrator never writes cut" in err
 
 

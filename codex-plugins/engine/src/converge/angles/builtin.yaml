@@ -60,52 +60,80 @@
   tell: the claim names a symbol, line or behaviour
   asks: Does it exist in the artifact? If not, record the attack as refuted.
 
-# evaluate: evidence for a cut field
-- id: entry-points
-  tag: evaluate
-  field: frequency
-  tell: the claim has a trigger path
-  asks: Which entry points reach the trigger? Cite the path.
-- id: call-site-count
-  tag: evaluate
-  field: frequency
-  tell: the trigger is a function or value with callers
-  asks: How many call sites reach it? Give the count and the search.
-- id: prod-traffic
-  tag: evaluate
-  field: frequency
-  tell: production data or metrics are available
-  asks: How often does the trigger happen in production? Quote the query output.
+# evaluate: evidence for a cut field; `values` holds the test for each value of the field
 - id: blast-radius
   tag: evaluate
-  field: severity
+  field: impact
   tell: the effect reaches users or data
   asks: What is the effect per user or per record, and how many are affected?
+  values:
+    security: a path from input an unauthorised caller controls to a resource they may not read, change or run
 - id: reversibility
   tag: evaluate
-  field: severity
+  field: impact
   tell: the effect is stored or shown
   asks: Is the damage stored (hard to reverse) or only shown (gone on the next read)?
+  values:
+    data-loss: stored data is lost or overwritten and the same store cannot restore it
 - id: who-notices
   tag: evaluate
-  field: severity
+  field: impact
   tell: the effect is observable
   asks: Who notices — the user, an operator, nobody until later?
-- id: evidence-tier
+  values:
+    wrong-output: a documented caller receives a wrong result and no stored data changes
+    clarity: the artifact's text reads two ways or omits a statement the work needs, and the code returns no wrong result
+    cosmetic: no result, caller decision or reader decision changes
+- id: affected-count
   tag: evaluate
-  field: confidence
-  tell: the claim has supporting evidence
-  asks: Is it reproduced (output shown), traced (lines read) or inferred?
-- id: independent-confirmations
+  field: size
+  tell: the effect reaches users or stored records
+  asks: >-
+    How many distinct users or stored records get a changed result? Count them from the
+    quoted blast-radius evidence (in a spec lens, the artifact statements that depend on the
+    changed statement).
+  values:
+    many: the count is at least 2
+    one: the count is at most 1 (a count of 0 is one)
+- id: entry-points
   tag: evaluate
-  field: confidence
-  tell: more than one agent checked it
-  asks: How many independent checks confirm it?
+  field: reach
+  tell: the claim has a trigger path
+  asks: Which entry points reach the trigger? Cite the path.
+  values:
+    normal: a documented caller with valid input reaches the trigger through a cited entry point
+    unreachable: no cited entry point reaches the trigger
+- id: crafted-only
+  tag: evaluate
+  field: reach
+  tell: the trigger needs unusual input
+  asks: Does the trigger need input no documented caller produces? Cite the input path an attacker controls.
+  values:
+    crafted: the trigger needs input no documented caller produces but an attacker can supply, with the input path cited
+- id: call-site-count
+  tag: evaluate
+  field: rate
+  tell: the trigger is a function or value with callers
+  asks: How many call sites reach it? Give the count and quote the search.
+- id: prod-traffic
+  tag: evaluate
+  field: rate
+  tell: production data or metrics are available
+  asks: How many production queries reach the trigger? Give the count and quote the query output.
 - id: files-touched
   tag: evaluate
   field: difficulty
   tell: a fix changes code
-  asks: Which files does the fix touch?
+  asks: >-
+    Which files does the fix touch? Check it against (1) one non-test file; (2) at most 10
+    changed lines; (3) no caller change (no signature, output format or config key); (4) no
+    data or interface migration; (5) at most one test file edited or added; (6) one reasonable
+    fix, shown by the finder's accept of the after-cut round.
+  values:
+    redesign: fails 6, whatever else fails
+    cross-cutting: otherwise, fails any of 1, 2, 3, 4 or 5; no patch means cross-cutting
+    trivial: otherwise, passes 1-6 with at most 3 changed lines
+    local: otherwise, passes 1-6
 - id: callers-affected
   tag: evaluate
   field: difficulty

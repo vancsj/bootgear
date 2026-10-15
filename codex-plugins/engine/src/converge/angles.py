@@ -19,7 +19,9 @@ BUILTIN = Path(__file__).resolve().parent / "angles" / "builtin.yaml"
 TAGS = ("find", "attack", "evaluate", "decide")
 KEY_RE = re.compile(r"\A[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 REQUIRED = ("id", "tag", "tell", "asks")
-OPTIONAL = ("field", "lens", "cost")
+OPTIONAL = ("field", "lens", "cost", "values")
+# Fields an evaluate angle collects evidence for.
+FIELDS = (*model.CUT_FIELDS, *model.AFTER_FIELDS)
 
 
 class AngleError(Exception):
@@ -55,12 +57,48 @@ def validate_rows(rows: Any, label: str) -> list[str]:
         if "field" in row:
             if tag != "evaluate":
                 problems.append(f"{at}: `field` is only for evaluate angles")
-            elif row["field"] not in model.CUT_FIELDS:
-                problems.append(f"{at}: field must be one of {', '.join(model.CUT_FIELDS)}")
+            elif row["field"] not in FIELDS:
+                problems.append(f"{at}: field must be one of {', '.join(FIELDS)}")
+        if "values" in row:
+            _values(row, at, problems)
         if isinstance(angle_id, str) and isinstance(tag, str):
             if (tag, angle_id) in seen:
                 problems.append(f"{at}: duplicate {tag} angle id {angle_id!r}")
             seen.add((tag, angle_id))
+    return problems
+
+
+def _values(row: dict[str, Any], at: str, problems: list[str]) -> None:
+    """`values` maps each value of the angle's enum field it tests to its test text."""
+    enum = model.FIELD_ENUMS.get(row.get("field", "")) if row.get("tag") == "evaluate" else None
+    if enum is None:
+        problems.append(f"{at}: `values` is only for evaluate angles of "
+                        f"{', '.join(model.FIELD_ENUMS)}")
+        return
+    values = row["values"]
+    if not isinstance(values, dict) or not values:
+        problems.append(f"{at}: `values` must map values to their test text")
+        return
+    for value, test in values.items():
+        if value not in enum:
+            problems.append(f"{at}: `values` key {value!r} is not a value of {row['field']} "
+                            f"(allowed: {', '.join(enum)})")
+        elif not (isinstance(test, str) and test.strip()):
+            problems.append(f"{at}: `values.{value}` must be a non-empty string")
+
+
+def value_gaps(rows: list[dict[str, Any]]) -> list[str]:
+    """Each enum field with a value that no evaluate angle of that field gives a test for."""
+    tested: dict[str, set[str]] = {name: set() for name in model.FIELD_ENUMS}
+    for row in rows:
+        if row["tag"] == "evaluate" and row.get("field") in tested:
+            tested[row["field"]].update(row.get("values", {}))
+    problems = []
+    for name, enum in model.FIELD_ENUMS.items():
+        missing = [value for value in enum if value not in tested[name]]
+        if missing:
+            problems.append(f"evaluate angles of field {name} give no test for "
+                            f"{', '.join(missing)}")
     return problems
 
 
@@ -109,4 +147,8 @@ def resolve(files: list[Path], config: dict[str, Any] | None = None,
     if problems:
         raise AngleError(problems)
     disabled = set(angles_cfg.get("disable", []))
-    return [row for row in rows if row["id"] not in disabled]
+    rows = [row for row in rows if row["id"] not in disabled]
+    gaps = value_gaps(rows)
+    if gaps:
+        raise AngleError(gaps)
+    return rows

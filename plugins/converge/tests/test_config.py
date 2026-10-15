@@ -43,15 +43,15 @@ def test_defaults(cv: Converge) -> None:
     assert eff["caps"] == DEFAULT_CAPS
     assert eff["steps"] == {"escalate": True, "gap_hunt": True, "cut": "both"}
     assert eff["angles"] == {"files": [], "disable": []}
-    assert eff["cutoff"]["report_if"][0] == {"severity": ["security", "data-loss"],
-                                             "frequency": ["every-call", "common", "rare"]}
-    assert eff["cutoff"]["report_if"][2] == {
-        "confidence": ["reproduced"],
-        "severity": ["security", "data-loss", "wrong-behavior", "degraded"],
-        "frequency": ["every-call", "common", "rare"]}
-    assert eff["cutoff"]["report_if_gap_hunt"] == [
-        {"frequency": ["every-call", "common"]},
-        {"frequency": ["rare"], "severity": ["security", "data-loss"]}]
+    assert set(eff["cutoff"]) == {"report_rules", "lenses", "rereview", "cheap"}
+    assert eff["cutoff"]["lenses"] == {"default": {
+        "attack_if": [{"reach": ["normal", "crafted"],
+                       "impact": ["security", "data-loss", "wrong-output"]},
+                      {"reach": ["normal", "crafted"], "tier": ["reproduced"]}],
+        "report_if": [{"status": ["survived", "disputed"], "reach": ["normal", "crafted"],
+                       "impact": ["security", "data-loss", "wrong-output"]}],
+        "choice_if": []}}
+    assert eff["cutoff"]["rereview"] == {"lenses": {}}
     assert eff["cutoff"]["report_rules"] == []
     assert "CONFIG valid" in cv("config", "validate", "--project-root", str(cv.project)).stdout
 
@@ -65,13 +65,13 @@ def test_layers_merge_later_wins(cv: Converge) -> None:
     (project_cfg / "converge.yaml").write_text("caps: {per_lens: {security: 2}}\n")
     task = cv.root / "task.yaml"
     task.write_text("caps: {angles_per_claim: 2}\nsteps: {cut: after, escalate: false}\n"
-                    "cutoff: {report_if: [{severity: [security]}]}\n")
+                    "cutoff: {lenses: {security: {report_if: [{impact: [security]}]}}}\n")
     eff = _effective(cv, "--config", str(task))
     assert eff["caps"] == {"cut_rounds": 4, "per_lens": {"default": 5, "security": 2},
                            "agents": 5, "angles_per_claim": 2, "batch_items": 30}
     assert eff["steps"] == {"escalate": False, "gap_hunt": True, "cut": "after"}
-    assert eff["cutoff"]["report_if"] == [{"severity": ["security"]}]
-    assert len(eff["cutoff"]["report_if_gap_hunt"]) == 2
+    assert eff["cutoff"]["lenses"]["security"] == {"report_if": [{"impact": ["security"]}]}
+    assert eff["cutoff"]["lenses"]["default"] == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
 
 
 def test_codex_host_reads_codex_user_path(cv: Converge) -> None:
@@ -103,7 +103,7 @@ def test_validate_lists_every_problem(cv: Converge) -> None:
         cv,
         "colour: blue\n"
         "caps: {cut_rounds: 0, per_lens: {default: 3}, extra: 1, agents: 6}\n"
-        "cutoff: {report_if: [{severity: [catastrophic]}, {speed: [fast]}], report_if_gap_hunt: [], "
+        "cutoff: {lenses: {default: {report_if: [{impact: [catastrophic]}, {speed: [fast]}]}}, "
         "report_rules: [R001, '']}\n"
         "angles: {files: [1], disable: [x]}\n"
         "steps: {retries: 2}\n")
@@ -225,8 +225,8 @@ def test_init_has_no_mode_or_version_option(cv: Converge) -> None:
 def test_init_snapshot_ignores_later_config_edits(cv: Converge) -> None:
     cv.ready(cut="before", claims=2, cut_rounds=1)
     (cv.root / "s1.task.yaml").write_text("caps: {cut_rounds: 5}\n")
-    cv.cut("F001", 1, when="before", confidence="inferred")
-    err = cv.cut("F001", 2, when="before", confidence="inferred", code=2).stderr
+    cv.cut("F001", 1, when="before")
+    err = cv.cut("F001", 2, when="before", code=2).stderr
     assert "cut: round 2 exceeds caps.cut_rounds 1" in err
 
 
@@ -266,3 +266,170 @@ def test_lens_cap_reads_the_per_lens_map(cv: Converge) -> None:
     assert slate.config["caps"]["per_lens"] == {"default": 50, "security": 7}
     assert slate.lens_cap("security") == 7
     assert slate.lens_cap("correctness") == 50
+
+
+# -- per-lens cutoff tables, the caller layer, `cheap` -------------------------------
+
+
+CALLER_LENSES = """\
+cutoff:
+  lenses:
+    security:
+      attack_if: [{impact: [security]}]
+      report_if: [{impact: [security], rate_at_least: 1}]
+    correctness:
+      attack_if: [{rate_at_least: 3}]
+    contract:
+      attack_if: [{reach: [normal]}]
+      choice_if: [{difficulty: [cross-cutting, redesign]}]
+  rereview:
+    lenses:
+      default:
+        report_if: [{impact: [security, data-loss]}]
+      security:
+        report_if: [{impact: [security], rate_at_least: 5}]
+      contract:
+        report_if: [{impact: [security]}]
+"""
+
+
+def _defaults_file(cv: Converge, text: str = CALLER_LENSES) -> str:
+    path = cv.root / "skill-cutoff.yaml"
+    path.write_text(text)
+    return str(path)
+
+
+def _project_layer(cv: Converge, text: str) -> None:
+    project_cfg = cv.project / ".bootgear" / "config"
+    project_cfg.mkdir(parents=True, exist_ok=True)
+    (project_cfg / "converge.yaml").write_text(text)
+
+
+def test_rate_at_least_rule() -> None:
+    rule = {"rate_at_least": 3, "impact": ["security"]}
+    assert model.rule_matches(rule, {"rate": 3, "impact": "security"})
+    assert model.rule_matches(rule, {"rate": 9, "impact": "security"})
+    assert not model.rule_matches(rule, {"rate": 2, "impact": "security"})
+    assert not model.rule_matches(rule, {"impact": "security"})
+    assert not model.rule_matches(rule, {"rate": 3, "impact": "cosmetic"})
+    assert model.rule_matches({"rate_at_least": 0}, {"rate": 0})
+    assert "rate_at_least" in model.RULE_FIELDS
+
+
+def test_rate_at_least_must_be_a_non_negative_integer(cv: Converge) -> None:
+    err = _validate(cv, "cutoff: {lenses: {default: {attack_if: [{rate_at_least: -1}], "
+                        "report_if: [{rate_at_least: '3'}], choice_if: [{rate_at_least: true}]}}}\n")
+    for got in ("-1", "'3'", "True"):
+        assert f"rate_at_least must be a non-negative integer; got {got}" in err
+    assert "CONFIG valid" in _validate(
+        cv, "cutoff: {lenses: {default: {report_if: [{rate_at_least: 3}]}}}\n", code=0)
+
+
+def test_project_layer_overrides_caller_defaults_per_lens(cv: Converge) -> None:
+    _project_layer(cv, "cutoff: {lenses: {security: {report_if: [{impact: [data-loss]}]}}}\n")
+    cv.init("s1", "correctness,security", MAIN, "--defaults", _defaults_file(cv))
+    lenses = cv.events()[0]["config"]["cutoff"]["lenses"]
+    assert lenses["security"] == {"attack_if": [{"impact": ["security"]}],
+                                  "report_if": [{"impact": ["data-loss"]}]}
+    assert lenses["correctness"] == {"attack_if": [{"rate_at_least": 3}]}
+    assert lenses["default"] == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+
+
+def test_caller_layer_sits_below_user(cv: Converge) -> None:
+    (cv.home / ".claude").mkdir()
+    (cv.home / ".claude" / "converge.yaml").write_text(
+        "cutoff: {lenses: {correctness: {attack_if: [{rate_at_least: 1}]}}}\n")
+    cv.init("s1", "correctness", MAIN, "--defaults", _defaults_file(cv))
+    lenses = cv.events()[0]["config"]["cutoff"]["lenses"]
+    assert lenses["correctness"] == {"attack_if": [{"rate_at_least": 1}]}
+    assert lenses["security"]["attack_if"] == [{"impact": ["security"]}]
+    assert config_mod.LAYER_NAMES == ("caller", "user", "project", "task")
+
+
+def test_missing_defaults_file_refused(cv: Converge) -> None:
+    err = cv.refused("init", "s1", "--as", MAIN, "--lenses", "correctness",
+                     "--project-root", str(cv.project), "--defaults", str(cv.root / "nope.yaml"))
+    assert "caller config does not exist" in err
+    assert not cv.path().exists()
+
+
+def test_lens_policy_reads_lens_else_default(cv: Converge) -> None:
+    cv.init("s1", "correctness,security", MAIN, "--defaults", _defaults_file(cv))
+    slate = ledger.read(cv.path(), "s1")
+    assert slate.lens_policy("security")["attack_if"] == [{"impact": ["security"]}]
+    assert slate.lens_policy("simplicity") == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+    assert slate.lens_policy(None) == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+
+
+def test_complete_lenses_needs_default() -> None:
+    snapshot = copy.deepcopy(config_mod.DEFAULTS)
+    snapshot["cutoff"]["lenses"] = {"security": {"attack_if": []}}
+    problems = config_mod.validate_config(snapshot, "snapshot", complete=True)
+    assert problems == ["snapshot: cutoff.lenses needs a `default` key"]
+
+
+def test_lens_tables_validate(cv: Converge) -> None:
+    err = _validate(
+        cv,
+        "cutoff:\n"
+        "  lenses: {security: {attack_if: [{speed: [fast]}], drop_if: []}, '': {}, tests: []}\n"
+        "  rereview: {lenses: {default: {report_if: {impact: [security]}}}, extra: 1}\n")
+    for fragment in ("cutoff.lenses.security.attack_if[0]: unknown field 'speed'",
+                     ("cutoff.lenses.security: unknown key 'drop_if' (allowed: attack_if, "
+                      "report_if, choice_if)"),
+                     "cutoff.lenses keys must be non-empty strings",
+                     "cutoff.lenses.tests must be a map of attack_if, report_if, choice_if",
+                     "cutoff.rereview.lenses.default.report_if must be a list of rules",
+                     "cutoff.rereview: unknown key 'extra' (allowed: lenses)"):
+        assert fragment in err, err
+
+
+def test_rereview_overlay_keeps_project_lens(cv: Converge) -> None:
+    _project_layer(cv, "cutoff: {lenses: {tests: {report_if: [{impact: [cosmetic]}]}}}\n")
+    defaults = _defaults_file(cv)
+    cv.init("s1", "correctness,security", MAIN, "--defaults", defaults, "--pass", "1")
+    first = cv.events("s1")[0]["config"]["cutoff"]["lenses"]
+    assert first["security"]["report_if"] == [{"impact": ["security"], "rate_at_least": 1}]
+    assert first["default"] == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+    cv.init("s2", "correctness,security", MAIN, "--defaults", defaults, "--pass", "2")
+    second = cv.events("s2")[0]["config"]["cutoff"]["lenses"]
+    builtin = config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+    assert second["security"] == {"attack_if": [{"impact": ["security"]}],
+                                  "report_if": [{"impact": ["security"], "rate_at_least": 5}]}
+    assert second["default"] == {**builtin, "report_if": [{"impact": ["security", "data-loss"]}]}
+    assert second["contract"] == {"attack_if": [{"reach": ["normal"]}],
+                                  "report_if": [{"impact": ["security"]}],
+                                  "choice_if": [{"difficulty": ["cross-cutting", "redesign"]}]}
+    assert second["correctness"] == {"attack_if": [{"rate_at_least": 3}]}
+    assert second["tests"] == {"report_if": [{"impact": ["cosmetic"]}]}
+
+
+def test_default_test_globs(cv: Converge) -> None:
+    cheap = _effective(cv)["cutoff"]["cheap"]
+    assert cheap == {"enabled": True, "files": 1, "lines": 10, "trivial_lines": 3, "tests": 1,
+                     "test_globs": ["**/test_*", "**/*_test.*", "**/tests/**", "**/*.test.*",
+                                    "**/*.spec.*"]}
+    _project_layer(cv, "cutoff: {cheap: {test_globs: ['spec/**'], lines: 20}}\n")
+    cheap = _effective(cv)["cutoff"]["cheap"]
+    assert cheap["test_globs"] == ["spec/**"]
+    assert cheap["lines"] == 20 and cheap["files"] == 1
+
+
+def test_old_cutoff_keys_are_refused(cv: Converge) -> None:
+    err = _validate(cv, "cutoff: {report_if: [], report_if_gap_hunt: []}\n")
+    assert ("unknown key cutoff.report_if (allowed: report_rules, lenses, rereview, cheap)"
+            in err)
+    assert "unknown key cutoff.report_if_gap_hunt" in err
+    assert not hasattr(config_mod, "REREVIEW_CUTOFF")
+
+
+def test_cheap_values_validate(cv: Converge) -> None:
+    err = _validate(cv, "cutoff: {cheap: {enabled: 'no', files: -1, lines: true, "
+                        "test_globs: ['', 3], speed: 1}}\n")
+    for fragment in ("cutoff.cheap.enabled must be true or false; got 'no'",
+                     "cutoff.cheap.files must be a non-negative integer; got -1",
+                     "cutoff.cheap.lines must be a non-negative integer; got True",
+                     "cutoff.cheap.test_globs must be a list of non-empty strings",
+                     ("cutoff.cheap: unknown key 'speed' (allowed: enabled, files, lines, "
+                      "trivial_lines, tests, test_globs)")):
+        assert fragment in err, err

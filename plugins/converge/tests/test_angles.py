@@ -1,23 +1,26 @@
 """Angle tables: built-in rows, caller files, config files/disable, validation."""
 from __future__ import annotations
 
-from conftest import Converge
+from conftest import PLUGIN_DIR, Converge
+from converge import model
 
 ATTACK = {"cited-but-unread", "point-in-time", "provenance", "reachability", "absent-vs-default",
           "downstream-consumer", "inverse-reading", "carve-out", "boundary", "dependents",
           "positive-control", "inherited-bounds", "guarded-elsewhere", "deliberate", "real-referent"}
-EVALUATE = {"entry-points": "frequency", "call-site-count": "frequency", "prod-traffic": "frequency",
-            "blast-radius": "severity", "reversibility": "severity", "who-notices": "severity",
-            "evidence-tier": "confidence", "independent-confirmations": "confidence",
+EVALUATE = {"blast-radius": "impact", "reversibility": "impact", "who-notices": "impact",
+            "affected-count": "size", "entry-points": "reach", "crafted-only": "reach",
+            "call-site-count": "rate", "prod-traffic": "rate",
             "files-touched": "difficulty", "callers-affected": "difficulty",
             "migration": "difficulty", "test-cost": "difficulty"}
+REVIEW_EVALUATE = (PLUGIN_DIR.parents[1] / "plugins" / "review" / "skills" / "review"
+                   / "references" / "evaluate-angles.yaml")
 DECIDE = {"reversibility", "blast-radius", "principle-fit", "cost-of-delay", "precedent",
           "stakeholder-view"}
 
 
 def _rows(cv: Converge, *args: str, code: int = 0) -> list[list[str]]:
     out = cv("angles", "--project-root", str(cv.project), *args, code=code).stdout
-    return [line.split(" — ")[0].split() for line in out.splitlines()]
+    return [line.split(" — ")[0].split() for line in out.splitlines() if not line.startswith(" ")]
 
 
 def test_builtin_rows(cv: Converge) -> None:
@@ -59,7 +62,7 @@ def test_row_validation_lists_every_problem(cv: Converge) -> None:
     bad = cv.root / "bad.yaml"
     bad.write_text("- {id: Bad_Id, tag: smell, tell: t, asks: a, colour: red}\n"
                    "- {id: ok-one, tag: find, tell: '', asks: a, field: severity}\n"
-                   "- {id: ev-one, tag: evaluate, tell: t, asks: a, field: speed}\n"
+                   "- {id: ev-one, tag: evaluate, tell: t, asks: a, field: severity}\n"
                    "- {tag: find}\n")
     err = cv("angles", "--project-root", str(cv.project), "--angles", str(bad), code=2).stderr
     for fragment in ("id must be kebab-case", "tag must be one of", "unknown key `colour`",
@@ -88,3 +91,77 @@ def test_init_rejects_unknown_angle_use(cv: Converge) -> None:
 def test_angle_lens_matches(cv: Converge) -> None:
     cv.init(lenses="correctness,architecture")
     assert cv.file(agent="find-architecture-1", lens="architecture", angle="god-object") == "F001"
+
+
+# -- value tests -----------------------------------------------------------------------
+
+
+def _value_lines(cv: Converge, *args: str) -> dict[str, list[str]]:
+    """Per evaluate angle, its indented `<value>: <test>` lines."""
+    out = cv("angles", "--project-root", str(cv.project), "--tag", "evaluate", *args).stdout
+    lines: dict[str, list[str]] = {}
+    current = ""
+    for line in out.splitlines():
+        if line.startswith("  "):
+            lines[current].append(line.strip())
+        else:
+            current = line.split()[1]
+            lines[current] = []
+    return lines
+
+
+def test_angles_prints_value_tests(cv: Converge) -> None:
+    lines = _value_lines(cv)
+    assert lines["blast-radius"] == [
+        ("security: a path from input an unauthorised caller controls to a resource they may "
+         "not read, change or run")]
+    assert lines["reversibility"] == [
+        "data-loss: stored data is lost or overwritten and the same store cannot restore it"]
+    assert [line.split(":")[0] for line in lines["who-notices"]] == [
+        "wrong-output", "clarity", "cosmetic"]
+    assert [line.split(":")[0] for line in lines["affected-count"]] == ["many", "one"]
+    assert [line.split(":")[0] for line in lines["entry-points"]] == ["normal", "unreachable"]
+    assert [line.split(":")[0] for line in lines["crafted-only"]] == ["crafted"]
+    assert [line.split(":")[0] for line in lines["files-touched"]] == [
+        "redesign", "cross-cutting", "trivial", "local"]
+    assert lines["call-site-count"] == [] and lines["prod-traffic"] == []
+
+
+def test_value_tests_cover_every_enum_value(cv: Converge) -> None:
+    lines = _value_lines(cv)
+    covered: dict[str, set[str]] = {}
+    for angle, field in EVALUATE.items():
+        covered.setdefault(field, set()).update(line.split(":")[0] for line in lines[angle])
+    for field, enum in model.FIELD_ENUMS.items():
+        assert covered[field] == set(enum), field
+    cfg = cv.project / ".bootgear" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "converge.yaml").write_text("angles: {disable: [who-notices, crafted-only]}\n")
+    err = cv("angles", "--project-root", str(cv.project), code=2).stderr
+    assert "evaluate angles of field impact give no test for wrong-output, clarity, cosmetic" in err
+    assert "evaluate angles of field reach give no test for crafted" in err
+
+
+def test_values_key_outside_enum_refused(cv: Converge) -> None:
+    bad = cv.root / "bad-values.yaml"
+    bad.write_text(
+        "- {id: ev-impact, tag: evaluate, field: impact, tell: t, asks: a,\n"
+        "   values: {catastrophic: t, cosmetic: ''}}\n"
+        "- {id: ev-rate, tag: evaluate, field: rate, tell: t, asks: a, values: {many: t}}\n"
+        "- {id: ev-size, tag: evaluate, field: size, tell: t, asks: a, values: [many]}\n"
+        "- {id: fd-one, tag: find, tell: t, asks: a, values: {many: t}}\n")
+    err = cv("angles", "--project-root", str(cv.project), "--angles", str(bad), code=2).stderr
+    only = "`values` is only for evaluate angles of impact, size, reach, difficulty"
+    for fragment in (("(ev-impact): `values` key 'catastrophic' is not a value of impact "
+                      "(allowed: security, data-loss, wrong-output, clarity, cosmetic)"),
+                     "(ev-impact): `values.cosmetic` must be a non-empty string",
+                     f"(ev-rate): {only}",
+                     "(ev-size): `values` must map values to their test text",
+                     f"(fd-one): {only}"):
+        assert fragment in err, err
+
+
+def test_evaluate_angle_loads_from_an_extra_file(cv: Converge) -> None:
+    rows = _rows(cv, "--tag", "evaluate", "--angles", str(REVIEW_EVALUATE))
+    assert ["evaluate", "file-churn", "field=rate", "lens=architecture"] in rows
+    assert {r[1] for r in rows} == {*EVALUATE, "file-churn"}

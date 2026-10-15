@@ -1,8 +1,9 @@
-"""Layered `converge.yaml`: built-in defaults < user < project < task.
+"""Layered `converge.yaml`: built-in defaults < caller < user < project < task.
 
 `resolve`/`_merge` are copied from engine's `config.py` (not imported: converge
-ships standalone). The user layer is `~/.claude/converge.yaml`, or
-`~/.codex/converge.yaml` when `CONVERGE_HOST=codex`.
+ships standalone). The caller layer is the file a skill passes to `init --defaults`.
+The user layer is `~/.claude/converge.yaml`, or `~/.codex/converge.yaml` when
+`CONVERGE_HOST=codex`.
 """
 from __future__ import annotations
 
@@ -16,51 +17,43 @@ import yaml
 from . import model
 
 NAME = "converge"
-LAYER_NAMES = ("user", "project", "task")
+LAYER_NAMES = ("caller", "user", "project", "task")
 
 DEFAULTS: dict[str, Any] = {
     "cutoff": {
-        "report_if": [
-            {"severity": ["security", "data-loss"], "frequency": ["every-call", "common", "rare"]},
-            {"severity": ["wrong-behavior"], "frequency": ["every-call", "common"]},
-            {"confidence": ["reproduced"],
-             "severity": ["security", "data-loss", "wrong-behavior", "degraded"],
-             "frequency": ["every-call", "common", "rare"]},
-        ],
-        "report_if_gap_hunt": [
-            {"frequency": ["every-call", "common"]},
-            {"frequency": ["rare"], "severity": ["security", "data-loss"]},
-        ],
         "report_rules": [],
+        "lenses": {"default": {
+            "attack_if": [
+                {"reach": ["normal", "crafted"], "impact": ["security", "data-loss", "wrong-output"]},
+                {"reach": ["normal", "crafted"], "tier": ["reproduced"]},
+            ],
+            "report_if": [
+                {"status": ["survived", "disputed"], "reach": ["normal", "crafted"],
+                 "impact": ["security", "data-loss", "wrong-output"]},
+            ],
+            "choice_if": [],
+        }},
+        "rereview": {"lenses": {}},
+        "cheap": {"enabled": True, "files": 1, "lines": 10, "trivial_lines": 3, "tests": 1,
+                  "test_globs": ["**/test_*", "**/*_test.*", "**/tests/**", "**/*.test.*",
+                                 "**/*.spec.*"]},
     },
     "caps": {"cut_rounds": 5, "per_lens": {"default": 50}, "agents": model.MAX_AGENTS,
              "angles_per_claim": 5, "batch_items": 30},
     "angles": {"files": [], "disable": []},
     "steps": {"escalate": True, "gap_hunt": True, "cut": "both"},
 }
-# Replaces `report_if` and `report_if_gap_hunt` for a slate started with `--pass` >= 2;
-# `report_rules` and the other sections keep their resolved values.
-REREVIEW_CUTOFF: dict[str, Any] = {
-    "report_if": [
-        {"severity": ["security", "data-loss"], "frequency": ["every-call", "common", "rare"]},
-        {"severity": ["wrong-behavior"], "frequency": ["every-call", "common"]},
-        {"confidence": ["reproduced"], "severity": ["security", "data-loss", "wrong-behavior"],
-         "frequency": ["every-call", "common", "rare"]},
-    ],
-    "report_if_gap_hunt": [
-        {"frequency": ["every-call", "common"],
-         "severity": ["security", "data-loss", "wrong-behavior"]},
-        {"frequency": ["rare"], "severity": ["security", "data-loss"]},
-    ],
-}
 SCHEMA = {
-    "cutoff": ("report_if", "report_if_gap_hunt", "report_rules"),
+    "cutoff": ("report_rules", "lenses", "rereview", "cheap"),
     "caps": ("cut_rounds", "per_lens", "agents", "angles_per_claim", "batch_items"),
     "angles": ("files", "disable"),
     "steps": ("escalate", "gap_hunt", "cut"),
 }
 # When the cutter rates: before the attack, after it, both, or never.
 CUT_MODES = ("before", "after", "both", "none")
+# The rule lists one `cutoff.lenses.<lens>` table may hold.
+LENS_KEYS = ("attack_if", "report_if", "choice_if")
+CHEAP_KEYS = ("enabled", "files", "lines", "trivial_lines", "tests", "test_globs")
 
 
 class ConfigError(Exception):
@@ -108,6 +101,10 @@ def _rules(value: Any, where: str, problems: list[str]) -> None:
             if name not in model.RULE_FIELDS:
                 problems.append(f"{at}: unknown field {name!r} (allowed: {', '.join(model.RULE_FIELDS)})")
                 continue
+            if name in model.RULE_MINIMUMS:
+                if not isinstance(allowed, int) or isinstance(allowed, bool) or allowed < 0:
+                    problems.append(f"{at}.{name} must be a non-negative integer; got {allowed!r}")
+                continue
             if not isinstance(allowed, list) or not allowed:
                 problems.append(f"{at}.{name} must be a non-empty list")
                 continue
@@ -129,6 +126,64 @@ def _per_lens(item: Any, where: str, complete: bool, problems: list[str]) -> Non
             problems.append(f"{where}.{lens} must be a positive integer; got {cap!r}")
     if complete and "default" not in item:
         problems.append(f"{where} needs a `default` key")
+
+
+def _lens_tables(item: Any, where: str, complete: bool, problems: list[str]) -> None:
+    """A map of lens -> {attack_if, report_if, choice_if}; `complete` needs `default`."""
+    if not isinstance(item, dict):
+        problems.append(f"{where} must be a map of lens -> {', '.join(LENS_KEYS)}")
+        return
+    for lens, table in item.items():
+        if not isinstance(lens, str) or not lens:
+            problems.append(f"{where} keys must be non-empty strings; got {lens!r}")
+            continue
+        if not isinstance(table, dict):
+            problems.append(f"{where}.{lens} must be a map of {', '.join(LENS_KEYS)}")
+            continue
+        for key, rules in table.items():
+            if key not in LENS_KEYS:
+                problems.append(f"{where}.{lens}: unknown key {key!r} "
+                                f"(allowed: {', '.join(LENS_KEYS)})")
+            else:
+                _rules(rules, f"{where}.{lens}.{key}", problems)
+    if complete and "default" not in item:
+        problems.append(f"{where} needs a `default` key")
+
+
+def _rereview(item: Any, where: str, complete: bool, problems: list[str]) -> None:
+    if not isinstance(item, dict):
+        problems.append(f"{where} must be a map with key `lenses`")
+        return
+    for key in item:
+        if key != "lenses":
+            problems.append(f"{where}: unknown key {key!r} (allowed: lenses)")
+    if "lenses" in item:
+        _lens_tables(item["lenses"], f"{where}.lenses", False, problems)
+    elif complete:
+        problems.append(f"{where}.lenses is missing")
+
+
+def _cheap(item: Any, where: str, complete: bool, problems: list[str]) -> None:
+    if not isinstance(item, dict):
+        problems.append(f"{where} must be a map of {', '.join(CHEAP_KEYS)}")
+        return
+    for key in item:
+        if key not in CHEAP_KEYS:
+            problems.append(f"{where}: unknown key {key!r} (allowed: {', '.join(CHEAP_KEYS)})")
+    for key in CHEAP_KEYS:
+        if key not in item:
+            if complete:
+                problems.append(f"{where}.{key} is missing")
+            continue
+        value = item[key]
+        if key == "enabled":
+            if not isinstance(value, bool):
+                problems.append(f"{where}.{key} must be true or false; got {value!r}")
+        elif key == "test_globs":
+            if not isinstance(value, list) or not all(isinstance(x, str) and x for x in value):
+                problems.append(f"{where}.{key} must be a list of non-empty strings")
+        elif not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            problems.append(f"{where}.{key} must be a non-negative integer; got {value!r}")
 
 
 def validate_config(value: Any, label: str, complete: bool = False) -> list[str]:
@@ -158,8 +213,12 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
                     problems.append(f"{where} is missing")
                 continue
             item = body[key]
-            if section == "cutoff" and key != "report_rules":
-                _rules(item, where, problems)
+            if section == "cutoff" and key == "lenses":
+                _lens_tables(item, where, complete, problems)
+            elif section == "cutoff" and key == "rereview":
+                _rereview(item, where, complete, problems)
+            elif section == "cutoff" and key == "cheap":
+                _cheap(item, where, complete, problems)
             elif section == "caps" and key == "per_lens":
                 _per_lens(item, where, complete, problems)
             elif section == "caps":
@@ -179,10 +238,12 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
     return problems
 
 
-def resolve(project_root: Path, task_path: Path | None) -> dict[str, Any]:
+def resolve(project_root: Path, task_path: Path | None,
+            caller_path: Path | None = None) -> dict[str, Any]:
     """Merge the layers onto the defaults; raise ConfigError listing every problem."""
     project_root = project_root.expanduser().resolve()
     paths: dict[str, Path | None] = {
+        "caller": caller_path.expanduser() if caller_path else None,
         "user": user_path(),
         "project": project_root / ".bootgear" / "config" / f"{NAME}.yaml",
         "task": task_path.expanduser() if task_path else None,
@@ -195,8 +256,8 @@ def resolve(project_root: Path, task_path: Path | None) -> dict[str, Any]:
         if path is None:
             sources.append({"layer": layer, "path": "<none>", "present": False})
             continue
-        if layer == "task" and not path.is_file():
-            problems.append(f"task config does not exist: {path}")
+        if layer in ("caller", "task") and not path.is_file():
+            problems.append(f"{layer} config does not exist: {path}")
             sources.append({"layer": layer, "path": str(path), "present": False})
             continue
         try:
@@ -214,3 +275,15 @@ def resolve(project_root: Path, task_path: Path | None) -> dict[str, Any]:
     if problems:
         raise ConfigError(problems)
     return {"project_root": str(project_root), "sources": sources, "effective": effective}
+
+
+def rereview(effective: dict[str, Any]) -> dict[str, Any]:
+    """`effective` with `cutoff.rereview.lenses` laid over `cutoff.lenses`: for each lens it
+    names, the rule lists it gives replace that lens's, and the lens keeps its other lists. A
+    lens with no table of its own starts from `default`."""
+    cutoff = effective["cutoff"]
+    lenses = copy.deepcopy(cutoff["lenses"])
+    for lens, overlay in cutoff["rereview"]["lenses"].items():
+        base = cutoff["lenses"].get(lens, cutoff["lenses"]["default"])
+        lenses[lens] = {**copy.deepcopy(base), **copy.deepcopy(overlay)}
+    return {**effective, "cutoff": {**cutoff, "lenses": lenses}}

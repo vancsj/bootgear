@@ -1,14 +1,18 @@
 """Every slate command through the CLI, with its printed lines and its `next:` step."""
 from __future__ import annotations
 
+import json
 import shlex
 from typing import Any
 
 from conftest import (
     BATCH_1,
+    CHOICE,
     CUT_EVIDENCE,
     CUTTER,
     DISABLED,
+    FILE_ARGS,
+    FILE_EVIDENCE,
     FINDER,
     MAIN,
     R1,
@@ -38,11 +42,11 @@ def _attack(cv: Converge, angle: str, *extra: str, agent: str = R1, batch: Any =
                          code=code)
 
 
-def _cut(cv: Converge, claim: str, when: str, frequency: str, severity: str,
-         confidence: str, difficulty: str) -> list[str]:
+def _cut(cv: Converge, claim: str, when: str, impact: str) -> list[str]:
+    after = ("--difficulty", "cross-cutting", "--choice", CHOICE) if when == "after" else ()
     return _lines(cv, "cut", "s1", "--as", CUTTER, "--claim", claim, "--when", when,
-                  "--round", "1", "--frequency", frequency, "--severity", severity,
-                  "--confidence", confidence, "--difficulty", difficulty, *CUT_EVIDENCE)
+                  "--round", "1", "--impact", impact, "--size", "one", "--reach", "normal",
+                  *after, *CUT_EVIDENCE)
 
 
 def _accept(cv: Converge, claim: str, when: str) -> list[str]:
@@ -62,9 +66,9 @@ def _to_attack(cv: Converge) -> None:
     cv.cover()
     for claim in ("F001", "F002"):
         cv.ok("escalate", "s1", "--as", FINDER, "--claim", claim)
-    _cut(cv, "F001", "before", "common", "wrong-behavior", "inferred", "local")
+    _cut(cv, "F001", "before", "wrong-output")
     _accept(cv, "F001", "before")
-    _cut(cv, "F002", "before", "rare", "cosmetic", "inferred", "trivial")
+    _cut(cv, "F002", "before", "cosmetic")
     _accept(cv, "F002", "before")
 
 
@@ -77,7 +81,7 @@ def test_find_commands_print_the_finder_step(cv: Converge) -> None:
         cv, "coverage s1 --dir {dir}")
     out = _lines(cv, "file", "s1", "--as", FINDER, "--lens", "correctness",
                  "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
-                 "--claim", "c", "--trigger", "t")
+                 "--claim", "c", "--trigger", "t", *FILE_ARGS)
     assert out == ["FILED F001", find]
     out = _lines(cv, "find-run", "s1", "--as", FINDER, "--lens", "correctness",
                  "--angle", "changed-contract", "--tell", "t", "--searches", "s",
@@ -98,7 +102,7 @@ def test_escalate_and_cut_before_print_the_plan_step(cv: Converge) -> None:
     out = _lines(cv, "escalate", "s1", "--as", FINDER, "--claim", "F002")
     assert out[0].endswith(" F002 wider=no")
     assert out[1] == f"next: cut-before: cutter cut-before F001, F002; plan: {_plan(cv)}"
-    out = _cut(cv, "F001", "before", "common", "wrong-behavior", "inferred", "local")
+    out = _cut(cv, "F001", "before", "wrong-output")
     assert out == [f"CUT seq={_seq(out)} F001 when=before round=1",
                    (f"next: cut-before: finder accept F001; cutter cut-before F002; "
                    f"plan: {_plan(cv)}")]
@@ -113,7 +117,7 @@ def test_cut_before_leads_to_the_attack(cv: Converge) -> None:
     cv.file()
     cv.cover()
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
-    _cut(cv, "F001", "before", "common", "wrong-behavior", "inferred", "local")
+    _cut(cv, "F001", "before", "wrong-output")
     out = _accept(cv, "F001", "before")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=before round=1",
                    f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
@@ -192,6 +196,27 @@ def test_decline_kills_the_claim(cv: Converge) -> None:
 # -- status ------------------------------------------------------------------------
 
 
+def test_status_emits_trigger_evidence_tier(cv: Converge) -> None:
+    cv.init(config=TASK)
+    cv.file(claim="None crashes the parser", evidence="pytest -k parse: TypeError at a.py:10",
+            tier="reproduced")
+    cv.file(claim="log line typo", tier="inferred")
+    claims = cv.status()["by_id"]
+    assert {key: claims["F001"][key] for key in ("loc", "trigger", "evidence", "tier")} == {
+        "loc": "src/a.py:10", "trigger": "caller passes None",
+        "evidence": "pytest -k parse: TypeError at a.py:10", "tier": "reproduced"}
+    assert (claims["F002"]["evidence"], claims["F002"]["tier"]) == (FILE_EVIDENCE, "inferred")
+    out = _lines(cv, "status", "s1")
+    assert " tier=reproduced " in out[1] and out[1].startswith("F001 ")
+    assert " tier=inferred " in out[2] and out[2].startswith("F002 ")
+    rendered = json.loads(cv.ok("render", "s1", "--json").stdout)
+    assert rendered["claims"] == [
+        {"id": "F001", "trigger": "caller passes None",
+         "evidence": "pytest -k parse: TypeError at a.py:10", "tier": "reproduced"},
+        {"id": "F002", "trigger": "caller passes None", "evidence": FILE_EVIDENCE,
+         "tier": "inferred"}]
+
+
 def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
     _to_attack(cv)
     _attack(cv, BATCH_1[0])
@@ -199,9 +224,9 @@ def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
     assert out[0] == ("SLATE s1 lenses=correctness,security phase=attack cutoff=none claims=2 "
                       "agents=4/5 advisor=-")
     assert out[1:] == [
-        (f"F001 status=survived cut=no batch=1 batch_state=open escalated=yes "
+        (f"F001 status=survived cut=no tier=traced batch=1 batch_state=open escalated=yes "
         f"fixed_remaining={','.join(BATCH_1[1:])}"),
-        ("F002 status=unverified cut=yes batch=- batch_state=- escalated=yes "
+        ("F002 status=unverified cut=yes tier=traced batch=- batch_state=- escalated=yes "
         f"fixed_remaining={','.join(BATCH_1)}"),
         "ADHOC -",
         f"PLAN 1 F001 attack r1 batch=1 angles={','.join(BATCH_1[1:])}",
@@ -280,7 +305,7 @@ def _to_cutoff(cv: Converge) -> None:
     for angle in BATCH_1:
         _attack(cv, angle)
     _attack(cv, "retry timing", "--last", agent=R2, batch="fresh-eye")
-    _cut(cv, "F001", "after", "common", "wrong-behavior", "traced", "local")
+    _cut(cv, "F001", "after", "wrong-output")
 
 
 def test_cut_after_accept_names_the_cutoff(cv: Converge) -> None:
@@ -307,8 +332,8 @@ def test_cutoff_gate_render_converged(cv: Converge) -> None:
         cutoff_step]
     out = _lines(cv, "cutoff", "s1")
     seq = out[0].split()[1].removeprefix("seq=")
-    assert out == [f"CUTOFF seq={seq} findings=1 follow-up=1 killed=0",
-                   "F001 finding status=survived cut=no rank=1 reason=report_if[1]",
+    assert out == [f"CUTOFF seq={seq} fix-now=0 fixed=0 findings=1 follow-up=1 killed=0",
+                   "F001 finding status=survived cut=no rank=1 reason=report_if[0]",
                    "F002 follow-up status=unverified cut=yes rank=2 reason=unverified",
                    "next: " + _cmd(cv, "render s1 --dir {dir}")]
     assert _lines(cv, "cutoff", "s1") == out
@@ -335,7 +360,7 @@ def test_converged_lists_the_disputed_findings(cv: Converge) -> None:
         "OPEN phase=attack claims=1", "F001 open in attack",
         f"next: attack: r2 attack F001 batch fresh-eye; plan: {_plan(cv)}"]
     cv.fresh_eye()
-    cv.rate(frequency="common", severity="security")
+    cv.rate(impact="security")
     cv.ok("cutoff", "s1")
     assert _lines(cv, "converged", "s1", code=1) == [
         "OPEN phase=done claims=1", "F001 disputed cut=no",

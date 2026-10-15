@@ -1,0 +1,5 @@
+{"id": "F001", "claim": "claim F001", "lens": "contract", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 5}
+{"id": "F002", "claim": "claim F002", "lens": "correctness", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 1}
+{"id": "F003", "claim": "claim F003", "lens": "architecture", "origin": "lens", "tier": "traced", "impact": "wrong-output", "size": "one", "reach": "crafted", "rate": 0}
+{"id": "F004", "claim": "claim F004", "lens": "contract", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "crafted", "rate": 0}
+{"id": "F005", "claim": "claim F005", "lens": "contract", "origin": "gap-hunt", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 1}

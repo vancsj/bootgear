@@ -12,26 +12,40 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .protocol import ClaimState
 
-FREQUENCY = ("every-call", "common", "rare", "contrived")
-SEVERITY = ("security", "data-loss", "wrong-behavior", "degraded", "cosmetic")
-CONFIDENCE = ("reproduced", "traced", "inferred")
+IMPACT = ("security", "data-loss", "wrong-output", "clarity", "cosmetic")
+SIZE = ("many", "one")
+REACH = ("normal", "crafted", "unreachable")
+# The finder's evidence basis for a filed claim.
+TIER = ("reproduced", "traced", "inferred")
 DIFFICULTY = ("trivial", "local", "cross-cutting", "redesign")
+# A live claim's status as gate 2 reads it.
+STATUS = ("survived", "disputed")
+RESULT = ("fix-now", "fixed", "finding", "follow-up", "killed")
 # The phases an `angle-na` event is recorded in.
 PHASE = ("find", "attack")
 ORIGIN = ("lens", "gap-hunt")
 EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "attack", "reply", "verdict", "cut",
-          "rebut", "accept", "cutoff")
+          "rebut", "accept", "cutoff", "fix-check")
 
-CUT_FIELDS = ("frequency", "severity", "confidence", "difficulty")
+# Every cut rates these; `rate` is an integer `>= 0`. An after cut also rates `AFTER_FIELDS`.
+CUT_FIELDS = ("impact", "size", "reach", "rate")
+AFTER_FIELDS = ("difficulty",)
+# The enum-valued cut fields; an evaluate angle of one of them carries a test per value.
 FIELD_ENUMS: dict[str, tuple[str, ...]] = {
-    "frequency": FREQUENCY,
-    "severity": SEVERITY,
-    "confidence": CONFIDENCE,
+    "impact": IMPACT,
+    "size": SIZE,
+    "reach": REACH,
     "difficulty": DIFFICULTY,
 }
+# Numeric rule keys: each holds an integer and matches when the named value is at least it.
+RULE_MINIMUMS = {"rate_at_least": "rate"}
 # Fields a cutoff rule may constrain; `lens` values are free-form.
-RULE_FIELDS: dict[str, tuple[str, ...] | None] = {**FIELD_ENUMS, "origin": ORIGIN, "lens": None}
+RULE_FIELDS: dict[str, tuple[str, ...] | None] = {
+    **FIELD_ENUMS, "tier": TIER, "status": STATUS, "origin": ORIGIN, "lens": None,
+    **dict.fromkeys(RULE_MINIMUMS)}
 CHOICE_DIFFICULTY = ("cross-cutting", "redesign")
+# The difficulty classes of a cheap fix (checks 1-6).
+CHEAP_DIFFICULTY = ("trivial", "local")
 
 ID_RE = re.compile(r"\A[a-z0-9][a-z0-9._-]{0,80}\Z")
 CLAIM_RE = re.compile(r"\AF\d{3,}\Z")
@@ -57,6 +71,8 @@ class Claim:
     loc: str
     original: str
     trigger: str
+    evidence: str
+    tier: str
     origin: str
     depends: list[str]
     rule: str | None
@@ -64,6 +80,8 @@ class Claim:
     state: ClaimState
     text: str = ""
     escalation: dict[str, Any] | None = None
+    # The `fix-check` event recorded for the claim's applied fix, if any.
+    fix_check: dict[str, Any] | None = None
     used_angles: set[str] = field(default_factory=set)
     # Attack angles a refuter recorded as not applicable to this claim, with the reason.
     na_angles: set[str] = field(default_factory=set)
@@ -81,6 +99,8 @@ class Slate:
     angles: list[dict[str, Any]] = field(default_factory=list)
     config: dict[str, Any] = field(default_factory=dict)
     snapshot: str | None = None
+    # The init's resolved --project-root, against which patch and loc paths resolve.
+    project_root: str | None = None
     review_pass: int | None = None
     since: dict[str, str] | None = None
     # Seat -> mechanism from init; a seat not recorded is native_subagent.
@@ -109,6 +129,17 @@ class Slate:
         """The `caps.per_lens` entry for `lens`, else its `default`."""
         per_lens = self.config["caps"]["per_lens"]
         return int(per_lens[lens] if lens in per_lens else per_lens["default"])
+
+    def lens_policy(self, lens: str | None) -> dict[str, Any]:
+        """The `cutoff.lenses` table for `lens`, else its `default`."""
+        lenses = self.config["cutoff"]["lenses"]
+        return lenses[lens] if lens in lenses else lenses["default"]
+
+    def counts_rate(self, lens: str | None) -> bool:
+        """The lens policy has a `rate_at_least` rule, so its cuts must give `rate`."""
+        policy = self.lens_policy(lens)
+        return any(name in RULE_MINIMUMS for key in ("attack_if", "report_if", "choice_if")
+                   for rule in policy.get(key, []) for name in rule)
 
     def angle(self, tag: str, angle_id: str) -> dict[str, Any] | None:
         for row in self.angles:
@@ -155,23 +186,36 @@ def delta_command(slate: Slate) -> str | None:
     return f"git diff {slate.since['snapshot']} {slate.snapshot}"
 
 
-def rating_key(rating: dict[str, Any] | None, claim_id: str) -> tuple[int, int, int, int]:
-    """Severity, then frequency, then confidence, then claim id; unrated claims last."""
+def rating_key(rating: dict[str, Any] | None, tier: str,
+               claim_id: str) -> tuple[int, int, int, int, int, int]:
+    """Impact, reach, size, rate descending, the finder's tier, then claim id; unrated
+    claims last."""
     cut = rating or {}
     return (
-        SEVERITY.index(cut["severity"]) if "severity" in cut else len(SEVERITY),
-        FREQUENCY.index(cut["frequency"]) if "frequency" in cut else len(FREQUENCY),
-        CONFIDENCE.index(cut["confidence"]) if "confidence" in cut else len(CONFIDENCE),
+        IMPACT.index(cut["impact"]) if "impact" in cut else len(IMPACT),
+        REACH.index(cut["reach"]) if "reach" in cut else len(REACH),
+        SIZE.index(cut["size"]) if "size" in cut else len(SIZE),
+        -int(cut.get("rate", 0)),
+        TIER.index(tier),
         int(claim_id[1:]),
     )
 
 
-def rank_key(claim: Claim) -> tuple[int, int, int, int]:
-    return rating_key(claim.state.rating, claim.id)
+def rank_key(claim: Claim) -> tuple[int, int, int, int, int, int]:
+    return rating_key(claim.state.rating, claim.tier, claim.id)
 
 
-def rule_matches(rule: dict[str, list[str]], values: dict[str, str | None]) -> bool:
-    return all(values.get(name) in allowed for name, allowed in rule.items())
+def rule_matches(rule: dict[str, Any], values: dict[str, Any]) -> bool:
+    """Every key holds: set membership, or for a `RULE_MINIMUMS` key a present value at least
+    the rule's integer."""
+    for name, allowed in rule.items():
+        if name in RULE_MINIMUMS:
+            value = values.get(RULE_MINIMUMS[name])
+            if not isinstance(value, int) or value < allowed:
+                return False
+        elif values.get(name) not in allowed:
+            return False
+    return True
 
 
 @dataclass

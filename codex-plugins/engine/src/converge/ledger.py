@@ -22,7 +22,7 @@ DEFAULT_DIR = Path("~/.bootgear/converge")
 
 REQUIRED: dict[str, tuple[str, ...]] = {
     "init": ("lenses", "angles", "config", "refuters"),
-    "file": ("id", "loc", "claim", "trigger", "origin"),
+    "file": ("id", "loc", "claim", "trigger", "evidence", "tier", "origin"),
     "escalate": ("claim",),
     "find-run": ("lens", "angle", "tell", "searches", "positive_control", "result"),
     "angle-na": ("phase", "angle", "reason"),
@@ -30,13 +30,14 @@ REQUIRED: dict[str, tuple[str, ...]] = {
                "positive_control"),
     "reply": ("claim", "batch", "stance"),
     "verdict": ("claim", "batch", "verdict"),
-    "cut": ("claim", "when", "round", *model.CUT_FIELDS, "evidence"),
+    "cut": ("claim", "when", "round", "impact", "size", "reach", "evidence"),
     "rebut": ("claim", "when", "evidence", "evidence_sha256"),
     "accept": ("claim", "when", "round"),
     "cutoff": ("results",),
+    "fix-check": ("claim", "outcome", "evidence"),
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
-    "init": ("snapshot", "pass", "since", "seats", "advisor"),
+    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root"),
     "file": ("lens", "angle", "depends", "rule"),
     "escalate": ("wider", "evidence"),
     "find-run": (),
@@ -44,10 +45,11 @@ OPTIONAL: dict[str, tuple[str, ...]] = {
     "attack": ("last",),
     "reply": ("evidence", "evidence_sha256", "text"),
     "verdict": ("evidence",),
-    "cut": ("choice", "fix"),
+    "cut": ("rate", "difficulty", "patch", "callers", "migration", "choice"),
     "rebut": (),
     "accept": (),
     "cutoff": (),
+    "fix-check": ("review_slate",),
 }
 ENVELOPE = ("seq", "ts", "event", "as")
 
@@ -222,6 +224,10 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
         problems.append(f"`refuters` must be 1 or 2; got {refuters!r}")
     problems.extend(f"config snapshot: {p}"
                     for p in validate_config(event.get("config"), "snapshot", complete=True))
+    if "project_root" in event:
+        root = event["project_root"]
+        if not (isinstance(root, str) and root.startswith("/")):
+            problems.append(f"`project_root` must be an absolute path; got {root!r}")
     if "pass" in event:
         value = event["pass"]
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
@@ -289,6 +295,7 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.config = event["config"]
     slate.init_refuters = event["refuters"]
     slate.snapshot = event.get("snapshot")
+    slate.project_root = event.get("project_root")
     slate.review_pass = event.get("pass")
     slate.since = event.get("since")
     slate.seats = event.get("seats") or {}

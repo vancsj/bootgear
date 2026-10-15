@@ -5,8 +5,10 @@ import json
 import subprocess
 
 from conftest import Converge
+from converge import config as config_mod
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+STRICT = [{"impact": ["security"]}]
 
 
 def git(cv: Converge, *args: str, check: bool = True) -> str:
@@ -30,6 +32,14 @@ def init_args(cv: Converge, slate: str, *extra: str) -> list[str]:
     return ["init", slate, "--dir", str(cv.dir), "--as", "orch",
             "--lenses", "correctness", "--project-root", str(cv.project),
             "--angles", str(cv.angles), *extra]
+
+
+def rereview_layer(cv: Converge, extra: str = "") -> str:
+    """A task layer whose pass-2 overlay makes the default lens report security only."""
+    path = cv.root / "rereview.yaml"
+    path.write_text("cutoff: {rereview: {lenses: {default: {report_if: [{impact: [security]}]}}}"
+                    f"{extra}}}\n")
+    return str(path)
 
 
 def ref(cv: Converge, slate: str) -> str | None:
@@ -146,13 +156,13 @@ def test_since_prints_the_delta_and_uses_the_rereview_cutoff(cv: Converge) -> No
     repo(cv)
     cv(*init_args(cv, "s1", "--snapshot", "--pass", "1"))
     (cv.project / "a.py").write_text("x = 4\n")
-    out = cv(*init_args(cv, "s2", "--snapshot", "--pass", "2", "--since", "s1")).stdout
+    out = cv(*init_args(cv, "s2", "--snapshot", "--pass", "2", "--since", "s1",
+                        "--config", rereview_layer(cv))).stdout
     prev, this = pinned(cv, "s1"), pinned(cv, "s2")
     assert f"DIFF since s1: git diff {prev} {this}" in out
     event = init_event(cv, "s2")
     assert event["since"] == {"slate": "s1", "snapshot": prev}
-    assert event["config"]["cutoff"]["report_if"][2]["severity"] == [
-        "security", "data-loss", "wrong-behavior"]
+    assert event["config"]["cutoff"]["lenses"]["default"]["report_if"] == STRICT
     render = cv.ok("render", "s2").stdout
     assert f"pass: 2 · snapshot: {this}" in render
     assert f"delta since `s1`: `git diff {prev} {this}`" in render
@@ -166,19 +176,17 @@ def test_pass_must_be_positive(cv: Converge) -> None:
 
 
 def test_first_pass_keeps_the_default_cutoff(cv: Converge) -> None:
-    cv(*init_args(cv, "s1", "--pass", "1"))
+    cv(*init_args(cv, "s1", "--pass", "1", "--config", rereview_layer(cv)))
     event = init_event(cv, "s1")
     assert event["pass"] == 1
-    assert event["config"]["cutoff"]["report_if"][2]["severity"][-1] == "degraded"
+    assert event["config"]["cutoff"]["lenses"] == config_mod.DEFAULTS["cutoff"]["lenses"]
 
 
 def test_rereview_pass_keeps_report_rules(cv: Converge) -> None:
-    task = cv.root / "task.yaml"
-    task.write_text("cutoff: {report_rules: [R002]}\n")
-    cv(*init_args(cv, "s1", "--pass", "2", "--config", str(task)))
+    cv(*init_args(cv, "s1", "--pass", "2", "--config", rereview_layer(cv, ", report_rules: [R002]")))
     cutoff = init_event(cv, "s1")["config"]["cutoff"]
     assert cutoff["report_rules"] == ["R002"]
-    assert cutoff["report_if"][2]["severity"] == ["security", "data-loss", "wrong-behavior"]
+    assert cutoff["lenses"]["default"]["report_if"] == STRICT
 
 
 def test_since_refusals_name_the_failed_check(cv: Converge) -> None:

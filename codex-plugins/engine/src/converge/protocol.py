@@ -6,11 +6,11 @@ to `apply_event`.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-from . import ledger, model
+from . import effort, ledger, model
 from .model import Claim, Slate
 
 FRESH_EYE = "fresh-eye"
@@ -22,7 +22,10 @@ STANCE = ("rebut", "decline")
 VERDICT = ("agree", "disagree")
 # Status ratchet, worst last; `unverified` is outside it.
 STATUS_ORDER = ("survived", "disputed", "killed")
-BEFORE_CONFIDENCE = "inferred"
+FIX_CHECK_OUTCOME = ("pass", "fail")
+# An after cut's fix facts: whether callers change, whether data or an interface migrates.
+CALLERS = ("none", "changed")
+MIGRATION = ("none", "needed")
 
 
 @dataclass
@@ -246,85 +249,126 @@ def slate_phase(slate: Slate) -> str:
 # cut
 
 
-def _values(event: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(event[f] for f in model.CUT_FIELDS)
+def _cut_values(event: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(event.get(f) for f in (*model.CUT_FIELDS, *model.AFTER_FIELDS))
 
 
 def cut_track_state(track: CutTrack, cap: int) -> str:
     """`converged` when the finder accepted the latest round and has not rebutted it, or the
-    round after a rebut repeats the same four values; `capped` at `cap` rounds; else `open`."""
+    round after a rebut repeats the same values; `capped` at `cap` rounds; else `open`."""
     last = track.round
     if last == 0:
         return "open"
     if track.accepted == last and track.pending < last:
         return "converged"
     if (last >= 2 and track.pending == last - 1
-            and _values(track.rounds[last]) == _values(track.rounds[last - 1])):
+            and _cut_values(track.rounds[last]) == _cut_values(track.rounds[last - 1])):
         return "converged"
     return "capped" if last >= cap else "open"
 
 
-def _rule_reason(slate: Slate, claim: Claim, rating: dict[str, Any]) -> str | None:
-    """The cutoff rule that reports the claim, or None when it is below the line."""
-    cutoff = slate.config["cutoff"]
-    if claim.rule is not None and claim.rule in cutoff.get("report_rules", []):
+def _first_match(rules: list[dict[str, Any]], values: dict[str, Any]) -> int | None:
+    return next((i for i, rule in enumerate(rules) if model.rule_matches(rule, values)), None)
+
+
+def _rule_values(claim: Claim, rating: dict[str, Any], *fields: str) -> dict[str, Any]:
+    """The cut's `fields` plus the claim's tier, lens and origin, for a rule match."""
+    values = {f: rating.get(f) for f in fields}
+    values.update(tier=claim.tier, lens=claim.lens, origin=claim.origin)
+    return values
+
+
+def _report_rule(slate: Slate, claim: Claim) -> str | None:
+    """`report_rules[<rule>]` when the claim's rule is in `cutoff.report_rules`."""
+    if claim.rule is not None and claim.rule in slate.config["cutoff"]["report_rules"]:
         return f"report_rules[{claim.rule}]"
-    key = "report_if_gap_hunt" if claim.origin == "gap-hunt" else "report_if"
-    values: dict[str, str | None] = {f: rating.get(f) for f in model.CUT_FIELDS}
-    values["origin"] = claim.origin
-    values["lens"] = claim.lens
-    matched = next((i for i, rule in enumerate(cutoff[key]) if model.rule_matches(rule, values)),
-                   None)
-    return None if matched is None else f"{key}[{matched}]"
+    return None
 
 
-def _cut_reasons(slate: Slate, claims: list[Claim],
-                 rating_of: Callable[[Claim], dict[str, Any] | None]
-                 ) -> dict[str, tuple[bool, str]]:
-    """Per claim, `cut` and its reason from the cutoff table and the per-lens cap, ranking the
-    claims within their lens by `rating_of`. A claim whose `rule` is in `cutoff.report_rules`
-    takes no rank slot and is never cut by the cap."""
-    report_rules = slate.config["cutoff"].get("report_rules", [])
-    ranked = sorted(claims, key=lambda c: model.rating_key(rating_of(c), c.id))
-    counts: dict[str | None, int] = {}
-    reasons: dict[str, tuple[bool, str]] = {}
-    for claim in ranked:
-        exempt = claim.rule is not None and claim.rule in report_rules
-        if not exempt:
-            counts[claim.lens] = counts.get(claim.lens, 0) + 1
-        rating = rating_of(claim)
-        if rating is None:
-            reasons[claim.id] = (False, "cut none")
-            continue
-        rule = _rule_reason(slate, claim, rating)
-        cap = slate.lens_cap(claim.lens)
-        if rule is None:
-            reasons[claim.id] = (True, "no rule matched")
-        elif not exempt and counts[claim.lens] > cap:
-            reasons[claim.id] = (True, f"per-lens cap {cap} ({claim.lens})")
-        else:
-            reasons[claim.id] = (False, rule)
-    return reasons
+def gate1(slate: Slate, claim: Claim, rating: dict[str, Any] | None) -> tuple[bool, str]:
+    """Attack or skip, from the `before` rating: (attacked, reason). A claim under
+    `report_rules` or with no before rating is attacked; otherwise the lens's `attack_if`
+    decides."""
+    reported = _report_rule(slate, claim)
+    if reported is not None:
+        return True, reported
+    if rating is None:
+        return True, "cut none"
+    matched = _first_match(slate.lens_policy(claim.lens).get("attack_if", []),
+                           _rule_values(claim, rating, *model.CUT_FIELDS))
+    return (False, "no rule matched") if matched is None else (True, f"attack_if[{matched}]")
+
+
+def cheap(slate: Slate, claim: Claim) -> bool:
+    """A cheap fix: `cutoff.cheap.enabled`, the claim survived, and its after cut typed
+    trivial or local (checks 1-5, validated at the cut) and closed by the finder's accept
+    (check 6)."""
+    track = claim.state.cuts["after"]
+    latest = track.latest()
+    return (bool(slate.config["cutoff"]["cheap"]["enabled"]) and claim.state.status == "survived"
+            and latest is not None and latest.get("difficulty") in model.CHEAP_DIFFICULTY
+            and track.accepted == track.round and track.pending < track.round)
+
+
+def gate2(slate: Slate, claim: Claim, rating: dict[str, Any] | None) -> tuple[str, str]:
+    """`fix-now`, `finding` or `follow-up` from the latest rating and the claim's status:
+    (result, reason). In order: a claim under `report_rules` or with no rating is a finding; a
+    cheap fix is fix-now; a `report_if` match is a finding; the rest are follow-ups. The
+    per-lens cap is applied by `gate_results`."""
+    reported = _report_rule(slate, claim)
+    if reported is not None:
+        return "finding", reported
+    if rating is None:
+        return "finding", "cut none"
+    check = claim.fix_check
+    if check is not None and check["outcome"] == "pass":
+        return "fixed", "fix-check passed"
+    if check is None and cheap(slate, claim):
+        return "fix-now", f"cheap ({rating['difficulty']})"
+    values = _rule_values(claim, rating, *model.CUT_FIELDS, *model.AFTER_FIELDS)
+    values["status"] = claim.state.status
+    matched = _first_match(slate.lens_policy(claim.lens).get("report_if", []), values)
+    if check is not None:
+        return ("follow-up" if matched is None else "finding"), "fix-check failed"
+    return ("follow-up", "no rule matched") if matched is None else (
+        "finding", f"report_if[{matched}]")
 
 
 def unverified_ids(slate: Slate) -> set[str]:
-    """Claims cut by their `before` ratings that were never attacked; empty unless
-    `steps.cut` is `before` or `both`. Every claim ranks here: none is killed before the
-    attack."""
+    """Claims gate 1 skipped that were never attacked; empty unless `steps.cut` is `before`
+    or `both`."""
     if "before" not in _cut_steps(slate):
         return set()
-    reasons = _cut_reasons(slate, list(slate.claims.values()),
-                           lambda c: c.state.cuts["before"].latest())
-    return {cid for cid, (cut, _) in reasons.items()
-            if cut and not slate.claims[cid].state.attacks}
+    return {claim.id for claim in slate.claims.values()
+            if not gate1(slate, claim, claim.state.cuts["before"].latest())[0]
+            and not claim.state.attacks}
+
+
+def gate_results(slate: Slate) -> dict[str, tuple[str, str]]:
+    """Per live claim, its result and reason: unverified claims are follow-ups; the rest take
+    gate 2 in rank order, and a finding past its lens's `caps.per_lens` is a follow-up. Only
+    findings count toward the cap, and a `report_rules` finding takes no slot."""
+    unverified = unverified_ids(slate)
+    counts: dict[str | None, int] = {}
+    results: dict[str, tuple[str, str]] = {}
+    for claim in sorted(slate.live_claims(), key=model.rank_key):
+        if claim.id in unverified:
+            results[claim.id] = ("follow-up", "unverified")
+            continue
+        result, reason = gate2(slate, claim, claim.state.rating)
+        if result == "finding" and _report_rule(slate, claim) is None:
+            counts[claim.lens] = counts.get(claim.lens, 0) + 1
+            cap = slate.lens_cap(claim.lens)
+            if counts[claim.lens] > cap:
+                result, reason = "follow-up", f"per-lens cap {cap} ({claim.lens})"
+        results[claim.id] = (result, reason)
+    return results
 
 
 def cut_reasons(slate: Slate) -> dict[str, tuple[bool, str]]:
-    """Per live claim, `cut` and its reason; an unverified claim is always cut."""
-    reasons = _cut_reasons(slate, slate.live_claims(), lambda c: c.state.rating)
-    for cid in unverified_ids(slate):
-        reasons[cid] = (True, "unverified")
-    return reasons
+    """Per live claim, `cut` (its result is a follow-up) and its reason."""
+    return {cid: (result == "follow-up", reason)
+            for cid, (result, reason) in gate_results(slate).items()}
 
 
 def cut_flags(slate: Slate) -> dict[str, bool]:
@@ -341,6 +385,7 @@ def validate_event(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
      "angle-na": _validate_angle_na, "attack": _validate_attack, "reply": _validate_reply,
      "verdict": _validate_verdict, "cut": _validate_cut, "accept": _validate_accept,
      "rebut": _validate_rebut, "cutoff": ledger.validate_cutoff,
+     "fix-check": _validate_fix_check,
      }[event["event"]](slate, event, problems)
     _gate(slate, event, problems)
 
@@ -504,6 +549,8 @@ def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
         problems.append(f"`loc` must match path:line ({model.LOC_RE.pattern}); got {loc!r}")
     ledger.nonempty(event, "claim", problems)
     ledger.nonempty(event, "trigger", problems)
+    ledger.nonempty(event, "evidence", problems)
+    ledger.enum(event, "tier", model.TIER, problems)
     if "rule" in event:
         ledger.nonempty(event, "rule", problems)
     depends = event.get("depends", [])
@@ -671,7 +718,9 @@ def _validate_verdict(slate: Slate, event: dict[str, Any], problems: list[str]) 
     ledger.roles(slate, claim, agent, "verdict", problems)
 
 
-def _cut_evidence(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
+def _cut_evidence(slate: Slate, event: dict[str, Any], fields: tuple[str, ...],
+                  problems: list[str]) -> None:
+    """Every evidence key is an evaluate angle, and the angles cover each of `fields`."""
     evidence = event.get("evidence")
     if not isinstance(evidence, dict) or not evidence:
         problems.append("`evidence` must map evaluate angle ids to evidence text")
@@ -683,9 +732,73 @@ def _cut_evidence(slate: Slate, event: dict[str, Any], problems: list[str]) -> N
             problems.append(f"evidence for {key!r} must be non-empty text")
         if row is not None and row.get("field"):
             covered.add(row["field"])
-    for name in model.CUT_FIELDS:
+    for name in fields:
         if name not in covered:
             problems.append(f"cut: no evidence for `{name}` (give an evaluate angle whose field is {name})")
+
+
+def _cut_choice(slate: Slate, claim: Claim, event: dict[str, Any], problems: list[str]) -> None:
+    """An after cut needs `choice` when the lens's `choice_if` matches, or, while
+    `cutoff.cheap.enabled` is true, when `difficulty` is cross-cutting or redesign."""
+    if _given(event, "choice"):
+        return
+    difficulty = event.get("difficulty")
+    if (slate.config["cutoff"]["cheap"]["enabled"]
+            and difficulty in model.CHOICE_DIFFICULTY):
+        problems.append(f"cut: {claim.id} has difficulty {difficulty}; "
+                        f"a non-empty `choice` is required")
+        return
+    values = _rule_values(claim, {"rate": 0, **event}, *model.CUT_FIELDS, *model.AFTER_FIELDS)
+    values["status"] = claim.state.status
+    matched = _first_match(slate.lens_policy(claim.lens).get("choice_if", []), values)
+    if matched is not None:
+        problems.append(f"cut: {claim.id} matches choice_if[{matched}]; "
+                        f"a non-empty `choice` is required")
+
+
+def _cut_patch(slate: Slate, claim: Claim, event: dict[str, Any], problems: list[str]) -> None:
+    """An after cut's patch measures; `trivial` and `local` need a patch within
+    `cutoff.cheap` whose non-test files are all the claim's loc file, `callers: none` and
+    `migration: none`, and a patch within `trivial_lines` is trivial."""
+    difficulty = event.get("difficulty")
+    cheap_class = difficulty in model.CHEAP_DIFFICULTY
+    where = f"cut: {claim.id} difficulty {difficulty}"
+    if cheap_class:
+        for key in ("callers", "migration"):
+            if event.get(key) != "none":
+                problems.append(f"{where} needs `{key}` none; got {event.get(key)!r}")
+    patch = event.get("patch")
+    if not isinstance(patch, str) or not patch.strip():
+        if cheap_class:
+            problems.append(f"{where} needs `patch`")
+        return
+    if slate.project_root is None:
+        problems.append("cut: the slate's init records no project_root; a patch cannot be "
+                        "measured")
+        return
+    limits = slate.config["cutoff"]["cheap"]
+    root = Path(slate.project_root)
+    try:
+        size = effort.measure(patch, limits["test_globs"], root)
+    except effort.EffortError as exc:
+        problems.append(f"cut: {claim.id} `patch`: {exc}")
+        return
+    if not cheap_class:
+        return
+    lines_key = "trivial_lines" if difficulty == "trivial" else "lines"
+    for count, key, text in ((size["files"], "files", "touches {} non-test files"),
+                             (size["test_files"], "tests", "touches {} test files"),
+                             (size["lines"], lines_key, "changes {} lines")):
+        if count > limits[key]:
+            problems.append(f"{where}: the patch {text.format(count)}; cutoff.cheap.{key} is "
+                            f"{limits[key]}")
+    loc_path = claim.loc.rsplit(":", 1)[0]
+    for path in size["paths"]:
+        if not effort.same_file(path, loc_path, root):
+            problems.append(f"{where}: patch file {path} is not the claim's loc file {loc_path}")
+    if difficulty == "local" and size["lines"] <= limits["trivial_lines"]:
+        problems.append(f"{where}: the patch changes {size['lines']} lines, within "
+                        f"cutoff.cheap.trivial_lines {limits['trivial_lines']}; type trivial")
 
 
 def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -693,21 +806,40 @@ def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> N
     claim = ledger.known_claim(slate, event, problems)
     when = ledger.enum(event, "when", WHEN, problems)
     rnd = ledger.round_number(event, problems)
-    values = {f: ledger.enum(event, f, model.FIELD_ENUMS[f], problems) for f in model.CUT_FIELDS}
-    confidence = values["confidence"]
-    if when == "before" and confidence is not None and confidence != BEFORE_CONFIDENCE:
-        problems.append(f"cut: a before cut has confidence {BEFORE_CONFIDENCE}; got {confidence!r}")
-    for key in ("choice", "fix"):
+    for name in ("impact", "size", "reach"):
+        ledger.enum(event, name, model.FIELD_ENUMS[name], problems)
+    rate = event.get("rate")
+    if "rate" in event and (not isinstance(rate, int) or isinstance(rate, bool) or rate < 0):
+        problems.append(f"`rate` must be a non-negative integer; got {rate!r}")
+    if when == "before":
+        for key in ("difficulty", "patch"):
+            if key in event:
+                problems.append(f"cut: a before cut carries no `{key}`")
+    elif when == "after":
+        if "difficulty" not in event:
+            problems.append("cut: an after cut needs `difficulty`")
+        else:
+            ledger.enum(event, "difficulty", model.DIFFICULTY, problems)
+    for key, allowed in (("callers", CALLERS), ("migration", MIGRATION)):
+        if key in event:
+            ledger.enum(event, key, allowed, problems)
+    for key in ("choice", "patch"):
         if key in event:
             ledger.nonempty(event, key, problems)
-    _cut_evidence(slate, event, problems)
     claim = _live(claim, problems)
+    counts_rate = claim is not None and slate.counts_rate(claim.lens)
+    fields = tuple(f for f in model.CUT_FIELDS if f != "rate" or counts_rate)
+    _cut_evidence(slate, event, (*fields, *model.AFTER_FIELDS) if when == "after" else fields,
+                  problems)
     if claim is None:
         return
+    if counts_rate and "rate" not in event:
+        problems.append(f"cut: {claim.id}'s lens {claim.lens} has a rate_at_least rule; "
+                        f"`rate` is required")
     ledger.roles(slate, claim, agent, "cut", problems)
-    if values["difficulty"] in model.CHOICE_DIFFICULTY and not _given(event, "choice"):
-        problems.append(f"cut: {claim.id} has difficulty {values['difficulty']}; "
-                        f"a non-empty `choice` is required")
+    if when == "after":
+        _cut_choice(slate, claim, event, problems)
+        _cut_patch(slate, claim, event, problems)
     if when is None:
         return
     track = claim.state.cuts[when]
@@ -764,6 +896,39 @@ def _validate_rebut(slate: Slate, event: dict[str, Any], problems: list[str]) ->
                         f"a rebut needs new evidence")
 
 
+def _validate_fix_check(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
+    """After the cutoff, once per fix-now claim, by anyone but its finder; `pass` names the
+    patch-only re-review slate, which the CLI reads before writing."""
+    agent = event.get("as")
+    claim = ledger.known_claim(slate, event, problems)
+    outcome = ledger.enum(event, "outcome", FIX_CHECK_OUTCOME, problems)
+    ledger.nonempty(event, "evidence", problems)
+    review = event.get("review_slate")
+    if "review_slate" in event:
+        if not (isinstance(review, str) and model.ID_RE.match(review)):
+            problems.append(f"`review_slate` must match {model.ID_RE.pattern}; got {review!r}")
+        elif review == slate.slate_id:
+            problems.append(f"fix-check: `review_slate` must name another slate than "
+                            f"{slate.slate_id}")
+    elif outcome == "pass":
+        problems.append("fix-check: outcome pass needs `review_slate`, the slate that "
+                        "re-reviewed only the patch")
+    claim = _live(claim, problems)
+    if claim is None:
+        return
+    if agent == claim.finder:
+        problems.append(f"fix-check: {agent} filed {claim.id} and may not check its fix")
+    if claim.fix_check is not None:
+        problems.append(f"fix-check: {claim.id} already has a fix-check; a fix is checked once")
+    if slate.cutoff is None:
+        problems.append("fix-check: the slate has no cutoff event; run `converge cutoff` first")
+        return
+    stored = {row["claim"]: row["result"] for row in slate.cutoff["results"]}
+    if stored.get(claim.id) != "fix-now":
+        problems.append(f"fix-check: {claim.id}'s cutoff result is {stored.get(claim.id)}; "
+                        f"fix-check takes a fix-now claim")
+
+
 # ---------------------------------------------------------------------------
 # apply
 
@@ -779,7 +944,8 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         slate.claims[event["id"]] = Claim(
             id=event["id"], finder=event["as"], lens=event.get("lens"), angle=event.get("angle"),
             loc=event["loc"], original=event["claim"], text=event["claim"],
-            trigger=event["trigger"], origin=event["origin"], depends=list(event.get("depends", [])),
+            trigger=event["trigger"], evidence=event["evidence"], tier=event["tier"],
+            origin=event["origin"], depends=list(event.get("depends", [])),
             rule=event.get("rule"), filed_seq=event["seq"], state=ClaimState(),
         )
     elif kind == "find-run":
@@ -792,6 +958,8 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
             claim.na_reasons[event["angle"]] = event["reason"]
     else:
         _apply_claim_event(slate.claims[event["claim"]], event)
+    if kind == "fix-check":
+        slate.cutoff_valid = False
     if any(track.rounds for claim in slate.claims.values() for track in claim.state.cuts.values()):
         slate.cutoff_valid = False
 
@@ -823,10 +991,13 @@ def _apply_claim_event(claim: Claim, event: dict[str, Any]) -> None:
         if event["verdict"] == "agree":
             state.status = worst(state.status, "survived")
     elif kind == "cut":
-        state.cuts[event["when"]].rounds[event["round"]] = event
+        # A cut without `rate` rates it 0.
+        state.cuts[event["when"]].rounds[event["round"]] = {"rate": 0, **event}
         state.cutters.add(event["as"])
     elif kind == "accept":
         state.cuts[event["when"]].accepted = event["round"]
+    elif kind == "fix-check":
+        claim.fix_check = event
     elif kind == "rebut":
         track = state.cuts[event["when"]]
         state.rebut_hashes["cut"].add(event["evidence_sha256"])
@@ -839,7 +1010,7 @@ def _apply_claim_event(claim: Claim, event: dict[str, Any]) -> None:
 
 def compute_cutoff(slate: Slate) -> list[model.CutoffRow]:
     """One row per claim: live claims in rank order, then killed claims."""
-    reasons = cut_reasons(slate)
+    results = gate_results(slate)
     unverified = unverified_ids(slate)
     live = sorted(slate.live_claims(), key=model.rank_key)
     killed = sorted((c for c in slate.claims.values() if not c.live), key=model.rank_key)
@@ -848,9 +1019,10 @@ def compute_cutoff(slate: Slate) -> list[model.CutoffRow]:
         if not claim.live:
             rows.append(model.CutoffRow(claim, "killed", "no", "killed", rank, "killed"))
             continue
-        cut, reason = reasons[claim.id]
-        rows.append(model.CutoffRow(claim, status(slate, claim, unverified), "yes" if cut else "no",
-                                    "follow-up" if cut else "finding", rank, reason))
+        result, reason = results[claim.id]
+        rows.append(model.CutoffRow(claim, status(slate, claim, unverified),
+                                    "yes" if result == "follow-up" else "no", result, rank,
+                                    reason))
     return rows
 
 

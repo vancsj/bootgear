@@ -28,9 +28,10 @@ BATCH_1 = ("cited-but-unread", "point-in-time", "provenance", "reachability", "a
 DISABLED = ("downstream-consumer, inverse-reading, carve-out, boundary, dependents, "
             "positive-control, inherited-bounds, guarded-elsewhere, deliberate, real-referent")
 STEPS = f"steps: {{cut: both, gap_hunt: false, escalate: true}}\nangles: {{disable: [{DISABLED}]}}\n"
+FILE_ARGS = ("--evidence", "a.py:1 reads x.y with x None", "--tier", "traced")
 CUT_EVIDENCE = ("--evidence", "entry-points=POST /x reaches it",
                 "--evidence", "blast-radius=one row per call",
-                "--evidence", "evidence-tier=traced a.py:1",
+                "--evidence", "affected-count=one record",
                 "--evidence", "files-touched=a.py")
 
 MAIN, FINDER, R1, R2, CUTTER = "orch", "finder", "r1", "r2", "cutter"
@@ -90,7 +91,8 @@ class Slate:
              code: int = 0) -> subprocess.CompletedProcess[str]:
         return self.ok("file", "--as", agent, "--lens", "correctness",
                        "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
-                       "--claim", claim, "--trigger", "caller passes None", *extra, code=code)
+                       "--claim", claim, "--trigger", "caller passes None", *FILE_ARGS, *extra,
+                       code=code)
 
     def cover(self) -> None:
         for angle in ("changed-contract", "failure-path"):
@@ -100,14 +102,19 @@ class Slate:
     def escalate(self, claim: str) -> list[str]:
         return self.lines("escalate", "--as", FINDER, "--claim", claim)
 
-    def cut(self, claim: str, when: str, frequency: str = "common",
-            severity: str = "wrong-behavior", confidence: str = "traced",
-            difficulty: str = "local", agent: str = CUTTER, rnd: int = 1,
+    def cut(self, claim: str, when: str, impact: str = "wrong-output", reach: str = "normal",
+            difficulty: str = "cross-cutting", agent: str = CUTTER, rnd: int = 1,
             extra: tuple[str, ...] = (), code: int = 0) -> list[str]:
+        """One `cut`; `difficulty` is passed at an after cut only, with a choice when it is
+        cross-cutting or redesign and `extra` names none."""
+        after: tuple[str, ...] = ()
+        if when == "after":
+            after = ("--difficulty", difficulty)
+            if difficulty in ("cross-cutting", "redesign") and "--choice" not in extra:
+                after += ("--choice", "patch the caller or move the check")
         return self.lines("cut", "--as", agent, "--claim", claim, "--when", when,
-                          "--round", str(rnd), "--frequency", frequency, "--severity", severity,
-                          "--confidence", confidence, "--difficulty", difficulty, *CUT_EVIDENCE,
-                          *extra, code=code)
+                          "--round", str(rnd), "--impact", impact, "--size", "one",
+                          "--reach", reach, *after, *CUT_EVIDENCE, *extra, code=code)
 
     def accept(self, claim: str, when: str) -> list[str]:
         return self.lines("accept", "--as", FINDER, "--claim", claim, "--when", when,
@@ -137,9 +144,9 @@ class Slate:
         self.cover()
         for claim in ("F001", "F002"):
             self.escalate(claim)
-        self.cut("F001", "before", "common", "wrong-behavior", "inferred", "local")
+        self.cut("F001", "before")
         self.accept("F001", "before")
-        self.cut("F002", "before", "rare", "cosmetic", "inferred", "trivial")
+        self.cut("F002", "before", "cosmetic")
         self.accept("F002", "before")
 
     def to_cut_after(self) -> None:
@@ -199,14 +206,14 @@ def test_bundled_gap_hunt_files_after_find_coverage(tmp_path: Path) -> None:
     gap = ("--origin", "gap-hunt")
     err = slate.lines("file", "--as", R2, "--lens", "correctness", "--angle", "changed-contract",
                       "--loc", "a.py:1", "--claim", "ticket asks for retries",
-                      "--trigger", "caller retries", *gap, code=2)
+                      "--trigger", "caller retries", *FILE_ARGS, *gap, code=2)
     assert "  - file: gap-hunt claims are filed after find coverage is complete" in err
     assert err[-1] == ("next: continue the finder with the missing angles, then "
                        + slate.cmd("coverage s1 --dir {dir}"))
     slate.cover()
     out = slate.lines("file", "--as", R2, "--lens", "correctness", "--angle", "changed-contract",
                       "--loc", "a.py:1", "--claim", "ticket asks for retries",
-                      "--trigger", "caller retries", *gap)
+                      "--trigger", "caller retries", *FILE_ARGS, *gap)
     assert out[0] == "FILED F002"
 
 
@@ -223,7 +230,7 @@ def test_bundled_escalate_and_cut_before_print_the_plan_step(tmp_path: Path) -> 
     out = slate.escalate("F002")
     assert out[0].endswith(" F002 wider=no")
     assert out[1] == f"next: cut-before: cutter cut-before F001, F002; plan: {slate.plan()}"
-    out = slate.cut("F001", "before", confidence="inferred")
+    out = slate.cut("F001", "before")
     assert out == [f"CUT seq={_seq(out)} F001 when=before round=1",
                    (f"next: cut-before: finder accept F001; cutter cut-before F002; "
                     f"plan: {slate.plan()}")]
@@ -239,14 +246,14 @@ def test_bundled_cut_round_waits_for_the_finder_answer(tmp_path: Path) -> None:
     slate.file()
     slate.cover()
     slate.escalate("F001")
-    slate.cut("F001", "before", confidence="inferred")
-    err = slate.cut("F001", "before", confidence="inferred", rnd=2, code=2)
+    slate.cut("F001", "before")
+    err = slate.cut("F001", "before", rnd=2, code=2)
     assert ("  - cut: F001 before round 1 awaits its finder; the finder must accept or rebut "
             "it first") in err
     assert err[-1] == f"next: cut-before: finder accept F001; plan: {slate.plan()}"
     slate.ok("rebut", "--as", FINDER, "--claim", "F001", "--when", "before",
              "--evidence", "the retry path is guarded")
-    out = slate.cut("F001", "before", confidence="inferred", rnd=2)
+    out = slate.cut("F001", "before", rnd=2)
     assert out[0] == f"CUT seq={_seq(out)} F001 when=before round=2"
 
 
@@ -256,7 +263,7 @@ def test_bundled_cut_before_leads_to_the_attack(tmp_path: Path) -> None:
     slate.file()
     slate.cover()
     slate.escalate("F001")
-    slate.cut("F001", "before", confidence="inferred")
+    slate.cut("F001", "before")
     out = slate.accept("F001", "before")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=before round=1",
                    f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"]
@@ -370,8 +377,8 @@ def test_bundled_cutoff_gate_render_converged(tmp_path: Path) -> None:
     assert slate.lines("converged", code=1) == ["OPEN phase=cutoff claims=0", cutoff_step]
     out = slate.lines("cutoff")
     seq = _seq(out)
-    assert out == [f"CUTOFF seq={seq} findings=1 follow-up=1 killed=0",
-                   "F001 finding status=survived cut=no rank=1 reason=report_if[1]",
+    assert out == [f"CUTOFF seq={seq} fix-now=0 fixed=0 findings=1 follow-up=1 killed=0",
+                   "F001 finding status=survived cut=no rank=1 reason=report_if[0]",
                    "F002 follow-up status=unverified cut=yes rank=2 reason=unverified",
                    "next: " + slate.cmd("render s1 --dir {dir}")]
     render = slate.ok("render").stdout
@@ -390,11 +397,9 @@ def test_bundled_render_choices_hold_findings_only(tmp_path: Path) -> None:
     slate.cover()
     for claim in ("F001", "F002"):
         slate.escalate(claim)
-    slate.cut("F001", "before", confidence="inferred", difficulty="redesign",
-              extra=("--choice", "split or patch"))
+    slate.cut("F001", "before", extra=("--choice", "split or patch"))
     slate.accept("F001", "before")
-    slate.cut("F002", "before", "rare", confidence="inferred", difficulty="redesign",
-              extra=("--choice", "drop or keep"))
+    slate.cut("F002", "before", "cosmetic", extra=("--choice", "drop or keep"))
     slate.accept("F002", "before")
     slate.batch_1()
     slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
@@ -421,7 +426,7 @@ def test_bundled_converged_lists_the_disputed_findings(tmp_path: Path) -> None:
     slate.ok("reply", "--as", FINDER, "--claim", "F001", "--batch", "1", "--stance", "rebut",
              "--evidence", "the router reaches b.py:4")
     slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
-    slate.cut("F001", "after", severity="security")
+    slate.cut("F001", "after", "security")
     slate.accept("F001", "after")
     slate.ok("cutoff")
     assert slate.lines("converged", code=1) == [
@@ -603,3 +608,123 @@ def test_bundled_slate_without_seats_is_all_native(tmp_path: Path) -> None:
     assert data["seats"] == {} and data["drivers"] == []
     head = _ok(tmp_path, "status", "s1", "--dir", str(ledger)).stdout.splitlines()[0]
     assert " advisor=-" in head
+
+
+# -- fix-now and fix-check ------------------------------------------------------------
+
+
+AFTER_ONLY = (f"steps: {{cut: after, gap_hunt: false, escalate: false}}\n"
+              f"angles: {{disable: [{DISABLED}]}}\n")
+PATCH = ("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,1 +1,3 @@\n"
+         "-x = y.z\n+if y is None:\n+    raise ValueError\n+x = y.z\n")
+
+
+def test_bundled_fix_now_flow(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    slate.init(config=AFTER_ONLY)
+    slate.file("None crashes the parser")
+    slate.cover()
+    slate.batch_1()
+    slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
+    slate.cut("F001", "after", difficulty="local",
+              extra=("--patch", PATCH, "--callers", "none", "--migration", "none"))
+    slate.accept("F001", "after")
+    out = slate.lines("cutoff")
+    assert out[0].endswith(" fix-now=1 fixed=0 findings=0 follow-up=0 killed=0")
+    assert out[1] == "F001 fix-now status=survived cut=no rank=1 reason=cheap (local)"
+    data = json.loads(slate.ok("render", "--json").stdout)
+    assert data["fix_now"] == [{"claim": "F001", "patch": PATCH}]
+    task = tmp_path / "review.yaml"
+    task.write_text(AFTER_ONLY)
+    review = ("s2", "--dir", str(slate.dir))
+    _ok(tmp_path, "init", *review, "--as", MAIN, "--lenses", "correctness",
+        "--angles", str(slate.angles), "--project-root", str(tmp_path), "--config", str(task))
+    for angle in ("changed-contract", "failure-path"):
+        _ok(tmp_path, "angle-na", *review, "--as", FINDER, "--phase", "find",
+            "--lens", "correctness", "--angle", angle, "--reason", "the patch has no I/O")
+    _ok(tmp_path, "cutoff", *review)
+    out = slate.lines("fix-check", "--as", MAIN, "--claim", "F001", "--outcome", "pass",
+                      "--evidence", "pytest passes", "--review-slate", "s2")
+    assert out[0].endswith(" F001 outcome=pass")
+    assert out[-1] == "next: " + slate.cmd("cutoff s1 --dir {dir}")
+    assert slate.status()["by_id"]["F001"]["fix_check"] == "pass"
+    out = slate.lines("cutoff")
+    assert out[0].endswith(" fix-now=0 fixed=1 findings=0 follow-up=0 killed=0")
+    assert slate.status()["by_id"]["F001"]["result"] == "fixed"
+
+
+def _stamp(ledger: Path, after: int, ts: str) -> int:
+    """Set `ts` on every event after seq `after`; the ledger's last seq."""
+    events = [json.loads(line) for line in ledger.read_text().splitlines()]
+    for event in events:
+        if event["seq"] > after:
+            event["ts"] = ts
+    ledger.write_text("".join(json.dumps(event) + "\n" for event in events))
+    return events[-1]["seq"]
+
+
+def _patch_review(root: Path, slate: Slate, name: str, ts: str) -> None:
+    """A clean patch-only re-review slate `name` with its cutoff stamped `ts`."""
+    task = root / f"{name}.yaml"
+    task.write_text(AFTER_ONLY)
+    review = (name, "--dir", str(slate.dir))
+    _ok(root, "init", *review, "--as", MAIN, "--lenses", "correctness",
+        "--angles", str(slate.angles), "--project-root", str(root), "--config", str(task))
+    for angle in ("changed-contract", "failure-path"):
+        _ok(root, "angle-na", *review, "--as", FINDER, "--phase", "find",
+            "--lens", "correctness", "--angle", angle, "--reason", "the patch has no I/O")
+    _ok(root, "cutoff", *review)
+    _stamp(slate.dir / f"{name}.jsonl", 0, ts)
+
+
+def test_bundled_fix_check_compares_against_last_cutoff_before_the_first_fix_check(
+        tmp_path: Path) -> None:
+    """Cutoffs at t0 and t2 precede the first fix-check and one at t4 follows it; review
+    slates cut at t1 and t3 tell the t2 cutoff apart from the first and the latest."""
+    slate = Slate(tmp_path)
+    ledger = slate.dir / "s1.jsonl"
+    slate.init(config=AFTER_ONLY)
+    for text in ("None crashes the parser", "None crashes the printer"):
+        slate.file(text)
+    slate.cover()
+    for claim in ("F001", "F002"):
+        for angle in BATCH_1:
+            slate.ok("attack", "--as", R1, "--claim", claim, "--batch", "1", "--angle", angle,
+                     "--tell", "tell applies", "--outcome", "clean", "--evidence", "read a.py:1",
+                     "--searches", "rg x", "--positive-control", "rg y finds y")
+        slate.ok("attack", "--as", R2, "--claim", claim, "--batch", "fresh-eye",
+                 "--angle", "retry timing", "--tell", "tell applies", "--outcome", "clean",
+                 "--evidence", "read a.py:1", "--searches", "rg x",
+                 "--positive-control", "rg y finds y", "--last")
+    for claim in ("F001", "F002"):
+        slate.cut(claim, "after", difficulty="local",
+                  extra=("--patch", PATCH, "--callers", "none", "--migration", "none"))
+        slate.lines("accept", "--as", FINDER, "--claim", claim, "--when", "after", "--round", "1")
+    slate.ok("cutoff")
+    seq = _stamp(ledger, 0, "2026-01-01T00:00:00Z")
+    _patch_review(tmp_path, slate, "early", "2026-01-01T00:00:01Z")
+    slate.ok("angle-na", "--as", FINDER, "--phase", "find", "--lens", "correctness",
+             "--angle", "failure-path", "--reason", "the fix adds no I/O")
+    slate.ok("cutoff")
+    baseline = seq = _stamp(ledger, seq, "2026-01-01T00:00:02Z")
+    _patch_review(tmp_path, slate, "late", "2026-01-01T00:00:03Z")
+    check = ("fix-check", "--as", MAIN, "--outcome", "pass", "--evidence", "pytest passes")
+    err = slate.lines(*check, "--claim", "F001", "--review-slate", "early", code=2)
+    assert f"s1's cutoff seq={baseline} (2026-01-01T00:00:02Z)" in " ".join(err)
+    slate.ok(*check, "--claim", "F001", "--review-slate", "late")
+    slate.ok("cutoff")
+    _stamp(ledger, seq, "2026-01-01T00:00:04Z")
+    err = slate.lines(*check, "--claim", "F002", "--review-slate", "early", code=2)
+    assert (f"  - --review-slate: slate 'early''s cutoff (2026-01-01T00:00:01Z) is older than "
+            f"s1's cutoff seq={baseline} (2026-01-01T00:00:02Z), its last before the first "
+            "fix-check; re-review the patch") in err
+    slate.ok(*check, "--claim", "F002", "--review-slate", "late")
+    out = slate.lines("cutoff")
+    assert out[0].endswith(" fix-now=0 fixed=2 findings=0 follow-up=0 killed=0")
+
+
+def test_bundled_cut_rate_help_points_to_the_evaluate_angles(tmp_path: Path) -> None:
+    out = " ".join(_ok(tmp_path, "cut", "--help").stdout.split())
+    assert "call sites" not in out and "production queries" not in out
+    assert ("--rate RATE the count an evaluate angle with field rate asks for (converge angles "
+            "--tag evaluate --angles <file>)") in out

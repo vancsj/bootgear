@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
-from . import model, protocol
+from . import effort, model, protocol
 from .model import Slate
 
 
 def _cell(text: str | None) -> str:
     return (text or "-").replace("|", "\\|").replace("\n", " ")
+
+
+def _text(value: object) -> str | None:
+    return None if value is None else str(value)
 
 
 @dataclass
@@ -63,7 +68,14 @@ def _killed_lines(slate: Slate) -> list[str]:
     return lines
 
 
-COLUMNS = ("rank", "claim", "lens", "loc", "text", *model.CUT_FIELDS, "status")
+def claim_inputs(slate: Slate) -> list[dict[str, str]]:
+    """Each claim's filed trigger, evidence and tier, in filing order."""
+    return [{"id": c.id, "trigger": c.trigger, "evidence": c.evidence, "tier": c.tier}
+            for c in slate.claims.values()]
+
+
+RATED = (*model.CUT_FIELDS, *model.AFTER_FIELDS)
+COLUMNS = ("rank", "claim", "lens", "loc", "text", *RATED, "status")
 
 
 def _table(rows: list[model.CutoffRow], with_cut: bool) -> list[str]:
@@ -77,8 +89,39 @@ def _table(rows: list[model.CutoffRow], with_cut: bool) -> list[str]:
         rating = row.claim.state.rating or {}
         last = row.cut if with_cut else _cell(rating.get("choice"))
         cells = [str(row.rank), row.claim.id, _cell(row.claim.lens), _cell(row.claim.loc),
-                 _cell(row.claim.text), *(_cell(rating.get(f)) for f in model.CUT_FIELDS),
+                 _cell(row.claim.text), *(_cell(_text(rating.get(f))) for f in RATED),
                  row.status, last, _cell(row.reason)]
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+FIX_COLUMNS = ("rank", "claim", "lens", "loc", "text", "impact", "reach", "difficulty",
+               "patch lines")
+# The result counts of the summary and of `converge cutoff`, in this order.
+RESULT_COUNTS = (("fix-now", "fix-now"), ("fixed", "fixed"), ("findings", "finding"),
+                 ("follow-up", "follow-up"), ("killed", "killed"))
+
+
+def counts(rows: list[model.CutoffRow]) -> str:
+    """`fix-now=N fixed=N findings=N follow-up=N killed=N`."""
+    return " ".join(f"{label}={sum(row.result == result for row in rows)}"
+                    for label, result in RESULT_COUNTS)
+
+
+def _fix_table(slate: Slate, rows: list[model.CutoffRow]) -> list[str]:
+    """Claims with a cheap fix to apply, or applied and checked, with the patch's changed
+    lines."""
+    if not rows:
+        return ["None."]
+    root = Path(slate.project_root) if slate.project_root else None
+    globs = slate.config["cutoff"]["cheap"]["test_globs"]
+    lines = ["| " + " | ".join(FIX_COLUMNS) + " |", "|" + "---|" * len(FIX_COLUMNS)]
+    for row in rows:
+        rating = row.claim.state.rating or {}
+        size = effort.measure(rating["patch"], globs, root)
+        cells = [str(row.rank), row.claim.id, _cell(row.claim.lens), _cell(row.claim.loc),
+                 _cell(row.claim.text), _cell(rating.get("impact")), _cell(rating.get("reach")),
+                 _cell(rating.get("difficulty")), str(size["lines"])]
         lines.append("| " + " | ".join(cells) + " |")
     return lines
 
@@ -104,16 +147,18 @@ def render(slate: Slate) -> str:
     cutoff_state = "current" if slate.cutoff_valid else ("stale" if slate.cutoff else "none")
     rows = protocol.compute_cutoff(slate)
     findings = [r for r in rows if r.result == "finding"]
+    fix_now = [r for r in rows if r.result == "fix-now"]
+    fixed = [r for r in rows if r.result == "fixed"]
     follow_up = [r for r in rows if r.result == "follow-up"]
-    killed = [r for r in rows if r.result == "killed"]
     choices = [r for r in findings if (r.claim.state.rating or {}).get("choice")]
     lines = [f"# converge slate `{slate.slate_id}`", "",
-             (f"findings={len(findings)} follow-up={len(follow_up)} killed={len(killed)} "
-              f"converged={'yes' if converged(slate) else 'no'}"), "",
+             f"{counts(rows)} converged={'yes' if converged(slate) else 'no'}", "",
              (f"lenses: {', '.join(slate.lenses)} · claims: {len(slate.claims)} · "
               f"phase: {slate_phase(slate)} · cutoff: {cutoff_state}"), "",
              *_snapshot_lines(slate)]
     lines += ["## Findings", "", *_table(findings, with_cut=True)]
+    lines += ["", "## Fix now", "", *_fix_table(slate, fix_now)]
+    lines += ["", "## Fixed", "", *_fix_table(slate, fixed)]
     lines += ["", "## Choices", ""]
     lines += [f"- **{r.claim.id}** ({r.result}) — {(r.claim.state.rating or {}).get('choice')}"
               for r in choices] or ["None."]

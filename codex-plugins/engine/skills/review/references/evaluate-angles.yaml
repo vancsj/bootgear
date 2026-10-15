@@ -1,0 +1,8 @@
+- id: file-churn
+  tag: evaluate
+  field: rate
+  lens: architecture
+  tell: the claim is about the design of files that change
+  asks: >-
+    How many commits touched the claim's files in the last 90 days? Give the count and quote
+    the git log --since="90 days ago" command that produced it.

@@ -28,9 +28,8 @@ def test_custom_cap_three(cv: Converge) -> None:
     assert cv.attack("F001", BATCH_1[1], agent=R1) == []
 
 
-def _cut(cv: Converge, cid: str, when: str, rnd: int, severity: str,
-         confidence: str) -> None:
-    cv.cut(cid, rnd, CUTTER, when, "common", severity, confidence)
+def _cut(cv: Converge, cid: str, when: str, rnd: int, impact: str) -> None:
+    cv.cut(cid, rnd, CUTTER, when, impact)
 
 
 def _gate_ok(cv: Converge) -> None:
@@ -49,8 +48,8 @@ def test_full_depth_allocation_with_gap_hunt(cv: Converge) -> None:
     gap = cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries")
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", lens_claim)
     cv.ok("escalate", "s1", "--as", R2, "--claim", gap)
-    _cut(cv, lens_claim, "before", 1, "wrong-behavior", "inferred")
-    _cut(cv, gap, "before", 1, "degraded", "inferred")
+    _cut(cv, lens_claim, "before", 1, "wrong-output")
+    _cut(cv, gap, "before", 1, "data-loss")
     assert "only F002's finder r2 may accept" in cv.accept(gap, 1, FINDER, "before",
                                                            code=2).stderr
     cv.accept(lens_claim, 1, FINDER, "before")
@@ -63,11 +62,11 @@ def test_full_depth_allocation_with_gap_hunt(cv: Converge) -> None:
         cv.attack_cli(gap, angle)
     cv.attack_cli(lens_claim, "retry timing", "--last", agent=R2, batch="fresh-eye")
     cv.attack_cli(gap, "retry timing", "--last", agent=R1, batch="fresh-eye")
-    _cut(cv, lens_claim, "after", 1, "wrong-behavior", "traced")
-    _cut(cv, gap, "after", 1, "degraded", "traced")
+    _cut(cv, lens_claim, "after", 1, "wrong-output")
+    _cut(cv, gap, "after", 1, "data-loss")
     cv.accept(lens_claim, 1, FINDER)
     cv.rebut_cut(gap, "every retry path is hit on deploy", R2)
-    _cut(cv, gap, "after", 2, "degraded", "traced")
+    _cut(cv, gap, "after", 2, "data-loss")
     _gate_ok(cv)
     assert cv.status()["agents"] == [MAIN, FINDER, R2, CUTTER, R1]
     assert cv.ok("converged", "s1").stdout.startswith("CONVERGED\n")
@@ -81,12 +80,12 @@ def test_quick_depth_shape(cv: Converge) -> None:
     cv.cover(lenses=("correctness", "tests"))
     cid = cv.file(agent=FINDER)
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", cid)
-    _cut(cv, cid, "before", 1, "wrong-behavior", "inferred")
+    _cut(cv, cid, "before", 1, "wrong-output")
     cv.accept(cid, 1, FINDER, "before")
     for angle in BATCH_1:
         cv.attack_cli(cid, angle)
     cv.attack_cli(cid, "retry timing", "--last", agent=R1, batch="fresh-eye")
-    _cut(cv, cid, "after", 1, "wrong-behavior", "traced")
+    _cut(cv, cid, "after", 1, "wrong-output")
     cv.accept(cid, 1, FINDER)
     _gate_ok(cv)
     assert cv.status()["agents"] == [MAIN, FINDER, CUTTER, R1]

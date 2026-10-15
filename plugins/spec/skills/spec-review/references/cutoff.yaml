@@ -1,8 +1,6 @@
 cutoff:
-  report_if: &report
-    - severity: [security, data-loss, wrong-behavior, degraded]
-      frequency: [every-call, common]
-    - confidence: [reproduced]
-      severity: [security, data-loss, wrong-behavior, degraded]
-      frequency: [every-call, common, rare]
-  report_if_gap_hunt: *report
+  cheap: {enabled: false}
+  lenses:
+    default:
+      attack_if: [{reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+      report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]

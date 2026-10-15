@@ -8,7 +8,7 @@ import os
 import subprocess
 import time
 
-from conftest import BIN, Converge
+from conftest import BIN, FILE_ARGS, Converge
 
 
 def test_seq_gapless_and_envelope(cv: Converge) -> None:
@@ -48,7 +48,8 @@ def test_invalid_write_lists_every_problem_and_writes_nothing(cv: Converge) -> N
     cv.init()
     before = cv.path().read_bytes()
     err = cv.refused("file", "s1", "--as", "f1", "--lens", "correctness", "--angle", "nope",
-                     "--loc", "no-line", "--claim", " ", "--trigger", "t", "--origin", "bogus")
+                     "--loc", "no-line", "--claim", " ", "--trigger", "t", "--origin", "bogus",
+                     *FILE_ARGS)
     for fragment in ("unknown find angle 'nope'", "`loc` must match", "`claim` must be a non-empty",
                      "`origin` must be one of"):
         assert fragment in err
@@ -57,7 +58,7 @@ def test_invalid_write_lists_every_problem_and_writes_nothing(cv: Converge) -> N
 
 def test_write_without_init_refused(cv: Converge) -> None:
     err = cv.refused("file", "ghost", "--as", "f1", "--loc", "a:1", "--claim", "c",
-                     "--trigger", "t", "--origin", "lens")
+                     "--trigger", "t", "--origin", "lens", *FILE_ARGS)
     assert "no slate 'ghost'" in err
     assert not cv.path("ghost").exists()
 
@@ -72,7 +73,7 @@ def _writer(dir_: str, home: str, env_extra: dict[str, str], agent: str, count: 
         subprocess.run([str(BIN), "file", "s1", "--dir", dir_, "--as", agent,
                         "--lens", "correctness", "--angle", "changed-contract",
                         "--loc", f"src/{agent}.py:{i + 1}", "--claim", f"{agent} claim {i}",
-                        "--trigger", "t", "--origin", "lens"],
+                        "--trigger", "t", "--origin", "lens", *FILE_ARGS],
                        check=True, capture_output=True, env=env)
 
 
@@ -105,7 +106,7 @@ def test_writer_waits_for_the_lock(cv: Converge) -> None:
         proc = subprocess.Popen([str(BIN), *cv.with_dir("file", "s1"), "--as", "f1",
                                  "--lens", "correctness", "--angle", "changed-contract",
                                  "--loc", "a.py:1", "--claim", "c", "--trigger", "t",
-                                 "--origin", "lens"],
+                                 "--origin", "lens", *FILE_ARGS],
                                 env=cv.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         time.sleep(1.5)
         assert proc.poll() is None, "writer finished while another process held the lock"

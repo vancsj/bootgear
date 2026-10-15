@@ -51,9 +51,9 @@ def test_rows_are_chunked_by_batch_items(cv: Converge) -> None:
 def test_cut_rows_follow_rank_order_and_the_finder_answers(cv: Converge) -> None:
     cv.ready(cut="before", claims=3)
     assert cv.append("cut", CUTTER, claim="F002", round=1, when="before",
-                     confidence="inferred", severity="security") == []
+                     impact="security") == []
     assert cv.append("cut", CUTTER, claim="F003", round=1, when="before",
-                     confidence="inferred", severity="degraded") == []
+                     impact="wrong-output") == []
     assert _plan(cv) == [[_row("F002", "accept", "finder"), _row("F003", "accept", "finder"),
                           _row("F001", "cut-before", "cutter")]]
 
@@ -104,7 +104,7 @@ def test_cut_after_rows_and_an_empty_plan_at_cutoff(cv: Converge) -> None:
 
 def test_each_claims_open_phase(cv: Converge) -> None:
     cv.ready(cut="before", claims=2)
-    cv.rate("F001", "before", frequency="common", severity="wrong-behavior")
+    cv.rate("F001", "before", impact="wrong-output")
     slate = _slate(cv)
     assert protocol.claim_phase(slate, slate.claims["F001"]) == "attack"
     assert [(c.id, phase) for c, phase in slate.open_claims()] == [("F001", "attack"),

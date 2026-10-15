@@ -1,0 +1,9 @@
+{"id": "F001", "claim": "claim F001", "lens": "security", "origin": "lens", "tier": "traced", "impact": "wrong-output", "size": "one", "reach": "crafted", "rate": 0}
+{"id": "F002", "claim": "claim F002", "lens": "correctness", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 3}
+{"id": "F003", "claim": "claim F003", "lens": "correctness", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "crafted", "rate": 0}
+{"id": "F004", "claim": "claim F004", "lens": "contract", "origin": "lens", "tier": "traced", "impact": "wrong-output", "size": "one", "reach": "normal", "rate": 3}
+{"id": "F005", "claim": "claim F005", "lens": "contract", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 1}
+{"id": "F006", "claim": "claim F006", "lens": "tests", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 1}
+{"id": "F007", "claim": "claim F007", "lens": "architecture", "origin": "lens", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 5}
+{"id": "F008", "claim": "claim F008", "lens": "security", "origin": "gap-hunt", "tier": "traced", "impact": "wrong-output", "size": "one", "reach": "crafted", "rate": 0}
+{"id": "F009", "claim": "claim F009", "lens": "contract", "origin": "gap-hunt", "tier": "traced", "impact": "cosmetic", "size": "one", "reach": "normal", "rate": 1}

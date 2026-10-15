@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import json
 
-from conftest import BATCH_1, FINDER, R1, Converge
+from conftest import BATCH_1, CHOICE, FINDER, R1, Converge
 from converge import ledger
 
-FINDINGS = ("| rank | claim | lens | loc | text | frequency | severity | confidence | "
+FINDINGS = ("| rank | claim | lens | loc | text | impact | size | reach | rate | "
             "difficulty | status | cut | reason |")
-FOLLOW_UP = ("| rank | claim | lens | loc | text | frequency | severity | confidence | "
+FOLLOW_UP = ("| rank | claim | lens | loc | text | impact | size | reach | rate | "
              "difficulty | status | choice | reason |")
 
 
@@ -24,7 +24,7 @@ def _reply(cv: Converge, stance: str, evidence: str | None = None, cid: str = "F
 
 
 def _full_slate(cv: Converge) -> None:
-    """F001 and F004 findings (F004 with a choice), F002 a follow-up, F003 killed after a
+    """F001 and F004 findings, F002 a follow-up, each with a choice; F003 killed after a
     disagree verdict."""
     cv.ready(cut="after", claims=4)
     for cid in ("F001", "F002", "F004"):
@@ -34,10 +34,9 @@ def _full_slate(cv: Converge) -> None:
     assert cv.append("verdict", R1, claim="F003", batch=1, verdict="disagree",
                      evidence="b.py:4 is dead code") == []
     _reply(cv, "decline")
-    cv.rate("F001", frequency="common", severity="wrong-behavior")
-    cv.rate("F002", frequency="rare", severity="cosmetic", difficulty="trivial",
-            fix="fix the typo")
-    cv.rate("F004", frequency="common", severity="data-loss", difficulty="cross-cutting",
+    cv.rate("F001", impact="wrong-output")
+    cv.rate("F002", impact="cosmetic")
+    cv.rate("F004", impact="data-loss", difficulty="cross-cutting",
             choice="idempotency key or single-shot write")
 
 
@@ -47,22 +46,26 @@ def test_render_after_cutoff(cv: Converge) -> None:
     out = cv.ok("render", "s1").stdout
     lines = out.splitlines()
     assert lines[:5] == ["# converge slate `s1`", "",
-                         "findings=2 follow-up=1 killed=1 converged=yes", "",
+                         "fix-now=0 fixed=0 findings=2 follow-up=1 killed=1 converged=yes", "",
                          ("lenses: correctness, security · claims: 4 · phase: done · "
                          "cutoff: current")]
     sections = _sections(out)
-    assert list(sections) == ["Findings", "Choices", "Follow-up", "Killed", "Coverage"]
+    assert list(sections) == ["Findings", "Fix now", "Fixed", "Choices", "Follow-up", "Killed",
+                              "Coverage"]
     assert sections["Findings"].splitlines() == [
-        FINDINGS, "|" + "---|" * 12,
-        ("| 1 | F004 | correctness | src/a.py:10 | claim 4 | common | data-loss | traced | "
+        FINDINGS, "|" + "---|" * 13,
+        ("| 1 | F004 | correctness | src/a.py:10 | claim 4 | data-loss | one | normal | 0 | "
         "cross-cutting | survived | no | report_if[0] |"),
-        ("| 2 | F001 | correctness | src/a.py:10 | claim 1 | common | wrong-behavior | traced | "
-        "local | survived | no | report_if[1] |")]
-    assert sections["Choices"] == "- **F004** (finding) — idempotency key or single-shot write"
+        ("| 2 | F001 | correctness | src/a.py:10 | claim 1 | wrong-output | one | normal | 0 | "
+        "cross-cutting | survived | no | report_if[0] |")]
+    assert sections["Fix now"] == sections["Fixed"] == "None."
+    assert sections["Choices"].splitlines() == [
+        "- **F004** (finding) — idempotency key or single-shot write",
+        f"- **F001** (finding) — {CHOICE}"]
     assert sections["Follow-up"].splitlines() == [
-        FOLLOW_UP, "|" + "---|" * 12,
-        ("| 3 | F002 | correctness | src/a.py:10 | claim 2 | rare | cosmetic | traced | trivial | "
-        "survived | - | no rule matched |")]
+        FOLLOW_UP, "|" + "---|" * 13,
+        ("| 3 | F002 | correctness | src/a.py:10 | claim 2 | cosmetic | one | normal | 0 | "
+        f"cross-cutting | survived | {CHOICE} | no rule matched |")]
     assert sections["Killed"] == (
         f"- **F003** killed by r1 ({BATCH_1[0]}, batch 1) — claim 3 — evidence: read a.py:10 "
         "· verdict disagree: b.py:4 is dead code")
@@ -95,11 +98,12 @@ def test_render_disputed_finding_is_not_converged(cv: Converge) -> None:
                      evidence="b") == []
     _reply(cv, "rebut", "e2", cid="F001")
     cv.fresh_eye()
-    cv.rate(frequency="common", severity="security")
+    cv.rate(impact="security")
     cv.ok("cutoff", "s1")
     out = cv.ok("render", "s1").stdout
     assert "findings=1 follow-up=0 killed=0 converged=no" in out
-    assert "| claim 1 | common | security | traced | local | disputed | no | report_if[0] |" in out
+    assert ("| claim 1 | security | one | normal | 0 | cross-cutting | disputed | no | "
+            "report_if[0] |") in out
 
 
 def test_render_json_carries_the_markdown_and_choices(cv: Converge) -> None:
@@ -108,24 +112,22 @@ def test_render_json_carries_the_markdown_and_choices(cv: Converge) -> None:
     data = json.loads(cv.ok("render", "s1", "--json").stdout)
     assert data["markdown"] == cv.ok("render", "s1").stdout
     assert data["choices"] == [{"claim": "F004", "result": "finding",
-                                "choice": "idempotency key or single-shot write"}]
+                                "choice": "idempotency key or single-shot write"},
+                               {"claim": "F001", "result": "finding", "choice": CHOICE}]
+    assert data["fix_now"] == []
 
 
 def _choice_slate(cv: Converge) -> None:
     """Every claim carries a choice: F001 a finding, F002 unverified (cut before the attack),
     F003 cut after the attack."""
     cv.ready(cut="both", claims=3)
-    cv.rate("F001", "before", frequency="common", severity="wrong-behavior",
-            difficulty="redesign", choice="split or patch")
-    cv.rate("F002", "before", frequency="rare", severity="wrong-behavior",
-            difficulty="redesign", choice="drop or keep")
-    cv.rate("F003", "before", frequency="common", severity="wrong-behavior")
+    cv.rate("F001", "before", impact="wrong-output", choice="split or patch")
+    cv.rate("F002", "before", impact="cosmetic", choice="drop or keep")
+    cv.rate("F003", "before", impact="wrong-output")
     for cid in ("F001", "F003"):
         cv.clean(cid)
-    cv.rate("F001", frequency="common", severity="wrong-behavior", difficulty="redesign",
-            choice="split or patch")
-    cv.rate("F003", frequency="rare", severity="wrong-behavior", difficulty="cross-cutting",
-            choice="lock or queue")
+    cv.rate("F001", impact="wrong-output", difficulty="redesign", choice="split or patch")
+    cv.rate("F003", impact="cosmetic", difficulty="cross-cutting", choice="lock or queue")
     cv.ok("cutoff", "s1")
 
 

@@ -49,8 +49,7 @@ def test_status_shows_a_fresh_eye_attack_on_a_not_applicable_angle(cv: Converge)
 
 def test_roles_and_shape(cv: Converge) -> None:
     cv.ready(cut="before")
-    assert cv.append("cut", CUTTER, claim="F001", round=1, when="before",
-                     confidence="inferred") == []
+    assert cv.append("cut", CUTTER, claim="F001", round=1, when="before") == []
     assert cv.append("accept", FINDER, claim="F001", round=1, when="before") == []
     assert "attack: finder filed F001 and may not attack it" in _na(cv, FINDER, BATCH_1[0])
     assert "attack: orch wrote init; the orchestrator never writes attack" in _na(

@@ -44,14 +44,21 @@ FIND_ANGLES = """\
   cost: every feature edits one file
 """
 
+# The finder's `file --evidence` in the helpers.
+FILE_EVIDENCE = "a.py:10 reads x.y with x None"
+FILE_ARGS = ("--evidence", FILE_EVIDENCE, "--tier", "traced")
+
 CUT_EVIDENCE = ("--evidence", "entry-points=POST /x reaches it",
                 "--evidence", "blast-radius=one row per call",
-                "--evidence", "evidence-tier=traced a.py:10-20",
+                "--evidence", "affected-count=one record",
                 "--evidence", "files-touched=a.py")
 CUT_EVIDENCE_MAP = {key: text for key, _, text in
                     (item.partition("=") for item in CUT_EVIDENCE[1::2])}
-CUT_DEFAULTS = {"frequency": "common", "severity": "wrong-behavior", "confidence": "traced",
-                "difficulty": "local"}
+# A cut the built-in `default` lens attacks and reports; an after cut adds a fix that is
+# not cheap, so gate 2 reports it as a finding with a choice.
+CUT_DEFAULTS = {"impact": "wrong-output", "size": "one", "reach": "normal"}
+CHOICE = "patch the caller or move the check"
+AFTER_DEFAULTS = {"difficulty": "cross-cutting", "choice": CHOICE}
 
 # The attack angles a `ready` slate keeps, in snapshot order: exactly one table batch.
 BATCH_1 = ("cited-but-unread", "point-in-time", "provenance", "reachability", "absent-vs-default")
@@ -177,9 +184,11 @@ class Converge:
 
     def file(self, slate: str = "s1", agent: str = FINDER, lens: str = "correctness",
              angle: str = "changed-contract", origin: str = "lens", claim: str = "x breaks y",
-             extra: tuple[str, ...] = (), code: int = 0) -> str:
+             extra: tuple[str, ...] = (), code: int = 0, evidence: str = FILE_EVIDENCE,
+             tier: str = "traced") -> str:
         args = ["--as", agent, "--loc", "src/a.py:10", "--claim", claim,
-                "--trigger", "caller passes None", "--origin", origin]
+                "--trigger", "caller passes None", "--origin", origin,
+                "--evidence", evidence, "--tier", tier]
         if lens:
             args += ["--lens", lens]
         if angle:
@@ -188,13 +197,19 @@ class Converge:
         return result.stdout.split()[1] if code == 0 else result.stderr
 
     def cut(self, claim: str, rnd: int, agent: str = CUTTER, when: str = "after",
-            frequency: str = "common", severity: str = "wrong-behavior",
-            confidence: str = "traced", difficulty: str = "local", *extra: str,
+            impact: str = "wrong-output", size: str = "one", reach: str = "normal",
+            difficulty: str = "cross-cutting", *extra: str,
             slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
+        """One `cut` through the CLI; `difficulty` is passed at an after cut only, with
+        `CHOICE` when it is cross-cutting or redesign and `extra` names no choice."""
+        after: tuple[str, ...] = ()
+        if when == "after":
+            after = ("--difficulty", difficulty)
+            if difficulty in ("cross-cutting", "redesign") and "--choice" not in extra:
+                after += ("--choice", CHOICE)
         return self.ok("cut", slate, "--as", agent, "--claim", claim, "--round", str(rnd),
-                       "--when", when, "--frequency", frequency, "--severity", severity,
-                       "--confidence", confidence, "--difficulty", difficulty,
-                       *CUT_EVIDENCE, *extra, code=code)
+                       "--when", when, "--impact", impact, "--size", size, "--reach", reach,
+                       *after, *CUT_EVIDENCE, *extra, code=code)
 
     def accept(self, claim: str, rnd: int, agent: str = FINDER, when: str = "after",
                slate: str = "s1", code: int = 0) -> subprocess.CompletedProcess[str]:
@@ -213,10 +228,13 @@ class Converge:
                         "--angle", angle, "--lens", lens, "--reason", "no I/O in diff")
 
     def append(self, kind: str, agent: str, slate: str = "s1", **fields: Any) -> list[str]:
-        """Append one event through the ledger, not the CLI; the problems, or [] when written."""
+        """Append one event through the ledger, not the CLI; the problems, or [] when written.
+        A field given as None is left out."""
         event = {"event": kind, "as": agent, **fields}
         if kind == "cut":
-            event = {**CUT_DEFAULTS, "evidence": dict(CUT_EVIDENCE_MAP), **event}
+            after = AFTER_DEFAULTS if fields.get("when") == "after" else {}
+            event = {**CUT_DEFAULTS, **after, "evidence": dict(CUT_EVIDENCE_MAP), **event}
+        event = {key: value for key, value in event.items() if value is not None}
         if kind == "rebut" and "evidence" in fields:
             event["evidence_sha256"] = ledger.evidence_hash(fields["evidence"])
         try:
@@ -254,10 +272,8 @@ class Converge:
         self.fresh_eye(cid, agent=fresh_eye_agent)
 
     def rate(self, cid: str = "F001", when: str = "after", finder: str = FINDER,
-             **values: str) -> None:
+             **values: Any) -> None:
         """Cut round 1 of `cid` at `when` with `values`, accepted by its finder."""
-        if when == "before":
-            values.setdefault("confidence", "inferred")
         assert self.append("cut", CUTTER, claim=cid, round=1, when=when, **values) == []
         assert self.append("accept", finder, claim=cid, round=1, when=when) == []
 
