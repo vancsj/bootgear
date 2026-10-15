@@ -1,0 +1,16 @@
+# use when: the project's tests use mocking libraries, HTTP test clients or helpers for asynchronous code
+- id: lenient-mock-hides-gap
+  tag: find
+  lens: tests
+  tell: A mock accepts any call, or stubs match on loose arguments.
+  asks: Would a missing or wrong stub still pass?
+- id: assert-call-not-value
+  tag: find
+  lens: tests
+  tell: A test asserts that a save or send was called.
+  asks: Does it read back what was saved or sent and assert the value?
+- id: test-resource-leak
+  tag: find
+  lens: tests
+  tell: A test opens a stream, response body, connection or worker thread.
+  asks: Is each closed or joined on every exit path, and is a wait timeout checked instead of ignored?

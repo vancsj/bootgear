@@ -18,6 +18,9 @@ cutoff:
     architecture:
       attack_if: [{tier: [reproduced, traced], rate_at_least: 3}]
       report_if: [{status: [survived, disputed], tier: [reproduced, traced], rate_at_least: 3}]
+    consistency:
+      attack_if: [{tier: [reproduced, traced]}]
+      report_if: [{status: [survived, disputed], tier: [reproduced, traced], impact: [security, data-loss, wrong-output, clarity]}]
   rereview:
     lenses:
       default: &strict
@@ -29,6 +32,7 @@ cutoff:
       correctness: *strict
       contract: *strict
       tests: *strict
+      consistency: *strict
       architecture:
         attack_if: [{tier: [reproduced, traced], rate_at_least: 3}]
         report_if: [{status: [survived, disputed], tier: [reproduced], rate_at_least: 3}]

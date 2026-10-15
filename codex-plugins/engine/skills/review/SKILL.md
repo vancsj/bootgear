@@ -16,7 +16,9 @@ each iteration's slate id, converge dir and `converge render` output:
 findings in rank order with their status, `fix-now` claims with their patches
 (`converge render --json` `fix_now`) and any `fix-check` recorded on them,
 `choice` claims, follow-up claims with their status, and killed claims with
-their evidence. Return follow-up claims in the handback; do not record them.
+their evidence. When the default implementation selects packs, also hand back
+the angle packs enabled for the slate, each with the reason. Return follow-up
+claims in the handback; do not record them.
 
 A new review ends with exactly one outcome:
 
@@ -124,7 +126,7 @@ change.
 Use the depth label passed by the caller, else `full`:
 
 - `quick`: lenses `correctness,tests`; agents main, F, R1, C; no gap hunt.
-- `full`: lenses `correctness,security,architecture,tests,simplicity,contract`;
+- `full`: lenses `correctness,security,architecture,tests,simplicity,contract,consistency`;
   agents main, F, R1, R2, C; gap hunt by R2.
 
 This slate is one task: never use more than these agents on it, and reuse
@@ -147,12 +149,33 @@ Choose the slate id and the converge dir:
 
 Initialize the slate through the public `converge` command with the selected
 depth, lenses, angle files, and project root. The angle files are
-[references/find-angles.yaml](references/find-angles.yaml) for every depth,
-plus [references/design-patterns.yaml](references/design-patterns.yaml) and
+[references/find-angles.yaml](references/find-angles.yaml) for every depth;
+for each lens in the depth, its `references/angles-<lens>.yaml` when that file
+exists ([references/angles-security.yaml](references/angles-security.yaml),
+[references/angles-tests.yaml](references/angles-tests.yaml),
+[references/angles-simplicity.yaml](references/angles-simplicity.yaml),
+[references/angles-consistency.yaml](references/angles-consistency.yaml));
+[references/design-patterns.yaml](references/design-patterns.yaml) and
 [references/evaluate-angles.yaml](references/evaluate-angles.yaml) when the
-`architecture` lens is in the depth. Pass the absolute path of
-[references/cutoff.yaml](references/cutoff.yaml), the per-lens cutoff
-policy, as `--defaults` to `init`.
+`architecture` lens is in the depth; and each angle pack enabled below. Pass
+the absolute path of [references/cutoff.yaml](references/cutoff.yaml), the
+per-lens cutoff policy, as `--defaults` to `init`.
+
+Select the angle packs before `init`. Each `references/pack-*.yaml` opens with
+one line `# use when: <project property>`. Read that line of every pack and
+enable the pack when the project has the property, judging from project-wide
+sources only: the host's project instruction file (`CLAUDE.md` or
+`AGENTS.md`), the project docs, and the build and manifest files at the
+project root. Never use the diff or the changed-file list. Enable a pack when
+unsure; enable none when the sources give no stack information. For a
+re-review (a pass `<n>` ≥ 2, or a standalone review on a new slate after an
+iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
+that file is missing, select anew. Write the enabled pack file names, one per
+line, to `<converge-dir>/<slate>.packs` (an empty file when none). In an
+active run, record
+`task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
+If `init` refuses with a duplicate angle id that names a pack, remove that
+pack from `--angles` and from the `.packs` file, and run `init` again.
 
 In an active run, write the settlement with
 `task session read <run-id> --dir <session-dir> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`

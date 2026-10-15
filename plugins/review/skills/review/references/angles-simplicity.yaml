@@ -1,0 +1,21 @@
+# simplicity find angles: asked of the simplicity lens beside the general find angles.
+- id: defensive-check-on-guaranteed
+  tag: find
+  lens: simplicity
+  tell: A guard, default or null check handles a case that the type or the caller's contract already rules out.
+  asks: Can that case happen? If not, does the check hide a real failure or mislead the reader?
+- id: nested-condition-chain
+  tag: find
+  lens: simplicity
+  tell: Conditions nest three or more levels, or else-if branches chain on one value.
+  asks: Would early returns, a lookup or a flat branch say the same with less reading?
+- id: mixed-concerns-block
+  tag: find
+  lens: simplicity
+  tell: A function, block or test body does two unrelated things.
+  asks: Which two concerns does it mix, and does the mix hide a bug or a path that is hard to test?
+- id: parameter-sprawl
+  tag: find
+  lens: simplicity
+  tell: A function gains a parameter and now takes five or more.
+  asks: Do the parameters travel together, so that one request object could carry them?

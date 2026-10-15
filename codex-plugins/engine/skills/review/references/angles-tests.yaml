@@ -1,0 +1,46 @@
+# tests find angles: asked of the tests lens beside the general find angles.
+- id: untested-branch
+  tag: find
+  lens: tests
+  tell: A branch, condition or error path was added or changed.
+  asks: Which existing test fails if this branch is wrong? If none, what input would break it unnoticed?
+- id: guard-side-effects-untested
+  tag: find
+  lens: tests
+  tell: An early return, guard or permission check was added or changed.
+  asks: Does a test assert that the deletes, saves, sends or events did not happen on that path?
+- id: entry-point-invalid-input
+  tag: find
+  lens: tests
+  tell: A new public entry point accepts input, such as an endpoint, a command or a function with outside callers.
+  asks: Are missing, wrong-type and out-of-set inputs tested, with the error each returns?
+- id: fallback-untested
+  tag: find
+  lens: tests
+  tell: A default value, swallowed error or caught failure now produces a fallback result.
+  asks: Does a test force the fallback and assert what the caller sees?
+- id: strict-boundary-untested
+  tag: find
+  lens: tests
+  tell: A strict comparison against a threshold was added or changed.
+  asks: Do tests probe the limit and both neighbors, so a change from < to <= fails?
+- id: status-only-assertion
+  tag: find
+  lens: tests
+  tell: A test checks the success or failure of a call that returns a structured result.
+  asks: Does it assert the returned fields, text or headers for each branch, not only the status?
+- id: fixture-drift
+  tag: find
+  lens: tests
+  tell: A test uses a canned payload, mock response or fixture in place of production data.
+  asks: Does the fixture match what production now selects, with no excluded field and no missing one?
+- id: unstable-negative-assertion
+  tag: find
+  lens: tests
+  tell: A test asserts that something is absent or empty after an asynchronous step.
+  asks: Is the assertion made once the condition is guaranteed stable, not before the step finishes?
+- id: disabled-or-bypassed-test
+  tag: find
+  lens: tests
+  tell: A test or check is skipped, suppressed or loosened, or a safety guard is bypassed.
+  asks: Is there a stated reason and a tracked follow-up, or was it disabled to get a pass?

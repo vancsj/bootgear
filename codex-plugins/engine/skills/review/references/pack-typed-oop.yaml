@@ -1,0 +1,43 @@
+# use when: the project is written in a statically typed language that has classes, interfaces or value types
+- id: primitive-obsession
+  tag: find
+  lens: architecture
+  tell: Raw strings or numbers carry distinct kinds of identifier or quantity.
+  asks: Can two kinds be swapped without the compiler noticing?
+  cost: A swapped value compiles and corrupts data.
+- id: public-mutable-state
+  tag: find
+  lens: architecture
+  tell: A public field or collection can be changed from outside its owner.
+  asks: Who else changes it, and which invariant do they break?
+  cost: Any caller can break an invariant.
+- id: bypassable-constructor
+  tag: find
+  lens: architecture
+  tell: A factory or validating builder exists beside a public constructor.
+  asks: Can a caller build an invalid instance through the constructor?
+  cost: An invalid instance enters the system.
+- id: anemic-type
+  tag: find
+  lens: architecture
+  tell: The same validation or conversion of one type appears at two or more call sites.
+  asks: Does the check belong in the type?
+  cost: One call site drifts from the others.
+- id: unvalidated-boundary-type
+  tag: find
+  lens: architecture
+  tell: An outside payload, such as a request, row or message, is deserialized straight into a domain type.
+  asks: Does anything enforce the type's invariants on that path?
+  cost: Invalid data reaches domain code.
+- id: over-broad-type
+  tag: find
+  lens: architecture
+  tell: One type carries different fields for two code paths.
+  asks: Should it split, so that each path sees only what it uses?
+  cost: Each path handles fields that are never set for it.
+- id: cross-cutting-in-base
+  tag: find
+  lens: architecture
+  tell: Logging, audit, metrics or tracing was added to a base class or to domain code.
+  asks: Could a wrapper at the wiring layer do it?
+  cost: Every subclass inherits the dependency, and a missing one disables it silently.

@@ -1,0 +1,27 @@
+# consistency find angles: asked of the consistency lens beside the general find angles.
+# A claim from this lens cites each peer it compares against with file:line.
+- id: peer-file-divergence
+  tag: find
+  lens: consistency
+  tell: A new file, class, endpoint, migration or test sits beside others of the same kind.
+  asks: What do two or three peers do that this one does not, in naming, error handling, parameters, docs, registration or tests? Cite each peer with file:line.
+- id: sibling-in-file-divergence
+  tag: find
+  lens: consistency
+  tell: A new function, block or test body was added next to adjacent ones in the same file.
+  asks: Does it differ from its neighbours in style, timeouts, helpers or assertions without a reason? Cite the neighbour with file:line.
+- id: name-fit
+  tag: find
+  lens: consistency
+  tell: A name was added, or a file or class gained content of a different kind.
+  asks: Does the name still describe its responsibility, and match how peers name the same thing?
+- id: unmarked-deliberate-oddity
+  tag: find
+  lens: consistency
+  tell: New code departs on purpose from the obvious form, such as a duplicate kept separate, a magic value or an unusual comparison.
+  asks: Does a one-line comment state the intent, or will a later reader fix it and break it?
+- id: stale-doc-comment
+  tag: find
+  lens: consistency
+  tell: Code changed under a comment or doc comment.
+  asks: Do the names, defaults, parameters, return and failure text in the comment still match the code?

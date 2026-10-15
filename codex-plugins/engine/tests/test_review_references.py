@@ -13,14 +13,19 @@ import yaml
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
 
-from converge.angles import load_file
+from converge.angles import load_file, resolve
 from converge.config import DEFAULTS, _merge, rereview, validate_config
 from converge.model import rule_matches
 
 REPO_ROOT = PLUGIN_DIR.parents[1]
 CLAUDE_REFS = REPO_ROOT / "plugins" / "review" / "skills" / "review" / "references"
 CODEX_REFS = PLUGIN_DIR / "skills" / "review" / "references"
-FILES = ("cutoff.yaml", "evaluate-angles.yaml")
+NEW_ANGLE_FILES = (
+    "angles-security.yaml", "angles-tests.yaml", "angles-simplicity.yaml",
+    "angles-consistency.yaml", "pack-web.yaml", "pack-typed-oop.yaml",
+    "pack-concurrency-db.yaml", "pack-test-tooling.yaml",
+)
+FILES = ("cutoff.yaml", "evaluate-angles.yaml", "lenses.md", *NEW_ANGLE_FILES)
 
 
 def _effective(review_pass: int = 1) -> dict:
@@ -39,7 +44,7 @@ def test_cutoff_is_a_valid_config_layer() -> None:
     assert validate_config(table, "review cutoff.yaml") == []
     assert set(table) == {"cutoff"} and set(table["cutoff"]) == {"lenses", "rereview"}
     assert set(table["cutoff"]["lenses"]) == {"security", "correctness", "contract", "tests",
-                                              "architecture"}
+                                              "architecture", "consistency"}
     assert validate_config(_effective(2), "pass 2", complete=True) == []
 
 
@@ -48,6 +53,11 @@ def test_evaluate_angles_file() -> None:
     assert [(row["id"], row["tag"], row["field"], row["lens"]) for row in rows] == [
         ("file-churn", "evaluate", "rate", "architecture")]
     assert "git log --since" in rows[0]["asks"]
+
+
+def test_review_angle_files_resolve_together() -> None:
+    names = ("find-angles.yaml", "design-patterns.yaml", "evaluate-angles.yaml", *NEW_ANGLE_FILES)
+    assert resolve([CLAUDE_REFS / name for name in names])
 
 
 def _decides(lens: str, key: str, review_pass: int = 1, **values: object) -> bool:
@@ -68,6 +78,9 @@ def _decides(lens: str, key: str, review_pass: int = 1, **values: object) -> boo
         ("architecture", {"impact": "cosmetic", "reach": "normal", "rate": 2}, False),
         ("architecture", {"impact": "cosmetic", "reach": "normal", "rate": 3}, True),
         ("simplicity", {"impact": "wrong-output", "reach": "normal"}, True),
+        ("consistency", {"tier": "traced", "impact": "clarity"}, True),
+        ("consistency", {"tier": "traced", "impact": "cosmetic"}, True),
+        ("consistency", {"tier": "inferred", "impact": "clarity"}, False),
     ],
 )
 def test_cutoff_attacks(lens: str, values: dict, attacked: bool) -> None:
@@ -86,6 +99,10 @@ def test_cutoff_attacks(lens: str, values: dict, attacked: bool) -> None:
          True),
         ("architecture", 2, {"impact": "cosmetic", "reach": "normal", "rate": 4}, False),
         ("simplicity", 2, {"impact": "security", "reach": "crafted"}, True),
+        ("consistency", 1, {"tier": "traced", "impact": "clarity"}, True),
+        ("consistency", 1, {"tier": "traced", "impact": "cosmetic"}, False),
+        ("consistency", 1, {"tier": "inferred", "impact": "clarity"}, False),
+        ("consistency", 2, {"tier": "traced", "impact": "clarity"}, False),
     ],
 )
 def test_cutoff_reports(lens: str, review_pass: int, values: dict, reported: bool) -> None:

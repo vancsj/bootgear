@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,23 @@ SKILL_DIR = PLUGIN_DIR / "skills" / "review"
 REFERENCES = SKILL_DIR / "references"
 ANGLE_FILES = ("find-angles.yaml", "design-patterns.yaml")
 ANGLE_KEYS = {"id", "tag", "tell", "asks", "lens", "cost"}
+LENS_ANGLE_FILES = ("angles-security.yaml", "angles-tests.yaml", "angles-simplicity.yaml",
+                    "angles-consistency.yaml")
+PACK_FILES = ("pack-web.yaml", "pack-typed-oop.yaml", "pack-concurrency-db.yaml",
+              "pack-test-tooling.yaml")
+PROJECT_WORDS = ("kotlin", "java", "spring", "angular", "jpa", "hibernate", "flyway", "mockk",
+                 "rxjs", "ngrx", "webclient", "jackson")
+
+
+def _rows(name: str) -> list[dict]:
+    return yaml.safe_load((REFERENCES / name).read_text())
+
+
+def _full_depth_lenses() -> list[str]:
+    skill = (SKILL_DIR / "SKILL.md").read_text()
+    match = re.search(r"^- `full`: lenses `([^`]+)`", skill, re.MULTILINE)
+    assert match, "SKILL.md has no `full` depth line"
+    return match.group(1).split(",")
 
 
 class ReviewContractTest(unittest.TestCase):
@@ -27,6 +45,57 @@ class ReviewContractTest(unittest.TestCase):
                     self.assertTrue(row["cost"].strip(), row)
                 ids.append(row["id"])
         self.assertEqual(len(ids), len(set(ids)))
+
+    def test_per_lens_files(self):
+        found = sorted(path.name for path in REFERENCES.glob("angles-*.yaml"))
+        self.assertEqual(found, sorted(LENS_ANGLE_FILES))
+        for name in LENS_ANGLE_FILES:
+            lens = name.removeprefix("angles-").removesuffix(".yaml")
+            for row in _rows(name):
+                self.assertLessEqual(set(row), ANGLE_KEYS, row)
+                self.assertRegex(row["id"], r"\A[a-z0-9]+(-[a-z0-9]+)*\Z")
+                self.assertEqual(row["tag"], "find", row)
+                self.assertEqual(row["lens"], lens, row)
+
+    def test_pack_files(self):
+        found = sorted(path.name for path in REFERENCES.glob("pack-*.yaml"))
+        self.assertEqual(found, sorted(PACK_FILES))
+        for name in PACK_FILES:
+            first_line = (REFERENCES / name).read_text().splitlines()[0]
+            self.assertRegex(first_line, r"\A# use when: \S", name)
+            for row in _rows(name):
+                self.assertIn("lens", row, row)
+                if row["lens"] == "architecture":
+                    self.assertTrue(row["cost"].strip(), row)
+
+    def test_ids_unique_across_angle_files(self):
+        ids = [row["id"] for name in (*ANGLE_FILES, *LENS_ANGLE_FILES, *PACK_FILES)
+               for row in _rows(name)]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_angle_text_is_project_free(self):
+        words = re.compile(r"\b(" + "|".join(PROJECT_WORDS) + r")\b", re.IGNORECASE)
+        for name in (*LENS_ANGLE_FILES, *PACK_FILES):
+            for row in _rows(name):
+                for key in ("tell", "asks", "cost"):
+                    self.assertIsNone(words.search(row.get(key, "")), (name, row["id"], key))
+
+    def test_skill_names_every_angle_file(self):
+        skill = (SKILL_DIR / "SKILL.md").read_text()
+        full_depth = _full_depth_lenses()
+        for path in sorted(REFERENCES.glob("angles-*.yaml")):
+            lens = path.name.removeprefix("angles-").removesuffix(".yaml")
+            self.assertIn(f"references/{path.name}", skill)
+            self.assertIn(lens, full_depth)
+        for name in LENS_ANGLE_FILES:
+            self.assertIn(f"references/{name}", skill)
+        self.assertIn("references/pack-*.yaml", skill)
+
+    def test_full_depth_lenses_have_a_brief(self):
+        table = (REFERENCES / "lenses.md").read_text()
+        briefed = set(re.findall(r"^\| `([a-z-]+)` \|", table, re.MULTILINE))
+        for lens in _full_depth_lenses():
+            self.assertIn(lens, briefed)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+# use when: the project runs concurrent tasks, async or pooled workers, or uses a database with transactions
+- id: cancellation-swallowed
+  tag: find
+  lens: correctness
+  tell: A broad catch or handler wraps async or cancellable work.
+  asks: Does it swallow cancellation or interrupt signals, so that stopping the work stops nothing?
+- id: io-in-transaction
+  tag: find
+  lens: architecture
+  tell: A network call, file write or queue send runs inside a database transaction.
+  asks: What holds the connection while it waits, and what state remains if the transaction rolls back after the call succeeded?
+  cost: The pool starves, or the outside effect stays while the data rolls back.
+- id: long-call-on-shared-pool
+  tag: find
+  lens: architecture
+  tell: A call with a long or unbounded wait runs on a shared worker pool or event loop.
+  asks: Can it starve other work, and is there a dedicated, bounded pool?
+  cost: One slow call stalls unrelated requests.

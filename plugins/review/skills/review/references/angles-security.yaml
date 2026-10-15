@@ -1,0 +1,41 @@
+# security find angles: asked of the security lens beside the general find angles.
+- id: ownership-check-missing
+  tag: find
+  lens: security
+  tell: An object is fetched, changed or deleted by an id taken from the request, or a state-changing path checks only that the caller is signed in.
+  asks: Is the object checked against the requesting user or tenant, not only authenticated?
+- id: bulk-ownership
+  tag: find
+  lens: security
+  tell: One request acts on a list of objects.
+  asks: Is every item checked against the requester, or only the first item or the container?
+- id: url-from-response
+  tag: find
+  lens: security
+  tell: The code follows a URL taken from an external response or from input while credentials are attached.
+  asks: Is the host checked against an allowed list before the call?
+- id: sensitive-in-output
+  tag: find
+  lens: security
+  tell: A log line, error message or response carries a field.
+  asks: Does it expose personal data, a secret, an internal id, or an internal stack trace or class name to someone who should not see it?
+- id: injection-concat
+  tag: find
+  lens: security
+  tell: A query, command, template or filter expression is built by joining strings that include input.
+  asks: Can input change its structure, and is a parameterized form available?
+- id: path-from-input
+  tag: find
+  lens: security
+  tell: A file path or resource name is built from input.
+  asks: Is the result normalized and checked to stay under the intended root?
+- id: secret-compare
+  tag: find
+  lens: security
+  tell: A token, signature or password is compared with an ordinary equality check.
+  asks: Does the comparison leak timing, and does the platform offer a constant-time compare?
+- id: crash-on-external-input
+  tag: find
+  lens: security
+  tell: An assertion, unchecked unwrap, forced cast or direct index is applied to a value that came from outside the process.
+  asks: Can a caller supply a value that crashes the request, and what validation does the crash skip?

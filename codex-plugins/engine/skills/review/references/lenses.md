@@ -3,8 +3,9 @@
 Each lens is one topic of the single finder, F. Its brief lists every lens of
 the depth with the scope and brief below, plus the diff and, when one is
 linked, the ticket. For each lens, F declares the find angles whose tell
-matches the diff (`find-angles.yaml`, plus `design-patterns.yaml` for
-`architecture`) and records every other angle as not applicable.
+matches the diff (`find-angles.yaml`, the lens's `angles-<lens>.yaml`,
+`design-patterns.yaml` for `architecture`, and each enabled `pack-*.yaml`)
+and records every other angle as not applicable.
 
 | Lens | Depth | Scope | Brief |
 |---|---|---|---|
@@ -14,6 +15,7 @@ matches the diff (`find-angles.yaml`, plus `design-patterns.yaml` for
 | `architecture` | full | Fit with surrounding structure; the design-pattern catalog. | Find a design choice with a tell in the diff and a cost scenario shown in this repo. |
 | `simplicity` | full | Unnecessary abstraction, unreachable branches, excess complexity, reinvented utilities. | Find code the change could drop or shrink with the same behavior. |
 | `contract` | full | Public API, schema, CLI, event and file-format surfaces; callers and consumers. | Find a caller or consumer that the changed surface breaks or leaves unstated. |
+| `consistency` | full | Fit with peer files and neighbours: naming, structure, error handling, docs, tests of the same kind. | Find where the change deviates from its cross-file and intra-file peers, citing each peer with `file:line`; file `tier: traced` only when every compared peer is cited, else `inferred`. |
 
 ## Cut dimensions per lens
 
@@ -29,3 +31,4 @@ by the tests `converge angles --tag evaluate` prints. Per lens:
 | `contract` | `impact: clarity` when the changed surface leaves a caller's contract unstated. |
 | `architecture` | `rate` counts the commits touching the claim's files in the last 90 days (`git log` churn, the `file-churn` angle); `impact` from the cost scenario shown in this repo. |
 | `simplicity` | `impact` is `clarity` or `cosmetic` unless the extra code returns a wrong result. |
+| `consistency` | `impact` is `clarity` unless the divergence returns a wrong result. |

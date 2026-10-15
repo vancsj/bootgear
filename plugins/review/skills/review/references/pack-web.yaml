@@ -1,0 +1,26 @@
+# use when: the project serves HTTP endpoints, a web UI or a public API to external callers
+- id: mass-assignment
+  tag: find
+  lens: security
+  tell: A request body binds directly to a stored model, or accepts fields such as owner, role or status.
+  asks: Can a caller set a field it must not control?
+- id: protection-disabled
+  tag: find
+  lens: security
+  tell: CSRF, authentication or origin checks are turned off, or an allowed-origin list is a wildcard.
+  asks: Is the reason stated, and does it hold for every client that reaches this route?
+- id: debug-surface-exposed
+  tag: find
+  lens: security
+  tell: A diagnostic, metrics, admin or debug route is exposed.
+  asks: Who can reach it without extra authentication, and what does it reveal?
+- id: open-redirect
+  tag: find
+  lens: security
+  tell: A redirect target is built from request input.
+  asks: Is it checked against an allowed list?
+- id: outlives-request
+  tag: find
+  lens: security
+  tell: A background task or callback is started from a request handler.
+  asks: After the request context is gone, does it still run with the caller's identity, or with none?
