@@ -38,6 +38,7 @@ How claims are attacked, rated and cut is converge's job; see its [README](../co
 | `architecture` | full | a design choice with a tell in the diff and a cost scenario shown in this repo |
 | `simplicity` | full | code the change could drop or shrink with the same behaviour |
 | `contract` | full | a caller or consumer that a changed API, schema, CLI, event or file format breaks |
+| `consistency` | full | where the change deviates from its peers in naming, structure, error handling, docs or tests, each peer cited |
 
 `quick` runs four agents (main, finder, one refuter, cutter) and no gap hunt. `full`, the
 default, adds a second refuter, who first hunts for gaps right after the find, before any
@@ -46,10 +47,15 @@ in both directions (asked but missing, present but unasked). An unlabelled call 
 
 **Find angles** are specific questions with a *tell*, the sign in the diff that makes the
 question worth asking: `changed-contract`, `removed-behavior`, `boundary-input`,
-`test-cant-fail`, `ticket-diff` and seven more. The `architecture` lens adds a catalog of 39
+`test-cant-fail`, `ticket-diff` and seven more. The `security`, `tests`, `simplicity` and
+`consistency` lenses each add their own angles. The `architecture` lens adds a catalog of 39
 design failure patterns (`layer-leak`, `hidden-coupling`, `premature-abstraction`,
-`god-object`, ...), each with the cost it makes harder. The finder declares the angles whose
-tell matches and records every other one as not applicable, so coverage is checkable.
+`god-object`, ...), each with the cost it makes harder. **Angle packs** are optional angle
+files for a kind of project (web, typed OOP, concurrency and database, test tooling); the
+review enables the packs whose `# use when:` line fits the project, and `angles.files` and
+`angles.disable` in a converge config layer pin or exclude angles. The finder declares the
+angles whose tell matches and records every other one as not applicable, so coverage is
+checkable.
 
 ## Applying feedback
 
