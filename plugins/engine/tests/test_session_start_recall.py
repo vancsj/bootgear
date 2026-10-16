@@ -150,12 +150,29 @@ class SessionStartRecallTest(unittest.TestCase):
         self.assertIn("[user]\n- user rule", msg)
         self.assertIn("[task]", msg)
 
-    def test_no_ledger_prints_nothing(self):
+    def _write_user_and_project_principles(self):
         (self.config_dir / "principles.md").write_text("- project rule\n")
+        (self.home / ".claude").mkdir()
+        (self.home / ".claude" / "principles.md").write_text("- user rule\n")
+
+    PRINCIPLES_ONLY = (
+        "Merged principles (user/project/task):\n"
+        "[user]\n- user rule\n\n[project]\n- project rule"
+    )
+
+    def test_no_ledger_prints_principles_only(self):
+        self._write_user_and_project_principles()
+        self.assertEqual(self._run("no-such-run"), self.PRINCIPLES_ONLY)
+
+    def test_no_ledger_and_no_principles_prints_nothing(self):
         self.assertEqual(self._run_stdout("no-such-run"), "")
 
-    def test_closed_ledger_prints_nothing(self):
-        (self.config_dir / "principles.md").write_text("- project rule\n")
+    def test_closed_ledger_prints_principles_only(self):
+        self._write_user_and_project_principles()
+        self.ledger.write_text(self.ledger.read_text() + "\n## closed\nsucceeded\n")
+        self.assertEqual(self._run(), self.PRINCIPLES_ONLY)
+
+    def test_closed_ledger_and_no_principles_prints_nothing(self):
         self.ledger.write_text(self.ledger.read_text() + "\n## closed\nsucceeded\n")
         self.assertEqual(self._run_stdout(), "")
 
@@ -171,7 +188,23 @@ class SessionStartRecallTest(unittest.TestCase):
         self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
         self.assertEqual(self._run_stdout(), "")
 
-    def test_missing_session_id_prints_nothing(self):
+    def test_missing_session_id_prints_principles_only(self):
+        self._write_user_and_project_principles()
+        result = subprocess.run(
+            ["python3", str(HOOK)],
+            input=json.dumps({"cwd": str(self.cwd), "hook_event_name": "SessionStart", "source": "compact"}),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(self.home)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"],
+            self.PRINCIPLES_ONLY,
+        )
+
+    def test_missing_session_id_and_no_principles_prints_nothing(self):
         result = subprocess.run(
             ["python3", str(HOOK)],
             input=json.dumps({"cwd": str(self.cwd), "hook_event_name": "SessionStart", "source": "compact"}),

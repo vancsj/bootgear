@@ -304,12 +304,21 @@ class SessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("the goal text", context)
         self.assertIn("[project]\n- project rule", context)
 
-    def test_no_ledger_prints_nothing(self):
+    def _context(self) -> str:
+        return json.loads(self._run())["hookSpecificOutput"]["additionalContext"]
+
+    PRINCIPLES_ONLY = "Merged principles (user/project/task):\n[project]\n- project rule"
+
+    def test_no_ledger_adds_principles_only(self):
+        self.assertEqual(self._context(), self.PRINCIPLES_ONLY)
+
+    def test_no_ledger_and_no_principles_prints_nothing(self):
+        (self.cwd / ".bootgear" / "config" / "principles.md").unlink()
         self.assertEqual(self._run(), "")
 
-    def test_closed_ledger_prints_nothing(self):
+    def test_closed_ledger_adds_principles_only(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
-        self.assertEqual(self._run(), "")
+        self.assertEqual(self._context(), self.PRINCIPLES_ONLY)
 
     def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n\n## notes\nnot ## closed yet\n## closed-loop notes\n")
@@ -317,6 +326,6 @@ class SessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("This session just compacted", context)
         self.assertIn("the goal text", context)
 
-    def test_unreadable_ledger_prints_nothing(self):
+    def test_unreadable_ledger_adds_principles_only(self):
         self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
-        self.assertEqual(self._run(), "")
+        self.assertEqual(self._context(), self.PRINCIPLES_ONLY)

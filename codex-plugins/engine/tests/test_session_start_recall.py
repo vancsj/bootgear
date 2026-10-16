@@ -5,6 +5,7 @@ invokes it: JSON on stdin, JSON on stdout. Exercises the active-ledger gate,
 the 3-level merge and each source's independent failure handling.
 """
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -36,12 +37,16 @@ session_dir: {session_dir}
 """
 
 
-def run_hook(hook_input: dict) -> dict:
+def run_hook(hook_input: dict, home: Path | None = None) -> dict:
+    env = dict(os.environ)
+    if home is not None:
+        env["HOME"] = str(home)
     result = subprocess.run(
         ["python3", str(HOOK)],
         input=json.dumps(hook_input),
         capture_output=True,
         text=True,
+        env=env,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -162,8 +167,29 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         self.assertIn("[user]\n- user rule", msg)
         self.assertIn("[task]", msg)
 
-    def test_no_ledger_prints_identity_only(self):
+    def _write_user_and_project_principles(self):
         (self.config_dir / "principles.md").write_text("- project rule\n")
+        (self.home / ".codex").mkdir()
+        (self.home / ".codex" / "principles.md").write_text("- user rule\n")
+
+    PRINCIPLES = (
+        "Merged principles (user/project/task):\n"
+        "[user]\n- user rule\n\n[project]\n- project rule"
+    )
+
+    def test_no_ledger_prints_identity_and_principles(self):
+        self._write_user_and_project_principles()
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                msg = self._run(source=source, run_id="no-such-run")
+                self.assertEqual(
+                    msg,
+                    "Codex session_id: `no-such-run`. Use this exact value as the "
+                    "engine run-id; do not generate a UUID or other replacement."
+                    f"\n\n{self.PRINCIPLES}",
+                )
+
+    def test_no_ledger_and_no_principles_prints_identity_only(self):
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 msg = self._run(source=source, run_id="no-such-run")
@@ -173,18 +199,14 @@ class SessionStartPrinciplesTest(unittest.TestCase):
                     "engine run-id; do not generate a UUID or other replacement.",
                 )
 
-    def test_closed_ledger_prints_identity_only(self):
-        (self.config_dir / "principles.md").write_text("- project rule\n")
+    def test_closed_ledger_prints_identity_and_principles(self):
+        self._write_user_and_project_principles()
         ledger = self.session_dir / f"{self.run_id}.md"
         ledger.write_text(ledger.read_text() + "\n## closed\nsucceeded\n")
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 msg = self._run(source=source)
-                self.assertEqual(
-                    msg,
-                    f"Codex session_id: `{self.run_id}`. Use this exact value as the "
-                    "engine run-id; do not generate a UUID or other replacement.",
-                )
+                self.assertEqual(msg, f"{self._identity()}\n\n{self.PRINCIPLES}")
 
     def _identity(self):
         return (
@@ -214,12 +236,14 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         self.assertNotIn("This session just compacted", msg)
         self.assertIn("succeeded when done", msg)
 
-    def test_missing_session_id_without_a_ledger_prints_the_missing_identity_message(self):
-        out = run_hook({"cwd": str(self.cwd), "source": "compact"})
+    def test_missing_session_id_prints_the_missing_identity_message_and_principles(self):
+        self._write_user_and_project_principles()
+        out = run_hook({"cwd": str(self.cwd), "source": "compact"}, home=self.home)
         self.assertEqual(
             out["hookSpecificOutput"]["additionalContext"],
             "Codex did not provide a session_id. Do not start or resume an engine run "
-            "with a generated UUID; obtain the host session identity first.",
+            "with a generated UUID; obtain the host session identity first."
+            f"\n\n{self.PRINCIPLES}",
         )
 
     def test_home_ledger_found_when_cwd_session_dir_holds_other_runs(self):

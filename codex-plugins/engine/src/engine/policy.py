@@ -277,24 +277,20 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
             if isinstance(event.session_id, str) and event.session_id
             else _CODEX_SESSION_ID_MISSING
         )
-        if active is None:
-            return Intent.add_context(identity)
-        message = identity
-        if source == "compact":
-            message = f"{_CODEX_SESSION_NUDGE}\n\n{message}"
+        parts = [identity]
+        if active is not None and source == "compact":
+            parts.insert(0, _CODEX_SESSION_NUDGE)
     else:
-        if active is None:
-            return Intent.observe()
-        message = _SESSION_NUDGE
-    settlement = _read_settlement(active[1])
+        parts = [_SESSION_NUDGE] if active is not None else []
+    settlement = _read_settlement(active[1]) if active is not None else None
     goal = _goal_text(settlement)
     if goal:
         label = "goal" if context.host == "codex" else "/goal"
-        message = f"{message}\n\nThis run's {label}:\n{goal}"
+        parts.append(f"This run's {label}:\n{goal}")
     principles = _principles(context, settlement)
     if principles:
-        message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
-    return Intent.add_context(message)
+        parts.append(f"Merged principles (user/project/task):\n{principles}")
+    return Intent.add_context("\n\n".join(parts)) if parts else Intent.observe()
 
 
 def _should_nudge(state: dict[str, Any], now: float) -> bool:

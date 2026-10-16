@@ -138,7 +138,7 @@ writes the ledger.
 
 | Hook | Fires on | Reads | Emits |
 |---|---|---|---|
-| session-start recall | session start after compaction (Codex: also startup, resume) | hook `session_id`, `cwd`; ledger existence and `## closed`; the ledger's settlement `goal` and `principles`; user `principles.md` in the host config dir; `.bootgear/config/principles.md` | nothing without an active ledger (Codex: the session id only); with one, a recall nudge (Codex: only when `source` is `compact`), the run's `goal` when it is a plain string (a `succeeded`/`failed` mapping is not shown), and merged `[user]`/`[project]`/`[task]` principles; a read failure drops only that part |
+| session-start recall | session start after compaction (Codex: also startup, resume) | hook `session_id`, `cwd`; ledger existence and `## closed`; the ledger's settlement `goal` and `principles`; user `principles.md` in the host config dir; `.bootgear/config/principles.md` | merged `[user]`/`[project]` principles, plus `[task]` with an active ledger (Codex: the session id first); with an active ledger only, a recall nudge (Codex: only when `source` is `compact`) and the run's `goal` when it is a plain string (a `succeeded`/`failed` mapping is not shown); without an active ledger and principles, nothing (Codex: the session id); a read failure drops only that part |
 | stop reminder | turn stop (Codex: also post-tool fallback) | ledger existence and `## closed`; marker `.<run-id>.stop_reminder_state` | a recall reminder on the 1st, 3rd, 5th … stop while stops keep coming within 30 s of the last reminder; the stops between are silent; silent when `stop_hook_active` |
 | state nudge | every tool call by the main agent | `task session read --section state --json`; marker `.<run-id>.state_nudge_state` (flock-guarded) | a transition reminder once the current node has been idle for 5 min, rechecked at most every 60 s; one escalated reminder after 15 more min for the same (node, activity time, transition count); nothing on terminal nodes or closed ledgers |
 
@@ -146,9 +146,9 @@ Host differences: the Claude stop hook adds context and never blocks. The Codex
 stop hook returns a one-round `block` continuation, and a `PostToolUse`
 fallback reminds when the previous turn never reached `Stop`. The Codex
 session-start hook fires on startup, resume and compaction, always hands the
-model its host `session_id` to use as the run id, and adds the rest only while
-a run is active, the recall nudge only after a compaction; Claude skills get
-the id by substitution.
+model its host `session_id` to use as the run id, adds the goal only while a
+run is active and the recall nudge only after a compaction in an active run;
+Claude skills get the id by substitution.
 
 ## State and invariants
 

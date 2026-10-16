@@ -4,19 +4,19 @@
 Runs on `SessionStart` with matcher `compact`, which fires after compaction
 and, unlike `PostCompact`, can return `additionalContext` to the model.
 
-Prints only when the session has an active engine ledger:
-`~/.bootgear/session/<session_id>.md` exists, is readable and has no
-`## closed` heading. Otherwise it prints nothing.
+The nudge and the run's `/goal` are printed only when the session has an
+active engine ledger: `~/.bootgear/session/<session_id>.md` exists, is
+readable and has no `## closed` heading. The goal comes from the ledger's
+settlement section, parsed as real YAML; `goal` may be a legacy string or a
+mapping with `succeeded` and `failed` conditions. Malformed YAML or a missing
+`goal` still prints the base NUDGE_MESSAGE.
 
-Appends the run's `/goal` text from the ledger's settlement section, parsed
-as real YAML; `goal` may be a legacy string or a mapping with `succeeded` and
-`failed` conditions. Malformed YAML or a missing `goal` still prints the base
-NUDGE_MESSAGE.
-
-Also merges principles from all 3 levels — user (`~/.claude/principles.md`),
-project (`{cwd}/.bootgear/config/principles.md`), task (the settlement's
-`principles`) — per `skills/execute/SKILL.md`'s "Reading and merging
-principles". A missing, empty, or unreadable file drops only that source.
+Merged principles are printed with or without an active ledger, from all 3
+levels — user (`~/.claude/principles.md`), project
+(`{cwd}/.bootgear/config/principles.md`), task (the settlement's
+`principles`, active ledger only) — per `skills/execute/SKILL.md`'s "Reading
+and merging principles". A missing, empty, or unreadable file drops only that
+source. With no active ledger and no principles it prints nothing.
 """
 from __future__ import annotations
 
@@ -114,16 +114,17 @@ def main() -> None:
     except json.JSONDecodeError:
         hook_input = {}
     ledger = _active(hook_input)
-    if ledger is None:
-        return
-    message = NUDGE_MESSAGE
-    settlement = _settlement(ledger)
+    parts = [NUDGE_MESSAGE] if ledger is not None else []
+    settlement = _settlement(ledger) if ledger is not None else None
     goal = _goal_text(settlement)
     if goal:
-        message = f"{message}\n\nThis run's /goal:\n{goal}"
+        parts.append(f"This run's /goal:\n{goal}")
     principles = _principles_text(hook_input, settlement)
     if principles:
-        message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
+        parts.append(f"Merged principles (user/project/task):\n{principles}")
+    if not parts:
+        return
+    message = "\n\n".join(parts)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

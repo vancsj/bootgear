@@ -5,19 +5,20 @@ Codex supplies the current session identity to every command hook on stdin.
 This hook always prints that identity so `clarify` can use it as the ledger
 run-id instead of inventing one.
 
-The rest is added only when the session has an active engine ledger:
-`~/.bootgear/session/<session_id>.md` exists, is readable and has no
-`## closed` heading. Then, on `source: compact`, the recall nudge is
-prepended; the run's `goal` text from the ledger's settlement (parsed as
+The recall nudge and the goal are added only when the session has an active
+engine ledger: `~/.bootgear/session/<session_id>.md` exists, is readable and
+has no `## closed` heading. Then, on `source: compact`, the recall nudge is
+prepended, and the run's `goal` text from the ledger's settlement (parsed as
 real YAML; a legacy string or a mapping with `succeeded` and `failed`
-conditions) and the merged principles follow. Malformed YAML or a missing
-`goal` drops only the goal.
+conditions) follows the identity. Malformed YAML or a missing `goal` drops
+only the goal.
 
-Principles merge from all 3 levels: task (the settlement's `principles`),
-project (`.bootgear/config/principles.md`) and user
-(`~/.codex/principles.md`, a dedicated file, not `~/.codex/AGENTS.md`), per
-`skills/execute/SKILL.md`'s "Reading and merging principles". A missing,
-empty, or unreadable file drops only that source.
+The merged principles follow, with or without an active ledger, from all 3
+levels: task (the settlement's `principles`, active ledger only), project
+(`.bootgear/config/principles.md`) and user (`~/.codex/principles.md`, a
+dedicated file, not `~/.codex/AGENTS.md`), per `skills/execute/SKILL.md`'s
+"Reading and merging principles". A missing, empty, or unreadable file drops
+only that source.
 """
 from __future__ import annotations
 
@@ -130,16 +131,15 @@ def main() -> None:
         identity = SESSION_ID_MISSING_MESSAGE
     message = identity
     ledger = _active(hook_input)
-    if ledger is not None:
-        if hook_input.get("source") == "compact":
-            message = f"{NUDGE_MESSAGE}\n\n{message}"
-        settlement = _settlement(ledger)
-        goal = _goal_text(settlement)
-        if goal:
-            message = f"{message}\n\nThis run's goal:\n{goal}"
-        principles = _principles_text(hook_input, settlement)
-        if principles:
-            message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
+    if ledger is not None and hook_input.get("source") == "compact":
+        message = f"{NUDGE_MESSAGE}\n\n{message}"
+    settlement = _settlement(ledger) if ledger is not None else None
+    goal = _goal_text(settlement)
+    if goal:
+        message = f"{message}\n\nThis run's goal:\n{goal}"
+    principles = _principles_text(hook_input, settlement)
+    if principles:
+        message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

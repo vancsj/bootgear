@@ -28,6 +28,9 @@ IDENTITY = (
     "Codex session_id: fixture-codex. Use this exact value as the engine "
     "run-id; do not generate a UUID or other replacement."
 )
+IDENTITY_AND_PRINCIPLES = (
+    f"{IDENTITY}\n\nMerged principles (user/project/task):\n[project]\n- project rule"
+)
 
 
 class CodexSessionRecallAdapterTest(unittest.TestCase):
@@ -74,16 +77,22 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("the goal text", context)
         self.assertIn("[project]\n- project rule", context)
 
-    def test_no_ledger_emits_identity_only(self):
+    def test_no_ledger_emits_identity_and_principles(self):
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(self._context(source), IDENTITY_AND_PRINCIPLES)
+
+    def test_no_ledger_and_no_principles_emits_identity_only(self):
+        (self.cwd / ".bootgear" / "config" / "principles.md").unlink()
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertEqual(self._context(source), IDENTITY)
 
-    def test_closed_ledger_emits_identity_only(self):
+    def test_closed_ledger_emits_identity_and_principles(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
-                self.assertEqual(self._context(source), IDENTITY)
+                self.assertEqual(self._context(source), IDENTITY_AND_PRINCIPLES)
 
     def test_active_ledger_on_startup_and_resume_adds_goal_without_the_nudge(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n")
@@ -100,6 +109,6 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("This session just compacted", context)
         self.assertIn("the goal text", context)
 
-    def test_unreadable_ledger_emits_identity_only(self):
+    def test_unreadable_ledger_emits_identity_and_principles(self):
         self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
-        self.assertEqual(self._context("compact"), IDENTITY)
+        self.assertEqual(self._context("compact"), IDENTITY_AND_PRINCIPLES)
