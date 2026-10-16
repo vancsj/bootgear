@@ -188,6 +188,98 @@ class AdvisorHookTests(unittest.TestCase):
         self.assertFalse(self.root.exists())
 
 
+    def send(self, sender: str, recipient: str, kind: str = "request", *extra: str) -> str:
+        result = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001", "--from", sender,
+             "--to", recipient, "--kind", kind, *extra, "--body-file", "-", "--json"],
+            input="body", capture_output=True, text=True, check=False, env=self.env, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)["message_id"]
+
+    def test_compact_for_the_asker_seat_names_its_role(self) -> None:
+        self.pair()
+        text = self.context(self.event("SessionStart", session="c1", source="compact"), "SessionStart")
+        self.assertIn("role: asker", text.splitlines())
+        self.assertIn("receive --channel 0001 --for asker --timeout 300", text.splitlines()[-1])
+
+    def test_compact_names_the_request_the_seat_still_owes(self) -> None:
+        self.pair()
+        request = self.send("asker", "listener")
+        self.channel("fetch", "--channel", "0001", "--message-id", request)
+        text = self.context(self.event("SessionStart", source="compact"), "SessionStart")
+        self.assertIn(f"owed: {request}", text.splitlines())
+        self.assertIn(f"answer request {request}", text.splitlines()[-1])
+
+    def test_compact_counts_the_unread_messages(self) -> None:
+        self.pair()
+        self.send("asker", "listener")
+        text = self.context(self.event("SessionStart", source="compact"), "SessionStart")
+        self.assertIn("unread: 1", text.splitlines())
+
+    def test_compact_after_the_channel_closed_prints_nothing(self) -> None:
+        self.pair()
+        self.channel("close", "--channel", "0001", "--role", "listener")
+        self.assertEqual(self.event("SessionStart", source="compact").stdout, "")
+
+    def test_compact_handles_only_the_newest_channel_of_the_session(self) -> None:
+        self.pair()
+        self.channel("register", "--role", "listener", "--session", "s1")
+        text = self.context(self.event("SessionStart", source="compact"), "SessionStart")
+        self.assertEqual(text.count("channel: "), 1)
+        self.assertIn("channel: 0002", text.splitlines())
+
+    def test_default_root_is_under_home_when_no_root_is_configured(self) -> None:
+        env = {k: v for k, v in self.env.items() if k != "BOOTGEAR_ADVISOR_DIR"}
+        subprocess.run([sys.executable, str(CHANNEL), "register", "--role", "listener", "--session", "s1", "--json"],
+                       capture_output=True, text=True, check=True, env=env, timeout=10)
+        result = subprocess.run(
+            [sys.executable, str(HOOK)], input=json.dumps({"session_id": "s1", "hook_event_name": "Stop"}),
+            capture_output=True, text=True, check=False, env=env, timeout=10)
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        record = json.loads((self.home / ".bootgear" / "advisor" / "channels" / "0001" / "channel.json").read_text())
+        self.assertIn("listener_hook_seen_at", record)
+
+    def test_heartbeat_inside_the_ttl_gets_no_reminder(self) -> None:
+        self.pair()
+        record = self.record()
+        record["listener_seen_at"] -= 5
+        self.write_record(record)
+        self.assertEqual(self.event("PostToolUse").stdout, "")
+
+    def test_heartbeat_past_the_ttl_gets_a_reminder(self) -> None:
+        self.pair()
+        record = self.record()
+        record["listener_seen_at"] -= 11
+        self.write_record(record)
+        self.assertIn("heartbeat --channel 0001", self.context(self.event("PostToolUse"), "PostToolUse"))
+
+    def test_asker_seat_gets_its_own_reminder(self) -> None:
+        self.pair()
+        record = self.record()
+        record["asker_seen_at"] -= 600
+        self.write_record(record)
+        text = self.context(self.event("PostToolUse", session="c1"), "PostToolUse")
+        self.assertIn("heartbeat for channel 0001 (asker) is not running", text)
+        self.assertIn("heartbeat --channel 0001 --role asker --session c1", text)
+
+    def test_non_utf8_input_exits_zero_silently(self) -> None:
+        self.pair()
+        result = subprocess.run([sys.executable, str(HOOK)], input=b"\xff\xfe{", capture_output=True,
+                                check=False, env=self.env, timeout=10)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
+
+    def test_unwritable_channel_directory_exits_zero_silently(self) -> None:
+        self.pair()
+        self.stop_heartbeat()
+        directory = self.root / "channels" / "0001"
+        directory.chmod(0o500)
+        self.addCleanup(directory.chmod, 0o700)
+        for event in EVENTS:
+            with self.subTest(event=event):
+                result = self.event(event, source="compact")
+                self.assertEqual((result.stdout, result.stderr), ("", ""))
+
+
 class HookManifestTests(unittest.TestCase):
     def assert_manifest(self, path: Path, variable: str) -> None:
         hooks = json.loads(path.read_text())["hooks"]

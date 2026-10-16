@@ -186,6 +186,42 @@ class SessionStartPrinciplesTest(unittest.TestCase):
                     "engine run-id; do not generate a UUID or other replacement.",
                 )
 
+    def _identity(self):
+        return (
+            f"Codex session_id: `{self.run_id}`. Use this exact value as the "
+            "engine run-id; do not generate a UUID or other replacement."
+        )
+
+    def test_closed_heading_with_trailing_space_prints_identity_only(self):
+        ledger = self.session_dir / f"{self.run_id}.md"
+        ledger.write_text(ledger.read_text() + "\n## closed  \nsucceeded\n")
+        self.assertEqual(self._run(), self._identity())
+
+    def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
+        ledger = self.session_dir / f"{self.run_id}.md"
+        ledger.write_text(ledger.read_text() + "\n## notes\nnot ## closed yet\n## closed-loop notes\n")
+        msg = self._run()
+        self.assertIn("This session just compacted", msg)
+        self.assertIn("[task]", msg)
+
+    def test_unreadable_ledger_prints_identity_only(self):
+        (self.session_dir / f"{self.run_id}.md").write_bytes(b"\xff\xfe\x00bad-utf8")
+        self.assertEqual(self._run(), self._identity())
+
+    def test_active_ledger_on_resume_adds_goal_without_the_nudge(self):
+        msg = self._run(source="resume")
+        self.assertIn(self._identity(), msg)
+        self.assertNotIn("This session just compacted", msg)
+        self.assertIn("succeeded when done", msg)
+
+    def test_missing_session_id_without_a_ledger_prints_the_missing_identity_message(self):
+        out = run_hook({"cwd": str(self.cwd), "source": "compact"})
+        self.assertEqual(
+            out["hookSpecificOutput"]["additionalContext"],
+            "Codex did not provide a session_id. Do not start or resume an engine run "
+            "with a generated UUID; obtain the host session identity first.",
+        )
+
     def test_home_ledger_found_when_cwd_session_dir_holds_other_runs(self):
         self.cwd_session_dir.mkdir(parents=True)
         (self.cwd_session_dir / "other-run.md").write_text(

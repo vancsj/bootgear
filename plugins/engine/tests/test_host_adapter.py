@@ -310,3 +310,13 @@ class SessionRecallAdapterTest(unittest.TestCase):
     def test_closed_ledger_prints_nothing(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
         self.assertEqual(self._run(), "")
+
+    def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n\n## notes\nnot ## closed yet\n## closed-loop notes\n")
+        context = json.loads(self._run())["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("This session just compacted", context)
+        self.assertIn("the goal text", context)
+
+    def test_unreadable_ledger_prints_nothing(self):
+        self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
+        self.assertEqual(self._run(), "")

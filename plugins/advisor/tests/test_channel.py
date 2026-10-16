@@ -2473,5 +2473,140 @@ class HookTouchTests(unittest.TestCase):
         self.assertEqual(channel_module.hook_touch(self.root, "nobody", time.time()), [])
 
 
+class HookStampCommandTests(unittest.TestCase):
+    """Commands that read liveness count a seat held only by its hook stamp as live."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def hook_only(self, role: str) -> None:
+        age_seat(self.root, role, 600)
+        set_fields(self.root, **{f"{role}_hook_seen_at": time.time()})
+
+    def test_status_reports_the_hook_only_seat_alive(self) -> None:
+        self.hook_only("listener")
+        output = json.loads(run(self.root, "status", "--channel", "0001").stdout)
+        self.assertIs(output["listener_alive"], True)
+
+    def test_list_live_for_finds_a_hook_only_listener(self) -> None:
+        self.hook_only("listener")
+        found = json.loads(run(self.root, "list", "--live-for", "asker", "--session", "c1").stdout)["channels"]
+        self.assertEqual([c["channel"] for c in found], ["0001"])
+
+    def test_conditional_close_refuses_while_the_peer_has_only_a_hook_stamp(self) -> None:
+        self.hook_only("asker")
+        result = run(self.root, "close", "--role", "listener", "--channel", "0001", "--if-peer-stale", timeout=5)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stderr)["category"], "peer_live")
+
+    def test_receive_still_reminds_the_owner_whose_heartbeat_stopped(self) -> None:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-", "--json"],
+            input="question", capture_output=True, text=True, check=False, timeout=5)
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.hook_only("listener")
+        received = json.loads(run(self.root, "receive", "--channel", "0001", "--for", "listener",
+                                  "--timeout", "0").stdout)
+        self.assertIn("then: your heartbeat is not running", received["next"])
+        self.assertIn("heartbeat --channel 0001 --role listener --session s1", received["next"])
+
+
+class OwnedChannelsWindowTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+
+    def owned(self) -> list[str]:
+        return [str(record["channel"]) for record, _ in channel_module.owned_channels(self.root, "s1")]
+
+    def test_channel_47_hours_old_qualifies(self) -> None:
+        old = time.time() - 47 * 3600
+        write_channel(self.root, "0001", listener_owner="s1", created_at=old, updated_at=old)
+        self.assertEqual(self.owned(), ["0001"])
+
+    def test_old_creation_with_a_recent_update_qualifies(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", created_at=time.time() - 72 * 3600)
+        self.assertEqual(self.owned(), ["0001"])
+
+    def test_recent_creation_with_an_old_update_qualifies(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", updated_at=time.time() - 72 * 3600)
+        self.assertEqual(self.owned(), ["0001"])
+
+    def test_a_newer_closed_channel_does_not_hide_the_open_one(self) -> None:
+        now = time.time()
+        write_channel(self.root, "0001", listener_owner="s1", updated_at=now - 60)
+        write_channel(self.root, "0002", listener_owner="s1", updated_at=now, state="closed")
+        self.assertEqual(self.owned(), ["0001"])
+
+
+class ChannelStatusOwedTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def send(self, sender: str, recipient: str, kind: str = "request", *extra: str) -> str:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", sender, "--to", recipient, "--kind", kind, *extra, "--body-file", "-", "--json"],
+            input="body", capture_output=True, text=True, check=False, timeout=5)
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message_id"]
+        self.assertEqual(run(self.root, "fetch", "--channel", "0001", "--message-id", message_id).returncode, 0)
+        return message_id
+
+    def status(self, role: str = "listener") -> dict[str, object]:
+        record = json.loads(channel_json(self.root).read_text())
+        return channel_module.channel_status(self.root, record, role)
+
+    def test_owed_names_the_newest_of_several_unanswered_requests(self) -> None:
+        self.send("asker", "listener")
+        second = self.send("asker", "listener")
+        self.assertEqual(self.status()["owed"], second)
+
+    def test_a_response_to_another_request_leaves_the_owed_one(self) -> None:
+        first = self.send("asker", "listener")
+        second = self.send("asker", "listener")
+        self.send("listener", "asker", "response", "--parent-id", second)
+        self.assertEqual(self.status()["owed"], first)
+
+    def test_a_response_from_the_peer_does_not_answer_the_request(self) -> None:
+        request = self.send("asker", "listener")
+        self.send("listener", "asker", "response", "--parent-id", request)
+        self.assertIsNone(self.status()["owed"])
+        self.assertIsNone(self.status("asker")["owed"])
+
+    def test_a_read_response_is_never_owed(self) -> None:
+        request = self.send("asker", "listener")
+        response = self.send("listener", "asker", "response", "--parent-id", request)
+        status = self.status("asker")
+        self.assertIsNone(status["owed"])
+        self.assertEqual(status["last_read"], response)
+        self.assertEqual(status["unread"], 0)
+
+    def test_owed_applies_to_the_asker_seat_too(self) -> None:
+        request = self.send("listener", "asker")
+        status = self.status("asker")
+        self.assertEqual(status["owed"], request)
+        self.assertEqual(status["next"], f"answer request {request}: fetch it again and send the response")
+
+    def test_peer_live_is_false_once_the_peer_heartbeat_stopped(self) -> None:
+        age_seat(self.root, "asker", 600)
+        self.assertIs(self.status()["peer_live"], False)
+
+
+class WhoamiDefaultOutputTests(unittest.TestCase):
+    def test_prose_is_the_default_output(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(root, "register", "--role", "listener", "--session", "s1")
+        result = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(root), "whoami", "--session", "s1"],
+            capture_output=True, text=True, check=False, env={**os.environ, "BOOTGEAR_OUTPUT": ""})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("channel: 0001\nrole: listener\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

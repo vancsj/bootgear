@@ -84,3 +84,22 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertEqual(self._context(source), IDENTITY)
+
+    def test_active_ledger_on_startup_and_resume_adds_goal_without_the_nudge(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        for source in ("startup", "resume"):
+            with self.subTest(source=source):
+                context = self._context(source)
+                self.assertIn(IDENTITY, context)
+                self.assertIn("the goal text", context)
+                self.assertNotIn("This session just compacted", context)
+
+    def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n\n## notes\nnot ## closed yet\n## closed-loop notes\n")
+        context = self._context("compact")
+        self.assertIn("This session just compacted", context)
+        self.assertIn("the goal text", context)
+
+    def test_unreadable_ledger_emits_identity_only(self):
+        self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
+        self.assertEqual(self._context("compact"), IDENTITY)

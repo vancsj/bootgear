@@ -159,6 +159,29 @@ class SessionStartRecallTest(unittest.TestCase):
         self.ledger.write_text(self.ledger.read_text() + "\n## closed\nsucceeded\n")
         self.assertEqual(self._run_stdout(), "")
 
+    def test_closed_heading_with_trailing_space_prints_nothing(self):
+        self.ledger.write_text(self.ledger.read_text() + "\n## closed  \nsucceeded\n")
+        self.assertEqual(self._run_stdout(), "")
+
+    def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
+        self.ledger.write_text(self.ledger.read_text() + "\n## notes\nnot ## closed yet\n## closed-loop notes\n")
+        self.assertIn("This session just compacted", self._run())
+
+    def test_unreadable_ledger_prints_nothing(self):
+        self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
+        self.assertEqual(self._run_stdout(), "")
+
+    def test_missing_session_id_prints_nothing(self):
+        result = subprocess.run(
+            ["python3", str(HOOK)],
+            input=json.dumps({"cwd": str(self.cwd), "hook_event_name": "SessionStart", "source": "compact"}),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(self.home)},
+            check=False,
+        )
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+
     def test_cwd_ledger_is_not_a_run_location(self):
         self.cwd_session_dir.mkdir(parents=True)
         self.ledger.rename(self.cwd_session_dir / f"{self.run_id}.md")
