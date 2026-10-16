@@ -33,7 +33,7 @@ def output(event: str, text: str) -> None:
 
 
 def engine_run(channel, session: str) -> str | None:
-    """`engine run: <session>` when this session has an engine ledger."""
+    """`engine run: <session>` when this session has an active engine ledger (no `## closed` heading)."""
     if not channel.safe_name(session):
         return None
     ledger = Path.home() / ".bootgear" / "session" / f"{session}.md"
