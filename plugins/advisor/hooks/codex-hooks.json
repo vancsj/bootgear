@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+      }
+    ]
+  }
+}

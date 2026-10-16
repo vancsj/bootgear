@@ -11,6 +11,8 @@ review, or delegated investigation. One plugin directory ships to both hosts.
 | `skills/advisor/SKILL.md` | The skill contract: mode selection, the listener loop, safety rules. |
 | `skills/advisor/references/` | One doc per communication (`direct`, `channel`) and per task (`rewrite`, `ask`, `review`, `delegate`). |
 | `skills/advisor/scripts/channel.py` | The mailbox CLI. Both hosts use this one copy. |
+| `hooks/advisor_hook.py` | The seat hook both hosts run: hook stamp, heartbeat restart reminder, status after compaction. |
+| `hooks/hooks.json`, `hooks/codex-hooks.json` | Claude and Codex hook manifests; the Codex one is named by `.codex-plugin/plugin.json`. |
 | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | Host manifests for the same skill tree. |
 | `gear.toml` | Exposes `channel.py` as the `channel` gear command. |
 
@@ -54,7 +56,7 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
 <root>/
   allocator.lock              serializes new channel numbers
   channels/<NNNN>/
-    channel.json              seat owners, heartbeat stamps, state, timestamps
+    channel.json              seat owners, heartbeat and hook stamps, state, timestamps
     channel.lock              per-channel write lock
     receive-<role>.lock       at most one waiting receive per role
     messages/<message_id>.json
@@ -64,8 +66,8 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   `listener` and `asker`. The role matches the mode. A seat records the
   host's session ID and a `seen_at` heartbeat.
 - **Lease.** A channel is one-time. A seat is live while its owner's `seen_at`
-  stamp is under 10 seconds old, or while it is inside a restart grace; a
-  seat with no stamp is stale. `register`
+  heartbeat stamp or `hook_seen_at` hook stamp is under 10 seconds old, or
+  while it is inside a restart grace; a seat with no stamp is stale. `register`
   stamps the seat, and the owner then keeps it fresh with `heartbeat`, which
   stamps every 3 seconds. `heartbeat --session` must match the seat's owner,
   so no other session can refresh it. Seat ownership is a string match on
@@ -94,6 +96,22 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   grace. A lock or disk
   stall longer than 10 seconds makes a live seat read stale until its next
   beat.
+  The plugin's hooks stamp `<role>_hook_seen_at` under the channel lock on
+  SessionStart `compact`, PostToolUse, UserPromptSubmit and Stop, at most
+  once every 3 seconds, for the hook session's seat on the one open channel
+  updated in the last 48 hours (the most recently updated when several
+  qualify). They never write `seen_at`, `updated_at` or `restart_until` and
+  never start a process. The `receive` restart reminder and its "restarting
+  its heartbeat" note read the heartbeat stamp alone. When `seen_at` is
+  stale, PostToolUse and UserPromptSubmit inject the exact `heartbeat`
+  restart command at most once a minute (`<role>_hook_nudged_at`); Stop and
+  subagent calls never inject. After compaction, SessionStart injects the
+  seat status that `whoami --session S` prints: channel, role, state, peer
+  liveness, heartbeat, unread count, last read message, the read request
+  still owed a response, and a `next` (answer the owed request, else
+  `receive`, after a heartbeat restart when the heartbeat stopped), plus
+  the engine run id when the session has an engine ledger. Every hook
+  failure exits 0 with no output.
 - **Pairing.** A listener always creates a new channel. An asker runs
   `list --live-for asker --session S`, which prints the open channels updated
   in the last 48 hours whose listener is live and whose asker seat is free

@@ -14,6 +14,7 @@ import time
 import unittest
 import uuid
 from pathlib import Path
+from unittest import mock
 
 PLUGIN = Path(__file__).resolve().parents[1]
 CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
@@ -1160,6 +1161,8 @@ class ArgumentRefusalTests(unittest.TestCase):
         ("close", ["close", "--channel", "0001", "--role", "boss"], "invalid_role"),
         ("receive", ["receive", "--channel", "0001", "--for", "boss"], "invalid_role"),
         ("fetch", ["fetch", "--channel", "0001", "--message-id", "../x"], "invalid_args"),
+        ("whoami", ["whoami"], "invalid_args"),
+        ("whoami", ["whoami", "--session=-dash"], "invalid_args"),
     )
 
     def setUp(self) -> None:
@@ -2096,6 +2099,378 @@ class ListenerLoopTests(unittest.TestCase):
                 process.kill()
                 _, stderr = process.communicate()
                 self.assertTrue(running, stderr)
+
+
+class HookStampLivenessTests(unittest.TestCase):
+    """`<role>_hook_seen_at` keeps a seat live; only `<role>_seen_at` counts as a beating heartbeat."""
+
+    def record(self, **fields: object) -> dict[str, object]:
+        return {"listener_owner": "s1", "updated_at": time.time(), **fields}
+
+    def test_fresh_hook_stamp_alone_reads_fresh_and_live_but_not_beating(self) -> None:
+        record = self.record(listener_hook_seen_at=time.time() - 1)
+        self.assertIs(channel_module.seat_fresh(record, "listener"), True)
+        self.assertIs(channel_module.seat_live(record, "listener"), True)
+        self.assertIs(channel_module.seat_beating(record, "listener"), False)
+
+    def test_aged_hook_stamp_reads_stale(self) -> None:
+        aged = time.time() - channel_module.HEARTBEAT_TTL_SECONDS - 1
+        record = self.record(listener_hook_seen_at=aged)
+        self.assertIs(channel_module.seat_fresh(record, "listener"), False)
+        self.assertIs(channel_module.seat_live(record, "listener"), False)
+
+    def test_both_stamps_fresh_read_fresh_and_beating(self) -> None:
+        now = time.time()
+        record = self.record(listener_seen_at=now - 1, listener_hook_seen_at=now - 1)
+        self.assertIs(channel_module.seat_fresh(record, "listener"), True)
+        self.assertIs(channel_module.seat_beating(record, "listener"), True)
+
+    def test_stale_heartbeat_with_fresh_hook_stamp_reads_fresh(self) -> None:
+        now = time.time()
+        record = self.record(listener_seen_at=now - 600, listener_hook_seen_at=now - 1)
+        self.assertIs(channel_module.seat_fresh(record, "listener"), True)
+        self.assertIs(channel_module.seat_beating(record, "listener"), False)
+
+    def test_invalid_or_future_hook_stamp_reads_stale(self) -> None:
+        for value in (0, "x", True, float("nan"), -5.0, None, time.time() + 60):
+            with self.subTest(value=value):
+                self.assertIs(channel_module.seat_fresh(self.record(listener_hook_seen_at=value), "listener"), False)
+
+    def test_heartbeat_reminder_fires_with_a_fresh_hook_stamp_and_a_stale_seen_at(self) -> None:
+        now = time.time()
+        record = self.record(listener_seen_at=now - 600, listener_hook_seen_at=now)
+        args = argparse.Namespace(root=None, recipient="listener", channel="0001")
+        reminder = channel_module.heartbeat_reminder(args, Path(tempfile.mkdtemp()), record)
+        self.assertIsNotNone(reminder)
+        self.assertIn("heartbeat --channel 0001 --role listener --session s1", reminder)
+
+
+class HookStampChannelTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def test_receive_still_says_restarting_when_the_peer_has_only_a_hook_stamp(self) -> None:
+        age_seat(self.root, "asker", 600)
+        set_fields(self.root, asker_restart_until=time.time() + 100, asker_hook_seen_at=time.time())
+        received = run(self.root, "receive", "--channel", "0001", "--for", "listener", "--timeout", "0")
+        output = json.loads(received.stdout)
+        self.assertIs(output["peer_live"], True)
+        self.assertIn("asker is restarting its heartbeat", output["note"])
+
+    def test_send_accepts_a_recipient_live_by_its_hook_stamp(self) -> None:
+        age_seat(self.root, "listener", 600)
+        set_fields(self.root, listener_hook_seen_at=time.time())
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", "asker", "--to", "listener", "--kind", "request", "--body-file", "-"],
+            input="question", capture_output=True, text=True, check=False, timeout=5)
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+
+
+def write_channel(root: Path, channel: str, **fields: object) -> Path:
+    """A channel directory whose channel.json holds a fresh open record plus `fields`."""
+    path = root / "channels" / channel
+    (path / "messages").mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    record = {"channel": channel, "created_at": now, "updated_at": now, "state": "waiting",
+              "listener_owner": None, "asker_owner": None, **fields}
+    (path / "channel.json").write_text(json.dumps(record))
+    return path
+
+
+class OwnedChannelsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+
+    def owned(self, session: str = "s1") -> list[tuple[str, str]]:
+        return [(str(record["channel"]), role) for record, role in channel_module.owned_channels(self.root, session)]
+
+    def test_open_owned_listener_seat_is_returned(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1")
+        self.assertEqual(self.owned(), [("0001", "listener")])
+
+    def test_closed_channel_is_skipped(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", state="closed")
+        self.assertEqual(self.owned(), [])
+
+    def test_channel_49_hours_old_is_skipped(self) -> None:
+        old = time.time() - 49 * 3600
+        write_channel(self.root, "0001", listener_owner="s1", created_at=old, updated_at=old)
+        self.assertEqual(self.owned(), [])
+
+    def test_unreadable_records_are_skipped(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", updated_at=time.time() - 10)
+        (write_channel(self.root, "0002") / "channel.json").write_text("{not json")
+        (write_channel(self.root, "0003") / "channel.json").write_text("[1, 2]")
+        (write_channel(self.root, "0004") / "channel.json").write_bytes(b"\xff\xfe")
+        (self.root / "channels" / "0005").mkdir()
+        (self.root / "channels" / "notes").mkdir()
+        self.assertEqual(self.owned(), [("0001", "listener")])
+
+    def test_missing_root_returns_nothing(self) -> None:
+        self.assertEqual(channel_module.owned_channels(self.root / "absent", "s1"), [])
+
+    def test_seat_of_another_session_is_skipped(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s2", asker_owner="c1")
+        self.assertEqual(self.owned(), [])
+
+    def test_each_session_gets_its_own_seat(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", asker_owner="c1")
+        self.assertEqual(self.owned("s1"), [("0001", "listener")])
+        self.assertEqual(self.owned("c1"), [("0001", "asker")])
+
+    def test_one_session_on_both_seats_gets_one_entry(self) -> None:
+        write_channel(self.root, "0001", listener_owner="s1", asker_owner="s1")
+        self.assertEqual(len(self.owned()), 1)
+
+    def test_two_qualifying_channels_return_only_the_newer(self) -> None:
+        now = time.time()
+        write_channel(self.root, "0001", asker_owner="s1", updated_at=now - 5)
+        write_channel(self.root, "0002", listener_owner="s1", updated_at=now - 60)
+        self.assertEqual(self.owned(), [("0001", "asker")])
+
+    def test_tied_updated_at_returns_the_higher_channel(self) -> None:
+        now = time.time()
+        write_channel(self.root, "0002", listener_owner="s1", updated_at=now)
+        write_channel(self.root, "0010", listener_owner="s1", updated_at=now)
+        self.assertEqual(self.owned(), [("0010", "listener")])
+
+
+class ChannelStatusTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def send(self, sender: str, recipient: str, kind: str = "request", *extra: str) -> str:
+        sent = subprocess.run(
+            [sys.executable, str(CHANNEL), "--root", str(self.root), "send", "--channel", "0001",
+             "--from", sender, "--to", recipient, "--kind", kind, *extra, "--body-file", "-", "--json"],
+            input="body", capture_output=True, text=True, check=False, timeout=5)
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        return json.loads(sent.stdout)["message_id"]
+
+    def fetch(self, message_id: str) -> None:
+        self.assertEqual(run(self.root, "fetch", "--channel", "0001", "--message-id", message_id).returncode, 0)
+
+    def status(self, role: str = "listener") -> dict[str, object]:
+        record = json.loads(channel_json(self.root).read_text())
+        return channel_module.channel_status(self.root, record, role)
+
+    def test_fields_for_an_idle_seat(self) -> None:
+        status = self.status()
+        self.assertEqual(list(status), ["channel", "role", "state", "peer_live", "heartbeat", "unread",
+                                        "last_read", "owed", "next"])
+        self.assertEqual((status["channel"], status["role"], status["state"]), ("0001", "listener", "waiting"))
+        self.assertIs(status["peer_live"], True)
+        self.assertIs(status["heartbeat"], True)
+        self.assertEqual(status["unread"], 0)
+        self.assertIsNone(status["last_read"])
+        self.assertIsNone(status["owed"])
+        self.assertTrue(str(status["next"]).startswith("python3 "))
+        self.assertIn("receive --channel 0001 --for listener --timeout 300", str(status["next"]))
+
+    def test_unread_counts_messages_to_the_role_only(self) -> None:
+        self.send("asker", "listener")
+        self.send("listener", "asker")
+        self.assertEqual(self.status()["unread"], 1)
+        self.assertEqual(self.status("asker")["unread"], 1)
+
+    def test_last_read_is_the_newest_read_message_by_created_at(self) -> None:
+        first = self.send("asker", "listener")
+        second = self.send("asker", "listener")
+        self.fetch(second)
+        self.fetch(first)
+        self.assertEqual(self.status()["last_read"], second)
+
+    def test_owed_names_a_read_request_without_a_response(self) -> None:
+        request = self.send("asker", "listener")
+        self.assertIsNone(self.status()["owed"])
+        self.fetch(request)
+        status = self.status()
+        self.assertEqual(status["owed"], request)
+        self.assertEqual(status["next"], f"answer request {request}: fetch it again and send the response")
+
+    def test_owed_clears_once_the_role_responds(self) -> None:
+        request = self.send("asker", "listener")
+        self.fetch(request)
+        self.send("listener", "asker", "response", "--parent-id", request)
+        status = self.status()
+        self.assertIsNone(status["owed"])
+        self.assertIn("receive --channel 0001 --for listener --timeout 300", str(status["next"]))
+
+    def test_stopped_heartbeat_puts_the_restart_line_first(self) -> None:
+        age_seat(self.root, "listener", 600)
+        status = self.status()
+        self.assertIs(status["heartbeat"], False)
+        first, second = str(status["next"]).split("\n")
+        self.assertIn("heartbeat --channel 0001 --role listener --session s1", first)
+        self.assertTrue(second.startswith("then: "))
+        self.assertIn("receive --channel 0001 --for listener --timeout 300", second)
+
+    def test_unreadable_message_files_are_skipped(self) -> None:
+        self.send("asker", "listener")
+        (channel_json(self.root).parent / "messages" / f"{uuid.uuid4().hex}.json").write_text("{bad")
+        self.assertEqual(self.status()["unread"], 1)
+
+
+class WhoamiTests(unittest.TestCase):
+    KEYS = ["channel", "role", "state", "peer_live", "heartbeat", "unread", "last_read", "owed", "next"]
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+
+    def whoami(self, session: str = "s1", output: str = "--json") -> subprocess.CompletedProcess:
+        return run(self.root, "whoami", "--session", session, output=output, timeout=5)
+
+    def test_prose_prints_every_field_in_order_with_null_as_none(self) -> None:
+        result = self.whoami(output="--prose")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual([line.split(": ", 1)[0] for line in lines], self.KEYS)
+        self.assertEqual(lines[3], "peer_live: none")
+        self.assertEqual(lines[6], "last_read: none")
+        self.assertEqual(lines[7], "owed: none")
+        self.assertIn("receive --channel 0001 --for listener --timeout 300", lines[-1])
+
+    def test_prose_next_is_last_and_spans_lines_when_the_heartbeat_stopped(self) -> None:
+        age_seat(self.root, "listener", 600)
+        lines = self.whoami(output="--prose").stdout.splitlines()
+        self.assertEqual(lines[4], "heartbeat: false")
+        self.assertTrue(lines[-2].startswith("next: "))
+        self.assertIn("heartbeat --channel 0001", lines[-2])
+        self.assertTrue(lines[-1].startswith("then: "))
+
+    def test_json_lists_the_channel_status(self) -> None:
+        result = self.whoami()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(list(payload), ["channels"])
+        self.assertEqual(list(payload["channels"][0]), self.KEYS)
+        self.assertEqual(payload["channels"][0]["role"], "listener")
+
+    def test_no_channel_exits_zero_with_a_note(self) -> None:
+        result = self.whoami("nobody")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout),
+                         {"channels": [], "note": "no open channel for this session"})
+        prose = self.whoami("nobody", output="--prose")
+        self.assertEqual(prose.returncode, 0, prose.stderr)
+        self.assertIn("note: no open channel for this session", prose.stdout)
+
+    def test_render_status_separates_channels_with_a_blank_line(self) -> None:
+        status = {key: None for key in self.KEYS}
+        text = channel_module.render_status([{**status, "channel": "0001"}, {**status, "channel": "0002"}])
+        blocks = text.split("\n\n")
+        self.assertEqual(len(blocks), 2)
+        self.assertTrue(blocks[1].startswith("channel: 0002"))
+
+    def test_list_item_keys_are_unchanged(self) -> None:
+        self.assertEqual(channel_module.ITEM_KEYS, {
+            "message_id": ("message_id", "sender", "kind", "parent_id", "preview", "answered"),
+            "channel": ("channel", "state", "listener_owner", "asker_owner"),
+        })
+
+    def test_example_runs(self) -> None:
+        example = shlex.split(channel_module.EXAMPLES["whoami"].replace('"$SESSION_ID"', "s1"))
+        result = run(self.root, *example, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class HookTouchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
+        run(self.root, "register", "--role", "listener", "--session", "s1")
+        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
+
+    def record(self) -> dict[str, object]:
+        return json.loads(channel_json(self.root).read_text())
+
+    def touch(self, now: float | None = None) -> list[tuple[str, str]]:
+        result = channel_module.hook_touch(self.root, "s1", time.time() if now is None else now)
+        return [(str(record["channel"]), role) for record, role in result]
+
+    def test_stamps_the_hook_field_and_leaves_the_heartbeat_fields(self) -> None:
+        set_fields(self.root, listener_restart_until=time.time() + 100)
+        before = self.record()
+        now = time.time()
+        self.assertEqual(self.touch(now), [])
+        after = self.record()
+        self.assertEqual(after["listener_hook_seen_at"], now)
+        for key in ("listener_seen_at", "updated_at", "listener_restart_until"):
+            self.assertEqual(after[key], before[key], key)
+        self.assertNotIn("listener_hook_nudged_at", after)
+
+    def test_stamp_only_neither_returns_nor_marks_the_reminder(self) -> None:
+        age_seat(self.root, "listener", 600)
+        now = time.time()
+        result = channel_module.hook_touch(self.root, "s1", now, remind=False)
+        self.assertEqual(result, [])
+        after = self.record()
+        self.assertEqual(after["listener_hook_seen_at"], now)
+        self.assertNotIn("listener_hook_nudged_at", after)
+
+    def test_stopped_heartbeat_is_returned_and_marks_the_reminder(self) -> None:
+        age_seat(self.root, "listener", 600)
+        now = time.time()
+        self.assertEqual(self.touch(now), [("0001", "listener")])
+        self.assertEqual(self.record()["listener_hook_nudged_at"], now)
+
+    def test_reminder_waits_60_seconds(self) -> None:
+        age_seat(self.root, "listener", 600)
+        now = time.time()
+        set_fields(self.root, listener_hook_nudged_at=now - 59)
+        self.assertEqual(self.touch(now), [])
+        self.assertEqual(self.record()["listener_hook_nudged_at"], now - 59)
+        set_fields(self.root, listener_hook_nudged_at=now - 60)
+        self.assertEqual(self.touch(now), [("0001", "listener")])
+        self.assertEqual(self.record()["listener_hook_nudged_at"], now)
+
+    def test_invalid_reminder_stamp_counts_as_absent(self) -> None:
+        age_seat(self.root, "listener", 600)
+        set_fields(self.root, listener_hook_nudged_at="x")
+        self.assertEqual(self.touch(), [("0001", "listener")])
+
+    def test_recent_hook_stamp_skips_the_write(self) -> None:
+        now = time.time()
+        set_fields(self.root, listener_hook_seen_at=now - 1)
+        before = channel_json(self.root).read_bytes()
+        self.assertEqual(self.touch(now), [])
+        self.assertEqual(channel_json(self.root).read_bytes(), before)
+        set_fields(self.root, listener_hook_seen_at=now - channel_module.HEARTBEAT_INTERVAL_SECONDS)
+        self.touch(now)
+        self.assertEqual(self.record()["listener_hook_seen_at"], now)
+
+    def test_recent_hook_stamp_still_writes_a_due_reminder(self) -> None:
+        age_seat(self.root, "listener", 600)
+        now = time.time()
+        set_fields(self.root, listener_hook_seen_at=now - 1)
+        self.assertEqual(self.touch(now), [("0001", "listener")])
+
+    def test_closed_channel_is_not_stamped(self) -> None:
+        run(self.root, "close", "--channel", "0001", "--role", "asker")
+        self.assertEqual(self.touch(), [])
+        self.assertNotIn("listener_hook_seen_at", self.record())
+
+    def assert_skipped_under_lock(self, **change: object) -> None:
+        stale = self.record()
+        set_fields(self.root, **change)
+        age_seat(self.root, "listener", 600)
+        with mock.patch.object(channel_module, "owned_channels", return_value=[(stale, "listener")]):
+            self.assertEqual(self.touch(), [])
+        self.assertNotIn("listener_hook_seen_at", self.record())
+
+    def test_channel_closed_after_the_scan_is_not_stamped(self) -> None:
+        self.assert_skipped_under_lock(state="closed")
+
+    def test_seat_taken_after_the_scan_is_not_stamped(self) -> None:
+        self.assert_skipped_under_lock(listener_owner="s2")
+
+    def test_no_channel_returns_nothing(self) -> None:
+        self.assertEqual(channel_module.hook_touch(self.root, "nobody", time.time()), [])
 
 
 if __name__ == "__main__":

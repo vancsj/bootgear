@@ -90,6 +90,10 @@ sequenceDiagram
   within 10 seconds after a normal host exit; after a crash, kill or terminal close an orphaned
   heartbeat keeps the seat live up to its maximum age plus the restart grace. A stall over 10 seconds makes a live
   seat read stale until its next beat.
+- **The plugin's hooks keep an active session's seat visible.** On each tool call, prompt, turn end and
+  compaction, the hooks stamp the session's seat (`<role>_hook_seen_at`), which keeps it live like a heartbeat
+  stamp. When the heartbeat itself has stopped, a tool call or prompt injects the exact restart command, at most
+  once a minute; turn ends and subagents never inject.
 - **The asker claims, it never creates.** It picks the most recently updated open channel from
   the last 48 hours whose listener is live and whose asker seat is free or its own; a busy
   listener counts as taken and may be absent. If the claim loses a race, it rescans once and
@@ -99,7 +103,8 @@ sequenceDiagram
   recipient already holds two unread messages, or when its seat is not live
   (`peer_not_live`; a `stop` is always accepted).
 - **`receive` never changes state**, so a session resuming after compaction can call it cold
-  and pick up a response that arrived while it was away.
+  and pick up a response that arrived while it was away. After compaction the hook injects the seat's
+  status (`whoami`): channel, role, unread count, the request still owed a response, and the next command.
 - **Nothing is guessed around.** A malformed message, the wrong recipient, an unmatched
   `parent_id` or a closed channel is a protocol error.
 
@@ -132,6 +137,7 @@ fetch     read a message's full body, mark it read, and remind the caller to rec
 state     record waiting, busy or closed for a role
 close     close the channel; --if-peer-stale closes only if the peer is not live and nothing unread waits
 status    show a channel's record
+whoami    show this session's seat: role, unread, last read, owed request, and the next command
 ```
 
 ---

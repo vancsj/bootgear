@@ -64,6 +64,11 @@ python3 "$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session
 
 - It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
 - Host reports the task stopped with no output, or handle lost: run `register` again with the same `SESSION_ID`, then start a new heartbeat.
+- A hook message `advisor: your heartbeat for channel N (ROLE) is not running; ...`: act on it like a `next` — start the command it names in a new background session.
+
+### After compaction (channel, both modes)
+
+Do what the `next` of the injected seat status says. With no status in context, run `python3 "$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
 
 ### mode=listening
 

@@ -16,10 +16,11 @@ Session ID: the host's real session identifier, never an invented one.
 SESSION_ID="<this host's session id>"
 ```
 
-A channel is a one-time lease on two seats, kept alive by a heartbeat. The seat's owner (the session ID that registered it) runs `heartbeat`, which stamps `seen_at` every 3 seconds; a seat is live while its stamp is under 10 seconds old, or while it is inside a restart grace. Only the owner's `--session` can refresh it; `receive` only reads. A seat with no stamp is stale.
+A channel is a one-time lease on two seats, kept alive by a heartbeat. The seat's owner (the session ID that registered it) runs `heartbeat`, which stamps `seen_at` every 3 seconds; a seat is live while its stamp, or the stamp the plugin's hooks write on each tool call, prompt or turn end, is under 10 seconds old, or while it is inside a restart grace. Only the owner's `--session` can refresh it; `receive` only reads. A seat with no stamp is stale.
 
 - `register` prints `next`: the `heartbeat` command. Run it in the background right after `register`, and keep it until `close`. Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000` (background Bash is capped at 2 hours). Codex CLI: a terminal session left running.
 - `heartbeat` prints nothing while it runs and ends with a `stopped:` line and a `next:` line saying what to do. A `max_age` stop records a 720-second restart grace on the seat: it reads live until the grace ends or the same session's next stamp clears it, so a seat stays live at most `--max-age` (default 6180 seconds) plus the 720-second grace (6900 seconds by default) past its last start. While the peer is live only through its grace, `receive` says it is restarting its heartbeat and to keep waiting. When the host reports the task stopped with no output, start a new heartbeat with the same session; after any stop other than `max_age` the seat can read stale until the new heartbeat's first stamp.
+- A hook message `advisor: your heartbeat for channel N (ROLE) is not running; start it in a new background session: <command>` → act on it like a `next`: start that command in a new background session.
 - `register --channel` with the same session ID takes the seat back; any other session gets `seat_claimed`, even when the holder is stale or restarting. A closed channel refuses both.
 - `send` to a peer whose seat is stale or unowned fails with `peer_not_live`; `--kind stop` is always accepted. `receive` reports `peer_live` (`true`, `false`, or `null` when the peer seat has no owner).
 - A busy listener counts as taken and may be absent from `list --live-for`. `list --live-for` offers only channels whose own seat is free or already held by this `--session`.
@@ -92,6 +93,12 @@ python3 "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$RESPONSE_ID"
 ```
 
 ## Resuming after compaction
+
+The hook injects your seat status after compaction. With none in context, print it:
+```sh
+python3 "$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"
+```
+It prints `channel`, `role`, `state`, `peer_live`, `heartbeat`, `unread`, `last_read`, `owed` (a request you read and have not answered) and `next`. Set `CHANNEL` and your role from it and do what `next` says: restart the heartbeat when it names one, answer the `owed` request (fetch it again, then send the response), else `receive`. `note: no open channel for this session` → this session holds no seat; register as in the mode sections.
 
 `receive` never mutates state, so it's always safe to call cold:
 ```sh
