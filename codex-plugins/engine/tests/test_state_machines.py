@@ -74,27 +74,46 @@ class BuiltInStateMachineTest(unittest.TestCase):
             )
 
     def test_spec_review_is_the_only_implementation_gate(self):
-        paths = [PLUGIN_DIR / "state-machines", REPO_ROOT / ".bootgear" / "config"]
-        for machine_dir in paths:
-            for filename, terminal in (("ticket-to-pr.yaml", "impl"), ("ticket-writing.yaml", "succeeded")):
-                machine_name = (
-                    filename if machine_dir == PLUGIN_DIR / "state-machines"
-                    else "state-machine-" + filename
-                )
-                machine = yaml.safe_load((machine_dir / machine_name).read_text())
-                spec = machine["nodes"]["spec"]
-                review = machine["nodes"]["spec-review"]
-                expected_spec_next = (
-                    ["ticket"]
-                    if filename == "ticket-writing.yaml" and machine_dir != PLUGIN_DIR / "state-machines"
-                    else ["spec-review"]
-                )
-                self.assertEqual(spec["next"], expected_spec_next)
-                self.assertEqual(review["max_visits"], 3)
-                self.assertNotIn(terminal, spec["next"])
-                self.assertIn(terminal, review["next"])
-                self.assertEqual(machine["nodes"]["spec-debate"]["next"], ["spec"])
-                self.assertIn("leave_check", review["reminder"])
+        for machine_path in self._spec_review_machines():
+            machine = yaml.safe_load(machine_path.read_text())
+            nodes = machine["nodes"]
+            task_type = "ticket-writing" if "ticket-writing" in machine_path.name else "ticket-to-pr"
+            terminal = "succeeded" if task_type == "ticket-writing" else "impl"
+            finalising = "ticket" if "ticket" in nodes else "spec"
+            review = nodes["spec-review"]
+            self.assertEqual(nodes["spec"]["next"], ["ticket"] if finalising == "ticket" else ["spec-review", terminal], machine_path)
+            self.assertEqual(review["max_visits"], 5, machine_path)
+            self.assertIn(terminal, review["next"], machine_path)
+            self.assertIn("spec-review", nodes[finalising]["next"], machine_path)
+            self.assertIn(terminal, nodes[finalising]["next"], machine_path)
+            for name, node in nodes.items():
+                if name not in (finalising, "spec-review"):
+                    self.assertNotIn(terminal, node.get("next", []), f"{machine_path} node '{name}'")
+            branch = nodes[finalising]["reminder"]["branches"][terminal]
+            self.assertIn("ready spec-review", branch, machine_path)
+            self.assertIn("`inline`", branch, machine_path)
+            self.assertEqual(nodes["spec-debate"]["next"], ["spec"], machine_path)
+            self.assertIn("leave_check", review["reminder"], machine_path)
+
+    def test_no_machine_states_the_handback_precedence_line(self):
+        for machine_dir in self._machine_dirs():
+            for machine_path in machine_dir.glob("*.yaml"):
+                self.assertNotIn("blocked > revise > choices > ready", machine_path.read_text(), machine_path)
+
+    @staticmethod
+    def _machine_dirs():
+        return [
+            REPO_ROOT / "plugins" / "engine" / "state-machines",
+            REPO_ROOT / "codex-plugins" / "engine" / "state-machines",
+            REPO_ROOT / ".bootgear" / "config",
+        ]
+
+    def _spec_review_machines(self):
+        return [
+            machine_dir / f"{prefix}{task_type}.yaml"
+            for machine_dir, prefix in zip(self._machine_dirs(), ("", "", "state-machine-"))
+            for task_type in ("ticket-to-pr", "ticket-writing")
+        ]
 
     @staticmethod
     def _normalize(machine):

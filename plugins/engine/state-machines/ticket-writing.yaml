@@ -20,17 +20,18 @@ nodes:
       leave: "The ticket artifact is complete enough for independent correctness and completeness review; do not resolve the final sign-off here."
       branches:
         spec-review: "The draft is ready for an independent review."
-    next: [spec-review]
+        succeeded: "A ready spec-review returned `inline` patches; they are applied and no new slate runs."
+    next: [spec-review, succeeded]
   spec-review:
-    max_visits: 3
+    max_visits: 5
     reminder:
       do: "Run spec-review. Review request fit, clarity and completeness, proportionality, simplicity, and testability; mark architecture-fit not applicable when no design artifact exists."
-      leave: "The independent review has complete converge coverage and one handback outcome with findings and evidence recorded; mixed findings use blocked > revise > choices > ready."
+      leave: "The independent review has complete converge coverage; its findings, evidence and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
       leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
-        spec: "The ticket needs revision; carry claim IDs and evidence back to spec."
-        spec-debate: "Only unresolved material interpretations or choices remain after review and source-of-truth resolution."
-        succeeded: "The final ticket is independently reviewed and ready."
+        spec: "`revise` is non-empty, or the review is ready with a non-empty `inline` list; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to spec."
+        spec-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
+        succeeded: "`revise`, `choices` and `inline` are empty."
     next: [spec, spec-debate, succeeded]
   spec-debate:
     reminder:
