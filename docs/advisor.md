@@ -108,9 +108,9 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   subagent calls never inject. After compaction, SessionStart injects the
   seat status that `whoami --session S` prints: channel, role, state, peer
   liveness, heartbeat, unread count, last read message, the read request
-  still owed a response, and a `next` (answer the owed request, else
-  `receive`, after a heartbeat restart when the heartbeat stopped), plus
-  the engine run id when the session has an engine ledger. Every hook
+  still owed a response, and a `next` (heartbeat restart if stopped, then
+  the owed request, else `receive`), plus the engine run id when the
+  session has an active engine ledger (no `## closed` heading). Every hook
   failure exits 0 with no output.
 - **Pairing.** A listener always creates a new channel. An asker runs
   `list --live-for asker --session S`, which prints the open channels updated

@@ -9,6 +9,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -36,7 +37,8 @@ def engine_run(channel, session: str) -> str | None:
     if not channel.safe_name(session):
         return None
     ledger = Path.home() / ".bootgear" / "session" / f"{session}.md"
-    return f"engine run: {session}" if ledger.is_file() else None
+    active = ledger.is_file() and not re.search(r"(?m)^## closed\s*$", ledger.read_text(encoding="utf-8"))
+    return f"engine run: {session}" if active else None
 
 
 def main() -> None:

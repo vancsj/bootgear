@@ -98,7 +98,7 @@ The hook injects your seat status after compaction. With none in context, print 
 ```sh
 python3 "$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"
 ```
-It prints `channel`, `role`, `state`, `peer_live`, `heartbeat`, `unread`, `last_read`, `owed` (a request you read and have not answered) and `next`. Set `CHANNEL` and your role from it and do what `next` says: restart the heartbeat when it names one, answer the `owed` request (fetch it again, then send the response), else `receive`. `note: no open channel for this session` → this session holds no seat; register as in the mode sections.
+It prints `channel`, `role`, `state`, `peer_live`, `heartbeat`, `unread`, `last_read`, `owed` (a request you read and have not answered) and `next`. Set `CHANNEL` and your role from it and do what `next` says. `note: no open channel for this session` → this session holds no seat; register as in the mode sections.
 
 `receive` never mutates state, so it's always safe to call cold:
 ```sh

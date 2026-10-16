@@ -76,6 +76,9 @@ class AdvisorHookTests(unittest.TestCase):
         ledger.write_text("# run\n")
         text = self.context(self.event("SessionStart", source="compact"), "SessionStart")
         self.assertIn("engine run: s1", text.splitlines())
+        ledger.write_text("## settlement\ngoal: g\n\n## closed\n")
+        text = self.context(self.event("SessionStart", source="compact"), "SessionStart")
+        self.assertNotIn("engine run:", text)
 
     def test_compact_restart_line_when_the_heartbeat_stopped(self) -> None:
         self.pair()
