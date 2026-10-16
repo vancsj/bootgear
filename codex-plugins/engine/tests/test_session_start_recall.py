@@ -1,8 +1,8 @@
 """Subprocess-level tests for the SessionStart hook's principles merge.
 
 Drives `hooks/session_start_recall.py` the same way the platform actually
-invokes it: JSON on stdin, JSON on stdout. Exercises the 3-level merge
-and each source's independent failure handling.
+invokes it: JSON on stdin, JSON on stdout. Exercises the active-ledger gate,
+the 3-level merge and each source's independent failure handling.
 """
 import json
 import subprocess
@@ -69,14 +69,14 @@ class SessionStartPrinciplesTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, extra_env=None, source="compact"):
+    def _run(self, extra_env=None, source="compact", run_id=None):
         import os
         env = dict(os.environ)
         env["HOME"] = str(self.home)
         result = subprocess.run(
             ["python3", str(HOOK)],
             input=json.dumps({
-                "session_id": self.run_id,
+                "session_id": run_id or self.run_id,
                 "cwd": str(self.cwd),
                 "source": source,
             }),
@@ -162,19 +162,29 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         self.assertIn("[user]\n- user rule", msg)
         self.assertIn("[task]", msg)
 
-    def test_nonexistent_run_id_still_reads_project_level(self):
+    def test_no_ledger_prints_identity_only(self):
         (self.config_dir / "principles.md").write_text("- project rule\n")
-        result = subprocess.run(
-            ["python3", str(HOOK)],
-            input=json.dumps({"session_id": "no-such-run", "cwd": str(self.cwd)}),
-            capture_output=True,
-            text=True,
-            env={**__import__("os").environ, "HOME": str(self.home)},
-            check=False,
-        )
-        out = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("[project]\n- project rule", out)
-        self.assertNotIn("[task]", out)
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                msg = self._run(source=source, run_id="no-such-run")
+                self.assertEqual(
+                    msg,
+                    "Codex session_id: `no-such-run`. Use this exact value as the "
+                    "engine run-id; do not generate a UUID or other replacement.",
+                )
+
+    def test_closed_ledger_prints_identity_only(self):
+        (self.config_dir / "principles.md").write_text("- project rule\n")
+        ledger = self.session_dir / f"{self.run_id}.md"
+        ledger.write_text(ledger.read_text() + "\n## closed\nsucceeded\n")
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                msg = self._run(source=source)
+                self.assertEqual(
+                    msg,
+                    f"Codex session_id: `{self.run_id}`. Use this exact value as the "
+                    "engine run-id; do not generate a UUID or other replacement.",
+                )
 
     def test_home_ledger_found_when_cwd_session_dir_holds_other_runs(self):
         self.cwd_session_dir.mkdir(parents=True)
@@ -191,6 +201,7 @@ class SessionStartPrinciplesTest(unittest.TestCase):
             self.cwd_session_dir / f"{self.run_id}.md"
         )
         msg = self._run()
+        self.assertNotIn("This session just compacted", msg)
         self.assertNotIn("succeeded when done", msg)
         self.assertNotIn("[task]", msg)
 

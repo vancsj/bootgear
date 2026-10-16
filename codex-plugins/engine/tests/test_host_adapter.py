@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -21,3 +22,65 @@ class CodexHostAdapterFixtureTest(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("host-adapter fixtures passed: codex", result.stdout)
+
+
+IDENTITY = (
+    "Codex session_id: fixture-codex. Use this exact value as the engine "
+    "run-id; do not generate a UUID or other replacement."
+)
+
+
+class CodexSessionRecallAdapterTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="codex-host-adapter-session-recall-")
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name) / "home"
+        self.cwd = Path(tmp.name) / "project"
+        self.session_dir = self.home / ".bootgear" / "session"
+        self.session_dir.mkdir(parents=True)
+        (self.cwd / ".bootgear" / "config").mkdir(parents=True)
+        (self.cwd / ".bootgear" / "config" / "principles.md").write_text("- project rule\n")
+        self.ledger = self.session_dir / "fixture-codex.md"
+
+    def _context(self, source: str) -> str:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PLUGIN_DIR / "hooks" / "adapter.py"),
+                "--handler",
+                "session_recall",
+                "--matcher-pattern",
+                "^(startup|resume|compact)$",
+            ],
+            input=json.dumps({
+                "session_id": "fixture-codex",
+                "cwd": str(self.cwd),
+                "hook_event_name": "SessionStart",
+                "source": source,
+            }),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(self.home), "PLUGIN_ROOT": str(PLUGIN_DIR)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    def test_active_ledger_adds_nudge_on_compact_with_goal_and_principles(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        context = self._context("compact")
+        self.assertIn("This session just compacted", context)
+        self.assertIn(IDENTITY, context)
+        self.assertIn("the goal text", context)
+        self.assertIn("[project]\n- project rule", context)
+
+    def test_no_ledger_emits_identity_only(self):
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(self._context(source), IDENTITY)
+
+    def test_closed_ledger_emits_identity_only(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
+        for source in ("startup", "resume", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(self._context(source), IDENTITY)

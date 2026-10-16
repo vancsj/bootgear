@@ -2,8 +2,8 @@
 
 Drives `hooks/session_start_recall.py` the same way the platform actually
 invokes it: JSON on stdin, JSON on stdout, with HOME pointed at a scratch
-directory holding the session ledger. Exercises the 3-level principles merge
-and each source's independent failure handling.
+directory holding the session ledger. Exercises the active-ledger gate, the
+3-level principles merge and each source's independent failure handling.
 """
 import json
 import os
@@ -59,7 +59,7 @@ class SessionStartRecallTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run_raw(self, run_id=None):
+    def _run_stdout(self, run_id=None):
         result = subprocess.run(
             ["python3", str(HOOK)],
             input=json.dumps({
@@ -74,7 +74,10 @@ class SessionStartRecallTest(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(result.stdout)["hookSpecificOutput"]
+        return result.stdout
+
+    def _run_raw(self, run_id=None):
+        return json.loads(self._run_stdout(run_id))["hookSpecificOutput"]
 
     def _run(self, run_id=None):
         return self._run_raw(run_id)["additionalContext"]
@@ -147,18 +150,19 @@ class SessionStartRecallTest(unittest.TestCase):
         self.assertIn("[user]\n- user rule", msg)
         self.assertIn("[task]", msg)
 
-    def test_nonexistent_run_id_still_reads_project_level(self):
+    def test_no_ledger_prints_nothing(self):
         (self.config_dir / "principles.md").write_text("- project rule\n")
-        out = self._run("no-such-run")
-        self.assertIn("[project]\n- project rule", out)
-        self.assertNotIn("[task]", out)
+        self.assertEqual(self._run_stdout("no-such-run"), "")
+
+    def test_closed_ledger_prints_nothing(self):
+        (self.config_dir / "principles.md").write_text("- project rule\n")
+        self.ledger.write_text(self.ledger.read_text() + "\n## closed\nsucceeded\n")
+        self.assertEqual(self._run_stdout(), "")
 
     def test_cwd_ledger_is_not_a_run_location(self):
         self.cwd_session_dir.mkdir(parents=True)
         self.ledger.rename(self.cwd_session_dir / f"{self.run_id}.md")
-        msg = self._run()
-        self.assertNotIn("succeeded when done", msg)
-        self.assertNotIn("[task]", msg)
+        self.assertEqual(self._run_stdout(), "")
 
     def test_home_ledger_found_when_cwd_session_dir_holds_other_runs(self):
         self.cwd_session_dir.mkdir(parents=True)

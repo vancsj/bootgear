@@ -269,6 +269,7 @@ def _principles(context: HostContext, settlement: dict[str, Any] | None) -> str 
 def _session_recall(event: Event, context: HostContext) -> Intent:
     payload = event.payload
     source = payload.get("source")
+    active = _active_ledger(context)
     if context.host == "codex":
         identity = (
             f"Codex session_id: {event.session_id}. Use this exact value as the engine "
@@ -276,13 +277,16 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
             if isinstance(event.session_id, str) and event.session_id
             else _CODEX_SESSION_ID_MISSING
         )
+        if active is None:
+            return Intent.add_context(identity)
         message = identity
         if source == "compact":
             message = f"{_CODEX_SESSION_NUDGE}\n\n{message}"
     else:
+        if active is None:
+            return Intent.observe()
         message = _SESSION_NUDGE
-    active = _active_ledger(context)
-    settlement = _read_settlement(active[1]) if active is not None else None
+    settlement = _read_settlement(active[1])
     goal = _goal_text(settlement)
     if goal:
         label = "goal" if context.host == "codex" else "/goal"

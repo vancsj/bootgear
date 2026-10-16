@@ -1,36 +1,23 @@
 #!/usr/bin/env python3
-"""Nudge toward `recall` immediately after a compaction.
+"""Expose the Codex session identity and nudge toward `recall` after compaction.
 
 Codex supplies the current session identity to every command hook on stdin.
-This hook exposes that identity to the engine skills so `clarify` can use it
-as the ledger run-id instead of inventing one. Compaction rewrites the model's
-own memory of the clarify-stage settlement
-with a lossy summary. The one moment that matters most for `recall` is
-right after that happens — the confirmed `SessionStart` hook event with
-`source: compact` is the real signal, not a guess, so this always fires
-rather than needing a search-shaped heuristic the way memory-ledger's
-`nudge.py` does for its own trigger.
+This hook always prints that identity so `clarify` can use it as the ledger
+run-id instead of inventing one.
 
-Also loads the run's actual `goal` text, when a ledger for this session
-exists, and appends it to the nudge — a compaction summary of the goal is
-lossy in exactly the way the settlement itself is, so recall's own re-read
-should not be the first time the real goal text reappears. `goal` may be a
-legacy string or a mapping with `succeeded` and `failed` conditions, so this
-parses the whole settlement section as real YAML.
-Every failure path here (missing ledger, malformed YAML, missing `goal`
-field) still prints the base NUDGE_MESSAGE — recall's own reminder to
-re-read from disk must never be silently dropped because the goal-loading
-extra failed.
+The rest is added only when the session has an active engine ledger:
+`~/.bootgear/session/<session_id>.md` exists, is readable and has no
+`## closed` heading. Then, on `source: compact`, the recall nudge is
+prepended; the run's `goal` text from the ledger's settlement (parsed as
+real YAML; a legacy string or a mapping with `succeeded` and `failed`
+conditions) and the merged principles follow. Malformed YAML or a missing
+`goal` drops only the goal.
 
-Also loads and merges principles from all 3 levels — task (the same
-settlement YAML `_goal_text` already parsed), project
-(`.bootgear/config/principles.md`), user (`~/.codex/principles.md`,
-a dedicated file — not `~/.codex/AGENTS.md`, which carries general
-instructions, not principles) — per `skills/execute/SKILL.md`'s "Reading
-and merging principles". Each of the 2 file sources is read
-independently: a missing, empty, or unreadable file only drops that
-source's text, never the whole function's result, matching the
-fail-safe shape above.
+Principles merge from all 3 levels: task (the settlement's `principles`),
+project (`.bootgear/config/principles.md`) and user
+(`~/.codex/principles.md`, a dedicated file, not `~/.codex/AGENTS.md`), per
+`skills/execute/SKILL.md`'s "Reading and merging principles". A missing,
+empty, or unreadable file drops only that source.
 """
 from __future__ import annotations
 
@@ -55,17 +42,24 @@ SESSION_ID_MISSING_MESSAGE = (
 )
 
 _SETTLEMENT_RE = re.compile(r"(?m)^## settlement\n(.*?)(?=\n## |\Z)", re.DOTALL)
+_CLOSED_HEADING_RE = re.compile(r"(?m)^## closed\s*$")
 
 
-def _settlement(hook_input: dict) -> dict | None:
+def _active(hook_input: dict) -> str | None:
     run_id = hook_input.get("session_id")
     if not isinstance(run_id, str) or not run_id:
         return None
     ledger_path = Path.home() / ".bootgear" / "session" / f"{run_id}.md"
     try:
-        text = ledger_path.read_text()
-    except OSError:
+        text = ledger_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return None
+    if _CLOSED_HEADING_RE.search(text):
+        return None
+    return text
+
+
+def _settlement(text: str) -> dict | None:
     m = _SETTLEMENT_RE.search(text)
     if not m:
         return None
@@ -135,15 +129,17 @@ def main() -> None:
     else:
         identity = SESSION_ID_MISSING_MESSAGE
     message = identity
-    if hook_input.get("source") == "compact":
-        message = f"{NUDGE_MESSAGE}\n\n{message}"
-    settlement = _settlement(hook_input)
-    goal = _goal_text(settlement)
-    if goal:
-        message = f"{message}\n\nThis run's goal:\n{goal}"
-    principles = _principles_text(hook_input, settlement)
-    if principles:
-        message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
+    ledger = _active(hook_input)
+    if ledger is not None:
+        if hook_input.get("source") == "compact":
+            message = f"{NUDGE_MESSAGE}\n\n{message}"
+        settlement = _settlement(ledger)
+        goal = _goal_text(settlement)
+        if goal:
+            message = f"{message}\n\nThis run's goal:\n{goal}"
+        principles = _principles_text(hook_input, settlement)
+        if principles:
+            message = f"{message}\n\nMerged principles (user/project/task):\n{principles}"
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",

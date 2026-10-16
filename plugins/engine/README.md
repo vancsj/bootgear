@@ -140,7 +140,7 @@ Three hooks keep a long run on track, each reading the ledger by session id:
 
 | Hook | Reminds the agent to |
 |---|---|
-| session start | run `recall` after a compaction, with the run's `goal` and merged principles |
+| session start | run `recall` after a compaction while a run is open, with the run's `goal` and merged principles |
 | stop | run `recall` before ending a turn while a run is open |
 | state nudge | transition when the current node has had no transition for 5 minutes |
 

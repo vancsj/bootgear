@@ -259,3 +259,54 @@ class HostAdapterBoundaryTest(unittest.TestCase):
         self.assertTrue(
             all(intent.kind in {"observe", "add_context", "continue"} for intent in intents)
         )
+
+
+class SessionRecallAdapterTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="host-adapter-session-recall-")
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name) / "home"
+        self.cwd = Path(tmp.name) / "project"
+        self.session_dir = self.home / ".bootgear" / "session"
+        self.session_dir.mkdir(parents=True)
+        (self.cwd / ".bootgear" / "config").mkdir(parents=True)
+        (self.cwd / ".bootgear" / "config" / "principles.md").write_text("- project rule\n")
+        self.ledger = self.session_dir / "fixture-claude.md"
+
+    def _run(self) -> str:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PLUGIN_DIR / "hooks" / "adapter.py"),
+                "--handler",
+                "session_recall",
+                "--matcher-pattern",
+                "compact",
+            ],
+            input=json.dumps({
+                "session_id": "fixture-claude",
+                "cwd": str(self.cwd),
+                "hook_event_name": "SessionStart",
+                "source": "compact",
+            }),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(self.home), "CLAUDE_PLUGIN_ROOT": str(PLUGIN_DIR)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_active_ledger_adds_recall_context(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        context = json.loads(self._run())["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("This session just compacted", context)
+        self.assertIn("the goal text", context)
+        self.assertIn("[project]\n- project rule", context)
+
+    def test_no_ledger_prints_nothing(self):
+        self.assertEqual(self._run(), "")
+
+    def test_closed_ledger_prints_nothing(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
+        self.assertEqual(self._run(), "")

@@ -4,11 +4,13 @@
 Runs on `SessionStart` with matcher `compact`, which fires after compaction
 and, unlike `PostCompact`, can return `additionalContext` to the model.
 
-Appends the run's `/goal` text when the session ledger
-`~/.bootgear/session/<session_id>.md` exists. The settlement section is parsed
+Prints only when the session has an active engine ledger:
+`~/.bootgear/session/<session_id>.md` exists, is readable and has no
+`## closed` heading. Otherwise it prints nothing.
+
+Appends the run's `/goal` text from the ledger's settlement section, parsed
 as real YAML; `goal` may be a legacy string or a mapping with `succeeded` and
-`failed` conditions. Every failure path
-(missing ledger, malformed YAML, missing `goal`) still prints the base
+`failed` conditions. Malformed YAML or a missing `goal` still prints the base
 NUDGE_MESSAGE.
 
 Also merges principles from all 3 levels — user (`~/.claude/principles.md`),
@@ -33,17 +35,24 @@ NUDGE_MESSAGE = (
 )
 
 _SETTLEMENT_RE = re.compile(r"(?m)^## settlement\n(.*?)(?=\n## |\Z)", re.DOTALL)
+_CLOSED_HEADING_RE = re.compile(r"(?m)^## closed\s*$")
 
 
-def _settlement(hook_input: dict) -> dict | None:
+def _active(hook_input: dict) -> str | None:
     run_id = hook_input.get("session_id")
-    if not run_id:
+    if not isinstance(run_id, str) or not run_id:
         return None
     ledger_path = Path.home() / ".bootgear" / "session" / f"{run_id}.md"
     try:
-        text = ledger_path.read_text()
-    except OSError:
+        text = ledger_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return None
+    if _CLOSED_HEADING_RE.search(text):
+        return None
+    return text
+
+
+def _settlement(text: str) -> dict | None:
     m = _SETTLEMENT_RE.search(text)
     if not m:
         return None
@@ -104,8 +113,11 @@ def main() -> None:
         hook_input = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         hook_input = {}
+    ledger = _active(hook_input)
+    if ledger is None:
+        return
     message = NUDGE_MESSAGE
-    settlement = _settlement(hook_input)
+    settlement = _settlement(ledger)
     goal = _goal_text(settlement)
     if goal:
         message = f"{message}\n\nThis run's /goal:\n{goal}"
