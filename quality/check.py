@@ -88,6 +88,10 @@ CHECKS = (
         ("python", "-m", "pytest", "plugins/review/tests"),
     ),
     Check(
+        "pytest-spec",
+        ("python", "-m", "pytest", "plugins/spec/tests"),
+    ),
+    Check(
         "pytest-codex",
         ("python", "-m", "pytest", "-n", "auto", "codex-plugins/engine/tests"),
     ),

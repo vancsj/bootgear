@@ -417,14 +417,26 @@ class ClaudePackageContractTest(unittest.TestCase):
 
     def test_spec_review_angles_resolve_as_find_angles(self):
         angle_file = (PLUGIN_DIR.parents[1] / "plugins" / "spec" / "skills" /
-                      "spec-review" / "references" / "find-angles.yaml")
+                      "spec-review" / "references" / "angles.yaml")
+        converge = PLUGIN_DIR.parents[1] / "plugins" / "converge" / "bin" / "converge"
         result = subprocess.run(
-            [str(PLUGIN_DIR.parents[1] / "plugins" / "converge" / "bin" / "converge"),
-             "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
+            [str(converge), "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(json.loads(result.stdout)["angles"]), 8)
+        self.assertEqual(len(json.loads(result.stdout)["angles"]), 12)
+
+        attack = subprocess.run(
+            [str(converge), "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(attack.returncode, 0, attack.stderr)
+        attack_ids = {row["id"] for row in json.loads(attack.stdout)["angles"]}
+        self.assertEqual(len(attack_ids), 20)
+        self.assertLessEqual(
+            {"request-quote", "settled-elsewhere", "negative-oracle", "wrong-outcome-test", "style-not-defect"},
+            attack_ids,
+        )
 
 if __name__ == "__main__":
     unittest.main()

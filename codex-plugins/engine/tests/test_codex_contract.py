@@ -140,7 +140,10 @@ class CodexPackageContractTest(unittest.TestCase):
         refused = subprocess.run([str(TASK), "state", "validate"], capture_output=True,
                                  text=True, check=False, env=env)
         self.assertEqual(refused.returncode, 2)
-        self.assertIn(f"\nexample: {TASK} state validate <machine.yaml>\n", refused.stderr)
+        self.assertTrue(
+            refused.stderr.startswith(f"example: {TASK} state validate <machine.yaml>\n"),
+            refused.stderr)
+        self.assertIn("error:", refused.stderr.splitlines()[-1])
         self.assertIn(f"\n  {TASK} session recall <run-id> --dir <session-dir>\n",
                       refused.stderr)
 
@@ -574,13 +577,25 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
     def test_spec_review_angles_resolve_as_find_angles(self):
-        angle_file = PLUGIN_DIR / "skills" / "spec-review" / "references" / "find-angles.yaml"
+        angle_file = PLUGIN_DIR / "skills" / "spec-review" / "references" / "angles.yaml"
         result = subprocess.run(
             [str(CONVERGE), "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(json.loads(result.stdout)["angles"]), 8)
+        self.assertEqual(len(json.loads(result.stdout)["angles"]), 12)
+
+        attack = subprocess.run(
+            [str(CONVERGE), "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(attack.returncode, 0, attack.stderr)
+        attack_ids = {row["id"] for row in json.loads(attack.stdout)["angles"]}
+        self.assertEqual(len(attack_ids), 20)
+        self.assertLessEqual(
+            {"request-quote", "settled-elsewhere", "negative-oracle", "wrong-outcome-test", "style-not-defect"},
+            attack_ids,
+        )
 
 
 if __name__ == "__main__":

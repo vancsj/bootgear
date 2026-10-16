@@ -1,0 +1,52 @@
+# Spec subset of the design failure patterns: find angles for lens `architecture-fit`.
+# Rows follow converge's angle schema; `cost` is the change or failure the design
+# makes harder. A claim needs a cost scenario.
+
+- id: two-sources-of-truth
+  tag: find
+  lens: architecture-fit
+  tell: The same fact is stored or cached twice.
+  asks: Which copy wins when the two disagree?
+  cost: The copies drift and nobody detects it.
+- id: implicit-state-machine
+  tag: find
+  lens: architecture-fit
+  tell: State transitions are scattered over `if` statements.
+  asks: Where is the set of legal transitions enforced?
+  cost: An illegal transition gets written.
+- id: partial-write
+  tag: find
+  lens: architecture-fit
+  tell: A multi-step mutation has no transaction or up-front validation.
+  asks: What state is left if the process stops between steps?
+  cost: A crash leaves corrupt state.
+- id: non-idempotent-retry
+  tag: find
+  lens: architecture-fit
+  tell: A retry wraps a side effect.
+  asks: Is the side effect safe to repeat?
+  cost: A duplicate charge, email or row.
+- id: irreversible-migration
+  tag: find
+  lens: architecture-fit
+  tell: A destructive change has no down path.
+  asks: Can the change be rolled back without losing data?
+  cost: A rollback loses data.
+- id: invalid-states-representable
+  tag: find
+  lens: architecture-fit
+  tell: Fields form nullable pairs, or `status` and `errorMsg` can both be set.
+  asks: Can the type hold a combination the domain forbids?
+  cost: Code has to handle impossible combinations.
+- id: no-timeout-backpressure
+  tag: find
+  lens: architecture-fit
+  tell: A new network or queue call.
+  asks: What bounds the wait and the backlog?
+  cost: One slow dependency stalls everything.
+- id: config-sprawl
+  tag: find
+  lens: architecture-fit
+  tell: A new flag or environment variable has no owner or removal plan.
+  asks: Who owns the setting and when does it go away?
+  cost: Combinations go untested.

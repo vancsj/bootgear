@@ -38,3 +38,43 @@
   lens: testability
   tell: An acceptance condition or task has no observable verification path.
   asks: What test or evidence would distinguish the intended behavior from a wrong implementation?
+- id: implied-requirement
+  tag: find
+  lens: clarity-completeness
+  tell: The request implies a behavior, constraint or boundary the artifact does not state.
+  asks: Which request sentence does it follow from (quote it), and does the stated outcome fail without it?
+- id: design-assumption
+  tag: find
+  lens: architecture-fit
+  tell: The design assumes something about existing code, configuration or a contract.
+  asks: Is the assumption true? Cite file:line or a run for each.
+- id: whole-design-alternative
+  tag: find
+  lens: simplicity
+  tell: The design as a whole is larger than the request needs.
+  asks: What smaller design meets the same requirement, and where does this one differ?
+- id: implementation-level
+  tag: find
+  lens: architecture-fit
+  tell: A statement is sound but leaves a code-level detail open (naming, local structure, message text).
+  asks: Would fixing it in code leave the design unchanged? If yes, file the claim with a `trigger` that starts `implementation-level:`.
+- id: request-quote
+  tag: attack
+  tell: The claim says the request requires or excludes something.
+  asks: Quote the request sentence. If it does not say so, the claim fails.
+- id: settled-elsewhere
+  tag: attack
+  tell: The claim calls something missing or undecided.
+  asks: Does another section of the artifact, or a recorded settlement, already answer it?
+- id: negative-oracle
+  tag: attack
+  tell: The claim says an acceptance condition is insufficient or untestable.
+  asks: Write a wrong implementation that still passes it. If one exists, the claim holds.
+- id: wrong-outcome-test
+  tag: attack
+  tell: The claim says a requirement is implied.
+  asks: Does the stated outcome fail without it?
+- id: style-not-defect
+  tag: attack
+  tell: The claim is about wording or structure.
+  asks: Would any reader or implementer behave differently under the two readings? If not, refute it or make it a follow-up.

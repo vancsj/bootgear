@@ -1,6 +1,24 @@
 cutoff:
   cheap: {enabled: false}
   lenses:
-    default:
+    default: &normal
       attack_if: [{reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
       report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+    request-fit: *normal
+    simplicity:
+      attack_if: [{reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+      report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+      choice_if: [{impact: [security, data-loss, wrong-output]}]
+    proportionality:
+      attack_if: [{reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+      report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+      choice_if: [{impact: [security, data-loss, wrong-output]}]
+  rereview:
+    lenses:
+      default:
+        attack_if: [{reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+        report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output]}]
+      simplicity:
+        report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output]}]
+      proportionality:
+        report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output]}]
