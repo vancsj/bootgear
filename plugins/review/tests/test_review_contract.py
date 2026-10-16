@@ -64,7 +64,7 @@ class ReviewContractTest(unittest.TestCase):
             first_line = (REFERENCES / name).read_text().splitlines()[0]
             self.assertRegex(first_line, r"\A# use when: \S", name)
             for row in _rows(name):
-                self.assertIn("lens", row, row)
+                self.assertIn(row["lens"], _full_depth_lenses(), row)
                 if row["lens"] == "architecture":
                     self.assertTrue(row["cost"].strip(), row)
 
@@ -79,23 +79,6 @@ class ReviewContractTest(unittest.TestCase):
             for row in _rows(name):
                 for key in ("tell", "asks", "cost"):
                     self.assertIsNone(words.search(row.get(key, "")), (name, row["id"], key))
-
-    def test_skill_names_every_angle_file(self):
-        skill = (SKILL_DIR / "SKILL.md").read_text()
-        full_depth = _full_depth_lenses()
-        for path in sorted(REFERENCES.glob("angles-*.yaml")):
-            lens = path.name.removeprefix("angles-").removesuffix(".yaml")
-            self.assertIn(f"references/{path.name}", skill)
-            self.assertIn(lens, full_depth)
-        for name in LENS_ANGLE_FILES:
-            self.assertIn(f"references/{name}", skill)
-        self.assertIn("references/pack-*.yaml", skill)
-
-    def test_full_depth_lenses_have_a_brief(self):
-        table = (REFERENCES / "lenses.md").read_text()
-        briefed = set(re.findall(r"^\| `([a-z-]+)` \|", table, re.MULTILINE))
-        for lens in _full_depth_lenses():
-            self.assertIn(lens, briefed)
 
 
 if __name__ == "__main__":

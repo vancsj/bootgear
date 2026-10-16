@@ -17,8 +17,10 @@ findings in rank order with their status, `fix-now` claims with their patches
 (`converge render --json` `fix_now`) and any `fix-check` recorded on them,
 `choice` claims, follow-up claims with their status, and killed claims with
 their evidence. When the default implementation selects packs, also hand back
-the angle packs enabled for the slate, each with the reason. Return follow-up
-claims in the handback; do not record them.
+the angle packs enabled for the slate, each with the reason, or, when none is
+enabled, that none is, with the reason. A re-review that reads its packs from
+the previous slate's `.packs` file hands them back marked as carried from the
+previous slate. Return follow-up claims in the handback; do not record them.
 
 A new review ends with exactly one outcome:
 
@@ -161,8 +163,12 @@ exists ([references/angles-security.yaml](references/angles-security.yaml),
 the absolute path of [references/cutoff.yaml](references/cutoff.yaml), the
 per-lens cutoff policy, as `--defaults` to `init`.
 
-Select the angle packs before `init`. Each `references/pack-*.yaml` opens with
-one line `# use when: <project property>`. Read that line of every pack and
+Select the angle packs before `init`. Each `references/pack-*.yaml`
+([references/pack-web.yaml](references/pack-web.yaml),
+[references/pack-typed-oop.yaml](references/pack-typed-oop.yaml),
+[references/pack-concurrency-db.yaml](references/pack-concurrency-db.yaml),
+[references/pack-test-tooling.yaml](references/pack-test-tooling.yaml)) opens
+with one line `# use when: <project property>`. Read that line of every pack and
 enable the pack when the project has the property, judging from project-wide
 sources only: the host's project instruction file (`CLAUDE.md` or
 `AGENTS.md`), the project docs, and the build and manifest files at the
