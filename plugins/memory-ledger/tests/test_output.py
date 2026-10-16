@@ -182,8 +182,8 @@ class LedgerOutputTests(unittest.TestCase):
         code, _, err = self.run_file(*args)
         self.assertEqual(code, 1)
         lines = err.splitlines()
-        self.assertTrue(lines[0].startswith("say which ledger"))
-        self.assertIn(f"example: ledger.py {ledger_cli.EXAMPLES['new']}", lines)
+        self.assertEqual(lines[0], f"example: ledger.py {ledger_cli.EXAMPLES['new']}")
+        self.assertTrue(lines[-1].startswith("say which ledger"), err)
         self.assertTrue(any(line.startswith("commands: ") for line in lines))
         self.assertIn(f"  ledger.py {ledger_cli.EXAMPLES['show']}", lines)
 
@@ -191,8 +191,8 @@ class LedgerOutputTests(unittest.TestCase):
         result = self.run_pipe("show", "--prose")
         self.assertEqual(result.returncode, 2)
         lines = result.stderr.splitlines()
-        self.assertTrue(lines[0].startswith("ledger.py show: error:"), result.stderr)
-        self.assertIn(f"example: ledger.py {ledger_cli.EXAMPLES['show']}", lines)
+        self.assertTrue(lines[-1].startswith("ledger.py show: error:"), result.stderr)
+        self.assertEqual(lines[0], f"example: ledger.py {ledger_cli.EXAMPLES['show']}")
         self.assertNotIn("usage:", result.stderr)
 
     def test_new_collects_every_problem_before_running_evidence(self) -> None:

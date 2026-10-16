@@ -321,16 +321,17 @@ def render_refusal(catalog: Catalog, command: str | None, refusal: Refusal,
             error["lines"] = refusal.lines
         print(dumps({"error": error}), file=sys.stderr)
         return
-    out = [refusal.message]
+    out: list[str] = []
+    if example:
+        out.append(f"example: {example}")
+    if others:
+        out.append(f"commands: {', '.join(others)}")
+    out.extend(f"  {line}" for line in frequent.values())
+    out.append(refusal.message)
     for kind, items in grouped:
         if kind:
             out.append(f"  {kind} ({len(items)}):")
             out.extend(f"    - {item}" for item in items)
         else:
             out.extend(f"  - {item}" for item in items)
-    if example:
-        out.append(f"example: {example}")
-    if others:
-        out.append(f"commands: {', '.join(others)}")
-    out.extend(f"  {line}" for line in frequent.values())
     print("\n".join(out), file=sys.stderr)

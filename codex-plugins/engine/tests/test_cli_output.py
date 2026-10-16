@@ -134,11 +134,15 @@ class CliOutputTest(unittest.TestCase):
                                str(self.session_dir), *args, **env)
 
     def _assert_refusal_lines(self, stderr, command, example):
-        self.assertIn(f"\nexample: {self.prog} {example}\n", stderr)
-        self.assertIn("\ncommands: ", stderr)
+        """The example, sibling commands and frequent examples come first; the message and
+        its problems are the last lines."""
+        lines = stderr.splitlines()
+        self.assertEqual(lines[0], f"example: {self.prog} {example}", stderr)
+        self.assertTrue(lines[1].startswith("commands: "), stderr)
         for leaf in self.frequent:
             if leaf != command:
-                self.assertIn(f"\n  {self.prog} {leaf} ", stderr)
+                self.assertTrue(any(line.startswith(f"  {self.prog} {leaf} ") for line in lines[2:]), stderr)
+        self.assertFalse(lines[-1].startswith(("example: ", "commands: ", f"  {self.prog} ")), stderr)
 
     # --- mode -------------------------------------------------------------
 
@@ -266,8 +270,7 @@ class CliOutputTest(unittest.TestCase):
     def test_domain_refusal_is_runnable(self):
         result = self._session("read", "--last", "0", "--prose")
         self.assertEqual(result.returncode, 1)
-        self.assertTrue(result.stderr.startswith("--last must be a positive integer\n"),
-                        result.stderr)
+        self.assertEqual(result.stderr.splitlines()[-1], "--last must be a positive integer")
         self._assert_refusal_lines(
             result.stderr, "session read", "session read <run-id> --dir <session-dir> --section state")
 
@@ -296,8 +299,12 @@ class CliOutputTest(unittest.TestCase):
         self.ledger.write_text(text)
         result = self._session("read", "--section", "state", "--prose")
         self.assertEqual(result.returncode, 1)
-        self.assertTrue(result.stderr.startswith(
-            f"malformed ledger at {self.ledger.resolve()}: 3 problem(s)\n"), result.stderr)
+        message = f"malformed ledger at {self.ledger.resolve()}: 3 problem(s)"
+        lines = result.stderr.splitlines()
+        self.assertIn(message, lines, result.stderr)
+        self.assertTrue(all(line.startswith("  ") for line in lines[lines.index(message) + 1:]),
+                        result.stderr)
+        self.assertLess(result.stderr.index("example: "), result.stderr.index(message))
         self.assertIn("  question id out of sequence (1):\n", result.stderr)
         self.assertIn("'q2' is the first entry tagging this question, but 'q1'",
                       result.stderr)
@@ -592,7 +599,7 @@ class CliOutputTest(unittest.TestCase):
         the command it names, with its placeholders filled in."""
         result = self._session(*self._close_args(outcome), "--prose")
         self.assertEqual(result.returncode, 1, result.stderr)
-        line = result.stderr.splitlines()[0]
+        line = result.stderr.splitlines()[-1]
         self.assertTrue(line.startswith(first_line), line)
         self.assertNotIn("## closed", self.ledger.read_text())
         argv = shlex.split(line.split(" — run: ", 1)[1])
@@ -637,8 +644,8 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(init.returncode, 0, init.stderr)
         self.ledger = self.session_dir / f"{self.run_id}.md"
         refused = self._session("close", "succeeded", "--prose")
-        self.assertIn("has no legal edge to 'succeeded'", refused.stderr.splitlines()[0])
-        argv = shlex.split(refused.stderr.splitlines()[0].split(" — run: ", 1)[1])
+        self.assertIn("has no legal edge to 'succeeded'", refused.stderr.splitlines()[-1])
+        argv = shlex.split(refused.stderr.splitlines()[-1].split(" — run: ", 1)[1])
         argv = [str(self.task_bin), *(a if not a.startswith("<") else "r" for a in argv[1:])]
         fixed = subprocess.run(argv, capture_output=True, text=True, check=False, env=_env())
         self.assertEqual(fixed.returncode, 1, fixed.stderr)
@@ -656,7 +663,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(init.returncode, 0, init.stderr)
         self.ledger = self.session_dir / f"{self.run_id}.md"
         refused = self._session("close", "succeeded", "--prose")
-        line = refused.stderr.splitlines()[0]
+        line = refused.stderr.splitlines()[-1]
         self.assertIn("--confirm-leave", line)
         argv = shlex.split(line.split(" — run: ", 1)[1])
         argv = [str(self.task_bin), *(a if not a.startswith("<") else "r" for a in argv[1:])]
@@ -702,7 +709,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertNotIn("Traceback", missing.stderr)
         self.assertIn("cannot init", missing.stderr)
-        self.assertIn("example: ", missing.stderr)
+        self.assertLess(missing.stderr.index("example: "), missing.stderr.index("cannot init"))
         self.assertFalse((self.session_dir / "fresh-run.md").exists())
         for mode in (0o555, 0o000):
             locked = self.tmp / f"locked-{mode:o}"
@@ -730,7 +737,7 @@ class CliOutputTest(unittest.TestCase):
             capture_output=True, text=True, check=False, env=_env())
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("record-decision refused", result.stderr)
-        self.assertIn("example: ", result.stderr)
+        self.assertLess(result.stderr.index("example: "), result.stderr.index("record-decision refused"))
 
     def test_examples_parse_and_cover_every_leaf(self):
         result = subprocess.run(

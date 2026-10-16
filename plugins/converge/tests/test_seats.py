@@ -192,9 +192,12 @@ def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
     settlement = _settlement(cv, "converge_seats: {r2: native_subagent}\n"
                                  "advisor_roles: {roles: [refuter], brief: Act only as r2.}\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0] == "converge: settlement seats do not match its advisor roles:"
-    assert ("  - advisor_roles: names refuter but converge_seats.r2 is native_subagent; "
-            "set converge_seats.r2: advisor, or remove refuter from advisor_roles.roles") in lines
+    assert lines[0].startswith("example: converge init ")
+    message = lines.index("converge: settlement seats do not match its advisor roles:")
+    assert lines[message + 1] == (
+        "  - advisor_roles: names refuter but converge_seats.r2 is native_subagent; "
+        "set converge_seats.r2: advisor, or remove refuter from advisor_roles.roles")
+    assert message + 2 == len(lines) - 1
     assert any(line.startswith("example: converge init ") and line.endswith("--settlement <file>")
                for line in lines), lines
     assert any(line.startswith("commands: ") for line in lines), lines
@@ -216,7 +219,8 @@ def test_init_refuses_every_seat_shape_problem(cv: Converge) -> None:
                                  "finder: advisor, r2: advisor}\n"
                                  "advisor_roles: {roles: [bogus], brief: ''}\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0] == "converge: invalid settlement seats:"
+    assert lines[0].startswith("example: converge init ")
+    assert "converge: invalid settlement seats:" in lines
     text = "\n".join(lines)
     for fragment in ("converge_seats: unknown seat 'r9'",
                      "converge_seats.r1: unknown mechanism 'robot'",
@@ -230,7 +234,9 @@ def test_init_refuses_every_seat_shape_problem(cv: Converge) -> None:
 def test_init_refuses_a_settlement_that_is_not_a_mapping(cv: Converge) -> None:
     settlement = _settlement(cv, "- r2\n- advisor\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0] == "converge: invalid settlement seats:"
+    assert lines[0].startswith("example: converge init ")
+    assert lines[-3:-1] == ["converge: invalid settlement seats:",
+                            "  - --settlement must be a YAML mapping (the engine settlement)"]
     assert "  - --settlement must be a YAML mapping (the engine settlement)" in lines
     assert lines[-1] == NEXT_FIX.format(path=settlement)
 

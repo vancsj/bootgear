@@ -216,8 +216,8 @@ def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Pat
 def test_both_mode_flags_refused(cv: Converge) -> None:
     cv.init()
     err = cv("status", "s1", "--dir", str(cv.dir), "--json", "--prose", code=2).stderr
-    assert err.startswith("--json and --prose are mutually exclusive\n")
-    assert f"example: converge {cli.EXAMPLES['status']}" in err
+    assert err.startswith(f"example: converge {cli.EXAMPLES['status']}\n")
+    assert err.endswith("--json and --prose are mutually exclusive\n")
 
 
 # ---------------------------------------------------------------------------
@@ -227,21 +227,22 @@ def test_both_mode_flags_refused(cv: Converge) -> None:
 def test_argparse_refusal_prose(cv: Converge) -> None:
     err = cv("cut", "s1", "--dir", str(cv.dir), "--as", CUTTER, code=2).stderr
     lines = err.splitlines()
-    assert lines[0].startswith("converge cut: error: the following arguments are required: ")
+    assert lines[-1].startswith("converge cut: error: the following arguments are required: ")
     assert "usage:" not in err
-    assert lines[1] == f"example: converge {cli.EXAMPLES['cut']}"
-    assert lines[2] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "cut")
-    assert lines[3:] == [f"  converge {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
+    assert lines[0] == f"example: converge {cli.EXAMPLES['cut']}"
+    assert lines[1] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "cut")
+    assert lines[2:-1] == [f"  converge {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
 
 
-def test_domain_refusal_prose_keeps_first_lines(cv: Converge) -> None:
+def test_domain_refusal_prose_ends_with_the_problems(cv: Converge) -> None:
     cv.init()
     err = cv(*_file_args(cv, angle="nope"), code=2).stderr
     lines = err.splitlines()
-    assert lines[:2] == ["converge: refused:",
-                         "  - unknown find angle 'nope' (not in this slate's init snapshot)"]
-    assert lines[2] == f"example: converge {cli.EXAMPLES['file']}"
-    assert lines[3].startswith("commands: init, escalate, ")
+    assert lines[-3:-1] == ["converge: refused:",
+                            "  - unknown find angle 'nope' (not in this slate's init snapshot)"]
+    assert lines[-1].startswith("next: ")
+    assert lines[0] == f"example: converge {cli.EXAMPLES['file']}"
+    assert lines[1].startswith("commands: init, escalate, ")
 
 
 def test_domain_refusal_json_and_display_prog(cv: Converge) -> None:
@@ -297,8 +298,8 @@ def test_gate_still_refuses_relative_dir(cv: Converge) -> None:
     rel = os.path.relpath(cv.dir, cv.root)
     err = cv("gate", "s1", "--dir", rel, code=2, env={"GEAR_CALLER_CWD": str(cv.root)}).stderr
     lines = err.splitlines()
-    assert lines[:2] == ["converge: refused:", f"  - gate needs an absolute --dir; got {rel!r}"]
-    assert lines[2] == "example: converge gate <slate> --dir <abs-dir>"
+    assert lines[-2:] == ["converge: refused:", f"  - gate needs an absolute --dir; got {rel!r}"]
+    assert lines[0] == "example: converge gate <slate> --dir <abs-dir>"
 
 
 # ---------------------------------------------------------------------------

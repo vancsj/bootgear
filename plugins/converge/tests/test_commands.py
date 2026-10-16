@@ -155,9 +155,9 @@ def test_attack_reply_verdict_walk_the_dispute(cv: Converge) -> None:
 def test_attack_reply_verdict_refusals_print_the_next_step(cv: Converge) -> None:
     _to_attack(cv)
     err = _attack(cv, BATCH_1[0], agent=FINDER, code=2).stderr.splitlines()
-    assert err[:2] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it"]
-    assert err[2] == f"example: converge {_example('attack')}"
-    assert err[-1] == f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"
+    assert err[0] == f"example: converge {_example('attack')}"
+    assert err[-3:] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it",
+                        f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
     err = _attack(cv, BATCH_1[0], batch=2, code=2).stderr
     assert "attack: F001's open batch is 1 (open); got batch 2" in err
     for angle in BATCH_1:
@@ -319,8 +319,9 @@ def test_cutoff_gate_render_converged(cv: Converge) -> None:
     _to_cutoff(cv)
     cutoff_step = "next: " + _cmd(cv, "cutoff s1 --dir {dir}")
     err = cv.ok("cutoff", "s1", code=2).stderr.splitlines()
-    assert err[:2] == ["converge: refused:", "  - F001 is open in cut-after"]
-    assert err[-1] == f"next: cut-after: finder accept F001; plan: {_plan(cv)}"
+    assert err[0] == f"example: converge {_example('cutoff')}"
+    assert err[-3:] == ["converge: refused:", "  - F001 is open in cut-after",
+                        f"next: cut-after: finder accept F001; plan: {_plan(cv)}"]
     out = _lines(cv, "gate", "s1", code=1)
     assert out == ["GATE fail s1", "F001 is open in cut-after",
                    "no current cutoff (run `converge cutoff` after the last state change)",

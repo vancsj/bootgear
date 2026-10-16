@@ -128,8 +128,8 @@ class ResolveModeTest(unittest.TestCase):
     def test_both_flags_through_run_exit_2(self):
         result = _Run(["a", "two", "--json", "--prose"], _noop)
         self.assertEqual(result.code, 2)
-        self.assertIn("--json and --prose are mutually exclusive", result.err)
-        self.assertIn("example: tool a two", result.err)
+        self.assertEqual(result.err.splitlines()[0], "example: tool a two")
+        self.assertIn("--json and --prose are mutually exclusive", result.err.splitlines()[-1])
 
 
 class CallerPathTest(unittest.TestCase):
@@ -172,10 +172,10 @@ class RefusalRenderingTest(unittest.TestCase):
         result = _Run(["a", "one", "n"], _noop, {clikit.ENV_MODE: "prose"})
         self.assertEqual(result.code, 2)
         self.assertEqual(result.err.splitlines(), [
-            "tool a one: error: the following arguments are required: --flag",
             "example: tool a one <name> --flag x",
             "commands: a two, b",
             "  tool b --json",
+            "tool a one: error: the following arguments are required: --flag",
         ])
         self.assertNotIn("usage:", result.err)
 
@@ -202,7 +202,7 @@ class RefusalRenderingTest(unittest.TestCase):
     def test_non_leaf_command_has_no_example(self):
         prose = _Run(["a"], _noop, {clikit.ENV_MODE: "prose"})
         self.assertEqual(prose.code, 2)
-        self.assertTrue(prose.err.startswith("tool a: error: "))
+        self.assertTrue(prose.err.splitlines()[-1].startswith("tool a: error: "))
         self.assertNotIn("example:", prose.err)
         self.assertIn("commands: a one, a two, b", prose.err)
         self.assertIn("  tool a one <name> --flag x", prose.err)
@@ -217,8 +217,13 @@ class RefusalRenderingTest(unittest.TestCase):
 
         prose = _Run(["a", "two"], dispatch, {clikit.ENV_MODE: "prose"})
         self.assertEqual(prose.code, 1)
-        self.assertEqual(prose.err.splitlines()[:2],
-                         ["bad ledger at /x", "example: tool a two"])
+        self.assertEqual(prose.err.splitlines(), [
+            "example: tool a two",
+            "commands: a one, b",
+            "  tool a one <name> --flag x",
+            "  tool b --json",
+            "bad ledger at /x",
+        ])
         error = _Run(["a", "two"], dispatch, {clikit.ENV_MODE: "json"}).err_json()
         self.assertEqual(error["message"], "bad ledger at /x")
         self.assertEqual(error["command"], "a two")
@@ -232,7 +237,11 @@ class RefusalRenderingTest(unittest.TestCase):
 
         prose = _Run(["a", "two"], dispatch, {clikit.ENV_MODE: "prose"})
         self.assertEqual(prose.code, 3)
-        self.assertEqual(prose.err.splitlines()[:7], [
+        self.assertEqual(prose.err.splitlines(), [
+            "example: tool a two",
+            "commands: a one, b",
+            "  tool a one <name> --flag x",
+            "  tool b --json",
             "malformed ledger at /x: 4 problem(s)",
             "  - loose",
             "  missing section (2):",
@@ -248,6 +257,14 @@ class RefusalRenderingTest(unittest.TestCase):
             {"kind": "missing section", "items": ["## todos", "## pitches"]},
             {"kind": "bad todo", "items": ["- [?] a"]},
         ])
+
+    def test_refusal_ends_with_the_message_and_its_problems(self):
+        def dispatch(args):
+            clikit.refuse("bad ledger", [("missing section", "## todos")])
+
+        lines = _Run(["a", "two"], dispatch, {clikit.ENV_MODE: "prose"}).err.splitlines()
+        self.assertEqual(lines[-3:], ["bad ledger", "  missing section (1):", "    - ## todos"])
+        self.assertTrue(all(line.startswith(("example: ", "commands: ", "  tool ")) for line in lines[:-3]))
 
     def test_int_exit_passes_through_silently(self):
         result = _Run(["a", "two"], lambda args: sys.exit(4), {clikit.ENV_MODE: "json"})

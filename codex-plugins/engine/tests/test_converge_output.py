@@ -302,8 +302,9 @@ def test_bundled_attack_refusals_name_the_role_and_the_next_step(tmp_path: Path)
     slate = Slate(tmp_path)
     slate.to_attack()
     err = slate.attack(BATCH_1[0], agent=FINDER, code=2)
-    assert err[:2] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it"]
-    assert err[-1] == f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"
+    assert err[0].startswith("example: ") and " attack <slate> " in err[0]
+    assert err[-3:] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it",
+                        f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"]
     err = slate.attack(BATCH_1[0], agent=MAIN, code=2)
     assert "  - attack: orch wrote init; the orchestrator never writes attack" in err
     err = slate.attack(BATCH_1[0], agent=CUTTER, code=2)
@@ -366,8 +367,9 @@ def test_bundled_cutoff_gate_render_converged(tmp_path: Path) -> None:
     slate.cut("F001", "after")
     cutoff_step = "next: " + slate.cmd("cutoff s1 --dir {dir}")
     err = slate.lines("cutoff", code=2)
-    assert err[:2] == ["converge: refused:", "  - F001 is open in cut-after"]
-    assert err[-1] == f"next: cut-after: finder accept F001; plan: {slate.plan()}"
+    assert err[0].startswith("example: ") and " cutoff <slate> " in err[0]
+    assert err[-3:] == ["converge: refused:", "  - F001 is open in cut-after",
+                        f"next: cut-after: finder accept F001; plan: {slate.plan()}"]
     assert slate.lines("gate", code=1) == [
         "GATE fail s1", "F001 is open in cut-after",
         "no current cutoff (run `converge cutoff` after the last state change)",
@@ -538,10 +540,10 @@ def test_bundled_init_refuses_seat_mismatch(tmp_path: Path) -> None:
     settlement = _settlement(tmp_path, "converge_seats: {r2: native_subagent}\n"
                                        "advisor_roles: {roles: [refuter], brief: Act only as r2.}\n")
     lines = _seat_init(tmp_path, ledger, "--settlement", str(settlement), code=2).stderr.splitlines()
-    assert lines[0] == "converge: settlement seats do not match its advisor roles:"
-    assert any("set converge_seats.r2: advisor, or remove refuter" in line for line in lines)
-    assert any(line.startswith("example: ") and line.endswith("--settlement <file>")
-               for line in lines), lines
+    assert lines[0].startswith("example: ") and lines[0].endswith("--settlement <file>")
+    message = lines.index("converge: settlement seats do not match its advisor roles:")
+    assert "set converge_seats.r2: advisor, or remove refuter" in lines[message + 1]
+    assert message + 2 == len(lines) - 1
     assert lines[-1] == FIX_NEXT.format(path=settlement)
     error = json.loads(_seat_init(tmp_path, ledger, "--settlement", str(settlement), "--json",
                                   code=2).stderr)["error"]
@@ -554,7 +556,8 @@ def test_bundled_init_refuses_non_r2_advisor_seat(tmp_path: Path) -> None:
     ledger = tmp_path / "ledgers"
     settlement = _settlement(tmp_path, "converge_seats: {finder: advisor, r2: advisor}\n")
     lines = _seat_init(tmp_path, ledger, "--settlement", str(settlement), code=2).stderr.splitlines()
-    assert lines[0] == "converge: invalid settlement seats:"
+    assert lines[0].startswith("example: ")
+    assert "converge: invalid settlement seats:" in lines
     assert any(line.startswith("  - converge_seats.finder: only r2 may be advisor")
                for line in lines), lines
     assert lines[-1] == FIX_NEXT.format(path=settlement)

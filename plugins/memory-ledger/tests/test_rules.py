@@ -465,7 +465,10 @@ class RuleFileGuardTests(TempLedgerCase):
                         self.assertEqual(error["command"], "rules")
                         self.assertIn("not a regular file", error["message"])
                     else:
-                        self.assertIn("not a regular file", result.stderr.splitlines()[0])
+                        lines = result.stderr.splitlines()
+                        self.assertTrue(lines[0].startswith("example: "), result.stderr)
+                        self.assertIn("not a regular file", "\n".join(lines[1:]))
+                        self.assertIn(" is a ", lines[-1])
 
     def test_doctor_warns_with_the_problem(self) -> None:
         for shape, problem in (("dangling", "is a symbolic link"),
