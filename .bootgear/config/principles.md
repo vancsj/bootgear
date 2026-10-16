@@ -12,7 +12,9 @@
 ## CLI and enforcement
 
 - Every plugin script is a `gear` command: registered under `[commands]` in its plugin's `gear.toml`, runnable as `gear.py <plugin> <command>` as well as on its own, and resolving the caller's relative paths against `GEAR_CALLER_CWD` when it is set.
-- CLI output is designed for an LLM reader: minimize its retries and tokens. The last few lines carry all the key information (result, errors, next step), because readers often `tail` the output.
+- CLI output is designed for an LLM reader: minimize its retries and tokens.
+- CLI output puts the most important information last: the result, errors and next step are the final lines, because readers often `tail` the output.
+- CLI output, including each `next` line, addresses the role that sees it (user, main agent or role agent) and names only commands that role can run.
 - A skill states the overall workflow, so the model knows where each step leads and can use its judgment. Deterministic detail derivable from validated CLI-owned state or configuration (the next command, legal branches, gates, argument tables) is printed by the CLI at the step where it matters, not repeated in skill prose. Skills keep judgment, safety, orchestration, fallbacks and public handbacks.
 - A rule about data or behavior that a script can check is enforced by the script (CLI validation, a gate, a cap), not stated only in prose. Rules about doc content are enforced by the review standard, not by tests or scripts, except mechanical repo hygiene such as `check_content.py`.
 
