@@ -195,9 +195,7 @@ Do not use a dedicated mode or marker for this — it is an ordinary `solo` deci
 
 Do not use `approach` as a principles source.
 
-## Reading the standards
-
-After each compaction, read `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` in full, each when present. Skip a file that is already in your context. The session-start hook names them. Do not merge them into the principles.
+At the same triggers, read `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` in full, each when present. Skip a file that is already in your context. The session-start hook names them. Do not merge them into the principles.
 
 ## Ending the run
 
