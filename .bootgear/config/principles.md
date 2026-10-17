@@ -1,33 +1,33 @@
-0. Principles do not conflict. Where two must, the earlier one wins, so list the winner first; the engine resolves a conflict by that order.
+0. Principles do not conflict. If two principles conflict, the earlier one wins. List the winner first. The engine resolves a conflict in this order.
 
 ## Plugins and skills
 
-- Each plugin installs and works on its own. A Claude plugin that needs another declares it in `dependencies`; Codex has no dependencies, so a Codex skill that calls a sibling states what to do if the sibling is missing. A plugin never assumes a sibling is installed.
-- Reference only bootgear's own skills, plugins and tools, host built-ins, and well-known skills or plugins from outside this repo. Never name local personal skills or plugins. The local denylist can carry those names.
-- Skills call each other only through the public interface: the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns a callee's settings by running `settings`, never by reading the callee's files.
-- Built-in defaults (state machines, angles, skills) are project-free. Anything specific to one project lives in that project's `.bootgear/config/`.
-- Host parity: a behavior shared by the Claude and Codex plugins changes on both hosts in the same change.
-- Shared Claude/Codex plugin and skill sections use host-neutral references, terms, paths, and invocation names; host-specific adapters belong in explicit host sections.
+- Each plugin must install and work on its own. A Claude plugin that needs another plugin declares it in `dependencies`. Codex has no dependencies. A Codex skill that calls a sibling skill states what to do if the sibling is missing. A plugin never assumes that a sibling is installed.
+- Reference only these items: the skills, plugins, and tools of bootgear; host built-ins; and well-known skills or plugins from outside this repo. Never name a local personal skill or plugin. The local denylist can carry those names.
+- Skills call each other only through the public interface. The public interface is the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns the settings of a callee when it runs `settings`. It never reads the files of the callee.
+- Built-in defaults (state machines, angles, skills) are project-free. Keep anything that is specific to one project in the `.bootgear/config/` of that project.
+- Host parity: when the Claude and Codex plugins share a behavior, change it on both hosts in the same change.
+- Shared sections of the Claude and Codex plugins and skills use host-neutral references, terms, paths, and invocation names. Put host-specific adapters in explicit host sections.
 
 ## CLI and enforcement
 
-- Every plugin script is a `gear` command: registered under `[commands]` in its plugin's `gear.toml`, runnable as `gear.py <plugin> <command>` as well as on its own, and resolving the caller's relative paths against `GEAR_CALLER_CWD` when it is set.
-- CLI output is designed for an LLM reader: minimize its retries and tokens.
-- CLI output puts the most important information last: the result, errors and next step are the final lines, because readers often `tail` the output.
-- CLI output, including each `next` line, addresses the role that sees it (user, main agent or role agent) and names only commands that role can run.
-- A skill states the overall workflow, so the model knows where each step leads and can use its judgment. Deterministic detail derivable from validated CLI-owned state or configuration (the next command, legal branches, gates, argument tables) is printed by the CLI at the step where it matters, not repeated in skill prose. Skills keep judgment, safety, orchestration, fallbacks and public handbacks.
-- A rule about data or behavior that a script can check is enforced by the script (CLI validation, a gate, a cap), not stated only in prose. Rules about doc content are enforced by the review standard, not by tests or scripts, except mechanical repo hygiene such as `check_content.py`.
+- Every plugin script is a `gear` command. Register it under `[commands]` in the `gear.toml` of its plugin. It runs as `gear.py <plugin> <command>` and also on its own. When `GEAR_CALLER_CWD` is set, the script resolves the relative paths of the caller against it.
+- Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
+- Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.
+- Write the CLI output, and each `next` line, for the role that sees it: the user, the main agent, or a role agent. Name only commands that this role can run.
+- A skill states the overall workflow. The model then knows where each step leads and can use its judgment. The CLI prints deterministic detail at the step where it matters (the next command, legal branches, gates, argument tables). That detail comes from validated CLI-owned state or configuration. Do not repeat it in skill text. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks.
+- A script enforces a rule about data or behavior that the script can check (CLI validation, a gate, a cap). Do not state such a rule in text only. The review standard enforces rules about doc content. Tests and scripts do not, except mechanical repo hygiene such as `check_content.py`.
 
 ## Docs and repo content
 
-- Skill docs (`SKILL.md` and its reference docs) say what to do. No rationale, and absolutely no maintainer rationale. A required action may carry a short why, a clause at most. Detail needed only on some paths goes in focused reference docs that `SKILL.md` points to. Token efficiency matters throughout.
-- No development diary anywhere in the repo: comments, docstrings, tests and docs state current behavior and, where needed, a short why, never how it got there (fixes, earlier versions, review findings, incidents). History and design rationale belong in tickets, PR bodies and PR comments.
-- `docs/` holds only the up-to-date design, with no details: no history, alternatives, open questions, task lists, or procedure.
-- No private information in the repo.
-- Spec docs (`requirements.md`, `design.md`, `task.md`) and skill docs (`SKILL.md` and its reference docs) are written in ASD-STE100 format.
+- Skill docs (`SKILL.md` and its reference docs) say what to do. They contain no rationale. They never contain maintainer rationale. A required action can carry a short reason of one clause at most. Put detail that only some paths need in focused reference docs. `SKILL.md` points to them. Token efficiency matters in all docs.
+- Do not keep a development diary anywhere in the repo: not in comments, docstrings, tests, or docs. State the current behavior. Where needed, add a short reason. Do not state how the behavior came about (fixes, earlier versions, review findings, incidents). Put history and design rationale in tickets, PR bodies, and PR comments.
+- `docs/` holds only the up-to-date design, with no detail. It contains no history, alternatives, open questions, task lists, or procedures.
+- Do not put private information in the repo.
+- Write spec docs (`requirements.md`, `design.md`, `task.md`) and skill docs (`SKILL.md` and its reference docs) in ASD-STE100 format.
 
 ## Run behavior
 
-- When an advisor from a different vendor is available, it takes the refuter or adversarial role by default, unless the user says no.
-- Reviews (including spec reviews), refutations and tests cover only what an LLM caller can produce. A claim that needs a made-up or edge-case value, hand-edited state, or an environment the run never uses is not reported.
-- The main agent keeps reviewers, refuters, cutters, gap hunters and other judging roles independent. It gives each role only the context its task needs (the request, the artifacts, the evidence and its role brief) and never its own conclusions, hypotheses, preferred answers or another role's reasoning.
+- If an advisor from a different vendor is available, it takes the refuter or adversarial role by default. The user can say no.
+- Reviews (including spec reviews), refutations, and tests cover only what an LLM caller can produce. Do not report a claim that needs a made-up value, an edge-case value, hand-edited state, or an environment that the run never uses.
+- The main agent keeps reviewers, refuters, cutters, gap hunters, and other judging roles independent. It gives each role only the context that the task needs: the request, the artifacts, the evidence, and the role brief. It never gives a role its own conclusions, hypotheses, preferred answers, or the reasoning of another role.
