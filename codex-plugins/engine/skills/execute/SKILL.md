@@ -205,7 +205,7 @@ Call `close` exactly once when the run ends, as the `session close` command that
 - the exhausted-stall gap (step 5's fourth bullet), when every unit of work ran out with no condition literally met;
 - the stop reason (Fallbacks), for a validation refusal, a missing required dependency, a rejected `session_dir` amendment, a `blocked` spec or spec-review, or a missing permission with no other path.
 
-Send a final pitch before `close`, naming every open `follow-up [<stage>]` and `fix-now [<stage>]` todo:
+Send a final pitch before `close`, naming every open `follow-up [<stage>]`, `fix-now [<stage>]` and `deferred [spec-review]` todo:
 
 - **Succeeded:** State what was done and name the ledger file `close` will write.
 - **Failed, condition met:** State what was attempted, the genuinely undoable condition, and the change required to make it reachable.

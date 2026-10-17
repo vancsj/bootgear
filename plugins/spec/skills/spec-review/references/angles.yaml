@@ -77,4 +77,4 @@
 - id: style-not-defect
   tag: attack
   tell: The claim is about wording or structure.
-  asks: Would any reader or implementer behave differently under the two readings? If not, refute it or make it a follow-up.
+  asks: Would any reader or implementer behave differently under the two readings? If not, refute it.

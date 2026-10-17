@@ -171,7 +171,7 @@ Return the requirements, design when stage 2 ran, and `task.md` paths, the open 
 
 ### Re-entry from independent review
 
-When `spec-review` returns `revise`, `choices` settled by `spec-debate`, or `ready` with `inline` patches, read its render and claim IDs. Apply each `inline` fix (the cutter patch) to the skeleton artifacts and address each `revise` claim; settled `choices` decisions are already in the artifacts. When the review was `ready` with only `inline` patches, hand back `ready` with the applied claim IDs; do not rerun stages 3–5 and start no new slate. Otherwise rerun stages 3–5 and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. If stage 4 returns `blocked` on re-entry, return `blocked` with the claim IDs and evidence.
+When `spec-review` returns `revise`, `choices` settled by `spec-debate`, or `ready` with `inline` patches, read its render and claim IDs. Apply each `inline` fix to the skeleton artifacts and address each `revise` claim; settled `choices` decisions are already in the artifacts. When the review was `ready` with only `inline` patches, hand back `ready` with the applied claim IDs; do not rerun stages 3–5 and start no new slate. Otherwise rerun stages 3–5 and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. If stage 4 returns `blocked` on re-entry, return `blocked` with the claim IDs and evidence.
 
 ## Skeleton and notes
 

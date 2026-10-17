@@ -79,6 +79,15 @@ class SpecReviewContractTest(unittest.TestCase):
             self.assertIn(text, skill)
         self.assertNotIn("blocked > revise", skill)
 
+    def test_mapping_rules_keep_their_order_and_an_unfinished_slate_resumes(self):
+        skill = _skill()
+        self.assertIn("already exists in the converge directory, do not `init`; resume it", skill)
+        rules = ("1. missing role", "2. status `disputed`", "3. survived claim", "4. a finding of lens",
+                 "5. a finding whose cut", "6. status `survived`", "7. any other finding")
+        positions = [skill.find(f"   {rule}") for rule in rules]
+        self.assertNotIn(-1, positions)
+        self.assertEqual(positions, sorted(positions))
+
     def test_pass_flag_is_passed_only_from_slate_three_and_never_standalone(self):
         self.assertIn(PASS_RULE, _skill())
         for execute in EXECUTE_SKILLS:
