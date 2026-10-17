@@ -24,6 +24,7 @@
 - No development diary anywhere in the repo: comments, docstrings, tests and docs state current behavior and, where needed, a short why, never how it got there (fixes, earlier versions, review findings, incidents). History and design rationale belong in tickets, PR bodies and PR comments.
 - `docs/` holds only the up-to-date design, with no details: no history, alternatives, open questions, task lists, or procedure.
 - No private information in the repo.
+- Spec docs (`requirements.md`, `design.md`, `task.md`) and skill docs (`SKILL.md` and its reference docs) are written in ASD-STE100 format.
 
 ## Run behavior
 
