@@ -44,7 +44,7 @@ Check for an override → collect inputs → `init` the slate with the cutoff ta
 7. Render with `converge render <slate> --dir <converge-dir> > <converge-dir>/<slate>.md`. Map it mechanically, first rule first:
    1. missing role, missing coverage, open claims or failed gate -> `blocked`.
    2. status `disputed` -> `revise`, except a finding of lens `simplicity` or `proportionality` (rules 4-5 decide it).
-   3. claim whose `trigger` (from `converge status --json`) starts `implementation-level:` and whose last cut difficulty is not `cross-cutting` or `redesign` -> `deferred`.
+   3. survived claim whose `trigger` (from `converge status --json`) starts `implementation-level:` and whose last cut difficulty is not `cross-cutting` or `redesign` -> `deferred`.
    4. a finding of lens `simplicity` or `proportionality` with no `choice` -> follow-up.
    5. a finding whose cut carries a `choice` -> `choices`, listed even when `revise` is also non-empty.
    6. status `survived` with difficulty `trivial` -> `inline`, except a `clarity` finding at `<n>` >= 3 -> follow-up.
