@@ -327,7 +327,7 @@ def _check_event_values(raw: Mapping[str, Any], contract: EventContract, value: 
         allowed = (
             {"startup", "clear", "compact"}
             if contract.host == "claude"
-            else {"startup", "resume", "clear", "compact"}
+            else {"startup", "resume", "compact"}
         )
         if raw.get("source") not in allowed:
             raise AdapterError("invalid_matcher", "unsupported SessionStart source")

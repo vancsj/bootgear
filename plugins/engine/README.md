@@ -140,7 +140,7 @@ Three hooks keep a long run on track, each reading the ledger by session id:
 
 | Hook | Reminds the agent to |
 |---|---|
-| session start | on startup, clear and compaction (Codex: also resume): merged principles and the project's standard files with their rule IDs, with or without a run (Codex: also the session id); the run's `goal` while a run is open; run `recall` after a compaction while a run is open |
+| session start | on startup, clear and compaction (Codex: startup, resume and compaction): merged principles and the project's standard files with their rule IDs, with or without a run (Codex: also the session id); the run's `goal` while a run is open; run `recall` after a compaction while a run is open |
 | stop | run `recall` before ending a turn while a run is open |
 | state nudge | transition when the current node has had no transition for 5 minutes |
 

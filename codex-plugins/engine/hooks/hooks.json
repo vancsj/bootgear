@@ -12,11 +12,11 @@
     ],
     "SessionStart": [
       {
-        "matcher": "^(startup|resume|clear|compact)$",
+        "matcher": "^(startup|resume|compact)$",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern '^(startup|resume|clear|compact)$'",
+            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern '^(startup|resume|compact)$'",
             "statusMessage": "Restoring engine context"
           }
         ]

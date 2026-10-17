@@ -588,7 +588,7 @@ POLICY_TABLE: dict[tuple[str, str, str | None, str], Policy] = {
     ("claude", "PostCompact", "manual|auto", "compaction_observe"): Policy(
         "compaction_observe", _compaction_observe
     ),
-    ("codex", "SessionStart", "^(startup|resume|clear|compact)$", "session_recall"): Policy(
+    ("codex", "SessionStart", "^(startup|resume|compact)$", "session_recall"): Policy(
         "session_recall", _session_recall
     ),
     ("codex", "Stop", None, "stop_reminder"): Policy("stop_reminder", _stop_codex),

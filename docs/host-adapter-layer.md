@@ -36,7 +36,7 @@ does not import advisor, mailbox, or memory-ledger implementation modules.
 | Claude | `PostToolUse` | `.*` | `state_nudge` | native context |
 | Claude | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |
 | Claude | `PostCompact` | `manual|auto` | `compaction_observe` | observe only |
-| Codex | `SessionStart` | `^(startup\|resume\|clear\|compact)$` | `session_recall` | session id, principles and standards block always; with an active ledger, goal, and compact adds recall |
+| Codex | `SessionStart` | `^(startup\|resume\|compact)$` | `session_recall` | session id, principles and standards block always; with an active ledger, goal, and compact adds recall |
 | Codex | `Stop` | none | `stop_reminder` | continuation-compatible output |
 | Codex | `PostToolUse` | `.*` | `state_nudge`, `stop_reminder` | independent context handlers |
 | Codex | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |

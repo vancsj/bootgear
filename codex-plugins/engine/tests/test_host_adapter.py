@@ -59,7 +59,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
                 "--handler",
                 "session_recall",
                 "--matcher-pattern",
-                "^(startup|resume|clear|compact)$",
+                "^(startup|resume|compact)$",
             ],
             input=json.dumps({
                 "session_id": "fixture-codex",
@@ -86,12 +86,9 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
             "## R001 [must]\nFirst test rule.\n"
         )
 
-    def test_clear_source_is_accepted(self):
-        self.assertEqual(self._context("clear"), IDENTITY_AND_PRINCIPLES)
-
     def test_standard_files_add_the_standards_block_after_the_principles(self):
         self._write_standards()
-        for source in ("startup", "resume", "clear", "compact"):
+        for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertEqual(
                     self._context(source),
@@ -99,7 +96,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
                 )
 
     def test_no_standard_file_omits_the_standards_block(self):
-        for source in ("startup", "resume", "clear", "compact"):
+        for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertNotIn("Standards", self._context(source))
 
