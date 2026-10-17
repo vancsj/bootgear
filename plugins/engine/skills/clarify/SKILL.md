@@ -20,7 +20,7 @@ Read the project principles and standards → investigate the request → settle
 
 Ask items in the order that fits the conversation. Use answers already implied by the conversation. Do not force a questionnaire.
 
-Before item 1, read `.bootgear/config/principles.md`, `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` from the project root, each when present. Use them to draft the goal and to settle the items that follow.
+Before item 1, read the host user-principles file, if present, and `.bootgear/config/principles.md`, `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` from the project root, each when present. Use them to draft the goal and to settle the items that follow.
 
 Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` skill with the question, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and ask the user. On `answered`, use the answer and keep its cited slugs for `init`. On `escalate`, ask the user. Item 7 (permitted mutations) and the goal sign-off are never sent to the deputy, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it.
 
