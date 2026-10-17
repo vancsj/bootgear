@@ -120,7 +120,7 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
             "SessionStart": _contract(
                 host,
                 "SessionStart",
-                "compact",
+                "startup|clear|compact",
                 "source",
                 _COMMON_REQUIRED + _required("source"),
                 _COMMON_OPTIONAL + _optional(*_NULLABLE_TEXT, nullable=True),
@@ -180,7 +180,7 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
             "SessionStart": _contract(
                 host,
                 "SessionStart",
-                "^(startup|resume|compact)$",
+                "^(startup|resume|clear|compact)$",
                 "source",
                 _COMMON_REQUIRED + _required("source"),
                 _COMMON_OPTIONAL + _optional(*_NULLABLE_TEXT, nullable=True),

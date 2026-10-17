@@ -59,7 +59,7 @@ One slate is one task. Never use more than `caps.agents` agents on it (default 5
 Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as in `## Host mechanics`; for an `advisor` seat, follow the driver step the CLI prints instead of spawning.
 
 - Spawn each role once and reuse it across the slate by continuing that agent; never spawn a new agent for a role that already has one.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its agent id, `<slate>`, `<dir>` and the exact `converge` command it writes.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
 
 ## 3. Find
 

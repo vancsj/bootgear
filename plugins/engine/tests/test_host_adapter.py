@@ -273,27 +273,30 @@ class SessionRecallAdapterTest(unittest.TestCase):
         (self.cwd / ".bootgear" / "config" / "principles.md").write_text("- project rule\n")
         self.ledger = self.session_dir / "fixture-claude.md"
 
-    def _run(self) -> str:
-        result = subprocess.run(
+    def _invoke(self, source: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run(
             [
                 sys.executable,
                 str(PLUGIN_DIR / "hooks" / "adapter.py"),
                 "--handler",
                 "session_recall",
                 "--matcher-pattern",
-                "compact",
+                "startup|clear|compact",
             ],
             input=json.dumps({
                 "session_id": "fixture-claude",
-                "cwd": str(self.cwd),
+                "cwd": str(cwd or self.cwd),
                 "hook_event_name": "SessionStart",
-                "source": "compact",
+                "source": source,
             }),
             capture_output=True,
             text=True,
             env={**os.environ, "HOME": str(self.home), "CLAUDE_PLUGIN_ROOT": str(PLUGIN_DIR)},
             check=False,
         )
+
+    def _run(self, source: str = "compact") -> str:
+        result = self._invoke(source)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
@@ -304,10 +307,96 @@ class SessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("the goal text", context)
         self.assertIn("[project]\n- project rule", context)
 
-    def _context(self) -> str:
-        return json.loads(self._run())["hookSpecificOutput"]["additionalContext"]
+    def _context(self, source: str = "compact") -> str:
+        return json.loads(self._run(source))["hookSpecificOutput"]["additionalContext"]
 
     PRINCIPLES_ONLY = "Merged principles (user/project/task):\n[project]\n- project rule"
+    STANDARDS_BLOCK = (
+        "Standards (read each file in full before you judge or write):\n"
+        "[review-standard] .bootgear/config/review-standard.md: R001 [must], R002 [should]\n"
+        "[test-standard] .bootgear/config/test-standard.md: R001 [must]"
+    )
+
+    def _write_standards(self):
+        config = self.cwd / ".bootgear" / "config"
+        (config / "review-standard.md").write_text(
+            "# review-standard\n\nseverities: [must, should]\ncutoff: must\n\n"
+            "## R001 [must]\nFirst review rule.\n\n## R002 [should]\nSecond review rule.\n"
+        )
+        (config / "test-standard.md").write_text(
+            "# test-standard\n\nseverities: [must, should]\ncutoff: must\n\n"
+            "## R001 [must]\nFirst test rule.\n"
+        )
+
+    def test_startup_and_clear_sources_are_accepted(self):
+        for source in ("startup", "clear", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(self._context(source), self.PRINCIPLES_ONLY)
+
+    def test_resume_source_is_refused(self):
+        result = self._invoke("resume")
+        self.assertEqual(result.stdout, "")
+        self.assertIn("engine hook adapter: ", result.stderr)
+
+    def test_standard_files_add_the_standards_block_after_the_principles(self):
+        self._write_standards()
+        for source in ("startup", "clear", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(
+                    self._context(source),
+                    f"{self.PRINCIPLES_ONLY}\n\n{self.STANDARDS_BLOCK}",
+                )
+
+    def test_no_standard_file_omits_the_standards_block(self):
+        for source in ("startup", "clear", "compact"):
+            with self.subTest(source=source):
+                self.assertNotIn("Standards", self._context(source))
+
+    def test_partial_standard_files_list_only_the_files_with_rules(self):
+        self._write_standards()
+        config = self.cwd / ".bootgear" / "config"
+        cases = {
+            "only review": ("test-standard.md", None, self.STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "only test": (
+                "review-standard.md",
+                None,
+                self.STANDARDS_BLOCK.split("\n", 1)[0] + "\n" + self.STANDARDS_BLOCK.rsplit("\n", 1)[1],
+            ),
+            "empty file": ("test-standard.md", "", self.STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "unreadable file": ("test-standard.md", b"\xff\xfe", self.STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "no rule heading": (
+                "test-standard.md",
+                "# test-standard\n",
+                self.STANDARDS_BLOCK.rsplit("\n", 1)[0]
+                + "\n[test-standard] .bootgear/config/test-standard.md",
+            ),
+        }
+        for name, (file, text, block) in cases.items():
+            with self.subTest(case=name):
+                self._write_standards()
+                if text is None:
+                    (config / file).unlink()
+                elif isinstance(text, bytes):
+                    (config / file).write_bytes(text)
+                else:
+                    (config / file).write_text(text)
+                self.assertEqual(self._context("startup"), f"{self.PRINCIPLES_ONLY}\n\n{block}")
+
+    def test_active_ledger_adds_the_nudge_on_compact_only(self):
+        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        for source in ("startup", "clear"):
+            with self.subTest(source=source):
+                context = self._context(source)
+                self.assertNotIn("This session just compacted", context)
+                self.assertIn("the goal text", context)
+        self.assertIn("This session just compacted", self._context("compact"))
+
+    def test_repo_hook_output_fits_the_limit(self):
+        result = self._invoke("startup", cwd=REPO_ROOT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Standards (read each file in full before you judge or write):", context)
+        self.assertLess(len(context), 8000)
 
     def test_no_ledger_adds_principles_only(self):
         self.assertEqual(self._context(), self.PRINCIPLES_ONLY)

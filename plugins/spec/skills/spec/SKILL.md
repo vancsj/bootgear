@@ -90,7 +90,7 @@ Scale the detail, and the stages actually run, to the task:
 
 ### Stage 1: requirements
 
-1. **Investigate.** Read the supplied ticket, bug report, or request. Inspect current behavior in the relevant codebase area before writing requirements.
+1. **Investigate.** Read the supplied ticket, bug report, or request. Inspect current behavior in the relevant codebase area before writing requirements. Read `.bootgear/config/principles.md`, the host user-principles file, `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md`, each when present. In an active run, read the `principles` text of the settlement.
 
 2. **Write `requirements.md`** (skeleton — see "Skeleton and notes"). State:
 

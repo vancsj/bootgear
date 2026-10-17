@@ -47,7 +47,7 @@ When delegating inside an active run, pass `<run-id>`, `<engine-root>`, and `<se
 
 Use only the sub-tasks required by the request:
 
-1. **Writing test cases.** Given a change or requirement, write cases for the stated behavior and its edge cases. Use the project's existing framework and conventions. If none are evident, choose the simplest reasonable approach and state that choice. If `.bootgear/config/test-standard.md` exists, apply its rule IDs and cite the specific rule for each case.
+1. **Writing test cases.** Given a change or requirement, write cases for the stated behavior and its edge cases. Use the project's existing framework and conventions. If none are evident, choose the simplest reasonable approach and state that choice. If `.bootgear/config/test-standard.md` exists, apply its rule IDs and cite the specific rule for each case. When you delegate test writing or triage to an agent, name `.bootgear/config/principles.md`, the host user-principles file and each standard file in `.bootgear/config/` in its brief, each when present. In an active run, add the `principles` text of the settlement. Tell it to read the files first.
 
 2. **Running tests.** Run the relevant suite and record the exact command and actual output.
 

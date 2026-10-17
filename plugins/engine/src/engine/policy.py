@@ -33,6 +33,9 @@ _MIN_RECHECK_SECONDS: Final = 60
 _ESCALATE_AFTER_SECONDS: Final = 15 * 60
 _MAX_NUDGE_HISTORY: Final = 50
 _TERMINAL_NODES: Final = frozenset({"succeeded", "failed"})
+_STANDARD_FILES: Final = ("review-standard", "test-standard")
+_STANDARD_RULE_RE: Final = re.compile(r"(?m)^## (R\d+) \[([^\]\n]+)\]\s*$")
+_STANDARDS_HEADER: Final = "Standards (read each file in full before you judge or write):"
 
 _REMINDER_MESSAGE: Final = (
     "An engine run is active in this session ({run_id}). Before treating "
@@ -266,6 +269,23 @@ def _principles(context: HostContext, settlement: dict[str, Any] | None) -> str 
     return "\n\n".join(sections) if sections else None
 
 
+def _standards(context: HostContext) -> str | None:
+    lines: list[str] = []
+    for name in _STANDARD_FILES:
+        relative = f".bootgear/config/{name}.md"
+        text = _read_text(Path(context.cwd) / relative)
+        if text is None:
+            continue
+        rules = ", ".join(
+            f"{match.group(1)} [{match.group(2)}]"
+            for match in _STANDARD_RULE_RE.finditer(text)
+        )
+        lines.append(f"[{name}] {relative}: {rules}" if rules else f"[{name}] {relative}")
+    if not lines:
+        return None
+    return "\n".join([_STANDARDS_HEADER, *lines])
+
+
 def _session_recall(event: Event, context: HostContext) -> Intent:
     payload = event.payload
     source = payload.get("source")
@@ -281,7 +301,7 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
         if active is not None and source == "compact":
             parts.insert(0, _CODEX_SESSION_NUDGE)
     else:
-        parts = [_SESSION_NUDGE] if active is not None else []
+        parts = [_SESSION_NUDGE] if active is not None and source == "compact" else []
     settlement = _read_settlement(active[1]) if active is not None else None
     goal = _goal_text(settlement)
     if goal:
@@ -290,6 +310,9 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
     principles = _principles(context, settlement)
     if principles:
         parts.append(f"Merged principles (user/project/task):\n{principles}")
+    standards = _standards(context)
+    if standards:
+        parts.append(standards)
     return Intent.add_context("\n\n".join(parts)) if parts else Intent.observe()
 
 
@@ -554,7 +577,7 @@ def _policy_key(event: Event) -> tuple[str, str, str | None, str]:
 
 
 POLICY_TABLE: dict[tuple[str, str, str | None, str], Policy] = {
-    ("claude", "SessionStart", "compact", "session_recall"): Policy(
+    ("claude", "SessionStart", "startup|clear|compact", "session_recall"): Policy(
         "session_recall", _session_recall
     ),
     ("claude", "Stop", None, "stop_reminder"): Policy("stop_reminder", _stop_claude),
@@ -565,7 +588,7 @@ POLICY_TABLE: dict[tuple[str, str, str | None, str], Policy] = {
     ("claude", "PostCompact", "manual|auto", "compaction_observe"): Policy(
         "compaction_observe", _compaction_observe
     ),
-    ("codex", "SessionStart", "^(startup|resume|compact)$", "session_recall"): Policy(
+    ("codex", "SessionStart", "^(startup|resume|clear|compact)$", "session_recall"): Policy(
         "session_recall", _session_recall
     ),
     ("codex", "Stop", None, "stop_reminder"): Policy("stop_reminder", _stop_codex),

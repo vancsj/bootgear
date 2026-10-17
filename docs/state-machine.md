@@ -130,7 +130,7 @@ The machine in force is the newest `## machines` entry. When there is none, it i
   - A terminal node prints `terminal: close the ledger` and the close command.
   - The `recall` skill runs `current` at the start of every `execute` iteration and after a compaction, so a node's `do` is not lost when the context is compacted.
 - **Hooks** in `plugins/engine/hooks/`:
-  - `SessionStart` with matcher `compact` adds the merged principles. With an active ledger (no `## closed` heading) it also tells the model to run `recall` and adds the settlement `goal` when `goal` is plain text.
+  - `SessionStart` with matcher `startup|clear|compact` adds the merged principles and a standards block that names each standard file in `.bootgear/config/` with its rule IDs and severities. With an active ledger (no `## closed` heading) it also adds the settlement `goal`, plain text or the `succeeded`/`failed` mapping. After a compaction in an active run, it also tells the model to run `recall`.
   - `Stop` tells the model to run `recall` before it ends a turn during an open run.
   - `PostToolUse` sends a nudge when `## state` has recorded no transition for 5 minutes. If the state still has not changed 15 minutes after that nudge, it sends one escalated nudge, then stays silent for that state. It measures time from the last log line or from `started:`, never from file timestamps, because every ledger write changes those.
   - Each hook finds the ledger by the host `session_id` under `~/.bootgear/session/`.

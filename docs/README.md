@@ -126,8 +126,8 @@ file is absent, the built-in default applies.
 
 | File | Read by | Meaning |
 |---|---|---|
-| `principles.md` | engine (execute, session-start hook) | Project principles, merged `[user]` → `[project]` → `[task]`; task wins a real conflict. |
-| `test-standard.md`, `review-standard.md` | test, review | Rules `## R### [severity]` with `severities:`, `cutoff:`, `iteration_cap:`; checked by `validate_standard.py`. |
+| `principles.md` | engine (clarify, execute, session-start hook), spec; named in the role briefs of spec-review, review, test, and execute sub-agents | Project principles, merged `[user]` → `[project]` → `[task]`; task wins a real conflict. |
+| `test-standard.md`, `review-standard.md` | test, review, spec, engine (clarify, execute after a compaction, session-start hook lists rule IDs); named in the role briefs of spec-review, review, test, debate, and execute sub-agents | Rules `## R### [severity]` with `severities:`, `cutoff:`, `iteration_cap:`; checked by `validate_standard.py`. |
 | `state-machine-<task_type>.yaml` | engine clarify | Wholly replaces the built-in machine for that task type. |
 | `<name>.yaml` (e.g. `debate-parties.yaml`, `converge-seats.yaml`, `converge.yaml`) | `task config resolve`, converge | Layered config: user file in the host config dir, then this project file, then an optional task file. Mappings merge recursively; scalars and lists replace. |
 

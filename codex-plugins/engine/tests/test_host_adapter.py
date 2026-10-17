@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = PLUGIN_DIR.parents[1]
 RUNNER = PLUGIN_DIR / "tests" / "run_host_adapter_fixture.py"
 
 
@@ -31,6 +32,11 @@ IDENTITY = (
 IDENTITY_AND_PRINCIPLES = (
     f"{IDENTITY}\n\nMerged principles (user/project/task):\n[project]\n- project rule"
 )
+STANDARDS_BLOCK = (
+    "Standards (read each file in full before you judge or write):\n"
+    "[review-standard] .bootgear/config/review-standard.md: R001 [must], R002 [should]\n"
+    "[test-standard] .bootgear/config/test-standard.md: R001 [must]"
+)
 
 
 class CodexSessionRecallAdapterTest(unittest.TestCase):
@@ -45,7 +51,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         (self.cwd / ".bootgear" / "config" / "principles.md").write_text("- project rule\n")
         self.ledger = self.session_dir / "fixture-codex.md"
 
-    def _context(self, source: str) -> str:
+    def _context(self, source: str, cwd: Path | None = None) -> str:
         result = subprocess.run(
             [
                 sys.executable,
@@ -53,11 +59,11 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
                 "--handler",
                 "session_recall",
                 "--matcher-pattern",
-                "^(startup|resume|compact)$",
+                "^(startup|resume|clear|compact)$",
             ],
             input=json.dumps({
                 "session_id": "fixture-codex",
-                "cwd": str(self.cwd),
+                "cwd": str(cwd or self.cwd),
                 "hook_event_name": "SessionStart",
                 "source": source,
             }),
@@ -68,6 +74,69 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    def _write_standards(self):
+        config = self.cwd / ".bootgear" / "config"
+        (config / "review-standard.md").write_text(
+            "# review-standard\n\nseverities: [must, should]\ncutoff: must\n\n"
+            "## R001 [must]\nFirst review rule.\n\n## R002 [should]\nSecond review rule.\n"
+        )
+        (config / "test-standard.md").write_text(
+            "# test-standard\n\nseverities: [must, should]\ncutoff: must\n\n"
+            "## R001 [must]\nFirst test rule.\n"
+        )
+
+    def test_clear_source_is_accepted(self):
+        self.assertEqual(self._context("clear"), IDENTITY_AND_PRINCIPLES)
+
+    def test_standard_files_add_the_standards_block_after_the_principles(self):
+        self._write_standards()
+        for source in ("startup", "resume", "clear", "compact"):
+            with self.subTest(source=source):
+                self.assertEqual(
+                    self._context(source),
+                    f"{IDENTITY_AND_PRINCIPLES}\n\n{STANDARDS_BLOCK}",
+                )
+
+    def test_no_standard_file_omits_the_standards_block(self):
+        for source in ("startup", "resume", "clear", "compact"):
+            with self.subTest(source=source):
+                self.assertNotIn("Standards", self._context(source))
+
+    def test_partial_standard_files_list_only_the_files_with_rules(self):
+        self._write_standards()
+        config = self.cwd / ".bootgear" / "config"
+        cases = {
+            "only review": ("test-standard.md", None, STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "only test": (
+                "review-standard.md",
+                None,
+                STANDARDS_BLOCK.split("\n", 1)[0] + "\n" + STANDARDS_BLOCK.rsplit("\n", 1)[1],
+            ),
+            "empty file": ("test-standard.md", "", STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "unreadable file": ("test-standard.md", b"\xff\xfe", STANDARDS_BLOCK.rsplit("\n", 1)[0]),
+            "no rule heading": (
+                "test-standard.md",
+                "# test-standard\n",
+                STANDARDS_BLOCK.rsplit("\n", 1)[0]
+                + "\n[test-standard] .bootgear/config/test-standard.md",
+            ),
+        }
+        for name, (file, text, block) in cases.items():
+            with self.subTest(case=name):
+                self._write_standards()
+                if text is None:
+                    (config / file).unlink()
+                elif isinstance(text, bytes):
+                    (config / file).write_bytes(text)
+                else:
+                    (config / file).write_text(text)
+                self.assertEqual(self._context("startup"), f"{IDENTITY_AND_PRINCIPLES}\n\n{block}")
+
+    def test_repo_hook_output_fits_the_limit(self):
+        context = self._context("startup", cwd=REPO_ROOT)
+        self.assertIn("Standards (read each file in full before you judge or write):", context)
+        self.assertLess(len(context), 8000)
 
     def test_active_ledger_adds_nudge_on_compact_with_goal_and_principles(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n")

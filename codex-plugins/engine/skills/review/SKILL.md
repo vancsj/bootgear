@@ -221,6 +221,11 @@ every lens with its scope and brief from `references/lenses.md` and that
 lens's find angles from the angle files of sub-task 2, plus the actual diff
 (not only commit messages or the PR description) and the linked ticket if any.
 
+Name `.bootgear/config/principles.md`, the host user-principles file and each
+standard file in `.bootgear/config/` as context files for F, R1, R2 and C, each
+when present. In an active run, add the `principles` text of the settlement.
+Each role reads the files before it files, attacks or cuts.
+
 For `<n>` ≥ 2, also give F the `git diff` command `init` printed and the
 previous slate's `converge render` output as settled context. A claim outside
 that diff is in scope only when the diff changes that code's behaviour. When

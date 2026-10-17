@@ -103,6 +103,8 @@ Brief every party, in round 0 and every later round, with:
 - `debate_threshold` and why the decision reached `debate`
 - the run's `task_type` and `goal`
 - merged user, project, and task principles
+- the paths of the project's standard files in `.bootgear/config/`, each when
+  present, and the instruction to read them first
 - the caller's converge render, when it has one: its findings with status
   `survived` and its killed claims are settled facts, and parties argue only
   the choice, not those facts; its `disputed` findings and `unverified`

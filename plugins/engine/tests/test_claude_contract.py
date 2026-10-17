@@ -371,13 +371,13 @@ class ClaudePackageContractTest(unittest.TestCase):
         self.assertEqual(manifest["dependencies"],
                          ["converge", "spec", "test", "review", "advisor", "memory-ledger", "deputy"])
 
-    def test_compaction_recall_uses_session_start_compact(self):
+    def test_session_recall_runs_on_startup_clear_and_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
         self.assertEqual(
             [(entry["matcher"], [h["command"] for h in entry["hooks"]])
              for entry in hooks["SessionStart"]],
-            [("compact",
-              ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern compact"])],
+            [("startup|clear|compact",
+              ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern 'startup|clear|compact'"])],
         )
         self.assertIn("PreCompact", hooks)
         self.assertIn("PostCompact", hooks)

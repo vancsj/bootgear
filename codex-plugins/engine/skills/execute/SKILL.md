@@ -116,6 +116,10 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - When invoking `review`, append the open `deferred [spec-review]:` todos to the linked-ticket input as a "Deferred spec-review findings" section.
 - Under `review_fix_mode: accepted_only`, record each returned `fix-now` claim the same way as `"fix-now [<stage>]: <claim text>"`, never as `follow-up`, and mark done each open `fix-now [<stage>]` todo the new return no longer lists.
 
+## Briefing sub-agents
+
+Brief each sub-agent that writes code or docs, or that judges, with the paths of `.bootgear/config/principles.md`, of the host user-principles file and of each standard file that is present, and with the `principles` text of the settlement. Tell it to read the files first. Give it only the context its task needs. Do not give it the conclusions of another role. The rule covers an `impl` sub-agent.
+
 ## Checking and recording in memory-ledger
 
 `memory-ledger` is an optional peer: engine neither declares nor bundles it. Reach it through its public name `memory-ledger:ledger`, never its implementation script directly. Preserve its compact capability status: `configured`, `unconfigured`, `broken`, `cooldown`, or `missing`. A missing skill or untrusted host adapter is `missing`, not a configured no-op; record the marker and continue because memory-ledger never gates `goal`.
@@ -190,6 +194,10 @@ task session record-decision <run-id> --dir <session-dir> --mode solo --summary 
 Do not use a dedicated mode or marker for this — it is an ordinary `solo` decision.
 
 Do not use `approach` as a principles source.
+
+## Reading the standards
+
+After each compaction, read `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` in full, each when present. Skip a file that is already in your context. The session-start hook names them. Do not merge them into the principles.
 
 ## Ending the run
 

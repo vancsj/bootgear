@@ -36,7 +36,9 @@ If the project has `.bootgear/config/test-standard.md`, `test` applies its rule 
 writing cases and cites the rule behind each one. The file lists `severities:` and a
 `cutoff:`, then rules as `## R### [severity]`. A regression that cites a rule blocks when the
 rule's severity is at or above `cutoff`, and is reported as non-blocking below it. A
-regression with no cited rule, or in a project with no standard, blocks. See
+regression with no cited rule, or in a project with no standard, blocks. When `test`
+delegates writing or triage to an agent, its brief also names the standards and the project
+and user principles files. See
 [docs/README.md](../../docs/README.md) for the project config files.
 
 ## Overrides

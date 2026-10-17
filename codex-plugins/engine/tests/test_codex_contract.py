@@ -34,7 +34,11 @@ class CodexPackageContractTest(unittest.TestCase):
 
         hooks = json.loads(HOOKS.read_text())["hooks"]
         session_start = hooks["SessionStart"][0]
-        self.assertEqual(session_start["matcher"], "^(startup|resume|compact)$")
+        self.assertEqual(session_start["matcher"], "^(startup|resume|clear|compact)$")
+        self.assertIn(
+            "--matcher-pattern '^(startup|resume|clear|compact)$'",
+            session_start["hooks"][0]["command"],
+        )
         self.assertIn("${PLUGIN_ROOT}", session_start["hooks"][0]["command"])
         self.assertIn("--handler session_recall", session_start["hooks"][0]["command"])
         stop = hooks["Stop"][0]["hooks"][0]

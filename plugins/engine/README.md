@@ -41,7 +41,7 @@ flowchart TD
 | Request assessment | observed scope, a `small`/`medium`/`large` estimate and the files or commands behind it |
 | Task type | exactly one of `ticket-writing`, `bug-triage`, `ticket-to-pr`, `pr-review` |
 | State machine | the workflow graph for this run, validated and shown to you as a diagram |
-| Approach and principles | the concrete steps, and the run-wide constraints (merged with project and user principles) |
+| Approach and principles | the concrete steps, and the run-wide constraints (merged with project and user principles; `clarify` also reads the project's review and test standards) |
 | Source of truth, per domain | who decides scope and outcome, current behaviour, implementation approach, correctness |
 | Debate threshold | which decisions are too hard to reverse or too broad to make alone; reversibility and blast radius by default |
 | Autonomy | an explicit list of permitted mutations (commit, push, open a PR, post review comments, ...) — "go ahead autonomously" is not a list |
@@ -140,7 +140,7 @@ Three hooks keep a long run on track, each reading the ledger by session id:
 
 | Hook | Reminds the agent to |
 |---|---|
-| session start | run `recall` after a compaction while a run is open, with the run's `goal`; merged principles with or without a run (Codex: also the session id) |
+| session start | on startup, clear and compaction (Codex: also resume): merged principles and the project's standard files with their rule IDs, with or without a run (Codex: also the session id); the run's `goal` while a run is open; run `recall` after a compaction while a run is open |
 | stop | run `recall` before ending a turn while a run is open |
 | state nudge | transition when the current node has had no transition for 5 minutes |
 
@@ -202,7 +202,9 @@ The Codex build bundles `spec`, `test`, `review` and `converge`. Add `memory-led
 too if you want runs to look up and record durable facts; its absence never blocks a run.
 Add `advisor@bootgear` for advisor roles; without it, `clarify` records none.
 
-Project customisation lives in `.bootgear/config/`: `principles.md`, a
+Project customisation lives in `.bootgear/config/`: `principles.md`, the
+standards `review-standard.md` and `test-standard.md` (named in every role
+brief with the principles), a
 `state-machine-<task_type>.yaml` override, and layered YAML config such as
 `debate-parties.yaml` and `converge-seats.yaml`. See the [design overview](../../docs/README.md).
 

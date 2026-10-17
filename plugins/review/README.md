@@ -88,7 +88,9 @@ without an outside signal, and `fix-now` claims are reported with the findings.
 
 A project can commit `.bootgear/config/review-standard.md`: rules headed `## R### [severity]`
 with a `severities:` list and a `cutoff:`. The finder tags each claim that breaks a rule, and
-a claim tagged with a rule at or above the cutoff is never cut.
+a claim tagged with a rule at or above the cutoff is never cut. The brief of every finder,
+refuter and cutter also names the standard, the project and user principles files, and in
+an `engine` run the settlement's `principles`.
 
 Before its own review, `review` looks for a more specific skill: inside an `engine` run it
 reads `review_override` from the settlement (a skill name, or a map keyed by depth);

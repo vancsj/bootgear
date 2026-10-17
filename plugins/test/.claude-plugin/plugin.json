@@ -1,6 +1,6 @@
 {
   "name": "test",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "General testing domain interface: writing cases, running them, and reading/triaging reports as one skill. Delegates to a project's own specialized test skill(s) when registered.",
   "author": {
     "name": "vancsj",
