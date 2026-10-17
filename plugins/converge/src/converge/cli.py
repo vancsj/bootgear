@@ -180,7 +180,7 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
     step = (_step(args, "cutoff") if phase == "cutoff"
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
     if _gap_hunt_open(slate):
-        gap = _step(args, "file", "--as r2 --origin gap-hunt")
+        gap = _step(args, "file", "--as r2 --origin gap-hunt --lens <lens> --angle <angle>")
         return (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
                 f"escalate, cut or attack; then {step}")
     return step

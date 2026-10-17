@@ -262,13 +262,25 @@ def test_status_names_the_gap_hunt_until_the_first_escalate(cv: Converge) -> Non
     cv.init(config={**TASK, "steps": {"cut": "both", "gap_hunt": True, "escalate": True}})
     cv.file()
     cv.cover()
-    gap = _cmd(cv, "file s1 --dir {dir} --as r2 --origin gap-hunt")
+    gap = _cmd(cv, "file s1 --dir {dir} --as r2 --origin gap-hunt --lens <lens> --angle <angle>")
     assert _lines(cv, "status", "s1")[-1] == (
         f"next: gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
         f"escalate, cut or attack; then escalate: finder escalate F001; plan: {_plan(cv)}")
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
     assert _lines(cv, "status", "s1")[-1] == (
         f"next: cut-before: cutter cut-before F001; plan: {_plan(cv)}")
+
+
+def test_gap_hunt_file_needs_lens_and_angle(cv: Converge) -> None:
+    cv.init(config={**TASK, "steps": {"cut": "both", "gap_hunt": True, "escalate": True}})
+    cv.file()
+    cv.cover()
+    err = cv.ok("file", "s1", "--as", R2, "--loc", "src/a.py:10", "--claim", "ticket asks for retries",
+                "--trigger", "caller passes None", "--origin", "gap-hunt",
+                "--evidence", FILE_EVIDENCE, "--tier", "traced", code=2).stderr
+    assert "`lens` must be a non-empty string" in err
+    assert "`angle` must be a find angle id; got None" in err
+    assert cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries") == "F002"
 
 
 def test_gap_hunt_files_only_between_coverage_and_the_first_escalate(cv: Converge) -> None:
