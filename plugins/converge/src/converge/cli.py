@@ -1033,8 +1033,10 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--evidence")
 
     p = command("find-run", cmd_find_run, write=True)
-    for flag in ("--lens", "--angle", "--tell", "--searches", "--positive-control", "--result"):
+    for flag in ("--lens", "--angle", "--tell", "--searches", "--positive-control"):
         p.add_argument(flag, required=True)
+    p.add_argument("--result", required=True,
+                   help="`none` if the find filed no claim, else the claim ids it filed, comma-separated")
 
     p = command("angle-na", cmd_angle_na, write=True)
     p.add_argument("--phase", required=True)

@@ -283,6 +283,11 @@ def test_gap_hunt_file_needs_lens_and_angle(cv: Converge) -> None:
     assert cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries") == "F002"
 
 
+def test_find_run_help_names_the_result_forms(cv: Converge) -> None:
+    out = " ".join(cv.ok("find-run", "s1", "--help").stdout.split())
+    assert "`none` if the find filed no claim, else the claim ids it filed, comma-separated" in out
+
+
 def test_gap_hunt_files_only_between_coverage_and_the_first_escalate(cv: Converge) -> None:
     cv.init(config={**TASK, "steps": {"cut": "both", "gap_hunt": True, "escalate": True}})
     cv.file()
