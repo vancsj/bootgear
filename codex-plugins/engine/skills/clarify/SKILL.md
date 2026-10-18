@@ -174,7 +174,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 - **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
 - **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
 - **State machine fails validation** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
-- **Settlement fails validation** — `init` refuses each settlement that `task session validate` refuses: a missing required field, a wrong type or value, a `goal` that is not a `succeeded`/`failed` mapping, `autonomy.no_further_questions` not `true`, `autonomy.permitted_mutations` not a non-empty list of specific actions, or a `state_machine` that fails `task state validate`. It prints the problems grouped by field and writes no ledger. Fix every listed problem in the settlement file and run `init` again with the same run-id; do not add `--force`, because no ledger exists. When a problem is in a value the user confirmed, ask no new work question. Do not write the settlement until `init` accepts it.
+- **Settlement fails validation** — `init` prints the problems grouped by field and writes no ledger. Fix every listed problem in the settlement file, then run `init` again with the same run-id. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
 
 ## Host mechanics
 
