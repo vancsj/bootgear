@@ -180,7 +180,7 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
     step = (_step(args, "cutoff") if phase == "cutoff"
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
     if _gap_hunt_open(slate):
-        gap = _step(args, "file", "--as r2 --origin gap-hunt")
+        gap = _step(args, "file", "--as r2 --origin gap-hunt --lens <lens> --angle <angle>")
         return (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
                 f"escalate, cut or attack; then {step}")
     return step
@@ -1033,8 +1033,10 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--evidence")
 
     p = command("find-run", cmd_find_run, write=True)
-    for flag in ("--lens", "--angle", "--tell", "--searches", "--positive-control", "--result"):
+    for flag in ("--lens", "--angle", "--tell", "--searches", "--positive-control"):
         p.add_argument(flag, required=True)
+    p.add_argument("--result", required=True,
+                   help="`none` if the find filed no claim, else the claim ids it filed, comma-separated")
 
     p = command("angle-na", cmd_angle_na, write=True)
     p.add_argument("--phase", required=True)
