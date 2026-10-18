@@ -180,8 +180,35 @@ class CliOutputTest(unittest.TestCase):
                             "--prose")
         self.assertEqual(result.returncode, 1)
         self.assertIn("request_assessment", result.stderr)
-        self.assertNotIn("strict execution validation", result.stderr)
+        diagnostic = result.stderr[result.stderr.index("session init refused"):]
+        self.assertNotIn("strict", diagnostic)
         self.assertFalse((self.session_dir / "missing-field-run.md").exists())
+
+    def test_session_init_refuses_prose_permitted_mutations(self):
+        old = "  permitted_mutations: [run tests]\n"
+        self.assertIn(old, SETTLEMENT)
+        settlement = self.tmp / "prose-mutations.txt"
+        settlement.write_text(SETTLEMENT.replace(old, "  permitted_mutations: run tests\n"))
+        result = self._task("session", "init", "prose-mutations-run", "--dir",
+                            str(self.session_dir), "--settlement-file", str(settlement),
+                            "--prose")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("autonomy.permitted_mutations", result.stderr)
+        self.assertIn("must be a non-empty list", result.stderr)
+        self.assertFalse((self.session_dir / "prose-mutations-run.md").exists())
+
+    def test_session_init_refuses_questions_left_open(self):
+        old = "  no_further_questions: true\n"
+        self.assertIn(old, SETTLEMENT)
+        settlement = self.tmp / "open-questions.txt"
+        settlement.write_text(SETTLEMENT.replace(old, "  no_further_questions: false\n"))
+        result = self._task("session", "init", "open-questions-run", "--dir",
+                            str(self.session_dir), "--settlement-file", str(settlement),
+                            "--prose")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("autonomy.no_further_questions", result.stderr)
+        self.assertIn("must be true", result.stderr)
+        self.assertFalse((self.session_dir / "open-questions-run.md").exists())
 
     def test_recall_json(self):
         self._session("update-todo", "write tests")
