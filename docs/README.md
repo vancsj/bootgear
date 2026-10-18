@@ -29,6 +29,7 @@ project-specific knowledge; each project customizes them through
 | `test` | Testing domain skill: write, run, and triage test results. | none |
 | `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger, a machine-local ledger and a deputy ledger |
 | `advisor` | Pairs Claude Code and Codex CLI through a file mailbox, or makes a one-shot Codex call. | mailbox files |
+| `deputy` | Answers a judgement question from the user's recorded decisions, or escalates it; hooks remind the AI to ask it and to record the user's answer. | deputy ledger |
 
 Dependencies:
 
@@ -36,6 +37,7 @@ Dependencies:
 engine ──needs──> converge, spec, test, review, advisor, memory-ledger   (declared dependencies, Claude Code)
 review ──needs──> converge                       (declared dependency)
 converge ──needs──> memory-ledger, advisor       (declared dependencies)
+deputy ──needs──> memory-ledger                  (declared dependency, Claude Code)
 ```
 
 `spec`, `test` and `review` each work standalone. Each first checks the active
@@ -47,15 +49,15 @@ when one is set.
 ```
 plugins/<name>/            one source tree per plugin
   .claude-plugin/          Claude Code manifest (all plugins)
-  .codex-plugin/           Codex manifest (memory-ledger, advisor)
+  .codex-plugin/           Codex manifest (memory-ledger, advisor, deputy)
 codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
                            review, converge
 .claude-plugin/marketplace.json   Claude marketplace: all seven plugins
-.agents/plugins/marketplace.json  Codex marketplace: memory-ledger, advisor, engine
+.agents/plugins/marketplace.json  Codex marketplace: memory-ledger, advisor, deputy, engine
 ```
 
-- `memory-ledger` and `advisor` serve both hosts from one directory with two
-  manifests.
+- `memory-ledger`, `advisor` and `deputy` serve both hosts from one directory
+  with two manifests.
 - `engine` has a separate Codex package that bundles the skills and code it
   needs, because Codex has no cross-plugin dependency mechanism. Converge and
   review therefore have no separate Codex install.

@@ -48,7 +48,7 @@ bootgear keeps the opinionated core but treats customizability as a first-class 
 |---|---|
 | Claude Code | **engine, converge, spec, test, review, advisor, and memory-ledger**, as plugins — see Install |
 | opencode | Not shipped |
-| Codex | **memory-ledger, engine, and advisor**, as plugins — see Install |
+| Codex | **memory-ledger, engine, advisor, and deputy**, as plugins — see Install |
 
 Skill/hook formats differ across platforms; bootgear aims to keep one conceptual gear set with platform-specific adapters.
 
@@ -76,7 +76,7 @@ Plugins are authored and loaded in their host's native format.
 ```
 bootgear/
 ├── plugins/         # gear that ships today; most plugins are Claude Code-only,
-│                    # some (e.g. memory-ledger, advisor) also ship a Codex CLI
+│                    # some (e.g. memory-ledger, advisor, deputy) also ship a Codex CLI
 │                    # manifest from the same source directory
 ├── codex-plugins/   # gear that ships as Codex CLI-only plugins, with no
 │                    # Claude Code counterpart
@@ -89,7 +89,7 @@ bootgear/
 
 A plugin that serves both hosts ships from one source directory under `plugins/`,
 with a `.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by
-side (see `memory-ledger`, `advisor`). `codex-plugins/` holds plugins with no
+side (see `memory-ledger`, `advisor`, `deputy`). `codex-plugins/` holds plugins with no
 Claude Code counterpart at all (e.g. `engine`'s Codex-CLI port). Both retain
 platform-native manifests, hooks, wrappers, and invocation contracts.
 `converge` is the exception to both: it ships as a Claude Code plugin from
@@ -122,13 +122,15 @@ differ (see [Codex CLI](#codex-cli)).
 | [spec](plugins/spec) | requirements and design for `engine`'s ticket-writing and ticket-to-pr runs; works on its own too |
 | [test](plugins/test) | test writing, running, and failure triage for `engine`'s bug-triage and ticket-to-pr runs; works on its own too |
 | [advisor](plugins/advisor) | pairs Claude Code and Codex CLI through a shared mailbox, or makes a one-shot call to Codex |
+| [deputy](plugins/deputy) | answers a judgement question from your recorded decisions, or escalates it to you, and reminds the AI to ask it before it asks you; installs `memory-ledger` with it on Claude Code, and needs `memory-ledger` installed on Codex |
 
 ### Codex CLI
 
-[advisor](plugins/advisor) ships from one source directory serving both hosts
-(the same pattern as `memory-ledger`): a `.claude-plugin/plugin.json` and a
-`.codex-plugin/plugin.json` side by side, so it's registered in both
-`.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`.
+[advisor](plugins/advisor) and [deputy](plugins/deputy) each ship from one source
+directory serving both hosts (the same pattern as `memory-ledger`): a
+`.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by side, so
+each is registered in both `.claude-plugin/marketplace.json` and
+`.agents/plugins/marketplace.json`.
 Codex CLI's plugin mechanism only ever sees plugins listed in the latter.
 Install:
 
@@ -136,6 +138,7 @@ Install:
 codex plugin marketplace add vancsj/bootgear
 codex plugin add memory-ledger@bootgear
 codex plugin add advisor@bootgear
+codex plugin add deputy@bootgear
 codex plugin add engine@bootgear
 ```
 

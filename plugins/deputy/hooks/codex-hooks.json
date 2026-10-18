@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "request_user_input",
+        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+      }
+    ]
+  }
+}
