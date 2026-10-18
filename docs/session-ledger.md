@@ -56,7 +56,7 @@ The file always has five sections, in this order: `settlement`, `decisions`, `to
 
 - `init` writes the settlement once. It refuses when a ledger for that run already exists, unless `--force` is passed; `--force` overwrites the existing ledger, closed or not. It also refuses a settlement that has a line which looks like a section heading.
 - `init` always replaces any `session_dir:` value in the settlement with the directory it resolved itself.
-- `init` checks the value and type of the fields that are present, except that it only parses `state_machine` as YAML and does not check the shape of `goal` or `autonomy.permitted_mutations`. `session validate` adds those checks: every required field is present, `autonomy.no_further_questions` is true, `autonomy.permitted_mutations` is a non-empty list, `goal` has `succeeded` and `failed`, and `state_machine` passes `state validate`.
+- `init` refuses a settlement that `session validate` refuses, and writes no ledger. Both check that every required field is present, the value and type of each field, that `autonomy.no_further_questions` is true, that `autonomy.permitted_mutations` is a non-empty list, that `goal` has `succeeded` and `failed`, and that `state_machine` passes `state validate`. `validate --settlement-file` checks the file as written, so its `session_dir:` line must be the resolved directory; `init` adds that line itself.
 - The settlement is never rewritten after `init`.
 
 **Decisions.** This section is append-only. Each entry has the form `- <ts> [<mode>] [<qN>] <summary>`. The mode is `solo`, `resolve`, `debate`, `debate-capped`, `debate-degraded` or `scope-settled`. Only the four debate modes carry a question tag, and they must carry one. The debate rules are:

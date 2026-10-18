@@ -15,49 +15,28 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from settlement_fixture import valid_settlement
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "bin" / "task"
 PROG = "task"
 FREQUENT = ("session read", "session record-decision", "state transition")
 
-SETTLEMENT = """\
-task_type: ticket-to-pr
-approach: output contract test
-principles: none
-goal:
-  succeeded: output contract holds
-  failed: never
-state_machine: |
-  name: smoke
-  nodes:
-    clarify:
-      next: [succeeded]
-      reminder:
-        do: check the output contract
-    succeeded:
-      terminal: true
-    failed:
-      terminal: true
+SMOKE_MACHINE = """\
+name: smoke
+nodes:
+  clarify:
+    next: [succeeded]
+    reminder:
+      do: check the output contract
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
 """
 
-STRICT_FIELDS = """\
-request_assessment: fixture assessment
-source_of_truth:
-  scope: fixture scope
-debate_threshold: fixture reversibility rule
-debate_round_cap: 1
-convergence_policy: unanimous
-consented_stop_allowed: true
-debate_party_config: {}
-spec_skill: spec
-test_skill: test
-review_skill: review
-debate_roster: [main-agent, independent-reviewer]
-review_fix_mode: accepted_only
-autonomy:
-  no_further_questions: true
-  permitted_mutations: [run tests]
-"""
+SETTLEMENT = valid_settlement(SMOKE_MACHINE, approach="output contract test",
+                              succeeded="output contract holds", failed="never")
 
 MACHINE = """\
 name: tiny
@@ -153,7 +132,7 @@ class CliOutputTest(unittest.TestCase):
 
     def test_session_validate_returns_strict_json_summary(self):
         settlement = self.tmp / "strict.txt"
-        settlement.write_text(SETTLEMENT + STRICT_FIELDS)
+        settlement.write_text(SETTLEMENT)
         init = self._task("session", "init", "strict-run", "--dir",
                           str(self.session_dir), "--settlement-file", str(settlement))
         self.assertEqual(init.returncode, 0, init.stderr)
@@ -176,6 +155,29 @@ class CliOutputTest(unittest.TestCase):
         self.assertIn("task_type", result.stderr)
         self.assertIn("approach", result.stderr)
         self.assertIn("session_dir", result.stderr)
+
+    def test_session_init_refuses_a_settlement_that_validate_refuses(self):
+        settlement = self.tmp / "prose-goal.txt"
+        settlement.write_text(SETTLEMENT.replace(
+            "goal:\n  succeeded: output contract holds\n  failed: never\n",
+            "goal: output contract holds\n"))
+        result = self._task("session", "init", "refused-run", "--dir",
+                            str(self.session_dir), "--settlement-file", str(settlement),
+                            "--prose")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("goal", result.stderr)
+        self.assertFalse((self.session_dir / "refused-run.md").exists())
+
+    def test_session_init_refusal_does_not_say_strict(self):
+        settlement = self.tmp / "missing-field.txt"
+        settlement.write_text(SETTLEMENT.replace("request_assessment: fixture assessment\n", ""))
+        result = self._task("session", "init", "missing-field-run", "--dir",
+                            str(self.session_dir), "--settlement-file", str(settlement),
+                            "--prose")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("request_assessment", result.stderr)
+        self.assertNotIn("strict execution validation", result.stderr)
+        self.assertFalse((self.session_dir / "missing-field-run.md").exists())
 
     def test_state_json_lists_transitions(self):
         moved = self._task("state", "transition", self.run_id, "--dir",
@@ -384,6 +386,16 @@ class CliOutputTest(unittest.TestCase):
                             str(self.session_dir), "--settlement-file", str(settlement))
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def _init_run_raw(self, run_id, settlement_text):
+        """Init a run, then replace its ledger settlement with `settlement_text`,
+        which `init` itself refuses."""
+        self._init_run(run_id, SETTLEMENT)
+        ledger = self.session_dir / f"{run_id}.md"
+        head, rest = ledger.read_text().split("## settlement\n", 1)
+        _, tail = rest.split("\n\n## decisions", 1)
+        ledger.write_text(f"{head}## settlement\n{settlement_text.rstrip(chr(10))}"
+                          f"\n\n## decisions{tail}")
+
     def _current(self, run_id=None, *extra):
         return self._task("state", "current", run_id or self.run_id, "--dir",
                           str(self.session_dir), *extra)
@@ -468,7 +480,7 @@ class CliOutputTest(unittest.TestCase):
             "        do: check the output contract\n",
             "        do: check the output contract\n        skill: test\n"
             "    work:\n      next: [succeeded]\n      reminder:\n        skill: debate\n")
-        self._init_run("old-run", legacy)
+        self._init_run_raw("old-run", legacy)
         prose = self._current("old-run", "--prose")
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
@@ -503,11 +515,11 @@ class CliOutputTest(unittest.TestCase):
         self.assertNotIn("next", data)
 
     def test_state_current_refuses_unusable_machine(self):
-        self._init_run("no-machine", SETTLEMENT.split("state_machine: |")[0])
+        self._init_run_raw("no-machine", SETTLEMENT.split("state_machine: |")[0])
         result = self._current("no-machine", "--prose")
         self.assertEqual(result.returncode, 1)
         self.assertIn("no 'state_machine: |' block", result.stderr)
-        self._init_run("scalar-node", SETTLEMENT.replace(
+        self._init_run_raw("scalar-node", SETTLEMENT.replace(
             "    clarify:\n      next: [succeeded]\n"
             "      reminder:\n        do: check the output contract\n",
             "    clarify: oops\n"))

@@ -14,43 +14,25 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from settlement_fixture import valid_settlement
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "bin" / "task"
 
-SETTLEMENT = """\
-task_type: ticket-to-pr
-approach: smoke test
-principles: none
-source_of_truth:
-  scope: ticket
-debate_threshold: any
-debate_round_cap: 10
-convergence_policy: unanimous
-consented_stop_allowed: true
-debate_roster: [main-agent, independent-reviewer, adversarial-reviewer]
-debate_party_config: {{}}
-spec_skill: spec
-test_skill: test
-review_skill: review
-autonomy:
-  no_further_questions: true
-  permitted_mutations: [edit files]
-goal:
-  succeeded: smoke test passes
-  failed: never
-state_machine: |
-  name: smoke
-  nodes:
-    clarify:
-      next: [impl]
-    impl:
-      next: [succeeded]
-    succeeded:
-      terminal: true
-    failed:
-      terminal: true
-session_dir: {session_dir}
+MACHINE = """\
+name: smoke
+nodes:
+  clarify:
+    next: [impl]
+  impl:
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
 """
+
+SETTLEMENT = valid_settlement(MACHINE)
 
 _STARTED_RE = re.compile(r"(?m)^started: (\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$")
 
@@ -60,7 +42,7 @@ class StateStartedTest(unittest.TestCase):
         self.session_dir = Path(tempfile.mkdtemp(prefix="engine-state-started-test-"))
         self.addCleanup(shutil.rmtree, self.session_dir, ignore_errors=True)
         settlement_file = self.session_dir / "settlement.txt"
-        settlement_file.write_text(SETTLEMENT.format(session_dir=self.session_dir))
+        settlement_file.write_text(SETTLEMENT)
         self.run_id = "test-run"
         self._task("session", "init", self.run_id,
                    "--settlement-file", str(settlement_file))

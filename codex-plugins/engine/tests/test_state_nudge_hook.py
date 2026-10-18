@@ -17,6 +17,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from settlement_fixture import valid_settlement
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 HOOK = PLUGIN_DIR / "hooks" / "state_nudge_reminder.py"
@@ -27,42 +29,22 @@ if _spec is None or _spec.loader is None:
 state_nudge_reminder = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(state_nudge_reminder)
 
-SETTLEMENT = """\
-task_type: ticket-to-pr
-approach: smoke test
-principles: none
-source_of_truth:
-  scope: ticket
-debate_threshold: any
-debate_round_cap: 10
-convergence_policy: unanimous
-consented_stop_allowed: true
-debate_roster: [main-agent, independent-reviewer, adversarial-reviewer]
-debate_party_config: {{}}
-spec_skill: spec
-test_skill: test
-review_skill: review
-autonomy:
-  no_further_questions: true
-  permitted_mutations: [edit files]
-goal:
-  succeeded: smoke test passes
-  failed: never
-state_machine: |
-  name: smoke
-  nodes:
-    clarify:
-      next: [impl]
-    impl:
-      next: [fix, succeeded]
-    fix:
-      next: [impl]
-    succeeded:
-      terminal: true
-    failed:
-      terminal: true
-session_dir: {session_dir}
+MACHINE = """\
+name: smoke
+nodes:
+  clarify:
+    next: [impl]
+  impl:
+    next: [fix, succeeded]
+  fix:
+    next: [impl]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
 """
+
+SETTLEMENT = valid_settlement(MACHINE)
 
 
 class StateNudgeHookTest(unittest.TestCase):
@@ -70,7 +52,7 @@ class StateNudgeHookTest(unittest.TestCase):
         self.session_dir = Path(tempfile.mkdtemp(prefix="state-nudge-hook-test-"))
         self.addCleanup(shutil.rmtree, self.session_dir, ignore_errors=True)
         settlement_file = self.session_dir / "settlement.txt"
-        settlement_file.write_text(SETTLEMENT.format(session_dir=self.session_dir))
+        settlement_file.write_text(SETTLEMENT)
         self.run_id = "test-run"
         subprocess.run(
             [str(TASK_BIN), "session", "init", self.run_id,

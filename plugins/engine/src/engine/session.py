@@ -376,7 +376,7 @@ def _required_skill_fields(machine_text) -> set[str]:
     return {field for field, field_nodes in SKILL_FIELD_NODES.items() if nodes & set(field_nodes)}
 
 
-def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: bool) -> tuple[list[tuple[str, str]], dict]:
+def _validate_settlement(body: str, run_id: str, session_dir: Path) -> tuple[list[tuple[str, str]], dict]:
     try:
         data = yaml.safe_load(body)
     except yaml.YAMLError as exc:
@@ -392,12 +392,11 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
         "debate_roster", "review_fix_mode", "autonomy", "goal", "state_machine",
         "session_dir",
     }
-    if strict:
-        required |= _required_skill_fields(data.get("state_machine"))
-        for field in sorted(required - data.keys()):
-            problems.append((field, "is required for strict execution validation"))
+    required |= _required_skill_fields(data.get("state_machine"))
+    for field in sorted(required - data.keys()):
+        problems.append((field, "is required"))
 
-    def text_field(field: str, *, required_field: bool = False) -> None:
+    def text_field(field: str) -> None:
         value = data.get(field)
         if value is None:
             return
@@ -408,7 +407,7 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
     if task_type is not None and task_type not in TASK_TYPES:
         problems.append(("task_type", f"must be one of: {', '.join(sorted(TASK_TYPES))}"))
     for field in ("request_assessment", "approach", "principles", "debate_threshold"):
-        text_field(field, required_field=strict)
+        text_field(field)
 
     source_of_truth = data.get("source_of_truth")
     if source_of_truth is not None:
@@ -542,17 +541,17 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
         if not isinstance(autonomy, dict):
             problems.append(("autonomy", "must be a mapping"))
         else:
-            if strict and autonomy.get("no_further_questions") is not True:
+            if autonomy.get("no_further_questions") is not True:
                 problems.append(("autonomy.no_further_questions", "must be true"))
             mutations = autonomy.get("permitted_mutations")
-            if strict and (not isinstance(mutations, list) or not mutations or
-                           any(not isinstance(item, str) or not item.strip() for item in mutations)):
+            if (not isinstance(mutations, list) or not mutations or
+                    any(not isinstance(item, str) or not item.strip() for item in mutations)):
                 problems.append(("autonomy.permitted_mutations", "must be a non-empty list of specific actions"))
             if isinstance(mutations, list) and any(item.strip().lower() == "go ahead autonomously" for item in mutations if isinstance(item, str)):
                 problems.append(("autonomy.permitted_mutations", "must name specific actions"))
 
     goal = data.get("goal")
-    if strict and goal is not None:
+    if goal is not None:
         if not isinstance(goal, dict):
             problems.append(("goal", "must contain succeeded and failed conditions"))
         else:
@@ -576,9 +575,9 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path, *, strict: b
             except yaml.YAMLError as exc:
                 problems.append(("state_machine", f"invalid YAML: {exc}"))
             else:
-                if strict and not isinstance(machine, dict):
+                if not isinstance(machine, dict):
                     problems.append(("state_machine", "must contain a YAML mapping"))
-                elif strict:
+                else:
                     from engine import state
                     problems.extend(("state_machine", problem) for problem in state.validate(machine))
 
@@ -635,7 +634,7 @@ def _init(args: argparse.Namespace) -> None:
     ]
     settlement_lines.append(f"session_dir: {resolved_dir}")
     settlement = "\n".join(settlement_lines)
-    problems, _ = _validate_settlement(settlement, args.run_id, path.parent, strict=False)
+    problems, _ = _validate_settlement(settlement, args.run_id, path.parent)
     if problems:
         refuse(f"session init refused for {path}: {len(problems)} problem(s)", problems)
     text = (
@@ -665,7 +664,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
             expected_dir = path.parent
     except (OSError, UnicodeError) as exc:
         sys.exit(f"cannot validate {source}: {exc}")
-    problems, summary = _validate_settlement(body, args.run_id, expected_dir, strict=True)
+    problems, summary = _validate_settlement(body, args.run_id, expected_dir)
     if problems:
         refuse(f"session validate refused for {source}: {len(problems)} problem(s)", problems)
     emit(args.output_mode, {"run_id": args.run_id, "valid": True, "fields": summary},

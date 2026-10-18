@@ -10,23 +10,14 @@ import os
 import shutil
 import subprocess
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 
 import yaml
+from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "scripts" / "task"
-
-SETTLEMENT_HEAD = """\
-task_type: ticket-to-pr
-approach: amend test
-goal:
-  succeeded: amend works
-  failed: never
-state_machine: |
-"""
 
 V1 = """\
 name: amendable
@@ -142,9 +133,8 @@ def _task(*args):
 
 
 def _settlement(machine: str, extra: str = "") -> str:
-    return SETTLEMENT_HEAD.replace("approach: amend test\n",
-                                   f"approach: amend test\n{extra}") \
-        + textwrap.indent(machine, "  ")
+    return valid_settlement(machine, approach="amend test",
+                            succeeded="amend works", extra=extra)
 
 
 class StateAmendTest(unittest.TestCase):

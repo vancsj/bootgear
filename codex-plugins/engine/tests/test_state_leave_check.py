@@ -10,39 +10,16 @@ import shutil
 import stat
 import subprocess
 import tempfile
-import textwrap
 import time
 import unittest
 from pathlib import Path
+
+from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_REL = Path("scripts") / "task"
 TASK_BIN = PLUGIN_DIR / TASK_REL
 PROGRAM = "engine-test-leave-check"
-
-SETTLEMENT_HEAD = """\
-task_type: ticket-to-pr
-approach: smoke test
-principles: none
-source_of_truth:
-  scope: ticket
-debate_threshold: any
-debate_round_cap: 10
-convergence_policy: unanimous
-consented_stop_allowed: true
-debate_roster: [main-agent, independent-reviewer, adversarial-reviewer]
-debate_party_config: {}
-spec_skill: spec
-test_skill: test
-review_skill: review
-autonomy:
-  no_further_questions: true
-  permitted_mutations: [edit files]
-goal:
-  succeeded: smoke test passes
-  failed: never
-state_machine: |
-"""
 
 
 def _machine(program=PROGRAM):
@@ -165,11 +142,7 @@ class _LeaveCheckLedger(unittest.TestCase):
 
     def _init(self, machine=None):
         settlement = self.tmp / "settlement.txt"
-        settlement.write_text(
-            SETTLEMENT_HEAD
-            + textwrap.indent(machine or _machine(), "  ")
-            + f"session_dir: {self.session_dir}\n"
-        )
+        settlement.write_text(valid_settlement(machine or _machine()))
         result = self._task("session", "init", self.run_id,
                             "--settlement-file", str(settlement))
         self.assertEqual(result.returncode, 0, result.stderr)

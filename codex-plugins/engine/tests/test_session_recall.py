@@ -5,8 +5,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from settlement_fixture import valid_settlement
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "scripts" / "task"
+
+MACHINE = """\
+name: recall
+nodes:
+  clarify:
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+"""
 
 
 class SessionRecallTest(unittest.TestCase):
@@ -14,10 +27,7 @@ class SessionRecallTest(unittest.TestCase):
         self.session_dir = Path(tempfile.mkdtemp(prefix="engine-recall-test-"))
         self.addCleanup(shutil.rmtree, self.session_dir, ignore_errors=True)
         settlement_file = self.session_dir / "settlement.yaml"
-        settlement_file.write_text(
-            "task_type: ticket-to-pr\n"
-            "goal: verify aggregate recall\n"
-        )
+        settlement_file.write_text(valid_settlement(MACHINE))
         self.run_id = "recall-test"
         self._task("session", "init", self.run_id,
                    "--settlement-file", str(settlement_file))
