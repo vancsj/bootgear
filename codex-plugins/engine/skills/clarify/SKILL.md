@@ -11,6 +11,7 @@ Outcomes:
 - **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
 - **Ledger already exists** — `init` refuses; follow `## Recovery`.
 - **State machine fails validation after the fallback** — follow `## Recovery`.
+- **Settlement fails validation** — `init` refuses and writes no ledger; follow `## Recovery`.
 
 ## Workflow
 
@@ -134,6 +135,8 @@ After settlement, draft `goal` as a short, high-level prompt. Do not write a spe
 - **succeeded when** — the concrete condition that means done
 - **failed when** — the task-specific condition that makes the task undoable; do not use a generic placeholder such as "the platform can't do X" or "the bug can't be reproduced at all"
 
+Store `goal` in the settlement as a mapping with the keys `succeeded` and `failed`, each a text value. Do not store it as prose.
+
 Classify a stall as not failure. Define failure as having no path to completion remaining.
 
 Show the draft. Get explicit confirmation before handing off to `execute`. Allow edits before confirmation.
@@ -150,7 +153,7 @@ After confirmation:
    task session init <run-id> --settlement-file <file>
    ```
 
-   When `init` refuses because a ledger already exists at this path, follow `## Recovery`.
+   When `init` refuses because a ledger already exists at this path, or because the settlement fails validation, follow `## Recovery`.
 
 3. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. `init` prints `INIT <ledger-file>`, the ledger file inside that directory. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
 
@@ -171,6 +174,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 - **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
 - **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
 - **State machine fails validation** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
+- **Settlement fails validation** — `init` refuses each settlement that `task session validate` refuses: a missing required field, a wrong type or value, a `goal` that is not a `succeeded`/`failed` mapping, `autonomy.no_further_questions` not `true`, `autonomy.permitted_mutations` not a non-empty list of specific actions, or a `state_machine` that fails `task state validate`. It prints the problems grouped by field and writes no ledger. Fix every listed problem in the settlement file and run `init` again with the same run-id; do not add `--force`, because no ledger exists. When a problem is in a value the user confirmed, ask no new work question. Do not write the settlement until `init` accepts it.
 
 ## Host mechanics
 
