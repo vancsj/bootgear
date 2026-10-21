@@ -38,7 +38,7 @@ class SkillContextFilesTest(unittest.TestCase):
 
     def test_clarify_reads_principles_and_both_standards(self):
         self.assertPinned({
-            "clarify": f"read {PRINCIPLES}, {REVIEW_STANDARD} and {TEST_STANDARD} from the project root",
+            "clarify": f"and {PRINCIPLES}, {REVIEW_STANDARD} and {TEST_STANDARD} from the project root, each when present",
         })
 
     def test_execute_briefs_sub_agents_with_context_files(self):

@@ -1,6 +1,6 @@
 {
   "name": "deputy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Your proxy for judgement questions: answers from your own recorded decisions and pinned assertions in a separate memory-ledger root, cites every entry it uses, and escalates what it cannot settle. Needs memory-ledger@bootgear. Install via `codex plugin add deputy@bootgear`.",
   "author": {
     "name": "vancsj",

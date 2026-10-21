@@ -10,7 +10,7 @@ Outcomes:
 - **Goal confirmed** — the settlement is written through `init` (required fields in `## Writing the settlement`), and the run is handed to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 - **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
 - **Ledger already exists** — `init` refuses; follow `## Recovery`.
-- **State machine fails validation after the fallback** — follow `## Recovery`.
+- **`task state validate` fails after the fallback** — follow `## Recovery`.
 - **Settlement fails validation** — `init` refuses and writes no ledger; follow `## Recovery`.
 
 ## Workflow
@@ -173,7 +173,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 
 - **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
 - **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
-- **State machine fails validation** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
+- **`task state validate` fails on the resolved machine** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
 - **Settlement fails validation** — `init` prints the problems and writes no ledger. Fix every listed problem in the settlement file, then run `init` again with the same run-id. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
 
 ## Host mechanics

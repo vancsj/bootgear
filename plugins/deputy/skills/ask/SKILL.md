@@ -37,7 +37,7 @@ Outcomes, handed back to the caller:
    - **Decisions, at or above the threshold.** Do not answer from votes. Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
 7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
 8. Return `answered` with: the answer, the confidence, `source: assertion` or `source: votes`, the cited agreeing slugs, the conflicting slugs if any, and one line of reasoning.
-9. After the user answers an escalation, call the `record` skill with the question, the user's answer, the reason, the options and the stakes shown to the user. Do not treat the user's answer as an assertion.
+9. After the user answers an escalation, and only when the answer is written in a session ledger file, call the `record` skill with the question, the user's answer, the reason, the options and the stakes shown to the user. Without a session ledger file, do not call it. Do not treat the user's answer as an assertion.
 
 ## Rules
 

@@ -46,7 +46,7 @@ bootgear keeps the opinionated core but treats customizability as a first-class 
 
 | Platform | Status |
 |---|---|
-| Claude Code | **engine, converge, spec, test, review, advisor, and memory-ledger**, as plugins — see Install |
+| Claude Code | **engine, converge, spec, test, review, advisor, memory-ledger, and deputy**, as plugins — see Install |
 | opencode | Not shipped |
 | Codex | **memory-ledger, engine, advisor, and deputy**, as plugins — see Install |
 

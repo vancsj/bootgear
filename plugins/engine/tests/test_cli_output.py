@@ -193,6 +193,22 @@ class CliOutputTest(unittest.TestCase):
         self.assertIn("must be a non-empty list", result.stderr)
         self.assertFalse((self.session_dir / "prose-mutations-run.md").exists())
 
+    def test_session_init_refuses_empty_or_blank_permitted_mutations(self):
+        old = "  permitted_mutations: [run tests]\n"
+        self.assertIn(old, SETTLEMENT)
+        for label, value in (("empty", "[]"), ("blank", '[""]')):
+            with self.subTest(list=label):
+                run_id = f"{label}-mutations-run"
+                settlement = self.tmp / f"{label}-mutations.txt"
+                settlement.write_text(SETTLEMENT.replace(old, f"  permitted_mutations: {value}\n"))
+                result = self._task("session", "init", run_id, "--dir",
+                                    str(self.session_dir), "--settlement-file", str(settlement),
+                                    "--prose")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("autonomy.permitted_mutations", result.stderr)
+                self.assertIn("must be a non-empty list", result.stderr)
+                self.assertFalse((self.session_dir / f"{run_id}.md").exists())
+
     def test_session_init_refuses_questions_left_open(self):
         old = "  no_further_questions: true\n"
         self.assertIn(old, SETTLEMENT)
