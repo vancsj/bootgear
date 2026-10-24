@@ -176,6 +176,28 @@ def test_bundled_init_with_shipped_angles_needs_find_coverage(tmp_path: Path) ->
     assert rendered["choices"] == []
 
 
+def test_bundled_angles_find_refuses_empty_results(tmp_path: Path) -> None:
+    err = _ok(tmp_path, "angles", "--project-root", str(tmp_path), "--tag", "find", code=2).stderr
+    assert "no find angles" in err
+    assert "--angles <file>" in err
+
+
+def test_bundled_angles_find_uses_caller_and_config_files(tmp_path: Path) -> None:
+    caller_angles = tmp_path / "caller-angles.yaml"
+    caller_angles.write_text(FIND_ANGLES)
+    caller = _ok(tmp_path, "angles", "--project-root", str(tmp_path), "--tag", "find",
+                 "--angles", str(caller_angles))
+    assert "find changed-contract" in caller.stdout
+
+    config_angles = tmp_path / "config-angles.yaml"
+    config_angles.write_text(FIND_ANGLES)
+    config = tmp_path / "converge.yaml"
+    config.write_text("angles: {files: [config-angles.yaml]}\n")
+    configured = _ok(tmp_path, "angles", "--project-root", str(tmp_path), "--config", str(config),
+                      "--tag", "find")
+    assert "find changed-contract" in configured.stdout
+
+
 def test_bundled_init_refuses_the_removed_mode_flag(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     err = _ok(tmp_path, "init", "s1", "--dir", str(slate.dir), "--as", MAIN, "--mode", "full",

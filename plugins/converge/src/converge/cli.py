@@ -945,6 +945,14 @@ def cmd_angles(args: argparse.Namespace) -> None:
     except (config_mod.ConfigError, angles_mod.AngleError) as exc:
         _refuse(exc.problems)
     rows = [row for row in rows if not args.tag or row["tag"] == args.tag]
+    if args.tag == "find" and not rows:
+        _refuse_next(
+            args,
+            "no find angles found",
+            ["no find angles were resolved from --angles or angles.files"],
+            "add a find angle with --angles <file> or configure angles.files, then "
+            "rerun `converge angles --tag find`",
+        )
     lines = []
     for row in rows:
         extra = "".join(f" {k}={row[k]}" for k in ("field", "lens") if k in row)

@@ -40,6 +40,12 @@ def test_tag_filter_and_caller_file(cv: Converge) -> None:
     assert finds[2][2] == "lens=architecture"
 
 
+def test_find_tag_refuses_empty_results(cv: Converge) -> None:
+    err = cv("angles", "--project-root", str(cv.project), "--tag", "find", code=2).stderr
+    assert "no find angles" in err
+    assert "--angles <file>" in err
+
+
 def test_mapping_layout_accepted(cv: Converge) -> None:
     mapping = cv.root / "mapped.yaml"
     mapping.write_text("angles:\n  - {id: odd-old-code, tag: find, tell: t, asks: a}\n")
@@ -80,6 +86,7 @@ def test_config_files_and_disable(cv: Converge) -> None:
     ids = {(r[0], r[1]) for r in rows}
     assert ("find", "gated-path") in ids
     assert ("attack", "boundary") not in ids and ("decide", "precedent") not in ids
+    assert [r[1] for r in _rows(cv, "--tag", "find")] == ["gated-path"]
 
 
 def test_init_rejects_unknown_angle_use(cv: Converge) -> None:
