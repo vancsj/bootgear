@@ -38,7 +38,7 @@ When a change affects such a behavior, the same change must update the test case
 The reviewer must compare the test cases of the two hosts for the same behavior.
 
 ## R007 [must]
-Built-in state machines, angle files, and skills must not name a skill, path, or convention that is specific to one project.
+Built-in state machines, angle files and skills must not name a skill, path or convention specific to one project.
 Put project-specific items in `.bootgear/config/`.
 
 ## R008 [must]
@@ -52,7 +52,7 @@ An input then cannot change the flags that the checked program sees.
 ## R010 [must]
 An AI caller can use a subcommand incorrectly. The usage errors are: an unknown subcommand, a missing required option, or a value outside a fixed set (for example a role or a kind).
 In these cases, the subcommand must print the error. It must also print one correct example of that subcommand and a short list of the other subcommands.
-Out of scope: made-up values and edge-case values. Examples are malformed numbers, odd flag orders, abbreviations, and hand-edited state. Do not report a claim that needs one of these.
+Made-up values and edge-case values are out of scope. Examples are malformed numbers, odd flag orders, abbreviations and hand-edited state. Do not report a claim that needs one of these.
 
 ## R011 [must]
 A CLI can find more than one problem of the same kind, for example bad entries in a list. The CLI must report all of them in one grouped message. The message must name each offending item.
@@ -65,8 +65,8 @@ A Codex wrapper script must pass prose, unless the caller asked for JSON.
 
 ## R013 [must]
 A subcommand that completes a workflow step must end its output with the next step. The next step is the next command or the decision to make. Write it on one line. In JSON, write it as a `next` field.
-You must write the `next` line for the role that the subcommand is designed for: the user, the main agent, or a role agent. The `next` line must name only a step that this role can do. The script does not have to detect who runs it.
-If the next step belongs to another role, the `next` line must tell the caller to hand that step to that role. Example: a subcommand for a role agent tells the role agent to report the next step to the main agent. It does not give the main agent a command.
+You must write the `next` line for the role the subcommand serves: the user, the main agent or a role agent. The `next` line must name only a step that this role can do. The script does not have to detect who runs it.
+If another role owns the next step, the `next` line must tell the caller to hand it to that role. Example: a subcommand for a role agent tells the role agent to report the next step to the main agent. It does not give the main agent a command.
 Show the reminder only when it changes what the caller does next.
 Remove a skill line that repeats the per-step detail that the CLI prints (command, branches, gates).
 Keep the overall workflow outline in the skill.

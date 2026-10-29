@@ -4,7 +4,7 @@ severities: [must, should]
 cutoff: must
 
 ## R001 [must]
-You must verify a claimed fix or behavior change. Run the relevant check and read its real output.
+You must verify a claimed fix or behavior change. Run the relevant check. Read its real output.
 Do not state the result from a reading of the code only.
 
 ## R002 [must]
@@ -20,6 +20,6 @@ A bug fix must start with a test that reproduces the bug.
 The test must fail before the fix. The test must pass after the fix.
 
 ## R005 [must]
-You must check a change to how a plugin is installed, loaded, or cached in a fresh host session on each affected host.
+You must check a change to how a plugin is installed, loaded or cached. Check it in a fresh host session on each affected host.
 You must record the real output.
 Such a change can be to the manifest, dependencies, hooks, `bin/` script wrappers, or marketplace entries.
