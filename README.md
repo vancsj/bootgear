@@ -119,8 +119,8 @@ differ (see [Codex CLI](#codex-cli)).
 | [engine](plugins/engine) | an autonomous task-execution loop — start a run with `/engine:start` (Codex: `$engine:start`); installs `converge`, `spec`, `test`, `review`, `advisor` and `memory-ledger` with it |
 | [converge](plugins/converge) | settles the facts behind a findings slate: find, refute, and cut each claim with separate agents, then compute what is reported; installs `memory-ledger` and `advisor` with it, and is installed automatically with `engine` and `review` |
 | [review](plugins/review) | PR review: lens finders and a gap hunt, with every finding settled through `converge`; installs `converge` with it |
-| [spec](plugins/spec) | requirements and design for `engine`'s ticket-writing and ticket-to-pr runs; works on its own too |
-| [test](plugins/test) | test writing, running, and failure triage for `engine`'s bug-triage and ticket-to-pr runs; works on its own too |
+| [spec](plugins/spec) | requirements and design for `engine`'s design-doc and ticket-to-pr runs. It works on its own too. |
+| [test](plugins/test) | test writing, running, and failure triage for `engine`'s triage and ticket-to-pr runs; works on its own too |
 | [advisor](plugins/advisor) | pairs Claude Code and Codex CLI through a shared mailbox, or makes a one-shot call to Codex |
 | [deputy](plugins/deputy) | answers a judgement question from your recorded decisions, or escalates it to you, and reminds the AI to ask it before it asks you; installs `memory-ledger` with it on Claude Code, and needs `memory-ledger` installed on Codex |
 

@@ -132,7 +132,7 @@ class ClaudePackageContractTest(unittest.TestCase):
 
     def _machine_validate(self, nodes: str, skills: str):
         settlement = (
-            "task_type: pr-review\napproach: fixture\nprinciples: none\n"
+            "task_type: change-review\napproach: fixture\nprinciples: none\n"
             "goal:\n  succeeded: done\n  failed: never\n"
             f"state_machine: |\n  name: fixture\n  nodes:\n{nodes}"
             "request_assessment: fixture\nsource_of_truth:\n  scope: fixture\n"

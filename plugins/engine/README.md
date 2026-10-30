@@ -39,7 +39,7 @@ flowchart TD
 | Item | What it fixes |
 |---|---|
 | Request assessment | observed scope, a `small`/`medium`/`large` estimate and the files or commands behind it |
-| Task type | exactly one of `ticket-writing`, `bug-triage`, `ticket-to-pr`, `pr-review` |
+| Task type | exactly one of `ticket-writing`, `ticket-to-pr`, `triage`, `change-review`, `design-doc` |
 | State machine | the workflow graph for this run, validated and shown to you as a diagram |
 | Approach and principles | the concrete steps, and the run-wide constraints (merged with project and user principles; `clarify` also reads the project's review and test standards) |
 | Source of truth, per domain | who decides scope and outcome, current behaviour, implementation approach, correctness |
@@ -98,10 +98,11 @@ findings included. You approve every `leave_check` command at `clarify`.
 
 | Task type | Built-in path |
 |---|---|
-| `ticket-writing` | inspect → spec → spec-review → succeeded |
-| `bug-triage` | inspect → triage → (triage-debate) → succeeded |
+| `ticket-writing` | inspect → ticket → ticket-review → (ticket-debate) → succeeded |
 | `ticket-to-pr` | inspect → spec → spec-review → impl → test-code → (e2e-test, fix) → review → delivery → succeeded |
-| `pr-review` | inspect → review → (review-debate, fix) → succeeded |
+| `triage` | inspect → triage → triage-review → (triage-debate) → triage-gate → succeeded |
+| `change-review` | inspect → review → (review-debate, fix) → succeeded |
+| `design-doc` | inspect → spec → spec-review → (spec-debate) → succeeded |
 
 A project can replace a built-in machine wholesale with
 `.bootgear/config/state-machine-<task_type>.yaml`, and `clarify` can adjust it for one run —
@@ -167,8 +168,10 @@ so they are listed by skill name rather than as a command to type.
 The CLI underneath is `bin/task` (`scripts/task` in the Codex build), run through `uv`:
 
 ```
-task session   init · validate · read · record-decision · next-question-id · update-todo · record-pitch · close
+task session   init · validate · read · record-decision · next-question-id · update-todo · record-pitch · write-ticket · close
                (Codex build also: recall)
+task session write-ticket <run-id> --dir <session-dir> --body-file <file>
+               writes the run's ticket body; the only writer of ticket_path
 task state     transition · current · amend · show · validate · diagram
 task config    resolve layered config, such as the debate-party roster
 ```

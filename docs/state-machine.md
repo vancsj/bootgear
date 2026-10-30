@@ -61,7 +61,7 @@ Every non-terminal node can move to `failed`, even though no `next:` list names 
 
 `clarify` resolves the machine once, before it writes the settlement:
 
-1. **Built-in**: `plugins/engine/state-machines/<task_type>.yaml`. There is one for each task type: `ticket-writing`, `bug-triage`, `ticket-to-pr` and `pr-review`. Each starts with `clarify -> inspect`. Every `review` node carries the `converge gate` `leave_check`, and every `fix` node, plus `review-debate` in `pr-review`, sets `max_visits` so the review and fix loops end.
+1. **Built-in**: `plugins/engine/state-machines/<task_type>.yaml`. There is one for each task type: `ticket-writing`, `ticket-to-pr`, `triage`, `change-review` and `design-doc`. The files are `ticket-writing.yaml`, `ticket-to-pr.yaml`, `triage.yaml`, `change-review.yaml` and `design-doc.yaml`. Each starts with `clarify -> inspect`. Every `review` node carries the `converge gate` `leave_check`, and every `fix` node, plus `review-debate` in `change-review`, sets `max_visits` so the review and fix loops end.
 2. **Project**: `.bootgear/config/state-machine-<task_type>.yaml`. When this file exists, it replaces the built-in machine completely. It is not merged. People own it, and no skill writes it.
 3. **Per-run**: `clarify` can adjust the resolved machine for this run. For example, it can drop `fix` from a review of someone else's PR. It validates the result, shows the diagram and every `leave_check` argv for the user to approve, and records the complete machine in the settlement's `state_machine: |` block scalar.
 

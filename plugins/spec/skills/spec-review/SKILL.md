@@ -19,13 +19,13 @@ Hand back to the caller (`execute` in an active run, the user standalone) `block
 - `deferred`: claim IDs with text; implementation-level claims for the review stage.
 - `follow-up`: all other follow-up claims, each labelled with its status.
 
-Branch: `choices` non-empty -> `spec-debate` (the `revise` list goes on to `spec` afterwards); else `revise` non-empty -> `spec`; else `ready`: `inline` non-empty -> `spec` (the author applies the `inline` patches, no new slate), which then goes straight to implementation or ticket delivery; `inline` empty -> implementation or ticket delivery. `ready` holds when `revise` and `choices` are empty and the gate passes.
+Branch: per the machine in force (`task state show`), `choices` non-empty -> the debate node (the `revise` list then goes to the drafting node); else `revise` non-empty -> the drafting node; else `ready`: `inline` non-empty -> the drafting node (it applies the `inline` patches, no new slate, then leaves through its inline exit), which then goes straight to implementation or ticket delivery; `inline` empty -> implementation or ticket delivery. `ready` holds when `revise` and `choices` are empty and the gate passes.
 
 In an active engine run, leave only through the current state-machine branch. A `ready` result is the only result that permits implementation or final ticket delivery.
 
 ## Workflow
 
-Check for an override → collect inputs → `init` the slate with the cutoff table → find, gap hunt, escalate, cut and attack with fresh converge roles → render and map → hand back `blocked` or the lists. `choices` go to `spec-debate` and back through `spec`; `revise` goes back to `spec`; `ready` lets implementation proceed, through `spec` first when `inline` is non-empty; every re-review is a full new slate.
+Check for an override → collect inputs → `init` the slate with the cutoff table → find, gap hunt, escalate, cut and attack with fresh converge roles → render and map → hand back `blocked` or the lists. `choices` go to the debate node and back through the drafting node; `revise` goes back to the drafting node; `ready` lets implementation proceed, through the drafting node first when `inline` is non-empty; every re-review is a full new slate.
 
 ## Procedure
 

@@ -2,7 +2,7 @@
 """Unified engine command line.
 
     task session init|validate|read|record-decision|update-todo|next-question-id|
-                 record-pitch|close ...
+                 record-pitch|close|write-ticket ...
     task state   transition|current|amend|show|validate|diagram ...
 
 `session` is the ledger (settlement, decisions, todos, pitches, close) —
@@ -30,6 +30,8 @@ EXAMPLES = {
     "session record-pitch": ('session record-pitch <run-id> --dir <session-dir> '
                              '"<what changed>"'),
     "session close": "session close <run-id> --dir <session-dir> succeeded",
+    "session write-ticket": ("session write-ticket <run-id> --dir <session-dir> "
+                             "--body-file <file>"),
     "state transition": ('state transition <run-id> --dir <session-dir> --to <node> '
                          '--reason "<why>"'),
     "state amend": ('state amend <run-id> --dir <session-dir> --machine-file '

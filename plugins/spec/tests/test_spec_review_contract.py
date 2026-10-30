@@ -17,10 +17,10 @@ DESIGN_PATTERN_IDS = {
     "config-sprawl",
 }
 MACHINES = (
-    REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-writing.yaml",
-    REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-to-pr.yaml",
-    REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-writing.yaml",
-    REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-to-pr.yaml",
+    (REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-writing.yaml", "ticket-review"),
+    (REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-to-pr.yaml", "spec-review"),
+    (REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-writing.yaml", "ticket-review"),
+    (REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-to-pr.yaml", "spec-review"),
 )
 EXECUTE_SKILLS = (
     REPO_ROOT / "plugins" / "engine" / "skills" / "execute" / "SKILL.md",
@@ -96,9 +96,9 @@ class SpecReviewContractTest(unittest.TestCase):
     def test_iteration_cap_equals_the_state_machines_max_visits(self):
         match = CAP_CLAUSE.search(_skill())
         self.assertIsNotNone(match, "SKILL.md has no iteration-cap clause")
-        for machine in MACHINES:
+        for machine, review_node in MACHINES:
             nodes = yaml.safe_load(machine.read_text())["nodes"]
-            self.assertEqual(nodes["spec-review"]["max_visits"], int(match.group(1)), machine)
+            self.assertEqual(nodes[review_node]["max_visits"], int(match.group(1)), machine)
 
     def test_codex_twin_matches_the_claude_skill(self):
         claude, codex = (

@@ -1,9 +1,12 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 MANIFEST = PLUGIN_DIR / ".codex-plugin" / "plugin.json"
@@ -126,6 +129,13 @@ class CodexPackageContractTest(unittest.TestCase):
             self.assertLess(script.index("BOOTGEAR_PROG"), script.index("exec "))
 
         machine = PLUGIN_DIR / "state-machines" / "ticket-writing.yaml"
+        nodes = yaml.safe_load(machine.read_text())["nodes"]
+        self.assertNotIn("spec", nodes)
+        for name, node in nodes.items():
+            self.assertNotIn("spec", node.get("next", []), name)
+            # The text after "Does not:" may name spec to forbid it.
+            do = ((node.get("reminder") or {}).get("do") or "").split("Does not:")[0]
+            self.assertIsNone(re.search(r"(?<![\w-])spec(?![\w-])", do), f"{name}: {do}")
         env = {k: v for k, v in os.environ.items()
                if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "VIRTUAL_ENV")}
 
@@ -180,7 +190,7 @@ class CodexPackageContractTest(unittest.TestCase):
 
     def _machine_validate(self, nodes: str, skills: str):
         settlement = (
-            "task_type: pr-review\napproach: fixture\nprinciples: none\n"
+            "task_type: change-review\napproach: fixture\nprinciples: none\n"
             "goal:\n  succeeded: done\n  failed: never\n"
             f"state_machine: |\n  name: fixture\n  nodes:\n{nodes}"
             "request_assessment: fixture\nsource_of_truth:\n  scope: fixture\n"

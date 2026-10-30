@@ -19,12 +19,12 @@
     {
       "name": "spec",
       "source": "./plugins/spec",
-      "description": "Requirements and independent spec-review skill for engine's ticket-writing and ticket-to-pr task types. Works standalone or as an engine peer, overridable per project."
+      "description": "Requirements and independent spec-review skill for engine's design-doc, ticket-to-pr and ticket-writing task types. Works standalone or as an engine peer, overridable per project."
     },
     {
       "name": "test",
       "source": "./plugins/test",
-      "description": "Default test-writing, running, and triage skill for engine's bug-triage and ticket-to-pr task types. Works standalone or as an engine peer, overridable per project."
+      "description": "Default test-writing, running, and triage skill for engine's triage and ticket-to-pr task types. Works standalone or as an engine peer, overridable per project."
     },
     {
       "name": "converge",
@@ -34,7 +34,7 @@
     {
       "name": "review",
       "source": "./plugins/review",
-      "description": "Default PR-review skill for engine's pr-review task type: lens finders, a gap hunt, and converge's refute/cut stages, reported from the converge ledger. Depends on converge (installed automatically). Works standalone or as an engine peer, overridable per project."
+      "description": "Default PR-review skill for engine's change-review task type: lens finders, a gap hunt, and converge's refute/cut stages, reported from the converge ledger. Depends on converge (installed automatically). Works standalone or as an engine peer, overridable per project."
     },
     {
       "name": "advisor",

@@ -72,5 +72,5 @@ On Codex CLI, `test` has no separate install: it is bundled into the Codex `engi
 
 `test` works on its own and needs nothing else from bootgear. Installed with `engine`, it
 runs the `test-code` and `e2e-test` nodes of `ticket-to-pr` runs and reproduces the report in
-the `triage` node of `bug-triage` runs. Its report feeds `execute`'s todo updates and goal
+the `triage` node of `triage` runs. Its report feeds `execute`'s todo updates and goal
 check; `test` never decides whether the broader task is complete.

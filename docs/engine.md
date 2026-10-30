@@ -1,7 +1,8 @@
 # engine
 
-`engine` drives one coding task (ticket writing, bug triage, ticket-to-PR, PR
-review) from the user's framing to a `succeeded` or `failed` end, unattended
+`engine` drives one coding task (ticket writing, design docs, triage,
+ticket-to-PR, change review) from the user's framing to a `succeeded` or
+`failed` end, unattended
 after a single clarification stage. The loop is generic; projects customize it
 through configuration and registered skills, never by editing the loop.
 
@@ -47,8 +48,11 @@ start -> clarify --(goal confirmed, settlement written)--> execute
 
 Written once by `clarify` into the session ledger and never rewritten. It holds:
 
-- `task_type` (one of `ticket-writing`, `bug-triage`, `ticket-to-pr`,
-  `pr-review`), `request_assessment`, and the complete resolved `state_machine`;
+- `task_type` (one of `ticket-writing`, `ticket-to-pr`, `triage`,
+  `change-review`, `design-doc`), `request_assessment`, and the complete
+  resolved `state_machine`;
+- `triage_cutoff` (`product` or `one-user`), required for a `triage` run;
+- `work_dir` (an absolute path or a path that starts with `~`), required for a `design-doc` run;
 - `approach` (workflow steps) and `principles` (run-wide constraints);
 - `source_of_truth` per domain: scope and outcome, current behavior,
   implementation approach, correctness;
@@ -75,6 +79,8 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `review_skill`,
   `debate_roster`, `debate_admission`, `review_fix_mode`;
 - `goal` and `session_dir` (written by `init` as the resolved absolute path).
+
+`ticket_path` and `owned_artifacts` are not settlement fields. `session write-ticket` writes them to the run ledger, and `init` refuses them in the settlement.
 
 A user-requested change is a `solo` decision `AMENDMENT <field>: <old> -> <new>`;
 the latest valid one wins from the next recall. `state_machine` changes only

@@ -1,0 +1,63 @@
+name: triage
+description: "Bootgear triage workflow with evidence and disposition gates. Input: one reported problem. Output: cause, impact, confidence and next action. Not for implementation. That is ticket-to-pr."
+
+nodes:
+  clarify:
+    reminder:
+      do: "Settle the run with the clarify skill."
+      leave: "The settlement is written to the run ledger and the goal is confirmed."
+    next: [inspect]
+  inspect:
+    reminder:
+      do: "Inspect the report, the relevant code, tests and contracts, and the settled context. Record the evidence that the diagnosis needs. Input: the report. Output: the evidence in the run ledger. Does not: draft cause claims or implement a fix."
+      leave: "The report context, relevant evidence, and open unknowns are recorded in the run ledger."
+      branches:
+        triage: "The evidence is sufficient to diagnose the report."
+    next: [triage]
+  triage:
+    max_visits: 5
+    reminder:
+      do: "Reproduce each cause claim with test. Give each claim a reproduction command and its real output. Draft cause claims only. On every visit, write the report file `<session-dir>/<run-id>.triage-report.md`: a `## Claims` table with the columns `id | claim | tier | command | output`, then the headings `## Cause`, `## Impact`, `## Confidence` and `## Next action`. Give the rows the ids F001, F002 and on, in order. Write a row for every cause on the first visit. A later visit cannot add a cause claim. A cause that the first visit misses stays out of this run. On a later visit, revise or test again only the rows of the first visit. Keep the id of each row. Add no row. Set each `tier` cell to `reproduced`. In a cell, write a line break as `<br>` and a `|` as `\\|`. Input: the report and `triage_cutoff`. Output: the claims and the report file. Does not: implement a fix."
+      leave: "Each cause claim has a reproduction command and its real output, and the report file is written on this visit."
+      branches:
+        triage-review: "The claims are drafted, revised or debated."
+    next: [triage-review]
+  triage-review:
+    max_visits: 5
+    reminder:
+      do: "Run converge on a new claim slate `<run-id>-triage-review-<n>` in `<session-dir>/converge`. `<n>` counts this run's triage-review visits from 1. Each visit uses a new slate, and no slate changes after its visit. Use a finder, a refuter and a cutter, each a separate agent. The finder files each row of the current `## Claims` table as one claim, in row order, with the row's claim text, and puts the row's command and output in the evidence. The refuter re-runs each quoted reproduction command and records it as an attack under angle `reproduction-rerun`. Each role brief names `.bootgear/config/principles.md` and each standard file present in `.bootgear/config/`. The main role writes only `init`. Pass these to `converge init`: `--defaults` with `.bootgear/config/cutoff-<triage_cutoff>.yaml` when present, else `<engine-root>/references/cutoff-<triage_cutoff>.yaml`; `--lenses default`; `--angles <engine-root>/references/angles-triage.yaml`; `--settlement <file>`. Write that file with `task session read <run-id> --dir <session-dir> --section settlement --prose > <file>`, so that `r2` seats as `advisor`. Record the slate with `task session record-decision <run-id> --dir <session-dir> --mode solo --summary \"triage slate <slate> converge_dir=<converge-dir>\"`. A row keeps the id of its first-visit row. A later visit cannot add a cause claim, and the gate refuses a new row id. A cause that the first visit misses stays out of this run. If the cause changes, start a new run. Does not: draft claims, write the report or resolve choices."
+      leave: "The converge pass on the slate is complete, and its render and slate name are recorded in the run ledger."
+      branches:
+        triage: "A claim is refuted or needs a revision."
+        triage-debate: "Choice claims remain."
+        triage-gate: "No revisions and no choices remain."
+    next: [triage, triage-debate, triage-gate]
+  triage-debate:
+    reminder:
+      do: "Resolve the choice claims with the public resolve skill. Use the public debate skill when resolve escalates. Record the decision. Does not: revise evidence or run converge."
+      leave: "The decision is recorded in the run ledger with mode resolve or debate."
+      branches:
+        triage: "The decision is recorded."
+    next: [triage]
+  triage-gate:
+    reminder:
+      do: "Gate the final report. The gated slate is named by the latest decision in the run ledger that starts with `triage slate`. The base slate is `<run-id>-triage-review-1`. The leave check runs `converge gate --kind triage --base-slate` on the gated slate, the base slate and the report file `<session-dir>/<run-id>.triage-report.md`. When you leave, pass `--leave-arg slate=<gated slate> --leave-arg base_slate=<run-id>-triage-review-1 --leave-arg converge_dir=<session-dir>/converge --leave-arg report=<session-dir>/<run-id>.triage-report.md`. If the gate refuses, move to `failed` and name the gate problems in the reason. Input: the gated slate, the base slate and the report file. Output: the gate result. Does not: revise claims, edit the report or resume the slate."
+      leave: "`converge gate --kind triage` exited 0 for the gated slate, the base slate and the report."
+      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}", --kind, triage, --base-slate, "{base_slate}", --report, "{report}"]
+      branches:
+        disposition: "The gate passed."
+    next: [disposition]
+  disposition:
+    reminder:
+      do: "Record the cause or unresolved status, impact, confidence, owner or next action, and supporting evidence."
+      leave: "The cause or unresolved status, impact, confidence, owner or next action, and supporting evidence are recorded in the run ledger."
+      branches:
+        succeeded: "The evidence-based triage disposition is recorded without implementation or delivery work."
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+
+# Any node may transition to failed; this cross-cutting rule is not repeated
+# in every node's next: list.

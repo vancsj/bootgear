@@ -37,19 +37,30 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Later nodes reassess scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
 
-2. **Task type** — record exactly one of the four v1 values:
-   - `ticket-writing` — requirement spike
-   - `bug-triage`
-   - `ticket-to-pr`
-   - `pr-review`
+2. **Task type** — record exactly one of the five values:
+   - `ticket-writing` — an issue body, with no design.
+   - `ticket-to-pr` — implement a ticket.
+   - `triage` — one reported problem.
+   - `change-review` — a change already made.
+   - `design-doc` — requirements and design, with no task list.
 
-   Compare `task_type` literally. Do not match it by description. Do not record another spelling or a paraphrase.
+   Show the node reminders of each machine before the type pick.
+
+   A request to review a draft is not a task type. Refuse it. Point the user to `spec-review`. `design-doc` writes its own requirements and design and does not review drafts.
+
+   Pick `task_type` by matching the request to the machine descriptions and node reminders. Do not record another spelling or a paraphrase.
+
+   If two types fit, ask the user which one. Do not choose silently.
 
    If none fits, tell the user, choose the closest value, and record the mismatch.
 
+   If `task_type` is `triage`, settle `triage_cutoff`: `one-user` only when the request says the target is a single user, a single-user install or a single customer; otherwise `product`.
+
+   If `task_type` is `design-doc`, settle `work_dir`. For a design-doc run, `work_dir` is required. It is an absolute path or a path that starts with `~`.
+
 3. **State machine** — resolve the run's `state_machine` settlement field before drafting `goal`. Follow these override tiers exactly:
    1. Resolve the built-in machine for `<task_type>` and tier 2 (`.bootgear/config/state-machine-<task_type>.yaml`, if present — wholly replaces tier 1 for this task type).
-   2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `pr-review` of a PR the user did not author, remove the `fix` node and every `next:` entry and `reminder.branches` key naming it, unless the user asks to push fixes to that PR.
+   2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `change-review` of a change the user did not author, remove the `fix` node. The user authored the change when its git author matches the user's git identity. The git author is the author of the branch commits or the diff. For a PR, it is the PR author. A mismatch or a missing author means the user did not author the change. Remove every `next:` entry and `reminder.branches` key that names it. Keep the fix node when the user asks to push fixes to the change.
    3. Run `task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
    4. Run `task state diagram <path>` on the same resolved machine.
    5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
@@ -66,7 +77,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - implementation approach — use this settlement's stated approach by default
    - correctness once implemented — use tests and verification run after the change by default
 
-   Adjust domains to the task type. Omit an implementation-approach domain for bug triage when it is not needed.
+   Adjust domains to the task type. Omit an implementation-approach domain for triage when it is not needed.
 
 6. **Debate threshold** — a decision that `resolve` cannot settle goes to `debate` when any of these holds: (a) undoing it takes more than one revert, or it changes shared state; (b) it reaches more than one person or customer; (c) it touches money, legal, security or data-loss; (d) any of (a) to (c) is unknown. Otherwise it is solo: reversible by one revert, confined to one component or file, and none of (a) to (d) applies. Record each answer with the decision. A `resolve` settled by a source of truth is always solo. Never send this item to `deputy:ask`: the deputy has no threshold to judge against.
 
@@ -82,9 +93,10 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - **Permitted mutations** — ask which actions `execute` may take without asking again, including commit, push, open a PR, edit the ticket, post review comments, merge, and force-push. Require a specific list. Do not accept "go ahead autonomously" as the list.
 
 8. **Domain-skill overrides** — map task types to domain skills as follows:
-   - ticket writing uses `spec`
-   - ticket-to-PR and bug triage use `test`
-   - PR review uses `review`
+   - `design-doc` uses `spec`.
+   - `ticket-writing` drafts without a skill and reviews with `spec-review`.
+   - `ticket-to-pr` and `triage` use `test`.
+   - `change-review` uses `review`.
 
    Ask whether the project has a specialized skill for every domain the task type calls.
 
@@ -105,7 +117,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
    Write:
-   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `pr-review` run records `review_skill` alone.
+   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `change-review` run records `review_skill` alone. A `design-doc` run records `spec_skill`. A `ticket-writing` run records `spec_review_skill`.
      - **Bare `<skill-name>`** when the override or its absence names one skill. Use the override, or the general default (`spec`, `test`, `review`) when absent.
      - **`{sub-task-label: <skill-name>}` mapping** when the override is a mapping. Mirror it exactly.
 
@@ -158,7 +170,7 @@ After confirmation:
 
 4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
-Include at least: `task_type`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
+Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 

@@ -428,13 +428,13 @@ class StateAmendTest(unittest.TestCase):
 
 
 class PrReviewWalkTest(unittest.TestCase):
-    """The built-in pr-review graph, leave gates stripped: every fix has a
+    """The built-in change-review graph, leave gates stripped: every fix has a
     legal edge back to review, and fix's own max_visits bounds the loop."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="engine-state-pr-review-walk-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="engine-state-change-review-walk-"))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        machine = yaml.safe_load((PLUGIN_DIR / "state-machines" / "pr-review.yaml").read_text())
+        machine = yaml.safe_load((PLUGIN_DIR / "state-machines" / "change-review.yaml").read_text())
         for node in machine["nodes"].values():
             reminder = node.get("reminder") or {}
             reminder.pop("leave", None)

@@ -16,8 +16,10 @@ factual dispute never goes to debate.
 | `plugins/converge/skills/converge/` | Orchestration skill (roles, steps, outcomes) |
 | `codex-plugins/engine/` | Codex copy: `src/converge/`, `scripts/converge`, `skills/converge/` |
 
-Callers: `review` runs every finding through a slate; the engine `pr-review` and
-`ticket-to-pr` machines gate their `review` node on `converge gate`; engine `debate` hands
+Callers: `review` runs every finding through a slate; the engine `change-review` and
+`ticket-to-pr` machines gate their `review` node on `converge gate`; the engine `triage`
+machine gates its `triage-gate` node on `converge gate --kind triage --report <absolute
+file> --base-slate <first visit's slate>`; engine `debate` hands
 factual disputes back, briefs parties with the render, and draws its closing angle round from
 the `decide` and `attack` angles.
 
@@ -204,9 +206,12 @@ flowchart LR
   older than this slate's last `cutoff` event before its first `fix-check`, and no claim
   with `cut: no` that is not killed. The event makes the cutoff stale.
 - `converge gate <slate> --dir <abs>` exits 0 only when every lens has full coverage, no
-  claim is open, and the cutoff is current; it does not require convergence. It requires an
-  absolute `--dir`. The engine runs it as the review node's `leave_check` (see
-  [state-machine.md](state-machine.md)).
+  claim is open, and the cutoff is current; it does not require convergence. Its triage form,
+  `converge gate <slate> --dir <abs> --kind triage --report <absolute file> [--base-slate <slate>]`,
+  also requires the triage checks on the report to pass. With `--base-slate`, every report row
+  must name a claim of that slate. Each triage visit uses a new slate. It requires an absolute
+  `--dir`. The engine runs it as
+  the `review` or `triage-gate` node's `leave_check` (see [state-machine.md](state-machine.md)).
 - `converge converged` exits 0 when the slate is done and no claim is `disputed` with
   `cut: no`; otherwise it lists the open and disputed claims.
 - `render` builds Markdown from the ledger alone: a summary line

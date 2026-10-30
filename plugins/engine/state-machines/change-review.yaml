@@ -1,5 +1,5 @@
-name: pr-review
-description: Pull-request review workflow with findings and decision gates.
+name: change-review
+description: "Review a change already made: a PR, PR stack, branch or diff. Input: the change target. Output: findings and their disposition. Not for a draft before work starts. That is spec-review."
 
 nodes:
   clarify:
@@ -9,14 +9,14 @@ nodes:
     next: [inspect]
   inspect:
     reminder:
-      do: "Inspect the pull request, ticket, changed files, tests, contracts, and settled context; record the evidence before review."
+      do: "Inspect the change target: a PR, PR stack, branch or diff. Also inspect the ticket, changed files, tests, contracts and settled context. Record the evidence before review. For a PR stack, inspect each PR in base-to-top order and record the evidence per PR. Input: the change target. Output: the evidence in the run ledger. Does not: review or fix the change."
       leave: "The reviewed scope, relevant evidence, and open unknowns are recorded in the run ledger."
       branches:
-        review: "The evidence is sufficient to review the pull request."
+        review: "The evidence is sufficient to review the change."
     next: [review]
   review:
     reminder:
-      do: "Review the change with review; it runs converge on every finding."
+      do: "Review the change with review; it runs converge on every finding. For a PR stack, review each PR in base-to-top order and report the findings per PR. Does not: apply fixes."
       leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
       leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:

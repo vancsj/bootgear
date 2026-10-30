@@ -1,0 +1,11 @@
+cutoff:
+  cheap: {enabled: false}
+  lenses:
+    default:
+      # The last rule attacks every cause claim, so each one gets its reproduction-rerun attack.
+      attack_if:
+        - {reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}
+        - {reach: [unreachable], impact: [security, data-loss, wrong-output]}
+        - {reach: [normal, crafted, unreachable]}
+      report_if: [{status: [survived, disputed], reach: [normal, crafted], impact: [security, data-loss, wrong-output, clarity]}]
+steps: {gap_hunt: false}

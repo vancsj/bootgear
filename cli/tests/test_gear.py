@@ -26,7 +26,7 @@ class RepoRegistrationTests(unittest.TestCase):
 
     def test_routed_child_follows_caller_stdout(self) -> None:
         # gear.py sets no output mode: both sinks default to prose.
-        machine = REPO / "plugins" / "engine" / "state-machines" / "pr-review.yaml"
+        machine = REPO / "plugins" / "engine" / "state-machines" / "change-review.yaml"
         argv = [sys.executable, str(GEAR), "engine", "task", "state", "validate", str(machine)]
         env = {k: v for k, v in os.environ.items() if k not in ("BOOTGEAR_OUTPUT", "VIRTUAL_ENV")}
 

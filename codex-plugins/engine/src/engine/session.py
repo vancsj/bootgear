@@ -15,6 +15,7 @@ many-compaction run.
     update-todo       toggle a todo's done state in place
     record-pitch      append a pitches line
     close             mark the ledger closed (succeeded or failed)
+    write-ticket      write the run's ticket body; the only writer of ticket_path
 
 A sixth, optional section, `## machines`, follows `## state`: the run's
 mid-run state machine amendments, written only by `state amend`.
@@ -32,6 +33,7 @@ not just that one question. There is no per-question isolation today.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -43,7 +45,7 @@ from pathlib import Path
 import yaml
 
 from engine import seats
-from engine.clikit import ENV_PROG, caller_path, emit, refuse
+from engine.clikit import ENV_PROG, caller_cwd, caller_path, emit, refuse
 
 PROG = "task"
 SECTIONS = ["settlement", "decisions", "todos", "pitches", "state"]
@@ -345,7 +347,16 @@ def _check_no_embedded_heading(body: str, label: str) -> None:
                   f"real ledger structure")
 
 
-TASK_TYPES = {"ticket-writing", "bug-triage", "ticket-to-pr", "pr-review"}
+TASK_TYPES = {"ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc"}
+TRIAGE_CUTOFFS = ("product", "one-user")
+# The one-user profile is a project override, read under the caller's project root.
+ONE_USER_CUTOFF = Path(".bootgear") / "config" / "cutoff-one-user.yaml"
+TICKET_FILE = "issue.md"
+# Run-ledger fields that only `session write-ticket` writes.
+VERB_OWNED_FIELDS = ("ticket_path", "owned_artifacts")
+# The five parts of a ticket body; each needs a Markdown heading with this text.
+TICKET_HEADINGS = ("Problem", "Outcome", "Acceptance criteria", "Scope", "Verification notes")
+HEADING_LINE_RE = re.compile(r"^#{1,6}[ \t]+(?P<text>.*?)[ \t]*$")
 ENGINE_SKILLS = {"clarify", "execute", "resolve", "debate", "recall"}
 SKILL_FIELDS = ("spec_skill", "test_skill", "review_skill")
 # The state-machine nodes that call each skill field.
@@ -377,7 +388,103 @@ def _required_skill_fields(machine_text) -> set[str]:
     return {field for field, field_nodes in SKILL_FIELD_NODES.items() if nodes & set(field_nodes)}
 
 
-def _validate_settlement(body: str, run_id: str, session_dir: Path) -> tuple[list[tuple[str, str]], dict]:
+def _triage_cutoff_problems(data: dict, task_type: object,
+                            project_root: Path) -> list[tuple[str, str]]:
+    """A triage run needs `triage_cutoff`; any other type refuses it. `one-user`
+    needs the project's own cutoff file."""
+    if "triage_cutoff" not in data:
+        if task_type == "triage":
+            return [("triage_cutoff",
+                     f"is required for a triage run: {' or '.join(TRIAGE_CUTOFFS)}")]
+        return []
+    value = data["triage_cutoff"]
+    problems: list[tuple[str, str]] = []
+    if task_type != "triage":
+        problems.append(("triage_cutoff", f"only a triage run has one, not {task_type!r}"))
+    if value not in TRIAGE_CUTOFFS:
+        problems.append(("triage_cutoff",
+                         f"must be one of: {', '.join(TRIAGE_CUTOFFS)}, got {value!r}"))
+    elif value == "one-user" and task_type == "triage":
+        cutoff_file = project_root / ONE_USER_CUTOFF
+        if not cutoff_file.is_file():
+            problems.append(("triage_cutoff", f"'one-user' needs {cutoff_file}, which is absent"))
+    return problems
+
+
+def _has_line_break(value: str) -> bool:
+    return "\n" in value or "\r" in value
+
+
+def _work_dir_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
+    """A design-doc run needs `work_dir`; any `work_dir` is an absolute or `~` path."""
+    if "work_dir" not in data:
+        if task_type == "design-doc":
+            return [("work_dir", ("is required for a design-doc run: an absolute path "
+                                  "or a path that starts with '~'"))]
+        return []
+    value = data["work_dir"]
+    if (isinstance(value, str) and value.strip() and not _has_line_break(value)
+            and os.path.isabs(os.path.expanduser(value))):
+        return []
+    return [("work_dir", "must be an absolute path or start with '~'")]
+
+
+def _ticket_path(run_id: str, session_dir: Path) -> Path:
+    """The one path a run's ticket body can have."""
+    return session_dir / f"{run_id}.artifacts" / TICKET_FILE
+
+
+def _ticket_path_problems(value: object, task_type: object, run_id: str,
+                          session_dir: Path) -> list[tuple[str, str]]:
+    problems: list[tuple[str, str]] = []
+    if task_type != "ticket-writing":
+        problems.append(("ticket_path", f"only a ticket-writing run has one, not {task_type!r}"))
+    if not isinstance(value, str):
+        return [*problems, ("ticket_path", "must be a path string")]
+    if not value.strip():
+        problems.append(("ticket_path", "must not be empty"))
+    if _has_line_break(value):
+        problems.append(("ticket_path", "must not contain a line break"))
+    if value.startswith("-"):
+        problems.append(("ticket_path", "must not start with '-'"))
+    if not os.path.isabs(value):
+        problems.append(("ticket_path", "must be an absolute path"))
+    expected = str(_ticket_path(run_id, session_dir))
+    if value != expected:
+        problems.append(("ticket_path", f"must equal {expected}"))
+    return problems
+
+
+def _owned_artifacts_problems(data: dict) -> list[tuple[str, str]]:
+    if "owned_artifacts" not in data:
+        return []
+    owned = data["owned_artifacts"]
+    if isinstance(owned, list) and all(isinstance(item, str) and os.path.isabs(item)
+                                       for item in owned):
+        return []
+    return [("owned_artifacts", "must be a list of absolute paths")]
+
+
+def _stored_owned_artifacts(path: Path) -> list[str]:
+    """The `owned_artifacts` of the ledger at `path`; exits when they cannot be read."""
+    try:
+        data = yaml.safe_load(_section_body(path.read_text(), "settlement"))
+    except yaml.YAMLError as exc:
+        sys.exit(f"cannot read owned_artifacts of {path}, refusing to overwrite it: {exc}")
+    if not isinstance(data, dict) or _owned_artifacts_problems(data):
+        sys.exit(f"cannot read owned_artifacts of {path}, refusing to overwrite it")
+    return data.get("owned_artifacts", [])
+
+
+def _verb_owned_problems(summary: dict) -> list[tuple[str, str]]:
+    """The fields of a settlement for `init` that only the write verb may write."""
+    fields = summary.get("fields", [])
+    return [(field, "is written only by `session write-ticket`; remove it from the settlement")
+            for field in VERB_OWNED_FIELDS if field in fields]
+
+
+def _validate_settlement(body: str, run_id: str, session_dir: Path,
+                         project_root: Path) -> tuple[list[tuple[str, str]], dict]:
     try:
         data = yaml.safe_load(body)
     except yaml.YAMLError as exc:
@@ -407,6 +514,11 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path) -> tuple[lis
     task_type = data.get("task_type")
     if task_type is not None and task_type not in TASK_TYPES:
         problems.append(("task_type", f"must be one of: {', '.join(sorted(TASK_TYPES))}"))
+    problems.extend(_triage_cutoff_problems(data, task_type, project_root))
+    problems.extend(_work_dir_problems(data, task_type))
+    if "ticket_path" in data:
+        problems.extend(_ticket_path_problems(data["ticket_path"], task_type, run_id, session_dir))
+    problems.extend(_owned_artifacts_problems(data))
     for field in ("request_assessment", "approach", "principles", "debate_threshold"):
         text_field(field)
 
@@ -611,6 +723,10 @@ def _init(args: argparse.Namespace) -> None:
     if path.exists() and not args.force:
         sys.exit(f"{path} already exists — settlement is written once; "
                   f"pass --force only to intentionally start over")
+    if path.exists() and (owned := _stored_owned_artifacts(path)):
+        sys.exit(f"{path} lists owned artifacts ({', '.join(owned)}) — --force is refused, "
+                 f"since it would drop the record that this run owns them; the ledger is "
+                 f"unchanged, ask the user how to proceed")
     path.parent.mkdir(parents=True, exist_ok=True)
     settlement = Path(args.settlement_file).read_text().rstrip("\n") \
         if args.settlement_file else sys.stdin.read().rstrip("\n")
@@ -635,7 +751,8 @@ def _init(args: argparse.Namespace) -> None:
     ]
     settlement_lines.append(f"session_dir: {resolved_dir}")
     settlement = "\n".join(settlement_lines)
-    problems, _ = _validate_settlement(settlement, args.run_id, path.parent)
+    problems, summary = _validate_settlement(settlement, args.run_id, path.parent, caller_cwd())
+    problems += _verb_owned_problems(summary)
     if problems:
         refuse(f"session init refused for {path}: {len(problems)} problem(s)", problems)
     text = (
@@ -665,7 +782,9 @@ def cmd_validate(args: argparse.Namespace) -> None:
             expected_dir = path.parent
     except (OSError, UnicodeError) as exc:
         sys.exit(f"cannot validate {source}: {exc}")
-    problems, summary = _validate_settlement(body, args.run_id, expected_dir)
+    problems, summary = _validate_settlement(body, args.run_id, expected_dir, caller_cwd())
+    if args.settlement_file:
+        problems += _verb_owned_problems(summary)
     if problems:
         refuse(f"session validate refused for {source}: {len(problems)} problem(s)", problems)
     emit(args.output_mode, {"run_id": args.run_id, "valid": True, "fields": summary},
@@ -1487,6 +1606,112 @@ def cmd_close(args: argparse.Namespace) -> None:
     emit(args.output_mode, {"outcome": outcome}, f"CLOSED   {outcome}")
 
 
+def _missing_ticket_headings(body: str) -> list[str]:
+    found = {m.group("text").casefold() for line in body.splitlines()
+             if (m := HEADING_LINE_RE.match(line))}
+    return [part for part in TICKET_HEADINGS if part.casefold() not in found]
+
+
+def _with_ticket_fields(text: str, owned: list[str], ticket: str) -> str:
+    """The ledger text with the settlement's `owned_artifacts` and `ticket_path`
+    set to these values."""
+    start, end = _section_span(text, "settlement")
+    lines = [line for line in text[start:end].rstrip("\n").split("\n")
+             if not line.startswith(tuple(f"{field}:" for field in VERB_OWNED_FIELDS))]
+    lines += [f"owned_artifacts: {json.dumps(owned)}", f"ticket_path: {json.dumps(ticket)}"]
+    return text[:start] + "\n".join(lines) + "\n\n" + text[end:]
+
+
+def _ticket_next_step(text: str, path: Path, run_id: str) -> str:
+    """The transition out of the current node when it has one successor, with
+    `--confirm-leave` when the node has a leave condition; else `state current`,
+    which prints the node's branches."""
+    from engine import state
+    _, _, node = state._current_node_lookup(text, path)
+    successors = [dest for dest in node.get("next") or [] if dest != "failed"]
+    if len(successors) == 1:
+        reminder = node.get("reminder")
+        confirm = " --confirm-leave" if isinstance(reminder, dict) and reminder.get("leave") else ""
+        return _command(f"state transition {_ledger_args(run_id, path)} "
+                        f"--to {successors[0]} --reason \"<why>\"{confirm}")
+    return _command(f"state current {_ledger_args(run_id, path)}")
+
+
+def cmd_write_ticket(args: argparse.Namespace) -> None:
+    """Write the run's ticket body at its one path and record that the run owns
+    it. Never replaces a file that the run does not own."""
+    path = _ledger_path(args.run_id, args.dir)
+    text = _read_text(path)
+    _check_open(text, path)
+    session_dir = path.parent
+    settlement = _section_body(text, "settlement")
+    problems, _ = _validate_settlement(settlement, args.run_id, session_dir, caller_cwd())
+    if problems:
+        refuse(f"write-ticket refused: the settlement of {path} has {len(problems)} "
+               f"problem(s)", problems)
+    data = yaml.safe_load(settlement)
+    ticket = _ticket_path(args.run_id, session_dir)
+    # a. The path, checked at entry.
+    problems = _ticket_path_problems(str(ticket), data.get("task_type"), args.run_id, session_dir)
+    if problems:
+        refuse(f"write-ticket refused for {ticket}: {len(problems)} problem(s)", problems)
+    next_step = _ticket_next_step(text, path, args.run_id)
+    try:
+        ticket.parent.mkdir(exist_ok=True)
+    except OSError as exc:
+        sys.exit(f"cannot create {ticket.parent}: {exc}")
+    # b. The five headings.
+    try:
+        body = args.body_file.read_text()
+    except (OSError, UnicodeError) as exc:
+        sys.exit(f"cannot read --body-file {args.body_file}: {exc}")
+    missing = _missing_ticket_headings(body)
+    if missing:
+        refuse(f"write-ticket refused: {args.body_file} lacks {len(missing)} of the "
+               f"{len(TICKET_HEADINGS)} part headings; nothing written",
+               [("missing heading", f"no '{part}' heading") for part in missing])
+    # c. Ownership.
+    owned = data.get("owned_artifacts", [])
+    exists = os.path.lexists(ticket)
+    if exists and str(ticket) not in owned:
+        sys.exit(f"{ticket} exists and this run does not own it (it is not in "
+                 f"owned_artifacts) — refusing to replace it; the file is unchanged")
+    if str(ticket) not in owned:
+        owned = [*owned, str(ticket)]
+    new_text = _with_ticket_fields(text, owned, str(ticket))
+    new_settlement = _section_body(new_text, "settlement")
+    problems, _ = _validate_settlement(new_settlement, args.run_id, session_dir, caller_cwd())
+    stored = yaml.safe_load(new_settlement) if not problems else {}
+    if not problems and (stored.get("ticket_path") != str(ticket)
+                         or stored.get("owned_artifacts") != owned):
+        problems.append(("settlement",
+                         "does not read back the new ticket_path and owned_artifacts"))
+    if problems:
+        refuse(f"write-ticket refused: the ownership record for {path} is invalid; "
+               f"nothing written", problems)
+    # d. The path, checked again at write.
+    problems = _ticket_path_problems(str(ticket), data.get("task_type"), args.run_id, session_dir)
+    if problems:
+        refuse(f"write-ticket refused for {ticket}: {len(problems)} problem(s)", problems)
+    try:
+        if exists:
+            _write_atomic(ticket, body)
+        else:
+            with open(ticket, "x") as handle:
+                handle.write(body)
+    except OSError as exc:
+        sys.exit(f"cannot write {ticket}: {exc}")
+    # e. Ownership.
+    try:
+        _write_atomic(path, new_text)
+    except OSError as exc:
+        sys.exit(f"wrote {ticket} but cannot record that this run owns it: {exc} — the "
+                 f"file stays unowned, so the next write-ticket refuses it")
+    action = "rewritten" if exists else "created"
+    emit(args.output_mode, {"path": str(ticket), "action": action, "owned_artifacts": owned},
+         f"TICKET   {action} {ticket}", next_step)
+
+
 def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.ArgumentParser) -> None:
     s = sub.add_parser("init", parents=[dir_parent],
                         help="create a new ledger and write its settlement")
@@ -1582,6 +1807,13 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
     s.add_argument("--reason", help="required in practice for a failed outcome, "
                                      "naming what made the goal undoable")
     s.set_defaults(func=cmd_close)
+
+    s = sub.add_parser("write-ticket", parents=[dir_parent],
+                        help="write the run's ticket body and record that the run owns it")
+    s.add_argument("run_id")
+    s.add_argument("--body-file", type=caller_path, required=True,
+                   help="the ticket body: Markdown with the five part headings")
+    s.set_defaults(func=cmd_write_ticket)
 
 
 def main() -> None:

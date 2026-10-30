@@ -181,7 +181,7 @@ status      phase, plan, and each claim's status, trigger, evidence, tier, resul
 converged   whether the finished slate has no disputed finding
 coverage    which find angles are still unaccounted for
 cutoff      compute each claim's status, cut and result
-gate        exit 0 only with full coverage, no open claim, a current cutoff
+gate        exit 0 only with full coverage, no open claim, a current cutoff; with --kind triage --report <absolute file>, also the triage report checks
 render      Markdown report built from the ledger alone; --json adds the fix-now patches
 angles      list the resolved angle table
 config      validate or resolve the layered configuration

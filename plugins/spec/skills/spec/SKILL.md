@@ -11,34 +11,45 @@ Inputs: the ticket, bug report, or request; the codebase; in an active run,
 also `<run-id>`, `<engine-root>`, `<session-dir>`, and the stage sub-task
 label; on re-entry, the `spec-review` render and claim IDs.
 
+Optional input: `stop_after`. Its only value is `design`.
+
 Hand back to the caller (`execute` in an active run, the user standalone)
 one of these outcomes:
 
-- **package** (stage 5): the requirements, design when stage 2 ran, and
-  `task.md` paths, the open interpretations or material design choices, and
+- **package** (stage 5, `stop_after` absent): the requirements, design when
+  stage 2 ran, and `task.md` paths, the open interpretations or material
+  design choices, and the exact repository evidence the independent
+  `spec-review` stage must inspect.
+- **package-design** (stage 5, `stop_after` is `design`): the requirements
+  and design paths, the open interpretations or material design choices, and
   the exact repository evidence the independent `spec-review` stage must
-  inspect.
+  inspect. It holds no `task.md`.
 - **`blocked`** (stage 4): the step that could not be derived and the
   missing or ambiguous statement; on re-entry, also the claim IDs and
   evidence.
 - **delegated**: an override ran; it returns each stage's artifact as defined
-  in that stage's "Return the ... artifact" step.
+  in that stage's "Return the ... artifact" step. When `stop_after` is
+  `design`, it returns no stage 4 artifact.
 - **`ready`** (re-entry only): the `inline` claim IDs applied, when the
   review was `ready` with only `inline` patches.
 
 The default implementation hands back once: at stage 5 with every stage's
-artifact included, or with `ready` on re-entry. A stage's artifact is
-returned on its own only when an override handles that stage.
+artifact included, or with `ready` on re-entry. When `stop_after` is
+`design`, the stage 5 hand-back is **package-design**, with no stage 4
+artifact. A stage's artifact is returned on its own only when an override
+handles that stage.
 
 ## Workflow
 
-1. Check for an override; delegate if one applies.
+1. Check for an override; delegate if one applies. Pass `stop_after` to it
+   when it is set.
 2. Stage 1: requirements.
-3. Stage 2: design, only for real trade-offs.
+3. Stage 2: design, only for real trade-offs. When `stop_after` is `design`,
+   run it on every path.
 4. Stage 3: completeness check; on a failure, go back to stage 2 or revise
    requirements.
 5. Stage 4: task breakdown; on a gap, one loop back to stage 2 or 3, then
-   `blocked`.
+   `blocked`. Skip stage 4 when `stop_after` is `design`.
 6. Stage 5: return the package to the caller, who runs `spec-review`.
 7. On `revise` or settled `choices`, apply the `inline` patches, re-enter at
    stage 3 and return a refreshed package. On a `ready` review with `inline`
@@ -72,7 +83,9 @@ is its own sub-task that may have its own matching entry:
 
 Use only clearly named or registered overrides. When invoking one inside an active `engine` run, provide `<run-id>`, `<engine-root>`, and `<session-dir>` — the same three identifiers `execute` itself received for this run — so it can read the settlement or record its result. Pass each as its own argument to any session call it makes; never interpolate one into a shell string with other text.
 
-An override must return each stage's artifact as defined in that stage's own "Return the ... artifact" step below. If it does not, the override is incompatible; fix the override rather than compensating here.
+When `stop_after` is set, pass it to the override, in a run and standalone. When `stop_after` is `design`, do not invoke the entry for the `task` label of a mapping `spec_override`.
+
+An override must return each stage's artifact as defined in that stage's own "Return the ... artifact" step below. An override must honour `stop_after`. When `stop_after` is `design`, it must run no task breakdown and return no `task.md`. If it does not meet these rules, the override is incompatible; fix the override rather than compensating here.
 
 ## Default implementation
 
@@ -87,6 +100,8 @@ Scale the detail, and the stages actually run, to the task:
 
 - For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, complete the review package check against `requirements.md`, derive a short `task.md`, and return the package.
 - For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
+
+When `stop_after` is `design`, run stage 2 on every path, including the small-ask path. On the small-ask path, check `design.md` in place of `requirements.md`. On every path, do not derive `task.md`. Return **package-design** after stage 3.
 
 ### Stage 1: requirements
 
@@ -120,7 +135,7 @@ implementation choice with more than one reasonable shape, not a
 mechanical follow-through with one obvious path. Skip straight to the review package
 otherwise; see "Scale to the task." A skipped stage 2 means stage 3
 checks `requirements.md` instead of `design.md` — see "The completeness
-check."
+check." When `stop_after` is `design`, run this stage on every task.
 
 1. **Propose an approach.** For each open design trade-off the requirements stage named, state the options actually considered and which one this stage picks. Name what each rejected option would have cost or risked — not just that it was rejected.
 
@@ -136,7 +151,7 @@ check."
 
 2. **Check the result against `goal` and every constraint stage 1 recorded.** Confirm nothing was dropped or contradicted.
 
-3. **Proceed to task breakdown.** Do not return the review package until the task artifact has been derived in stage 4.
+3. **Proceed to task breakdown.** Do not return the review package until the task artifact has been derived in stage 4. When `stop_after` is `design`, do not proceed to task breakdown. Return **package-design** as stage 5 states.
 
 ### Stage 4: task breakdown
 
@@ -167,11 +182,11 @@ passed. Never runs before that, and never on a design that failed it.
 
 ### Stage 5: return review package
 
-Return the requirements, design when stage 2 ran, and `task.md` paths, the open interpretations or material design choices, and the exact repository evidence the independent `spec-review` stage must inspect. Do not call `resolve` or `debate`; the state machine owns those decisions after review.
+Return the requirements, design when stage 2 ran, and `task.md` paths, the open interpretations or material design choices, and the exact repository evidence the independent `spec-review` stage must inspect. When `stop_after` is `design`, return **package-design**. Include no `task.md` path. Do not call `resolve` or `debate`; the state machine owns those decisions after review.
 
 ### Re-entry from independent review
 
-When `spec-review` returns `revise`, `choices` settled by `spec-debate`, or `ready` with `inline` patches, read its render and claim IDs. Apply each `inline` fix to the skeleton artifacts and address each `revise` claim; settled `choices` decisions are already in the artifacts. When the review was `ready` with only `inline` patches, hand back `ready` with the applied claim IDs; do not rerun stages 3–5 and start no new slate. Otherwise rerun stages 3–5 and return the refreshed package. Do not treat the review as a new requirement or silently drop an unresolved claim. If stage 4 returns `blocked` on re-entry, return `blocked` with the claim IDs and evidence.
+When `spec-review` returns `revise`, `choices` settled by `spec-debate`, or `ready` with `inline` patches, read its render and claim IDs. Apply each `inline` fix to the skeleton artifacts and address each `revise` claim; settled `choices` decisions are already in the artifacts. When the review was `ready` with only `inline` patches, hand back `ready` with the applied claim IDs; do not rerun stages 3–5 and start no new slate. Otherwise rerun stages 3–5 and return the refreshed package. When `stop_after` is `design`, rerun stage 3 in place of stages 3–5. Do not run stage 4. Return the refreshed **package-design**. Do not treat the review as a new requirement or silently drop an unresolved claim. If stage 4 returns `blocked` on re-entry, return `blocked` with the claim IDs and evidence.
 
 ## Skeleton and notes
 

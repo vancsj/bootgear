@@ -82,7 +82,7 @@ On Codex CLI, `spec` has no separate install: it is bundled into the Codex `engi
 ## Standalone, or as bootgear gear
 
 `spec` works on its own; a standalone caller answers the open questions itself. Installed
-with `engine`, it drafts the spec in `ticket-writing` and `ticket-to-pr` runs. Those artifacts
-pass through the independent `spec-review` gate before implementation or final ticket delivery;
+with `engine`, it drafts the spec in `design-doc` and `ticket-to-pr` runs. Those artifacts
+pass through the independent `spec-review` gate before implementation or final design delivery, and `ticket-writing` ticket bodies pass through it too;
 only unresolved material choices go to `engine`'s `spec-debate` node, which settles them through
 `resolve` and, if needed, `debate`. `spec` never calls either itself.

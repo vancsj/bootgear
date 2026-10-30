@@ -8,6 +8,7 @@ import io
 import itertools
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -77,15 +78,18 @@ EXAMPLES = {
 }
 ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
                  '--angle <angle> --reason "<why>"')
+GATE_TRIAGE = "gate <slate> --dir <abs-dir> --kind triage --report <abs-file>"
 FREQUENT = ("file", "attack", "reply", "verdict", "cut", "status", "converged")
 CATALOG = Catalog(prog="converge", examples=EXAMPLES, frequent=FREQUENT,
                   legacy_json=frozenset({"status"}))
 # A `--phase find` call's refusals show the find form of the angle-na example.
 FIND_CATALOG = dataclasses.replace(CATALOG, examples={**EXAMPLES, "angle-na": ANGLE_NA_FIND})
+# A call that names --kind or --report shows the triage form of the gate example.
+TRIAGE_CATALOG = dataclasses.replace(CATALOG, examples={**EXAMPLES, "gate": GATE_TRIAGE})
 
 
-def _refuse(problems: list[str], what: str = "refused") -> NoReturn:
-    refuse(f"converge: {what}:", [("", p) for p in problems], code=EXIT_REFUSED)
+def _refuse(problems: list[str], what: str = "refused", code: int = EXIT_REFUSED) -> NoReturn:
+    refuse(f"converge: {what}:", [("", p) for p in problems], code=code)
 
 
 def _refuse_next(args: argparse.Namespace, message: str, problems: list[str],
@@ -875,9 +879,146 @@ def cmd_coverage(args: argparse.Namespace) -> None:
          lines, step)
 
 
+# `gate --kind triage`: the report's sections, and the attack angle that re-runs a claim's
+# reproduction command.
+REPORT_COLUMNS = ("command", "output")
+REPORT_HEADINGS = ("Cause", "Impact", "Confidence", "Next action")
+RERUN_ANGLE = "reproduction-rerun"
+_UNESCAPED_PIPE = re.compile(r"(?<!\\)\|")
+_SEPARATOR_CELL = re.compile(r"\A:?-+:?\Z")
+_CODE_SPAN = re.compile(r"\A`([^`]*)`\Z")
+
+
+def _cell(part: str) -> str:
+    """A stripped table cell, without one code span that wraps the whole cell."""
+    text = part.strip()
+    span = _CODE_SPAN.match(text)
+    return span.group(1).strip() if span else text
+
+
+def _cells(line: str) -> list[str]:
+    """The cells of a Markdown table row; `\\|` inside a cell does not split it."""
+    parts = _UNESCAPED_PIPE.split(line)
+    if line.startswith("|"):
+        parts = parts[1:]
+    if line.endswith("|") and not line.endswith("\\|"):
+        parts = parts[:-1]
+    return [_cell(part) for part in parts]
+
+
+def _cell_text(cell: str) -> str:
+    """The plain text of a cell: `\\|` reads `|` and `<br>` reads a line break."""
+    return cell.replace("\\|", "|").replace("<br>", "\n")
+
+
+def _report_parts(text: str) -> tuple[list[dict[str, str]], set[str]]:
+    """The `## Claims` table rows keyed by their case-folded header cells, and the case-folded
+    texts of every `## ` heading."""
+    rows: list[dict[str, str]] = []
+    headings: set[str] = set()
+    header: list[str] | None = None
+    in_claims = False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            name = line[3:].strip().casefold()
+            headings.add(name)
+            in_claims, header = name == "claims", None
+        elif in_claims and line.strip().startswith("|"):
+            cells = _cells(line.strip())
+            if header is None:
+                header = [cell.casefold() for cell in cells]
+            elif not all(_SEPARATOR_CELL.match(cell) for cell in cells):
+                rows.append(dict(zip(header, cells)))
+    return rows, headings
+
+
+def _base_slate(args: argparse.Namespace) -> Slate | None:
+    """The `--base-slate` slate, or None when the option is not given."""
+    if args.base_slate is None:
+        return None
+    try:
+        return ledger.read(ledger.slate_path(args.dir, args.base_slate), args.base_slate)
+    except ledger.LedgerError as exc:
+        _refuse(exc.problems)
+
+
+def _triage_report(args: argparse.Namespace) -> tuple[str | None, list[str]]:
+    """The --report text for `--kind triage`, or every --kind/--report problem."""
+    problems = []
+    if args.base_slate is not None and args.kind is None:
+        problems.append("--base-slate needs --kind triage")
+    if args.kind is not None and args.report is None:
+        problems.append("--kind triage needs --report <absolute file>")
+    if args.report is None:
+        return None, problems
+    if args.kind is None:
+        problems.append("--report needs --kind triage")
+    if not args.report.is_absolute():
+        problems.append(f"--report needs an absolute path; got {str(args.report)!r}")
+    elif not args.report.is_file():
+        problems.append(f"--report {args.report} is not a file")
+    if problems:
+        return None, problems
+    try:
+        return args.report.read_text(), []
+    except (OSError, UnicodeError) as exc:
+        return None, [f"--report {args.report} is unreadable: {exc}"]
+
+
+def _triage_problems(slate: Slate, report: str, base: Slate | None = None) -> list[str]:
+    """No claim is disputed or unverified; each surviving claim is reproduced and has a report
+    row with its slate tier, a command and an output; each row names a slate claim and quotes
+    its text; the report has every heading; a claim survives; each surviving claim has a
+    `reproduction-rerun` attack. A killed claim needs no tier and no row. With `base`, each row
+    names a claim of the base slate. Presence checks only: no command runs."""
+    unverified = protocol.unverified_ids(slate)
+    statuses = {claim.id: protocol.status(slate, claim, unverified)
+                for claim in slate.claims.values()}
+    survived = [claim for claim in slate.claims.values() if statuses[claim.id] == "survived"]
+    rows, headings = _report_parts(report)
+    problems = [f"{cid} is {state}; each triage cause claim must survive or be killed"
+                for cid, state in statuses.items() if state in ("disputed", "unverified")]
+    problems.extend(f"{claim.id} has tier {claim.tier}; a surviving triage claim needs tier "
+                    "reproduced" for claim in survived if claim.tier != "reproduced")
+    for row in rows:
+        row_id, tier = row.get("id", ""), row.get("tier", "")
+        claim = slate.claims.get(row_id)
+        if claim is None:
+            problems.append(f"report row {row_id} names no slate claim")
+        else:
+            if tier != claim.tier:
+                problems.append(f"report row {row_id}: tier {tier!r} differs from the slate "
+                                f"tier {claim.tier!r}")
+            text = _cell_text(row.get("claim", ""))
+            if text != claim.text.strip():
+                problems.append(f"report row {row_id}: claim {text!r} differs from the slate "
+                                f"claim {claim.text.strip()!r}")
+        problems.extend(f"report row {row_id}: the {column} cell is empty"
+                        for column in REPORT_COLUMNS if not row.get(column))
+    row_ids = {row.get("id") for row in rows}
+    if base is not None:
+        problems.extend(f"report row {row.get('id')} names no claim of the base slate "
+                        f"{base.slate_id}; a later visit cannot add a cause claim"
+                        for row in rows if row.get("id") not in base.claims)
+    problems.extend(f"{claim.id} survived but has no row in the report's ## Claims table"
+                    for claim in survived if claim.id not in row_ids)
+    problems.extend(f"report has no ## {heading} heading"
+                    for heading in REPORT_HEADINGS if heading.casefold() not in headings)
+    if not survived:
+        problems.append("no claim survived; a triage slate needs at least one surviving "
+                        "cause claim")
+    problems.extend(f"{claim.id} survived with no {RERUN_ANGLE} attack"
+                    for claim in survived if RERUN_ANGLE not in claim.used_angles)
+    return problems
+
+
 def cmd_gate(args: argparse.Namespace) -> None:
     if not args.dir.is_absolute():
         _refuse([f"gate needs an absolute --dir; got {str(args.dir)!r}"])
+    report, usage = _triage_report(args)
+    if usage:
+        _refuse(usage, code=EXIT_NO)
+    base = _base_slate(args)
     path = _path(args)
     if not path.is_file():
         _refuse([f"no slate {args.slate!r} in {args.dir} (expected {path})"])
@@ -887,11 +1028,15 @@ def cmd_gate(args: argparse.Namespace) -> None:
         problems.append(f"{claim.id} is open in {phase}")
     if not slate.cutoff_valid:
         problems.append("no current cutoff (run `converge cutoff` after the last state change)")
+    step = _next_step(args, slate) if problems else None
+    if report is not None:
+        problems.extend(_triage_problems(slate, report, base))
     cutoff_seq = slate.cutoff["seq"] if slate.cutoff else None
     data = {"slate": args.slate, "ok": not problems, "problems": problems, "cutoff_seq": cutoff_seq}
     if problems:
-        emit(args.output_mode, data, [f"GATE fail {args.slate}", *problems],
-             _next_step(args, slate))
+        if step is None:
+            step = "no revision is possible after this gate; end the run as failed"
+        emit(args.output_mode, data, [f"GATE fail {args.slate}", *problems], step)
         sys.exit(EXIT_NO)
     shown = "-" if cutoff_seq is None else cutoff_seq
     emit(args.output_mode, data, f"GATE ok {args.slate} cutoff_seq={shown}",
@@ -1119,7 +1264,15 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     command("converged", cmd_converged)
     command("cutoff", cmd_cutoff)
     command("coverage", cmd_coverage)
-    command("gate", cmd_gate, dir_required=True)
+    p = command("gate", cmd_gate, dir_required=True)
+    p.add_argument("--kind", choices=("triage",),
+                   help="triage: each surviving claim is reproduced, and --report backs it with "
+                        "a row, a command, an output and a reproduction-rerun attack")
+    p.add_argument("--report", type=Path, metavar="FILE",
+                   help="the triage report, an absolute path; only with --kind triage")
+    p.add_argument("--base-slate", metavar="SLATE",
+                   help="triage: the first visit's slate; each report row must name one of its "
+                        "claims, so a later visit adds no cause claim")
     command("render", cmd_render)
 
     p = command("prune", cmd_prune, slate=False)
@@ -1142,7 +1295,8 @@ def main(argv: list[str] | None = None) -> None:
     raw = sys.argv[1:] if argv is None else argv
     find = "--phase=find" in raw or any(
         flag == "--phase" and value == "find" for flag, value in itertools.pairwise(raw))
-    catalog = FIND_CATALOG if find else CATALOG
+    triage = any(arg.partition("=")[0] in ("--kind", "--report") for arg in raw)
+    catalog = FIND_CATALOG if find else TRIAGE_CATALOG if triage else CATALOG
     run(_parser(catalog), catalog, lambda a: a.command, argv)
 
 
