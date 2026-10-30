@@ -147,9 +147,9 @@ def cmd_selftest(args, root):
         r = Path(td)
 
         def _g(*a):
-            return subprocess.run(["git", "-C", str(r), *a], capture_output=True)
+            return subprocess.run(["git", "-C", str(r), *a], capture_output=True, check=False)
 
-        subprocess.run(["git", "init", "-q", "-b", "main", str(r)], capture_output=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(r)], capture_output=True, check=False)
         _g("config", "user.email", "t@t")
         _g("config", "user.name", "t")
         (r / "a.txt").write_text("x", encoding="utf-8")
@@ -311,7 +311,7 @@ def cmd_selftest(args, root):
             p = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve().parents[1] / "ledger.py"),
                  "sign", "tech/asif", "a1", *extra],
-                capture_output=True, text=True, env=env)
+                capture_output=True, text=True, env=env, check=False)
             return p.returncode, (p.stdout + p.stderr)
         impersonate_rc, impersonate_out = run_sign("--as", "dave")
         after_impersonate = f.read_text(encoding="utf-8")
@@ -372,8 +372,8 @@ def cmd_selftest(args, root):
         base = Path(td)
         for name in ("shared", "local", "deputy"):
             (base / name).mkdir()
-        roots = dict(shared_override=str(base / "shared"), local_override=str(base / "local"),
-                     deputy_override=str(base / "deputy"))
+        roots = {"shared_override": str(base / "shared"), "local_override": str(base / "local"),
+                 "deputy_override": str(base / "deputy")}
         default_kinds = [lg.kind for lg in open_ledgers(**roots)]
         deputy_kinds = [lg.kind for lg in open_ledgers(only="deputy", **roots)]
     for label, got, want in [

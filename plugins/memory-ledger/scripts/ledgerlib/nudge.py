@@ -1,8 +1,8 @@
 """Shared memory-ledger reminder policy without a host output envelope."""
 from __future__ import annotations
 
-import json
 import fcntl
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -32,7 +32,7 @@ class NudgeEvent:
     host: str
 
     @classmethod
-    def from_payload(cls, payload: dict, *, host: str) -> "NudgeEvent | None":
+    def from_payload(cls, payload: dict, *, host: str) -> NudgeEvent | None:
         tool_input = payload.get("tool_input") or {}
         session_id = payload.get("session_id")
         if not isinstance(session_id, str) or not session_id:

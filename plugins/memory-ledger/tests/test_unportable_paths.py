@@ -11,8 +11,8 @@ from test_rules import SCRIPTS
 
 sys.path.insert(0, str(SCRIPTS))
 
-from ledgerlib.audit import unportable_paths  # noqa: E402
-from ledgerlib.gates import portability_problem  # noqa: E402
+from ledgerlib.audit import unportable_paths
+from ledgerlib.gates import portability_problem
 
 FOLDER_CHECK = 'test -d "${LEDGER_ROOT:-$HOME/.memory-ledger/shared}/tech/browser"'
 

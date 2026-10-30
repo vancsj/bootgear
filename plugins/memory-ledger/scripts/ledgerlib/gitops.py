@@ -50,7 +50,7 @@ def _check_remote(lg) -> str | None:
     if lg.kind != "shared":
         return None
     p = subprocess.run(["git", "-C", str(lg.root), "remote"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, check=False)
     if not p.stdout.split():
         return (f"  warn: {lg.root} has no remote — this save stays on this "
                 f"machine, not the team")
@@ -76,7 +76,7 @@ def _check_unportable(lg) -> str | None:
 
 
 def _git(root: Path, *a, check=True) -> subprocess.CompletedProcess:
-    p = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    p = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, check=False)
     if check and p.returncode:
         sys.exit(f"git {' '.join(a)} failed:\n{(p.stderr or p.stdout).strip()}")
     return p

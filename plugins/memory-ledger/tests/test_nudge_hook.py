@@ -34,7 +34,7 @@ class NudgeHookTest(unittest.TestCase):
             ["python3", str(HOOK)],
             input=json.dumps(payload),
             capture_output=True, text=True,
-            env={"HOME": str(self.home), "PATH": "/usr/bin:/bin"},
+            env={"HOME": str(self.home), "PATH": "/usr/bin:/bin"}, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         if not result.stdout.strip():
@@ -105,7 +105,7 @@ class NudgeHookTest(unittest.TestCase):
             ["python3", str(HOOK)],
             input=json.dumps(payload),
             capture_output=True, text=True,
-            env={"HOME": str(bare_home), "PATH": "/usr/bin:/bin"},
+            env={"HOME": str(bare_home), "PATH": "/usr/bin:/bin"}, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(

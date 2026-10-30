@@ -9,11 +9,10 @@ import hashlib
 import os
 import re
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .config import load_config
-from .context import InvocationContext, contextual_path
 from .constants import (
     CONF_CAP,
     CONFIRMED_AT,
@@ -26,6 +25,12 @@ from .constants import (
     VERIFY_DECAY,
     WELL_CONFIRMED_AT,
 )
+from .context import InvocationContext, contextual_path
+
+
+def local_today() -> date:
+    """Today's local calendar date."""
+    return datetime.now(UTC).astimezone().date()
 
 
 def answer_hash(claim: str, because_line: str, ref_line: str | None = None) -> str:
@@ -89,7 +94,7 @@ def resolve_repo(context: InvocationContext | None = None) -> Path | None:
         return contextual_path(str(configured), context)
     top = subprocess.run(["git", "-C", str(context.cwd if context else Path.cwd()),
                           "rev-parse", "--show-toplevel"],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, check=False)
     return Path(top.stdout.strip()) if top.returncode == 0 else None
 
 
@@ -104,7 +109,7 @@ def repo_name(path: Path | None = None,
     if repo is None:
         return None
     url = subprocess.run(["git", "-C", str(repo), "remote", "get-url", "origin"],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, check=False)
     if url.returncode == 0 and url.stdout.strip():
         return url.stdout.strip().rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
     return repo.name
@@ -132,7 +137,7 @@ _MAINLINE_CACHE: dict[str, str | None] = {}
 def _detect_mainline(here: Path) -> str | None:
     def git(*a):
         return subprocess.run(["git", "-C", str(here), *a],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
 
     # `origin/HEAD` is the authoritative answer where it exists, but `clone` is
     # the only thing that sets it — a repo created locally, or given a remote
@@ -249,7 +254,7 @@ def ref_state(ref: str, repo: str | None = None,
 
     def git(*a):
         return subprocess.run(["git", "-C", str(here), *a],
-                              capture_output=True, text=True).returncode
+                              capture_output=True, text=True, check=False).returncode
 
     mainline = mainline_ref(here, context)
     for candidate in (ref, f"origin/{ref}"):
@@ -379,7 +384,7 @@ def sig_line(mark: str, who: str, h: str, depth: int, author: bool = False) -> s
     Signatures survive an append, so without it `conf` would imply every signer
     ran every check.
     """
-    return (f"    {mark} {who:<8} {date.today()}  h={h}  e={depth}"
+    return (f"    {mark} {who:<8} {local_today()}  h={h}  e={depth}"
             + ("  (author)" if author else ""))
 
 
@@ -394,7 +399,7 @@ def render_header(a: Answer, conf: float, checked: str) -> str:
 
 
 def asserted_line(who: str, why: str) -> str:
-    return f"Asserted: {who} {date.today()} — {why}"
+    return f"Asserted: {who} {local_today()} — {why}"
 
 
 def git_user() -> str | None:
@@ -403,5 +408,5 @@ def git_user() -> str | None:
     The one place the ledger records a person rather than a session: an assertion
     is a human's ruling, so a session id would name the wrong party.
     """
-    p = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True)
+    p = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, check=False)
     return p.stdout.strip() or None if p.returncode == 0 else None

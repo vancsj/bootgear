@@ -52,7 +52,7 @@ class ResolveAllTest(unittest.TestCase):
         shared, local, deputy = cls.roots
         return subprocess.run([sys.executable, str(LEDGER), "--root", shared,
                                "--local-root", local, "--deputy-root", deputy, *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
 
     def listed_slugs(self, stdout: str) -> list[str]:
         return [line.split()[2] for line in stdout.splitlines()

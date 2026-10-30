@@ -11,7 +11,7 @@ from test_rules import SCRIPTS
 
 sys.path.insert(0, str(SCRIPTS))
 
-from ledgerlib.model import on_mainline, same_repo_name  # noqa: E402
+from ledgerlib.model import on_mainline, same_repo_name
 
 
 class SameRepoNameTests(unittest.TestCase):

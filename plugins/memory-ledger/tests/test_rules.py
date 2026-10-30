@@ -530,7 +530,7 @@ class RuleFileGuardTests(TempLedgerCase):
 
     def has_head(self, root: Path) -> bool:
         return subprocess.run(["git", "-C", str(root), "rev-parse", "-q", "--verify", "HEAD"],
-                              capture_output=True, text=True).returncode == 0
+                              capture_output=True, text=True, check=False).returncode == 0
 
     def test_save_refuses_a_staged_symlink(self) -> None:
         for mode in ("prose", "json"):
@@ -578,7 +578,7 @@ class RuleFileGuardTests(TempLedgerCase):
         self.assertIn("holds no entries yet", result.stdout)
         self.assertEqual(_git(self.local, "ls-files", "-s", "--", RULES_FILE), before)
         head = subprocess.run(["git", "-C", str(self.local), "rev-parse", "-q", "--verify", "HEAD"],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
         self.assertNotEqual(head.returncode, 0)
 
     def advised_command(self, line: str) -> list[str]:

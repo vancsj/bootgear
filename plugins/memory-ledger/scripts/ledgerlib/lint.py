@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-from datetime import date
 from pathlib import Path
 
 from .config import Ledger
@@ -15,6 +14,7 @@ from .constants import (
 )
 from .model import (
     confidence,
+    local_today,
     machine_path,
     mainline_ref,
     on_mainline,
@@ -228,7 +228,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                           f"{conf:.2f}" + ("  [fixed]" if args.fix else ""))
                     problems += 1
                     if args.fix:
-                        e.lines[a.header_idx] = render_header(a, conf, str(date.today()))
+                        e.lines[a.header_idx] = render_header(a, conf, str(local_today()))
             rv = a.ref_value
             # The mainline is whatever THIS repo calls it, discovered per repo.
             # Comparing against a hardcoded name meant an answer correctly scoped
@@ -314,7 +314,7 @@ def evidence_rewrites(root: Path) -> int:
     diff last named.
     """
     p = subprocess.run(["git", "-C", str(root), "diff", "HEAD", "--unified=0", "--", "."],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, check=False)
     if p.returncode:
         return 0                      # not a repo, or nothing committed yet
     problems, current, deleted = 0, None, False

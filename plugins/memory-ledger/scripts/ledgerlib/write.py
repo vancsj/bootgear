@@ -9,9 +9,7 @@ fixed one — `--keep-evidence` brings across the checks that still hold.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from datetime import date
 
 from .config import DEPUTY, LOCAL, SHARED, Ledger, locate, pick, resolve_you
 from .constants import (
@@ -39,6 +37,7 @@ from .model import (
     band,
     confidence,
     git_user,
+    local_today,
     mainline_ref,
     on_mainline,
     ref_state,
@@ -196,7 +195,7 @@ def cmd_assert(args, root):
             e.lines.remove(a.asserted_line)
         a.asserted = False
         # header_idx is unmoved: the Asserted: line always sits below it.
-        e.lines[a.header_idx] = render_header(a, counted, str(date.today()))
+        e.lines[a.header_idx] = render_header(a, counted, str(local_today()))
         e.write()
         print(f"{e.slug} {a.aid}  assertion cleared — back to the tally at "
               f"conf {counted:.2f} [{band(counted)}]   {yes}✓/{no}✗, "
@@ -229,7 +228,7 @@ def cmd_assert(args, root):
         # Below the header, so header_idx still addresses the line to re-render.
         e.lines.insert(_body_end(a) + 1, line)
     a.asserted = True
-    e.lines[a.header_idx] = render_header(a, 1.00, str(date.today()))
+    e.lines[a.header_idx] = render_header(a, 1.00, str(local_today()))
     e.write()
 
     e = find_entry(root, args.slug)
@@ -340,7 +339,7 @@ def cmd_new(args, root):
     refuse_problems(f"new {args.slug}", problems)
     report_evidence(args.evidence, root, lg.kind, getattr(args, "context", None))
     path.parent.mkdir(parents=True, exist_ok=True)
-    a = Answer("a1", args.claim, SEED_CONF, str(date.today()), False, 0)
+    a = Answer("a1", args.claim, SEED_CONF, str(local_today()), False, 0)
     a.because = f"Because: {args.because}"
     a.evidences = [f"Evidence: {ev}" for ev in _as_list(args.evidence)]
     context = getattr(args, "context", None)
@@ -350,7 +349,7 @@ def cmd_new(args, root):
     body = [f"# {args.slug}", f"Q: {args.q}"]
     if args.alt_terms:
         body.append(f"alt_terms: {args.alt_terms}")
-    body += ["", render_header(a, conf, str(date.today())), a.because, *a.evidences]
+    body += ["", render_header(a, conf, str(local_today())), a.because, *a.evidences]
     body += [ln for ln in (a.repo, a.ref) if ln]
     body += [author_sig(you, a.hash, len(a.evidences)), ""]
     path.write_text("\n".join(body), encoding="utf-8")
@@ -423,7 +422,7 @@ def cmd_rival(args, root):
     # would land on whichever came first. Counting reuses an id after any gap.
     used = [int(x.aid[1:]) for x in e.answers if x.aid[1:].isdigit()]
     aid = f"a{max(used, default=0) + 1}"
-    a = Answer(aid, args.claim, SEED_CONF, str(date.today()), False, 0)
+    a = Answer(aid, args.claim, SEED_CONF, str(local_today()), False, 0)
     a.because = f"Because: {args.because}"
     # Checks carried over from an answer this one disagrees with, ahead of the
     # new one. A correction usually leaves most of the old ground standing, and
@@ -439,7 +438,7 @@ def cmd_rival(args, root):
                                if f"Evidence: {ev}" not in inherited]
     a.repo, a.ref = _scope_lines(args)
     conf = confidence(0, 0)
-    e.lines += [render_header(a, conf, str(date.today())), a.because, *a.evidences]
+    e.lines += [render_header(a, conf, str(local_today())), a.because, *a.evidences]
     e.lines += [ln for ln in (a.repo, a.ref) if ln]
     e.lines += [author_sig(you, a.hash, len(a.evidences)), ""]
     e.write()
@@ -523,7 +522,7 @@ def cmd_sign(args, root):
     if not a.asserted:
         moved = standing is None or standing["mark"] != mark
         e.lines[a.header_idx] = render_header(
-            a, conf, str(date.today()) if moved else a.checked)
+            a, conf, str(local_today()) if moved else a.checked)
         e.write()
     verb = "→" if standing is None else f"corrects its own {standing['mark']} of {standing['date']} →"
     print(f"{mark} {you} {verb} {e.slug} {a.aid}   conf {a.conf:.2f} → {conf:.2f}  [{band(conf)}]"
@@ -580,7 +579,7 @@ def cmd_refute(args, root):
     conf = confidence(a.independent(), no)
     # A pinned header is the human's; a vote joins the tally without rewriting it.
     if not a.asserted:
-        e.lines[a.header_idx] = render_header(a, conf, str(date.today()))
+        e.lines[a.header_idx] = render_header(a, conf, str(local_today()))
         e.write()
     print(f"{mark} {you} answers {target['who']}'s {target['mark']} → {e.slug} {a.aid}   "
           f"conf {conf:.2f}  [{band(conf)}]  ({yes}✓/{no}✗, {a.independent()} independent)")
@@ -660,7 +659,7 @@ def cmd_promote(args, root):
 
     used = [int(x.aid[1:]) for x in e.answers if x.aid[1:].isdigit()]
     aid = f"a{max(used, default=0) + 1}"
-    n = Answer(aid, a.claim, SEED_CONF, str(date.today()), False, 0)
+    n = Answer(aid, a.claim, SEED_CONF, str(local_today()), False, 0)
     n.because = a.because
     n.evidences = list(a.evidences)
     # Promotion changes which ref the claim is about; it never moves the claim to
@@ -668,7 +667,7 @@ def cmd_promote(args, root):
     n.repo = a.repo
     n.ref = f"Ref: {to}"
     conf = confidence(0, 0)
-    e.lines += [render_header(n, conf, str(date.today())), n.because, *n.evidences,
+    e.lines += [render_header(n, conf, str(local_today())), n.because, *n.evidences,
                 *[ln for ln in (n.repo, n.ref) if ln], author_sig(you, n.hash, len(n.evidences)), ""]
     e.write()
     print(f"promoted {e.slug} {a.aid} ({a.ref_value}) → {aid} ({to})  "

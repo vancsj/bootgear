@@ -30,6 +30,7 @@ class RefLintCase(TempLedgerCase):
     def run_in(self, cwd: Path, *args: str, env: dict[str, str] | None = None
                ) -> subprocess.CompletedProcess[str]:
         import sys
+
         from test_rules import LEDGER
         return subprocess.run([sys.executable, str(LEDGER), *args], cwd=cwd,
                               env=env or self.env(), capture_output=True, text=True, check=False)

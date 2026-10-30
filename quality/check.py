@@ -60,6 +60,7 @@ CHECKS = (
             "plugins/converge",
             "plugins/review",
             "plugins/deputy",
+            "plugins/memory-ledger",
             "codex-plugins/engine",
         ),
     ),

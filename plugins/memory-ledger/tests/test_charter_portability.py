@@ -12,7 +12,7 @@ from test_rules import SCRIPTS, TempLedgerCase
 
 sys.path.insert(0, str(SCRIPTS))
 
-from ledgerlib.gitops import _check_unportable  # noqa: E402
+from ledgerlib.gitops import _check_unportable
 
 CHARTER = """# tech/_about
 Q: What belongs here?

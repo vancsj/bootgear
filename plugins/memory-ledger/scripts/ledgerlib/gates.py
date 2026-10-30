@@ -14,9 +14,14 @@ from pathlib import Path
 from .audit import unportable_paths
 from .clikit import refuse
 from .config import Ledger
+from .constants import (
+    BROKEN_EVIDENCE,
+    CLAIM_MAX_WORDS,
+    DUPLICATE_GATE,
+    FUZZY_FLOOR,
+    LOCAL_ONLY_KINDS,
+)
 from .context import InvocationContext
-from .constants import (BROKEN_EVIDENCE, CLAIM_MAX_WORDS, DUPLICATE_GATE, FUZZY_FLOOR,
-                        LOCAL_ONLY_KINDS)
 from .model import machine_path
 from .scoring import build_scorer, cut_candidates, normalize
 from .store import all_index, tag_of
@@ -199,7 +204,7 @@ def _check_one(evidence: str, root: Path, label: str = "EVIDENCE",
     try:
         p = subprocess.run(["bash", "-c", cmd],
                            capture_output=True, text=True, timeout=180,
-                           cwd=context.cwd if context else None)
+                           cwd=context.cwd if context else None, check=False)
     except subprocess.TimeoutExpired:
         return ("WARN     Evidence line still running after 180s. A check nobody will wait for "
                 "is a check nobody will re-run — consider narrowing it.")

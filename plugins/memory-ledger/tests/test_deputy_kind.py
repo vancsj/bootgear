@@ -4,8 +4,8 @@ Every run is a subprocess against temp ledger roots; nothing here touches a real
 """
 from __future__ import annotations
 
-import os
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,8 +18,8 @@ PLUGIN = Path(__file__).resolve().parents[1]
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-kind-test-session")
 sys.path.insert(0, str(PLUGIN / "scripts"))
 
-from ledgerlib import constants  # noqa: E402
-from ledgerlib.config import open_ledgers  # noqa: E402
+from ledgerlib import constants
+from ledgerlib.config import open_ledgers
 
 
 class DeputyConstantTest(unittest.TestCase):
@@ -33,7 +33,7 @@ LEDGER = PLUGIN / "scripts" / "ledger.py"
 
 
 def run_ledger(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(LEDGER), *args], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(LEDGER), *args], capture_output=True, text=True, check=False)
 
 
 def init_root(path: Path) -> Path:
@@ -133,7 +133,7 @@ class DeputySetupTest(unittest.TestCase):
 
 class DeputySelftestTest(unittest.TestCase):
     def test_selftest_checks_the_deputy_root_and_exits_zero(self) -> None:
-        r = subprocess.run([sys.executable, str(LEDGER), "selftest"], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, str(LEDGER), "selftest"], capture_output=True, text=True, check=False)
         self.assertEqual(r.returncode, 0, r.stdout[-800:] + r.stderr[-400:])
         self.assertIn("deputy: the default open set excludes the deputy root", r.stdout)
 

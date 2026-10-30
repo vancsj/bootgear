@@ -10,8 +10,15 @@ import os
 import sys
 from pathlib import Path
 
-from .constants import (DEFAULT_DEPUTY_ROOT, DEFAULT_KINDS, DEFAULT_LOCAL_ROOT,
-                        DEFAULT_SHARED_ROOT, DEPUTY, KINDS, LOCAL, SHARED)
+from .constants import (
+    DEFAULT_DEPUTY_ROOT,
+    DEFAULT_KINDS,
+    DEFAULT_LOCAL_ROOT,
+    DEFAULT_SHARED_ROOT,
+    DEPUTY,
+    LOCAL,
+    SHARED,
+)
 from .context import InvocationContext, contextual_path
 from .identity import resolve_identity
 

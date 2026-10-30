@@ -7,7 +7,7 @@ Claude: `ledger.py = ${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py`
 Codex: `ledger.py = ${PLUGIN_ROOT}/scripts/ledger`
 
 ledger.py resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
-ledger.py show <slug> [--data]                 # answers, conf, evidence, sigs, recorded output; --data as JSON
+ledger.py show <slug> [--data | --all-sigs]    # answers, conf, evidence, sigs (every ✗, newest 5 ✓ by file position, newest first; --all-sigs for all), recorded output; --data as JSON, refuses --all-sigs
 ledger.py list [--filter <text>] [--all] [--only …]
 ledger.py new <slug> (--shared|--local) --q --claim --because --evidence [--evidence …] [--ref <branch>] [--alt-terms]
 ledger.py rival <slug> --claim --because --evidence [--evidence …] [--keep-evidence aN] [--ref <branch>]

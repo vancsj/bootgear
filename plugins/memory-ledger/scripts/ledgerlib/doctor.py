@@ -39,7 +39,7 @@ def _row(state, label, detail, rows=None):
 
 
 def _git_ok(path: Path, *a):
-    p = subprocess.run(["git", "-C", str(path), *a], capture_output=True, text=True)
+    p = subprocess.run(["git", "-C", str(path), *a], capture_output=True, text=True, check=False)
     return p.returncode == 0, (p.stdout or p.stderr).strip()
 
 

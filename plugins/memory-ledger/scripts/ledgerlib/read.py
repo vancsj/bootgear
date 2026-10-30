@@ -7,9 +7,15 @@ from datetime import date
 from pathlib import Path
 
 from .config import pick, resolve_roots
-from .constants import FUZZY_FLOOR, KINDS, RESOLVE_MAX_FOLDERS, RESOLVE_MAX_PER_FOLDER
+from .constants import (
+    FUZZY_FLOOR,
+    KINDS,
+    RESOLVE_MAX_FOLDERS,
+    RESOLVE_MAX_PER_FOLDER,
+    SHOW_MAX_YES_SIGS,
+)
 from .gitops import _git
-from .model import Answer, band, confidence, split_evidence
+from .model import Answer, band, confidence, local_today, split_evidence
 from .scoring import build_scorer, cut_candidates, mint_slug, normalize, query_coverage
 from .store import Entry, all_entries, all_index, find_entry, tag_of
 
@@ -19,7 +25,7 @@ def age_days(checked: str | None) -> int | None:
     if not checked:
         return None
     try:
-        return (date.today() - date.fromisoformat(checked)).days
+        return (local_today() - date.fromisoformat(checked)).days
     except ValueError:
         return None
 
@@ -222,6 +228,24 @@ def print_entry_json(e: Entry) -> None:
                       "redirect": e.redirect, "answers": answers}, ensure_ascii=False, indent=2))
 
 
+def visible_sigs(sigs: list[dict], show_all: bool,
+                 current_hash: str) -> tuple[list[dict], int]:
+    """The signatures `show` prints, newest first, and how many valid ✓ it leaves out.
+
+    Every ✗ stays, so dissent is never hidden. Newest means last in file order:
+    `sign` appends a line, and a re-sign keeps its line's place. A ✓ signed on an
+    older body is voided and not counted, as in the header tally.
+    """
+    newest = list(reversed(sigs))
+    if show_all:
+        return newest, 0
+    yes = [s for s in newest if s["mark"] == "✓"]
+    keep = {s["idx"] for s in yes[:SHOW_MAX_YES_SIGS]}
+    shown = [s for s in newest if s["mark"] == "✗" or s["idx"] in keep]
+    left_out = [s for s in yes if s["idx"] not in keep and s["hash"] == current_hash]
+    return shown, len(left_out)
+
+
 def cmd_show(args, root):
     """Read one entry.
 
@@ -231,6 +255,9 @@ def cmd_show(args, root):
     """
     e = find_entry(root, args.slug)
     if getattr(args, "data", False):
+        if getattr(args, "all_sigs", False):
+            sys.exit("show --data has no signature list; drop --all-sigs for the JSON, "
+                     "or drop --data to print every signature")
         return print_entry_json(e)
     print(f"# {e.slug}")
     print(f"Q: {e.question}")
@@ -238,6 +265,7 @@ def cmd_show(args, root):
         print(f"alt_terms: {', '.join(e.alt_terms)}")
     if e.redirect:
         print(f"USE: {e.redirect}")
+    left_out_by = []
     for a in e.answers:
         yes, no, void = a.tally()
         counted = confidence(a.independent(), no)
@@ -254,7 +282,9 @@ def cmd_show(args, root):
             if line:
                 print(line)
         depth = len(a.evidences)
-        for s in a.sigs:
+        sigs, left_out = visible_sigs(a.sigs, getattr(args, "all_sigs", False), a.hash)
+        left_out_by.append((a.aid, left_out))
+        for s in sigs:
             d = s.get("depth")
             shallow = (f"  [ran {d} of {depth} checks]"
                        if d is not None and d < depth else "")
@@ -268,6 +298,12 @@ def cmd_show(args, root):
         if split_evidence(yes, no):
             print("    SPLIT — one body, both marks: the Evidence line depends on something "
                   "it does not name.")
+    left_out_total = sum(n for _, n in left_out_by)
+    if left_out_total:
+        labels = ", ".join(f"{aid} {n}" for aid, n in left_out_by if n)
+        names = f" ({labels})" if len(e.answers) > 1 else ""
+        print(f"    … {left_out_total} older ✓ not shown{names} — "
+              f"`{getattr(args, 'prog', 'ledger.py')} show {e.slug} --all-sigs`")
 
 
 def cmd_list(args, root):

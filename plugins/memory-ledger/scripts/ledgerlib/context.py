@@ -20,7 +20,7 @@ class InvocationContext:
         *,
         host: str | None = None,
         session_id: str | None = None,
-    ) -> "InvocationContext":
+    ) -> InvocationContext:
         caller = (os.environ.get("MEMORY_LEDGER_CWD")
                   or os.environ.get("GEAR_CALLER_CWD")
                   or str(Path.cwd()))
@@ -32,7 +32,7 @@ class InvocationContext:
             resolved_session = os.environ.get("CLAUDE_CODE_SESSION_ID") or None
         return cls(Path(caller).expanduser().resolve(), resolved_host, resolved_session)
 
-    def with_scope(self, *, repo: str | None = None, ref: str | None = None) -> "InvocationContext":
+    def with_scope(self, *, repo: str | None = None, ref: str | None = None) -> InvocationContext:
         return replace(self, repo=repo, ref=ref)
 
 

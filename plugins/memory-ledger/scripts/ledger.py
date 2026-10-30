@@ -27,7 +27,6 @@ import sys
 from ledgerlib.audit import cmd_audit
 from ledgerlib.clikit import Catalog, add_mode_flags, parser_class, run
 from ledgerlib.config import locate, open_ledgers
-from ledgerlib.context import InvocationContext
 from ledgerlib.constants import (
     CLAIM_MAX_WORDS,
     DEFAULT_DEPUTY_ROOT,
@@ -36,6 +35,7 @@ from ledgerlib.constants import (
     KINDS,
     SLUG_ADDRESSED,
 )
+from ledgerlib.context import InvocationContext
 from ledgerlib.doctor import cmd_doctor
 from ledgerlib.gitops import cmd_save
 from ledgerlib.lint import cmd_lint
@@ -48,13 +48,12 @@ from ledgerlib.write import (
     cmd_hash,
     cmd_new,
     cmd_promote,
-    cmd_vote,
     cmd_refute,
     cmd_rival,
     cmd_set_repo,
     cmd_sign,
+    cmd_vote,
 )
-
 
 # The argv after `ledger.py` that a refusal prints as the runnable shape of a
 # command; a test parses every one with the real parser.
@@ -195,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="the answers as data: claim, conf, votes, evidence")
     sh.add_argument("--stale-after", dest="stale_after", type=int, metavar="DAYS",
                     help="flag answers not touched in this many days")
+    sh.add_argument("--all-sigs", dest="all_sigs", action="store_true",
+                    help="print every signature, newest first, not every ✗ and the newest few ✓")
 
     ls = sub.add_parser("list", help="every answer, one line each, computed live")
     ls.add_argument("--filter", help="only slugs/questions containing this text")

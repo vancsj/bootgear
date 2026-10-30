@@ -15,6 +15,8 @@ WRAPPER = PLUGIN / "scripts" / "ledger"
 CODEX_HOOK = PLUGIN / "hooks" / "codex_nudge.py"
 GEAR = PLUGIN.parents[1] / "cli" / "gear.py"
 REPOSITORY = PLUGIN.parents[1]
+sys.path.insert(0, str(PLUGIN / "scripts"))
+from ledgerlib.constants import SHOW_MAX_YES_SIGS
 
 
 def git_repo(path: Path) -> None:
@@ -145,6 +147,99 @@ class CodexCompatibilityTests(unittest.TestCase):
         self.assertEqual(corrected.returncode, 0, corrected.stderr)
         self.assertIn(f"✗ codex:{session} ",
                       (self.shared / "tech" / "codex-correction.md").read_text())
+
+    def test_show_limits_codex_signatures_like_the_claude_host(self) -> None:
+        slug = "tech/codex-show-limit"
+        author = "c0de0000-0000-0000-0000-000000000000"
+        dissent = "c0dedead-0000-0000-0000-000000000000"
+        voters = [f"c0de{n:04x}-0000-0000-0000-000000000000" for n in range(1, 8)]
+        total_yes = len(voters) + 1
+
+        def marks(stdout: str) -> tuple[list[str], list[str]]:
+            lines = stdout.splitlines()
+            return ([ln for ln in lines if ln.startswith("    ✓ ")],
+                    [ln for ln in lines if ln.startswith("    ✗ ")])
+
+        created = self.run_wrapper(
+            "--host", "codex", "--session-id", author,
+            "new", slug, "--shared", "--q", "Should show print every Codex signature?",
+            "--claim", "Codex show prints every signature.",
+            "--because", "Because: test. Context: none.",
+            "--evidence", "true", "--as", f"codex:{author}",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        for n, session in enumerate(voters, start=1):
+            if n == 2:
+                failed = self.run_wrapper(
+                    "--host", "codex", "--session-id", dissent,
+                    "sign", slug, "a1", "--fail", "--output", "boom",
+                    "--as", f"codex:{dissent}",
+                )
+                self.assertEqual(failed.returncode, 0, failed.stderr)
+            signed = self.run_wrapper(
+                "--host", "codex", "--session-id", session,
+                "sign", slug, "a1", "--as", f"codex:{session}",
+            )
+            self.assertEqual(signed.returncode, 0, signed.stderr)
+
+        capped = self.run_wrapper("--host", "codex", "--session-id", author, "show", slug)
+        self.assertEqual(capped.returncode, 0, capped.stderr)
+        yes, no = marks(capped.stdout)
+        self.assertEqual(len(yes), SHOW_MAX_YES_SIGS, capped.stdout)
+        self.assertEqual(len(no), 1, capped.stdout)
+        self.assertIn(voters[-1].split("-")[0], yes[0])
+        for hidden in [author, *voters][:total_yes - SHOW_MAX_YES_SIGS]:
+            self.assertFalse(any(hidden.split("-")[0] in ln for ln in yes), capped.stdout)
+        self.assertIn(f"… {total_yes - SHOW_MAX_YES_SIGS} older ✓ not shown", capped.stdout)
+        self.assertIn(f"{total_yes}✓/1✗", capped.stdout)
+
+        everything = self.run_wrapper("--host", "codex", "--session-id", author,
+                                      "show", slug, "--all-sigs")
+        self.assertEqual(everything.returncode, 0, everything.stderr)
+        yes, no = marks(everything.stdout)
+        self.assertEqual(len(yes), total_yes, everything.stdout)
+        self.assertEqual(len(no), 1, everything.stdout)
+        self.assertIn(voters[-1].split("-")[0], yes[0])
+        self.assertNotIn("not shown", everything.stdout)
+        self.assertIn(f"{total_yes}✓/1✗", everything.stdout)
+        data = self.run_wrapper("--host", "codex", "--session-id", author, "show", slug, "--data")
+        self.assertEqual(data.returncode, 0, data.stderr)
+        self.assertEqual(json.loads(data.stdout)["slug"], slug)
+
+    def test_codex_footer_counts_only_valid_yes_signatures(self) -> None:
+        slug = "tech/codex-voided-tail"
+        author = "c0de1000-0000-0000-0000-000000000000"
+        voters = [f"c0de{n:04x}-0000-0000-0000-000000000000" for n in range(0x1001, 0x1008)]
+        fresh = "c0de2000-0000-0000-0000-000000000000"
+        created = self.run_wrapper(
+            "--host", "codex", "--session-id", author,
+            "new", slug, "--shared", "--q", "Does the Codex footer skip voided check-marks?",
+            "--claim", "The Codex footer skips voided check-marks.",
+            "--because", "Because: test. Context: none.",
+            "--evidence", "true", "--as", f"codex:{author}",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        for session in voters:
+            signed = self.run_wrapper(
+                "--host", "codex", "--session-id", session,
+                "sign", slug, "a1", "--as", f"codex:{session}",
+            )
+            self.assertEqual(signed.returncode, 0, signed.stderr)
+        path = self.shared / "tech" / "codex-voided-tail.md"
+        body = path.read_text(encoding="utf-8")
+        path.write_text(body.replace("The Codex footer skips voided check-marks.",
+                                     "The Codex footer skips voided check-marks only."),
+                        encoding="utf-8")
+        resigned = self.run_wrapper(
+            "--host", "codex", "--session-id", fresh,
+            "sign", slug, "a1", "--as", f"codex:{fresh}",
+        )
+        self.assertEqual(resigned.returncode, 0, resigned.stderr)
+        shown = self.run_wrapper("--host", "codex", "--session-id", author, "show", slug)
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn("1✓/0✗", shown.stdout, shown.stdout)
+        self.assertIn(f"{len(voters) + 1} voided by an edit", shown.stdout, shown.stdout)
+        self.assertNotIn("not shown", shown.stdout)
 
     def test_doctor_json_distinguishes_unconfigured_and_configured(self) -> None:
         absent_home = self.temp / "absent-home"

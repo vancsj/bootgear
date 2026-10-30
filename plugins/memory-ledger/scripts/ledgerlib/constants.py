@@ -85,6 +85,11 @@ RESOLVE_MAX_PER_FOLDER = 3
 SIBLING_MAX_EVIDENCE = 3
 
 
+# `show` prints every ✗ and this many of the newest ✓; `--all-sigs` prints them all.
+# A ✗ is never cut: it is a vote against the claim, and a reader must see it.
+SHOW_MAX_YES_SIGS = 5
+
+
 STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "do", "does",
     "did", "what", "which", "who", "how", "why", "when", "where", "to", "for",

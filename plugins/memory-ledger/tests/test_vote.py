@@ -43,7 +43,7 @@ class VoteTest(unittest.TestCase):
         shared, local, deputy = self.roots
         return subprocess.run([sys.executable, str(LEDGER), "--root", shared,
                                "--local-root", local, "--deputy-root", deputy, *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, check=False)
 
     def vote(self, question: str, claim: str, check: str) -> subprocess.CompletedProcess:
         return self.ledger("vote", "--question", question, "--claim", claim,
