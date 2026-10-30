@@ -33,3 +33,14 @@
 - The main agent keeps reviewers, refuters, cutters, gap hunters, and other judging roles independent. It gives each role only the context that the task needs. That context is: the request, the artifacts, the evidence, the applicable principles and standards, and the role brief. It never gives a role its own conclusions, hypotheses, preferred answers, or the reasoning of another role.
 - Give each judging or writing role the principles and standards that apply to its task. Name the files in the role brief. The role reads them. They are context, not the conclusions of another role.
 - A claim slate is immutable. Each review or triage visit uses a new slate. To keep a claim from an earlier slate, copy it to the new slate. Never change a claim or its events on an earlier slate.
+
+## Artefacts and review
+
+- Decide the artefact at clarify stage.
+- An artefact is what a task produces and refines, such as spec docs, code, or a triage report. An artefact is optional. When a task has one, it is the main object of review.
+- A run is authoring when it produces or changes an artefact. It is reviewing when it does not. A state machine lists possible paths, and the path a run takes decides its kind. For example, a `change-review` run is authoring when it passes through `fix`, and reviewing otherwise.
+- Converge checks the factual claims about an artefact over several passes, until the facts hold. A factual claim is right or wrong.
+- A question with no right answer is a judgement. Decide it with `resolve`, `debate`, or the deputy. Converge does not decide judgements.
+- Refine the artefact after each factual pass and after each judgement decision.
+- Set a threshold for each loop, so the loop ends. A threshold can change during a run. Work that a loop cannot close becomes a follow-up.
+- A solution has two parts. Converge checks its facts. The choice of solution is a judgement.
