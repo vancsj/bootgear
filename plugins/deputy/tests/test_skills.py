@@ -7,6 +7,7 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 SKILLS = {name: PLUGIN / "skills" / name / "SKILL.md" for name in ("ask", "record")}
+STANDARDS = PLUGIN / "references" / "qa-standards.md"
 HEADINGS = ["## Inputs and outcomes", "## Procedure", "## Rules", "## Host mechanics"]
 
 
@@ -35,6 +36,28 @@ class SkillTests(unittest.TestCase):
                 self.assertIn(f"`{outcome}", inputs)
         refused = next(line for line in inputs.splitlines() if "`REFUSED" in line)
         self.assertIn("memory-ledger", refused)
+
+    def test_record_lists_the_rival_outcome(self) -> None:
+        self.assertIn("`RIVAL", section(self.text("record"), "## Inputs and outcomes"))
+
+    def test_ask_answers_from_the_memory_ledger_band_not_a_vote_count(self) -> None:
+        procedure = section(self.text("ask"), "## Procedure")
+        self.assertNotIn("at least 3 votes", procedure)
+        self.assertIn("confirmed", procedure)
+        self.assertIn("independent", procedure)
+
+    def test_both_skills_point_at_the_standards_document(self) -> None:
+        for name in SKILLS:
+            with self.subTest(skill=name):
+                self.assertIn("references/qa-standards.md", self.text(name))
+        self.assertTrue(STANDARDS.is_file())
+
+    def test_standards_document_states_each_rule_section(self) -> None:
+        text = STANDARDS.read_text(encoding="utf-8")
+        for heading in ("## Scope", "## Question", "## Answer", "## Votes and reasons",
+                        "## Excluded from general votes", "## Hard gates"):
+            with self.subTest(heading=heading):
+                self.assertIn(heading, text)
 
     def test_host_mechanics_names_the_script_on_each_host(self) -> None:
         for name in SKILLS:

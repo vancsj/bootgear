@@ -33,8 +33,8 @@ Outcomes, handed back to the caller:
    Judge by meaning, not by matching words.
 6. Check the rules, in order:
    - **Assertion.** If an assertion covers the question, return `answered` at confidence `1.00` with that assertion's slug, at any stakes. Do not weigh decisions against it.
-   - **Decisions, below the threshold.** Answer only when the agreeing answers carry at least 3 votes in total and none conflicts. A vote is one `Evidence:` line on an agreeing answer. Confidence is that total vote count. Otherwise return `escalate`.
-   - **Decisions, at or above the threshold.** Do not answer from votes. Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
+   - **Decisions, confirmed.** Answer only when the agreeing answer has memory-ledger band `confirmed` or higher, at least one independent signer, and no conflicting answer has a band at least as high. Confidence is that answer's `conf` value. Otherwise return `escalate`.
+   - **Decisions, not confirmed.** Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
 7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
 8. Return `answered` with: the answer, the confidence, `source: assertion` or `source: votes`, the cited agreeing slugs, the conflicting slugs if any, and one line of reasoning.
 9. After the user answers an escalation, and only when the answer is written in a session ledger file, call the `record` skill with the question, the user's answer, the reason, the options and the stakes shown to the user. Without a session ledger file, do not call it. Do not treat the user's answer as an assertion.
@@ -44,10 +44,12 @@ Outcomes, handed back to the caller:
 - Never answer a hard-gate action.
 - Never write an assertion. Only `deputy.py assert`, after the user confirms in the conversation, pins one.
 - The deputy's own past answers do not count as agreeing cases.
+- Each entry follows the Q&A standards in `references/qa-standards.md`. Read that file when an entry's shape is unclear.
 
 ## Host mechanics
 
 Set `DEPUTY_SCRIPT` to `scripts/deputy.py` in this plugin:
 
 - Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/deputy.py"`.
-- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path.
+- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. The standards file is `<directory holding this SKILL.md>/../../references/qa-standards.md`.
+- Claude Code: the standards file is `${CLAUDE_PLUGIN_ROOT}/references/qa-standards.md`.

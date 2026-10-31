@@ -68,15 +68,15 @@ class DeputyTest(unittest.TestCase):
 
     def test_similar_question_with_the_same_answer_adds_a_vote(self) -> None:
         self.assertEqual(self.record()[0], 0)
-        code, out, err = self.record(question="Should I run scripts with uv?", session="second.md")
+        code, out, err = self.record(question="Should scripts run with uv?", session="second.md")
         self.assertEqual(code, 0, err)
-        self.assertIn("VOTED decisions/should-new-scripts-run-with-uv a1 n=2", out)
+        self.assertRegex(out, r"VOTED decisions/\S+ a1 n=2")
         self.assertEqual(len(list(self.root.rglob("*.md"))), 1)
 
     def test_similar_question_with_a_different_answer_writes_a_new_entry(self) -> None:
         self.assertEqual(self.record()[0], 0)
         code, out, err = self.record(claim="Scripts run with pip",
-                                     question="Should I run scripts with uv?", session="second.md")
+                                     question="Should scripts run with pip?", session="second.md")
         self.assertEqual(code, 0, err)
         self.assertIn("NEW decisions/", out)
         self.assertEqual(len(list(self.root.rglob("*.md"))), 2)
@@ -160,14 +160,40 @@ class DeputyTest(unittest.TestCase):
         self.assertIn("does not contain the answer", err)
         self.assertEqual(list(self.root.rglob("*.md")), [])
 
-    def test_different_answer_writes_a_newer_entry_beside_the_old_one(self) -> None:
+    def test_different_answer_to_the_same_question_adds_a_rival_to_the_entry(self) -> None:
         self.assertEqual(self.record()[0], 0)
         code, out, err = self.record(claim="Scripts run with pip")
         self.assertEqual(code, 0, err)
-        self.assertIn("NEW decisions/", out)
-        self.assertEqual(len(list(self.root.rglob("*.md"))), 2)
-        _, listing, _ = self.run_deputy("candidates", QUESTION)
-        self.assertIn("Newer than decisions/", listing)
+        self.assertIn("RIVAL decisions/", out)
+        entry, = self.root.rglob("*.md")
+        text = entry.read_text(encoding="utf-8")
+        self.assertIn("Scripts run with pip", text)
+        self.assertIn("## a2", text)
+
+    def test_new_entry_is_named_by_the_minted_slug(self) -> None:
+        question = ("Should new scripts run with uv when the team builds them on every "
+                    "laptop?")
+        code, out, err = self.record(question=question)
+        self.assertEqual(code, 0, err)
+        slug = out.split()[1].removeprefix("decisions/")
+        self.assertLessEqual(len(slug.split("-")), 4, slug)
+        self.assertNotIn("?", slug)
+
+    def test_record_refuses_an_entry_that_breaks_the_standards(self) -> None:
+        code, _, err = self.record(question="Should I run scripts with uv?")
+        self.assertEqual(code, 2)
+        self.assertIn("REFUSED", err)
+        self.assertEqual(list(self.root.rglob("*.md")), [])
+
+    def test_record_never_passes_anyway_to_memory_ledger(self) -> None:
+        with unittest.mock.patch.object(deputy, "ledger", side_effect=deputy.ledger) as spy:
+            self.assertEqual(self.record()[0], 0)
+            self.assertEqual(self.record(claim="Scripts run with pip",
+                                         question="Should scripts run with pip?",
+                                         session="second.md")[0], 0)
+        self.assertTrue(spy.call_args_list)
+        for call in spy.call_args_list:
+            self.assertNotIn("--anyway", call.args)
 
     def test_record_refuses_a_deputy_root_with_a_remote(self) -> None:
         subprocess.run(["git", "-C", str(self.root), "remote", "add", "origin",
@@ -191,6 +217,47 @@ class DeputyTest(unittest.TestCase):
                                          "--confirmed-by-user")
         self.assertEqual(code, 0, err)
         self.assertIn("ASSERTED", out)
+
+
+class StandardsTest(unittest.TestCase):
+    """The mechanical part of the Q&A standards, checked by `entry_problems`."""
+
+    def problems(self, question: str = QUESTION, claim: str = CLAIM, because: str = WHY) -> list[str]:
+        return deputy.entry_problems(question, claim, because)
+
+    def test_a_general_entry_passes(self) -> None:
+        self.assertEqual(self.problems(), [])
+
+    def test_a_pronoun_in_the_question_is_refused(self) -> None:
+        for question in ("Should I run scripts with uv?", "Should you run scripts with uv?",
+                         "Should it run scripts with uv?", "Should its scripts run with uv?"):
+            with self.subTest(question=question):
+                self.assertTrue(self.problems(question=question))
+
+    def test_a_pronoun_in_the_answer_is_refused(self) -> None:
+        self.assertTrue(self.problems(claim="I run scripts with uv"))
+
+    def test_options_in_the_question_are_refused(self) -> None:
+        for question in ("Should scripts run with uv or pip?", "Should scripts run with (a) uv?",
+                         "Should scripts run with a) uv?", "Should scripts run with uv? A: yes",
+                         "Should scripts run with either uv?"):
+            with self.subTest(question=question):
+                self.assertTrue(self.problems(question=question))
+
+    def test_a_question_over_twenty_words_is_refused(self) -> None:
+        question = "Should " + " ".join(["scripts"] * 20) + " run with uv?"
+        self.assertTrue(self.problems(question=question))
+
+    def test_a_bare_letter_or_number_answer_is_refused(self) -> None:
+        for claim in ("A", "b", "2", "(c)"):
+            with self.subTest(claim=claim):
+                self.assertTrue(self.problems(claim=claim))
+
+    def test_a_reason_of_two_sentences_is_refused(self) -> None:
+        self.assertTrue(self.problems(because="uv pins dependencies. Pip does not"))
+
+    def test_a_reason_with_a_semicolon_is_refused(self) -> None:
+        self.assertTrue(self.problems(because="uv pins dependencies; pip does not"))
 
 
 FAKE_LEDGER = """\
@@ -282,8 +349,8 @@ class InstalledCopyTest(unittest.TestCase):
         for call in calls:
             self.assertEqual(call[:6], ["--deputy-root", str(self.root),
                                         "--host", "codex", "--session-id", "abc"])
-        self.assertEqual([call[6] for call in calls], ["vote", "new", "save"])
-        vote, new, _ = calls
+        self.assertEqual([call[6] for call in calls], ["vote", "resolve", "new", "save"])
+        vote, _resolve, new, _ = calls
         self.assertNotIn("--as", vote)
         self.assertEqual(new[new.index("--as") + 1], "codex:abc")
 

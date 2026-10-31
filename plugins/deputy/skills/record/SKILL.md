@@ -19,7 +19,9 @@ Outcomes, reported to the caller:
 
 - `VOTED <slug> n=<count>`: a similar question already has this answer. One vote was added to it; `n` is the vote count.
 - `UNCHANGED <slug>`: this same session ledger's check is already on that answer. Nothing was written.
-- `NEW <slug>`: a different answer was written as a new entry, beside any recorded answer to the question.
+- `RIVAL <slug>`: a different answer to a recorded question was added to that entry as a rival. Its votes start at zero.
+- `NEW <slug>`: no entry exists for this question. A new entry was written.
+- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, the entry breaks the Q&A standards in `references/qa-standards.md` (the message names each problem), or the write failed. Report the message and stop.
 - `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, or the write failed. Report the message and stop.
 
 ## Procedure
@@ -36,5 +38,6 @@ Outcomes, reported to the caller:
 
 Set `DEPUTY_SCRIPT` to `scripts/deputy.py` in this plugin:
 
+- The standards file is `${CLAUDE_PLUGIN_ROOT}/references/qa-standards.md` on Claude Code.
 - Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/deputy.py"`. Add no host options.
-- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. Add `--host codex --session-id <session_id>` to the `record` command, using the host-provided ID. If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
+- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. The standards file is `<directory holding this SKILL.md>/../../references/qa-standards.md`. Add `--host codex --session-id <session_id>` to the `record` command, using the host-provided ID. If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.

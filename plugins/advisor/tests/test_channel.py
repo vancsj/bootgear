@@ -26,15 +26,20 @@ sys.path.insert(0, str(CHANNEL.parent))
 import channel as channel_module  # pyright: ignore[reportMissingImports]
 
 
+SESSION_ENV = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+
+
 def run(root: Path, *args: str, timeout: float | None = None, output: str = "--json"
         ) -> subprocess.CompletedProcess:
-    """Run `channel.py`; most tests parse the JSON, so it is asked for unless `output` says otherwise."""
+    """Run `channel.py` with no session variables from the caller's shell; tests pass `--session` when they need one."""
+    env = {k: v for k, v in os.environ.items() if k not in SESSION_ENV}
     return subprocess.run(
         [sys.executable, str(CHANNEL), "--root", str(root), *args, *([output] if output else [])],
         capture_output=True,
         text=True,
         check=False,
         timeout=timeout,
+        env=env,
     )
 
 

@@ -51,16 +51,48 @@ def ledger(deputy_root: Path, *args: str, signer: tuple[str, ...] = ()) -> subpr
                           capture_output=True, text=True, check=False)
 
 
-def slug_for(question: str) -> str:
-    return "decisions/" + (re.sub(r"[^a-z0-9]+", "-", question.lower()).strip("-")[:60] or "question")
+PRONOUN = re.compile(r"\b(i|me|my|mine|you|your|yours|it|its|itself)\b", re.IGNORECASE)
+OPTION = re.compile(r"\bor\b|\beither\b|\([a-z0-9]\)|\b[a-z0-9]\)|\b[a-z0-9]:\s", re.IGNORECASE)
+BARE_ANSWER = re.compile(r"\(?[a-z]\)?\.?|\d+\.?", re.IGNORECASE)
+MAX_WORDS = 20
+
+
+def sentences(text: str) -> list[str]:
+    return [part for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part]
+
+
+def entry_problems(question: str, claim: str, because: str) -> list[str]:
+    """The mechanical Q&A standards. An empty list means the entry may be written."""
+    problems = []
+    for label, text in (("question", question), ("answer", claim)):
+        if not text.strip():
+            problems.append(f"the {label} is empty")
+        if PRONOUN.search(text):
+            problems.append(f"the {label} uses a pronoun")
+        if any(len(part.split()) > MAX_WORDS for part in sentences(text)):
+            problems.append(f"a sentence in the {label} has more than {MAX_WORDS} words")
+    if OPTION.search(question):
+        problems.append("the question lists options")
+    if BARE_ANSWER.fullmatch(claim.strip()):
+        problems.append("the answer is a bare letter or number")
+    if len(sentences(because)) != 1:
+        problems.append("the reason is not one sentence")
+    if ";" in because:
+        problems.append("the reason is not one clause")
+    return problems
+
+
+def resolve_data(deputy_root: Path, question: str, signer: tuple[str, ...] = ()) -> dict:
+    """memory-ledger's resolve for the deputy kind: the exact slug, the minted slug, the candidates."""
+    r = ledger(deputy_root, "resolve", question, "--all", "--data", "--only", "deputy", signer=signer)
+    if r.returncode != 0:
+        sys.exit(r.stdout + r.stderr)
+    return json.loads(r.stdout)
 
 
 def matching_slugs(deputy_root: Path, question: str) -> list[str]:
     """Matching slugs: the exact slug first, then the candidates best score first."""
-    r = ledger(deputy_root, "resolve", question, "--all", "--data", "--only", "deputy")
-    if r.returncode != 0:
-        sys.exit(r.stdout + r.stderr)
-    data = json.loads(r.stdout)
+    data = resolve_data(deputy_root, question)
     rows = sorted(data["candidates"], key=lambda row: -row["score"])
     slugs = [data["exact"]] if data["exact"] else []
     return slugs + [row["slug"] for row in rows if row["slug"] != data["exact"]]
@@ -106,6 +138,9 @@ def session_id_from_environment(explicit: str | None) -> str | None:
 
 def record(deputy_root: Path, question: str, claim: str, because: str, options: str,
            stakes: str, session_ledger: Path, host: str = "claude", session_id: str | None = None) -> int:
+    if problems := entry_problems(question, claim, because):
+        print("REFUSED " + "; ".join(problems), file=sys.stderr)
+        return 2
     if host == "codex":
         session_id = session_id_from_environment(session_id)
     if host == "codex" and not session_id:
@@ -144,15 +179,20 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
         return 0
     existing = [line.split()[1] for line in r.stdout.splitlines()
                 if line.startswith("SAME-QUESTION ")]
-    base = slug_for(question)
-    slug = base if not existing else f"{base}-newer-{len(existing) + 1}"
-    newer = f" Newer than {existing[-1]}." if existing else ""
-    because_line = f"{because}.{newer} Context: options {options}; stakes {stakes}."
-    # A changed answer to a recorded question is deliberate, so memory-ledger's
-    # near-duplicate refusal is passed on purpose.
-    extra = ["--anyway"] if existing else []
+    because_line = f"{because}. Context: options {options}; stakes {stakes}."
+    if existing:
+        # The same question with another answer is a rival on its entry, not a new entry.
+        target = existing[0]
+        r = ledger(deputy_root, "rival", target, "--claim", claim, "--because", because_line,
+                   "--evidence", evidence, "--only", "deputy", *sign_as, signer=signer)
+        if r.returncode != 0:
+            print(r.stdout + r.stderr, file=sys.stderr)
+            return r.returncode
+        return save(deputy_root, f"RIVAL {target}", signer)
+    # The slug is memory-ledger's minted slug. Memory-ledger's duplicate gate applies to every new entry.
+    slug = "decisions/" + resolve_data(deputy_root, question, signer)["mint"]
     r = ledger(deputy_root, "new", slug, "--deputy", "--q", question, "--claim", claim,
-               "--because", because_line, "--evidence", evidence, *extra, *sign_as, signer=signer)
+               "--because", because_line, "--evidence", evidence, *sign_as, signer=signer)
     if r.returncode != 0:
         print(r.stdout + r.stderr, file=sys.stderr)
         return r.returncode
