@@ -68,8 +68,9 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
   `native_subagent` and `advisor`; on Claude Code an `advisor` debate party is
   a one-shot Codex call and an `advisor` converge seat a Codex listener over
   `channel`; on Codex both are Claude Code listeners over `channel`, one per
-  use), and the Codex-only
-  `task session recall` command.
+  use), and the Codex-only `task session recall` command. The Codex compact
+  hook tells the agent to run this command outside the sandbox; Claude's hook
+  tells the agent to call the `recall` skill.
 - Shared parts: the ledger formats, the `task` and `converge` CLIs apart
   from `session recall`, and the built-in state machines. The converge,
   resolve and review skill bodies above `## Host mechanics` are identical on

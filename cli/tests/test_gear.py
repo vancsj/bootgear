@@ -24,6 +24,27 @@ class RepoRegistrationTests(unittest.TestCase):
         self.assertEqual(set(plugins["converge"].commands), {"converge"})
         self.assertEqual(set(plugins["advisor"].commands), {"channel"})
 
+    def test_shared_host_plugins_use_one_extensionless_bin_entrypoint(self) -> None:
+        plugins = gear.discover(REPO)
+        expected = {
+            "advisor": "channel",
+            "deputy": "deputy",
+            "memory-ledger": "ledger",
+        }
+
+        for name, command in expected.items():
+            with self.subTest(plugin=name):
+                plugin = plugins[name]
+                wrapper = plugin.root / "bin" / command
+
+                self.assertEqual(plugin.commands[command], (f"./bin/{command}",))
+                self.assertTrue(wrapper.is_file())
+                self.assertTrue(os.access(wrapper, os.X_OK))
+                for manifest in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+                    data = json.loads((plugin.root / manifest).read_text(encoding="utf-8"))
+                    self.assertEqual(data["name"], name)
+                    self.assertTrue(wrapper.is_file())
+
     def test_routed_child_follows_caller_stdout(self) -> None:
         # gear.py sets no output mode: both sinks default to prose.
         machine = REPO / "plugins" / "engine" / "state-machines" / "change-review.yaml"
@@ -113,6 +134,28 @@ print(json.dumps({
                 "root": str(root.resolve()),
                 "caller_cwd": str(Path.cwd().resolve()),
             })
+
+    def test_routes_shared_plugin_commands_through_bin_wrappers(self) -> None:
+        commands = (("advisor", "channel"), ("deputy", "deputy"),
+                    ("memory-ledger", "ledger"))
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("BOOTGEAR_OUTPUT", "VIRTUAL_ENV")}
+
+        with tempfile.TemporaryDirectory() as caller_cwd:
+            for plugin, command in commands:
+                with self.subTest(plugin=plugin):
+                    result = subprocess.run(
+                        [sys.executable, str(GEAR), "--root", str(REPO),
+                         plugin, command, "--help"],
+                        cwd=caller_cwd,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("usage:", result.stdout)
 
     def test_routes_event_and_preserves_reminder_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

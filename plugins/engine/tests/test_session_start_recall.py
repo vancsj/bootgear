@@ -105,6 +105,7 @@ class SessionStartRecallTest(unittest.TestCase):
     def test_no_sources_present_base_message_only(self):
         msg = self._run()
         self.assertIn("This session just compacted", msg)
+        self.assertIn("call `recall` now", msg)
         self.assertIn("This run's /goal:\nsucceeded when done", msg)
         self.assertIn("[task]", msg)
         self.assertNotIn("[project]", msg)

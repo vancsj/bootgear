@@ -115,6 +115,7 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         msg = self._run()
         self.assertIn("This session just compacted", msg)
         self.assertIn(f"Codex session_id: `{self.run_id}`", msg)
+        self.assertIn("<plugin-root>/scripts/task session recall", msg)
         self.assertIn("session recall", msg)
         self.assertIn("outside the sandbox", msg)
         self.assertIn("host-level access", msg)

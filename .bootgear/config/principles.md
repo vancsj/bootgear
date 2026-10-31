@@ -15,7 +15,7 @@
 - Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
 - Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.
-- A skill states the overall workflow. The model then knows where each step leads and can use its judgment. The CLI prints deterministic detail at the step where it matters (the next command, legal branches, gates, argument tables). That detail comes from validated CLI-owned state or configuration. Do not repeat it in skill text. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks.
+- A skill states the overall workflow. The model then knows where each step leads and can use its judgment. The CLI prints deterministic detail at the step where it matters (the next command, legal branches, gates, argument tables). That detail comes from validated CLI-owned state or configuration. A skill may include concise examples for common, stable commands. Do not repeat state-dependent branches, gates, or next commands in skill text. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks.
 - A script enforces a rule about data or behavior that the script can check (CLI validation, a gate, a cap). Do not state such a rule in text only. The review standard enforces rules about doc content. Tests and scripts do not, except mechanical repo hygiene such as `check_content.py`.
 
 ## Docs and repo content

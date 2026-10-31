@@ -2,4 +2,4 @@
 name = "advisor"
 
 [commands.channel]
-exec = ["python3", "skills/advisor/scripts/channel.py"]
+exec = ["./bin/channel"]

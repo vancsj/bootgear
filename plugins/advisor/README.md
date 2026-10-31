@@ -123,8 +123,8 @@ Design detail, including the on-disk layout, lives in [docs/advisor.md](../../do
 | `/advisor:advisor --mode asking` (Codex: `$advisor:advisor --mode asking`) | ask the other model, one-shot or through the mailbox |
 | `/advisor:advisor --mode listening` (Codex: `$advisor:advisor --mode listening`) | open a channel and advise the paired session until stopped |
 
-The mailbox CLI underneath is `skills/advisor/scripts/channel.py`, one copy shared by both
-hosts:
+The extensionless `bin/channel` command proxies to
+`skills/advisor/scripts/channel.py`, one copy shared by both hosts:
 
 ```
 register  take a seat: a listener gets a new channel, an asker claims an existing one

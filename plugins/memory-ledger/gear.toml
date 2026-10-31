@@ -2,4 +2,4 @@
 name = "memory-ledger"
 
 [commands.ledger]
-exec = ["python3", "scripts/ledger.py"]
+exec = ["./bin/ledger"]

@@ -26,10 +26,12 @@ by its plain public name, without Claude `/` or Codex `$` punctuation. Only
 host adapter sections describe plugin-root paths, session identity, agent
 mechanism, and output wiring. A
 shared skill names the public command it calls in its common sections, and
-puts the resolved path in `## Host mechanics`. `engine` and `converge` call a
-wrapper (`<plugin-dir>/bin/<command>` on Claude, `<plugin-root>/scripts/<command>`
-on Codex) that resolves the project root from its own location. `memory-ledger`
-and `advisor` call their Python script directly under the plugin root.
+puts the resolved path in `## Host mechanics`. CLI skills may include concise
+examples for common, stable commands. Use placeholders for caller-supplied
+values. Do not repeat state-dependent branches, gates, or next commands that
+the CLI prints. `engine` and `converge` use extensionless wrappers that resolve
+the plugin root from their own location. Other plugin CLIs use extensionless
+`bin/<command>` wrappers that proxy to their Python implementations.
 
 ## Public skill contracts
 

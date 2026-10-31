@@ -10,11 +10,12 @@ review, or delegated investigation. One plugin directory ships to both hosts.
 |---|---|
 | `skills/advisor/SKILL.md` | The skill contract: mode selection, the listener loop, safety rules. |
 | `skills/advisor/references/` | One doc per communication (`direct`, `channel`) and per task (`rewrite`, `ask`, `review`, `delegate`). |
+| `bin/channel` | Extensionless `channel` CLI entrypoint; proxies to `channel.py`. |
 | `skills/advisor/scripts/channel.py` | The mailbox CLI. Both hosts use this one copy. |
 | `hooks/advisor_hook.py` | The seat hook both hosts run: hook stamp, heartbeat restart reminder, status after compaction. |
 | `hooks/hooks.json`, `hooks/codex-hooks.json` | Claude and Codex hook manifests; the Codex one is named by `.codex-plugin/plugin.json`. |
 | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | Host manifests for the same skill tree. |
-| `gear.toml` | Exposes `channel.py` as the `channel` gear command. |
+| `gear.toml` | Exposes `bin/channel` as the `channel` gear command. |
 
 ## Modes
 

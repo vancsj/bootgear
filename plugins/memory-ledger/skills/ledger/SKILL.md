@@ -27,7 +27,8 @@ zoom-out check → `sign`, `sign --fail --output`, or `refute`; a claim narrower
 than its checks → `rival` → no hit or a different question: read both ledgers'
 `rules`, choose a ledger → `new` (with `--alt-terms`) → `save` → hand back.
 
-1. Run `ledger.py --help` (or `<command> --help`) for command syntax. Read
+1. Use the common command forms below. Run `<command> --help` when a form is
+   not listed or when the CLI output does not settle the syntax. Read
    `references/mechanics.md` before a write command or when a flag, path, or
    output shape needs checking.
 2. Resolve the question before reading or writing an entry.
@@ -37,6 +38,16 @@ than its checks → `rival` → no hit or a different question: read both ledger
 5. Add a rival instead of editing an answer, evidence line, or signature bytes.
 6. Sign the verified result with the current AI session.
 7. `save` in the same working stretch, then hand back.
+
+### Common commands
+
+```text
+ledger.py resolve "<question or claim>"
+ledger.py show <slug>
+ledger.py list --filter "<term>"
+ledger.py doctor --json
+ledger.py resolve-roots --json
+```
 
 Read `references/judgement.md` when choosing a ledger, interpreting a match,
 writing a check, verifying a signature, or resolving disagreement.

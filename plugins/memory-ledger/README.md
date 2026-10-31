@@ -202,8 +202,9 @@ is a judgement the reader makes by running the checks.
 | `/memory-ledger:setup` (Codex: `$memory-ledger:setup`) | check dependencies, create the ledgers, wire the config file and the host instructions file (`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md`), audit what is already filed |
 | `/memory-ledger:ledger` | look something up, record a finding, verify or contest an entry |
 
-The CLI underneath is `scripts/ledger.py`. The skills invoke it by an absolute path
-substituted at load time, so nothing needs to be on `PATH`.
+The Python CLI is `scripts/ledger.py`. The extensionless `bin/ledger` entrypoint
+routes the gear command to it. The skills invoke their host entrypoint by an
+absolute path substituted at load time, so nothing needs to be on `PATH`.
 
 ```
 resolve   find the entry, or mint a slug for a new one

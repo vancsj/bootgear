@@ -68,7 +68,7 @@ A subcommand that completes a workflow step must end its output with the next st
 You must write the `next` line for the role the subcommand serves: the user, the main agent or a role agent. The `next` line must name only a step that this role can do. The script does not have to detect who runs it.
 If another role owns the next step, the `next` line must tell the caller to hand it to that role. Example: a subcommand for a role agent tells the role agent to report the next step to the main agent. It does not give the main agent a command.
 Show the reminder only when it changes what the caller does next.
-Remove a skill line that repeats the per-step detail that the CLI prints (command, branches, gates).
+A skill may include concise examples for common, stable commands. Use placeholders for caller-supplied values. Do not repeat state-dependent branches, gates, or next commands that the CLI prints.
 Keep the overall workflow outline in the skill.
 
 ## R014 [must]

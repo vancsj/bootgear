@@ -9,6 +9,7 @@ a cache for facts that are expensive to derive, not a note store.
 
 | Part | Role |
 |---|---|
+| `plugins/memory-ledger/bin/ledger` | Extensionless `ledger` gear entrypoint; proxies to `scripts/ledger`. |
 | `plugins/memory-ledger/scripts/ledger.py` | CLI: `resolve`, `show`, `list`, `new`, `rival`, `add-evidence`, `sign`, `refute`, `assert`, `promote`, `set-repo`, `hash`, `lint`, `save`, `audit`, `doctor`, `resolve-roots`, `selftest` |
 | `scripts/ledgerlib/` | `config` (roots), `context`/`identity` (host, signer), `model` (hash, confidence, refs), `store` (parsing, identity cache), `scoring` (resolver), `read`, `write`, `gates` (write-time checks), `lint`, `gitops` (save), `audit`, `doctor`, `nudge` |
 | `scripts/ledger` | Codex wrapper; defaults output to prose |
@@ -146,6 +147,7 @@ session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
 | | Claude | Codex |
 |---|---|---|
 | Entry point | `${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py` | `${PLUGIN_ROOT}/scripts/ledger` (prose output by default) |
+| Gear command | `${CLAUDE_PLUGIN_ROOT}/bin/ledger` | `${PLUGIN_ROOT}/bin/ledger` |
 | Signer | first segment of `CLAUDE_CODE_SESSION_ID`, or `--as` | `codex:<id>` from `--host codex --session-id <id>`; `--as`, if given, must equal it |
 | Manifest | `.claude-plugin`, `hooks/hooks.json` | `.codex-plugin`, `hooks/codex-hooks.json` |
 | Hook status output | `additionalContext` | `systemMessage`; the hook first validates the session id and stays silent if it is invalid |

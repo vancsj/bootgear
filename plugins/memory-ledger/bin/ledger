@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$BIN_DIR/.." && pwd)
+
+exec "$PLUGIN_ROOT/scripts/ledger" "$@"
