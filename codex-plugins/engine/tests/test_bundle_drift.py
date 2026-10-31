@@ -34,6 +34,19 @@ class BundleDriftTest(unittest.TestCase):
             CLAUDE_CONVERGE / "src" / "converge", PLUGIN_DIR / "src" / "converge"
         )
 
+    def test_converge_fresh_eye_instructions_match_across_hosts(self):
+        claude_skill = CLAUDE_CONVERGE / "skills" / "converge" / "SKILL.md"
+        codex_skill = PLUGIN_DIR / "skills" / "converge" / "SKILL.md"
+        claude_lines = [line for line in claude_skill.read_text().splitlines()
+                        if "Fresh-eye batch (`batch` `fresh-eye`)" in line]
+        codex_lines = [line for line in codex_skill.read_text().splitlines()
+                       if "Fresh-eye batch (`batch` `fresh-eye`)" in line]
+        self.assertEqual(len(claude_lines), 1)
+        self.assertEqual(codex_lines, claude_lines)
+        self.assertIn("including names outside the fixed list", claude_lines[0])
+        self.assertIn("fixed list is not a menu", claude_lines[0])
+        self.assertIn("For example", claude_lines[0])
+
     def test_clikit_copies_match_engine_source(self):
         # Each plugin ships its own copy; none imports another plugin's.
         source = REPO_ROOT / "plugins" / "engine" / "src" / "engine" / "clikit.py"

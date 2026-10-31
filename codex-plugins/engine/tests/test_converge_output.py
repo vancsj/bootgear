@@ -136,9 +136,9 @@ class Slate:
         data["by_id"] = {row["id"]: row for row in data["claims"]}
         return data
 
-    def to_attack(self) -> None:
+    def to_attack(self, config: str = STEPS) -> None:
         """Two claims, find coverage, escalate, and cut-before: F001 kept, F002 unverified."""
-        self.init()
+        self.init(config=config)
         self.file("None crashes the parser")
         self.file("log line typo")
         self.cover()
@@ -333,6 +333,41 @@ def test_bundled_attack_refusals_name_the_role_and_the_next_step(tmp_path: Path)
     assert "  - attack: cutter cut F001; refuters and cutters are disjoint" in err
     err = slate.attack(BATCH_1[0], batch="2", code=2)
     assert "  - attack: F001's open batch is 1 (open); got batch 2" in err
+
+
+def test_bundled_fresh_eye_reuse_refusal_explains_angle_choice(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    slate.to_attack()
+    slate.batch_1()
+    slate.attack("retry timing", agent=R2, batch="fresh-eye")
+    err = slate.attack("retry timing", agent=R2, batch="fresh-eye", code=2)
+    assert (
+        "  - attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
+        "including names outside the fixed list; "
+        "the fixed list is not a menu for this batch") in err
+
+
+def test_bundled_fresh_eye_plan_explains_angle_choice(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    slate.to_attack()
+    slate.batch_1()
+    [[row]] = slate.status()["plan"]
+    assert row["angles"] == []
+    assert row["rule"] == (
+        "choose a new angle name not listed in `used`, including names outside the fixed list; "
+        "the fixed list is not a menu for this batch. "
+        "For example, use `retry after timeout`.")
+
+
+def test_bundled_fresh_eye_closes_at_cap_twenty_without_last(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    slate.to_attack(config=STEPS + "caps: {angles_per_claim: 20}\n")
+    slate.batch_1()
+    for n in range(1, 21):
+        slate.attack(f"angle {n}", agent=R2, batch="fresh-eye")
+    status = slate.status()
+    assert status["phase"] == "cut-after"
+    assert status["by_id"]["F001"]["fresh_eye"] == [f"angle {n}" for n in range(1, 21)]
 
 
 def _example(lines: list[str]) -> str:

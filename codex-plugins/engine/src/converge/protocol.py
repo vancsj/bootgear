@@ -14,8 +14,9 @@ from . import effort, ledger, model
 from .model import Claim, Slate
 
 FRESH_EYE = "fresh-eye"
-FRESH_EYE_RULE = ("fixed set covered by table batches; any new one-line name without edge whitespace allowed; "
-                  "a name already used on this claim is refused")
+FRESH_EYE_RULE = ("choose a new angle name not listed in `used`, including names outside the fixed list; "
+                  "the fixed list is not a menu for this batch. "
+                  "For example, use `retry after timeout`.")
 WHEN = ("before", "after")
 ATTACK_OUTCOME = ("clean", "refuted")
 STANCE = ("rebut", "decline")
@@ -665,7 +666,11 @@ def _validate_attack(slate: Slate, event: dict[str, Any], problems: list[str]) -
     if angle is None:
         return
     if angle in claim.used_angles:
-        problems.append(f"attack: angle {angle!r} was already used on {claim.id}")
+        message = f"attack: angle {angle!r} was already used on {claim.id}"
+        if batch == FRESH_EYE:
+            message += ("; choose a new angle name not listed in `used`, including names outside the fixed list; "
+                       "the fixed list is not a menu for this batch")
+        problems.append(message)
     elif batch != FRESH_EYE and angle in claim.na_angles:
         problems.append(f"attack: angle {angle!r} is recorded not applicable to {claim.id}")
 

@@ -211,10 +211,16 @@ def test_fresh_eye_angle_is_free_text_not_used_before(cv: Converge) -> None:
     assert ("attack: `last` must be true or false; got 'yes'"
             in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye", last="yes"))
     assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye") == []
-    assert ("attack: angle 'retry timing' was already used on F001"
-            in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye"))
-    assert (f"attack: angle {BATCH_1[2]!r} was already used on F001"
-            in cv.attack("F001", BATCH_1[2], agent=R2, batch="fresh-eye"))
+    assert (
+        "attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
+        "including names outside the fixed list; "
+        "the fixed list is not a menu for this batch"
+        in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye"))
+    assert (
+        f"attack: angle {BATCH_1[2]!r} was already used on F001; choose a new angle name not listed in `used`, "
+        "including names outside the fixed list; "
+        "the fixed list is not a menu for this batch"
+        in cv.attack("F001", BATCH_1[2], agent=R2, batch="fresh-eye"))
     assert "`angle` must be a non-empty string" in cv.attack(
         "F001", " ", agent=R2, batch="fresh-eye")
 

@@ -136,6 +136,15 @@ def test_fresh_eye_batch_holds_up_to_angles_per_claim_attacks(cv: Converge) -> N
             in cv.attack("F001", "angle 6", agent=R2, batch="fresh-eye"))
 
 
+def test_fresh_eye_batch_closes_at_configured_cap_without_last(cv: Converge) -> None:
+    cv.ready(angles_per_claim=20)
+    cv.batch_1()
+    for n in range(1, 21):
+        assert cv.attack("F001", f"angle {n}", agent=R2, batch="fresh-eye") == []
+    assert _next(cv) is None
+    assert _batch_state(cv, "fresh-eye") == "done"
+
+
 def test_last_closes_the_fresh_eye_batch(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()

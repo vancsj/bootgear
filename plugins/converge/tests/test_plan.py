@@ -83,8 +83,9 @@ def test_fresh_eye_row_has_empty_angles_and_used_list(cv: Converge) -> None:
     assert row["angles"] == []
     assert row["used"] == [*BATCH_1, "retry timing"]
     assert row["rule"] == (
-        "fixed set covered by table batches; any new one-line name without edge whitespace allowed; "
-        "a name already used on this claim is refused")
+        "choose a new angle name not listed in `used`, including names outside the fixed list; "
+        "the fixed list is not a menu for this batch. "
+        "For example, use `retry after timeout`.")
 
 
 def test_status_fixed_remaining_empty_is_not_nothing_to_attack(cv: Converge) -> None:
