@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/pre_tool_use_task_identity.py\"",
+            "statusMessage": "Checking Gear command"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

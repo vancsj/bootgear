@@ -197,7 +197,9 @@ record, message, and lock file to `0600`, on every call.
   default.
 - **Both.** `SESSION_ID` must be the host's real session identifier. If it is not
   available, the skill fails instead of making one up. Claude Code passes
-  `$CLAUDE_CODE_SESSION_ID`; Codex CLI passes the `session_id` the host
-  gives the agent in its context (no shell environment variable carries it).
+  `$CLAUDE_CODE_SESSION_ID`; Codex CLI passes the `session_id` the host gives
+  the agent in its context when it runs the direct Python script. The
+  registered `bin/channel` Gear command receives `BOOTGEAR_SESSION_ID` from
+  the Codex hook and uses it as the default; an explicit `--session` still wins.
 - **Heartbeat.** Claude Code starts `heartbeat` with the Bash tool's
   `run_in_background` and `timeout: 7200000`; Codex CLI leaves it running in a terminal session.

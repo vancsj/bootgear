@@ -48,6 +48,8 @@ from engine import seats
 from engine.clikit import ENV_PROG, caller_cwd, caller_path, emit, refuse
 
 PROG = "task"
+BOOTGEAR_SESSION_ID = "BOOTGEAR_SESSION_ID"
+CLAUDE_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
 SECTIONS = ["settlement", "decisions", "todos", "pitches", "state"]
 # Optional, after `## state` only: a column-0 `## machines` line inside an
 # older ledger's settlement is settlement text, not this section.
@@ -176,7 +178,50 @@ def _command(rest: str) -> str:
     return f"{os.environ.get(ENV_PROG) or PROG} {rest}"
 
 
+def _effective_run_id(run_id: str | None) -> str:
+    """Use an explicit run ID, then the shared and Claude host identities."""
+    effective = (run_id or os.environ.get(BOOTGEAR_SESSION_ID)
+                 or os.environ.get(CLAUDE_SESSION_ID))
+    if not effective:
+        sys.exit("missing run-id — pass a positional <run-id>, or set "
+                 f"{BOOTGEAR_SESSION_ID} (or {CLAUDE_SESSION_ID})")
+    return effective
+
+
+def _run_id_command(func):
+    """Resolve the run identity before dispatching a session/state command."""
+    def run(args):
+        args.run_id = _effective_run_id(args.run_id)
+        return func(args)
+    run.__name__ = func.__name__
+    return run
+
+
+def _text_operand(args: argparse.Namespace) -> str:
+    """Accept legacy positional text or `--text` when the run ID is implicit."""
+    if args.text is not None and args.text_option is not None:
+        sys.exit("text was given twice — use positional text or --text, not both")
+    text = args.text if args.text is not None else args.text_option
+    if text is None:
+        sys.exit("missing text — use <run-id> <text> or --text <text> with "
+                 "the session run ID environment variable")
+    return text
+
+
+def _outcome_operand(args: argparse.Namespace) -> str:
+    """Accept legacy positional outcome or `--outcome` with an implicit ID."""
+    if args.outcome is not None and args.outcome_option is not None:
+        sys.exit("outcome was given twice — use positional outcome or --outcome, not both")
+    outcome = args.outcome if args.outcome is not None else args.outcome_option
+    if outcome is None:
+        sys.exit("missing outcome — use <run-id> succeeded|failed or "
+                 "--outcome succeeded|failed with the session run ID environment variable")
+    return outcome
+
+
 def _ledger_args(run_id: str, path: Path) -> str:
+    if path.parent.resolve() == DEFAULT_DIR.resolve():
+        return run_id
     return f"{run_id} --dir {shlex.quote(str(path.parent))}"
 
 
@@ -1513,7 +1558,7 @@ def cmd_update_todo(args: argparse.Namespace) -> None:
     path = _ledger_path(args.run_id, args.dir)
     text = _read_text(path)
     _check_open(text, path)
-    todo_text = _single_line(args.text, "todo text")
+    todo_text = _single_line(_text_operand(args), "todo text")
     start, end = _section_span(text, "todos")
     entries = [e for e in text[start:end].strip("\n").split("\n") if e.strip()]
     candidates = [i for i, e in enumerate(entries)
@@ -1560,13 +1605,14 @@ def cmd_record_pitch(args: argparse.Namespace) -> None:
     path = _ledger_path(args.run_id, args.dir)
     text = _read_text(path)
     _check_open(text, path)
-    pitch_text = _single_line(args.text, "pitch text")
+    pitch_text = _single_line(_text_operand(args), "pitch text")
     line = f"- {_now()} — {pitch_text}"
     _write_atomic(path, _append_to_section(text, "pitches", line))
     emit(args.output_mode, {"line": line}, "PITCH    recorded")
 
 
 def cmd_close(args: argparse.Namespace) -> None:
+    args.outcome = _outcome_operand(args)
     if args.outcome == "failed" and not args.reason:
         sys.exit("close failed requires --reason — the goal's undoable "
                   "condition must be named, not left blank")
@@ -1715,23 +1761,23 @@ def cmd_write_ticket(args: argparse.Namespace) -> None:
 def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.ArgumentParser) -> None:
     s = sub.add_parser("init", parents=[dir_parent],
                         help="create a new ledger and write its settlement")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--settlement-file", type=caller_path,
                    help="read settlement body from this file instead of stdin")
     s.add_argument("--force", action="store_true",
                    help="overwrite an existing ledger for this run-id")
-    s.set_defaults(func=cmd_init)
+    s.set_defaults(func=_run_id_command(cmd_init))
 
     s = sub.add_parser("validate", parents=[dir_parent],
                         help="validate an execution settlement without writing")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--settlement-file", type=caller_path,
                    help="validate this settlement body instead of an existing ledger")
-    s.set_defaults(func=cmd_validate)
+    s.set_defaults(func=_run_id_command(cmd_validate))
 
     s = sub.add_parser("read", parents=[dir_parent],
                         help="print a section, or the whole ledger")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--section", choices=[*SECTIONS, MACHINES_SECTION],
                    help="print just this section, full history")
     s.add_argument("--open-only", action="store_true",
@@ -1744,17 +1790,17 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                    help="print only decisions tagged with this debate question "
                         "id (e.g. 'q1') — use to resume one debate without "
                         "scanning the whole decisions section")
-    s.set_defaults(func=cmd_read)
+    s.set_defaults(func=_run_id_command(cmd_read))
 
     s = sub.add_parser("recall", parents=[dir_parent],
                         help="print settlement, full decisions, open todos, state, "
                              "and recent pitches")
-    s.add_argument("run_id")
-    s.set_defaults(func=cmd_recall)
+    s.add_argument("run_id", nargs="?")
+    s.set_defaults(func=_run_id_command(cmd_recall))
 
     s = sub.add_parser("record-decision", parents=[dir_parent],
                         help="append a decisions entry")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--mode", required=True,
                    choices=["solo", "resolve", "debate", "debate-capped",
                             "debate-degraded", "scope-settled"],
@@ -1772,13 +1818,15 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "--mode debate/debate-capped/debate-degraded/"
                         "scope-settled, refused for any other mode — get one "
                         "from `next-question-id`")
-    s.set_defaults(func=cmd_record_decision)
+    s.set_defaults(func=_run_id_command(cmd_record_decision))
 
     s = sub.add_parser("update-todo", parents=[dir_parent],
                         help="add a todo, or toggle one done")
-    s.add_argument("run_id")
-    s.add_argument("text", help="the todo text (or a substring to match an "
-                                 "existing one)")
+    s.add_argument("run_id", nargs="?")
+    s.add_argument("text", nargs="?", help="the todo text (or a substring to match an "
+                                              "existing one)")
+    s.add_argument("--text", dest="text_option", metavar="TEXT",
+                    help="todo text when the run ID comes from the environment")
     done_group = s.add_mutually_exclusive_group()
     done_group.add_argument("--done", action="store_true",
                    help="mark the matching todo done, instead of adding a new one")
@@ -1788,32 +1836,36 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "re-add silently undoing completed work); mutually "
                         "exclusive with --done, since marking done and "
                         "confirming a reopen are contradictory requests")
-    s.set_defaults(func=cmd_update_todo)
+    s.set_defaults(func=_run_id_command(cmd_update_todo))
 
     s = sub.add_parser("next-question-id", parents=[dir_parent],
                         help="print the next unused debate question id (q1, q2, ...)")
-    s.add_argument("run_id")
-    s.set_defaults(func=cmd_next_question_id)
+    s.add_argument("run_id", nargs="?")
+    s.set_defaults(func=_run_id_command(cmd_next_question_id))
 
     s = sub.add_parser("record-pitch", parents=[dir_parent],
                         help="append a pitches entry")
-    s.add_argument("run_id")
-    s.add_argument("text")
-    s.set_defaults(func=cmd_record_pitch)
+    s.add_argument("run_id", nargs="?")
+    s.add_argument("text", nargs="?")
+    s.add_argument("--text", dest="text_option", metavar="TEXT",
+                    help="pitch text when the run ID comes from the environment")
+    s.set_defaults(func=_run_id_command(cmd_record_pitch))
 
     s = sub.add_parser("close", parents=[dir_parent], help="mark the ledger closed")
-    s.add_argument("run_id")
-    s.add_argument("outcome", choices=["succeeded", "failed"])
+    s.add_argument("run_id", nargs="?")
+    s.add_argument("outcome", nargs="?", choices=["succeeded", "failed"])
+    s.add_argument("--outcome", dest="outcome_option", choices=["succeeded", "failed"],
+                    help="the outcome when the run ID comes from the environment")
     s.add_argument("--reason", help="required in practice for a failed outcome, "
                                      "naming what made the goal undoable")
-    s.set_defaults(func=cmd_close)
+    s.set_defaults(func=_run_id_command(cmd_close))
 
     s = sub.add_parser("write-ticket", parents=[dir_parent],
                         help="write the run's ticket body and record that the run owns it")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--body-file", type=caller_path, required=True,
                    help="the ticket body: Markdown with the five part headings")
-    s.set_defaults(func=cmd_write_ticket)
+    s.set_defaults(func=_run_id_command(cmd_write_ticket))
 
 
 def main() -> None:

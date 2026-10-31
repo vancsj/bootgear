@@ -177,8 +177,10 @@ Set `CHANNEL_SCRIPT` to `scripts/channel.py` in this skill's directory:
 
 Set `SESSION_ID` to the host's real session identifier, never an invented one; if none is available, fail.
 
-- Claude Code: `SESSION_ID="$CLAUDE_CODE_SESSION_ID"`.
-- Codex CLI: the `session_id` the host gives you in your context; the shell has no environment variable for it.
+The channel CLI resolves `--session` first, then `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
+
+- Claude Code: `SESSION_ID="${BOOTGEAR_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"`.
+- Codex CLI: use `BOOTGEAR_SESSION_ID` when it is set. Otherwise, use the `session_id` the host gives you in your context and pass it with `--session`.
 
 Escalation (Codex CLI): every `channel.py` call needs `sandbox_permissions: require_escalated` — `~/.bootgear/advisor` is outside the normal writable roots. Escalate on every call, not just the first.
 

@@ -38,6 +38,7 @@ from engine.session import (
     _machines_heading,
     _now,
     _read_text,
+    _run_id_command,
     _section_body,
     _section_span,
     _single_line,
@@ -1025,7 +1026,7 @@ def cmd_diagram(args: argparse.Namespace) -> None:
 def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.ArgumentParser) -> None:
     s = sub.add_parser("transition", parents=[dir_parent],
                         help="move the run to a new state machine node")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--to", required=True, metavar="NODE",
                    help="the destination node — must be in the current "
                         "node's `next:` list, or 'failed'")
@@ -1039,27 +1040,27 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                    help="value for a {NAME} placeholder in the leave check "
                         "of the exit taken (`reminder.leave_check`, or "
                         "`reminder.exit_checks.<exit>`); repeatable")
-    s.set_defaults(func=cmd_transition)
+    s.set_defaults(func=_run_id_command(cmd_transition))
 
     s = sub.add_parser("current", parents=[dir_parent],
                         help="print the run's current node and its full reminder")
-    s.add_argument("run_id")
-    s.set_defaults(func=cmd_current)
+    s.add_argument("run_id", nargs="?")
+    s.set_defaults(func=_run_id_command(cmd_current))
 
     s = sub.add_parser("amend", parents=[dir_parent],
                         help="replace the run's machine mid-run with a valid one "
                              "that keeps the current node")
-    s.add_argument("run_id")
+    s.add_argument("run_id", nargs="?")
     s.add_argument("--machine-file", required=True, type=caller_path,
                    help="the full new machine YAML — start from `state show`")
     s.add_argument("--reason", required=True,
                    help="one line stating why the machine changes now")
-    s.set_defaults(func=cmd_amend)
+    s.set_defaults(func=_run_id_command(cmd_amend))
 
     s = sub.add_parser("show", parents=[dir_parent],
                         help="print the run's machine in force and its version")
-    s.add_argument("run_id")
-    s.set_defaults(func=cmd_show)
+    s.add_argument("run_id", nargs="?")
+    s.set_defaults(func=_run_id_command(cmd_show))
 
     s = sub.add_parser("validate", help="check a state machine YAML file's structure")
     s.add_argument("path", type=caller_path, help="path to a state machine YAML file")

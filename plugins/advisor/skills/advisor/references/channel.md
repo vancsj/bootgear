@@ -7,10 +7,12 @@ Requires the `advisor` Codex CLI plugin, installed via `codex plugin add advisor
 - Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"`.
 - Codex CLI: `CHANNEL_SCRIPT="<directory holding SKILL.md>/scripts/channel.py"`, as an absolute path.
 
-Session ID: the host's real session identifier, never an invented one.
+Session ID: `--session` takes priority. If it is omitted, the CLI uses
+`BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
 
-- Claude Code: `$CLAUDE_CODE_SESSION_ID`.
-- Codex CLI: the `session_id` the host gives you in your context; the shell has no environment variable for it.
+- Claude Code: use `BOOTGEAR_SESSION_ID` when set, then `$CLAUDE_CODE_SESSION_ID`.
+- Codex CLI: use `BOOTGEAR_SESSION_ID` when set. Otherwise, use the
+  `session_id` the host gives you in your context and pass it with `--session`.
 
 ```sh
 SESSION_ID="<this host's session id>"

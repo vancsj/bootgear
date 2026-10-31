@@ -3,6 +3,8 @@ name: clarify
 description: Settle task type, approach, source-of-truth order, debate threshold, and autonomy scope; draft a goal for confirmation. Use at the start of any engine run, before execute. The only stage that asks the user work questions; recall's lost-session_dir recovery is a documented exception, not work.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Run at the start of every engine run, before `execute`. Input: the user's request, directly or through `start`.
 
 Outcomes:
@@ -135,7 +137,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - Pair one listener per chosen use that needs its own, and show every pairing in the goal confirmation. One use needs only its own listener; none needs none. Record a debate party `native_subagent`, with its role left out of `advisor_roles`, only when the user explicitly declines its listener, and show the diagnostic. While a pairing is unanswered, do not write the settlement.
    - Write a task-layer debate-parties file setting `mechanism` for `independent-reviewer` and `adversarial-reviewer` (`advisor` when named, else `native_subagent`), and a task-layer converge-seats file whose `seats` names all five seats: `r2: advisor` when `refuter` or `gap-hunter` is named, every other seat (and `r2` otherwise) `native_subagent`; a lower layer's value survives for any seat the task layer leaves out. Resolve both with `--task-config-file` and follow each `next`.
    - Record `advisor_roles: {roles, brief}` (brief: one line limiting the advisor to its roles) and `converge_seats` together.
-   - After `init`, record the channels: `task session record-decision <run-id> --dir <session-dir> --mode solo --summary "advisor channels: r2=<n>, debate=<m>"`, naming only the channels that exist; skip it when none does.
+   - After `init`, record the channels: `task session record-decision <run-id> --mode solo --summary "advisor channels: r2=<n>, debate=<m>"`, naming only the channels that exist; skip it when none does.
    - While the run lasts, whenever a channel's heartbeat task ends, run its printed `next` at once, inside the 720-second restart grace.
 
 ## Drafting goal

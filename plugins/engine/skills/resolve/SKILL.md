@@ -3,6 +3,8 @@ name: resolve
 description: Resolve disagreements during `execute` from the settlement's per-domain `source_of_truth` order; if no settled source applies, invoke `debate` with the settled source text and `principles`. Use during engine runs when two considerations conflict.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Apply the settlement's per-domain `source_of_truth`.
 
 Invoke `debate` with the required settlement data when no settled source applies.
@@ -51,7 +53,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
 Write one line in the session ledger for every disagreement `resolve` decides:
 
 ```text
-task session record-decision <run-id> --dir <session-dir> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
+task session record-decision <run-id> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
 ```
 
 During a stuck round, record the decided entry without `--question`, and state in the summary that it broke a debate stall.

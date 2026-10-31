@@ -219,7 +219,8 @@ class InstalledCopyTest(unittest.TestCase):
         self.log = self.base / "ledger-calls.jsonl"
         self.session = self.base / "session.md"
         self.session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
-        unset = ("GEAR_PY", "CLAUDE_CODE_SESSION_ID", "MEMORY_LEDGER_HOST", "MEMORY_LEDGER_SESSION_ID")
+        unset = ("GEAR_PY", "BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID",
+                 "MEMORY_LEDGER_HOST", "MEMORY_LEDGER_SESSION_ID")
         self.env = {**{k: v for k, v in os.environ.items() if k not in unset},
                     "FAKE_LEDGER_LOG": str(self.log)}
 
@@ -271,8 +272,9 @@ class InstalledCopyTest(unittest.TestCase):
         self.assertEqual(r.stderr.strip(), REFUSED_MISSING)
         self.assertEqual(r.stdout, "")
 
-    def test_codex_record_forwards_the_host_signer_to_every_ledger_call(self) -> None:
+    def test_codex_record_prefers_explicit_session_over_environment(self) -> None:
         self.fake_ledger("4.14.1")
+        self.env.update({"BOOTGEAR_SESSION_ID": "shared", "CLAUDE_CODE_SESSION_ID": "legacy"})
         r = self.run_copy(*self.record_argv("--host", "codex", "--session-id", "abc"))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("NEW decisions/", r.stdout)
@@ -284,6 +286,25 @@ class InstalledCopyTest(unittest.TestCase):
         vote, new, _ = calls
         self.assertNotIn("--as", vote)
         self.assertEqual(new[new.index("--as") + 1], "codex:abc")
+
+    def test_codex_record_uses_bootgear_session_by_default(self) -> None:
+        self.fake_ledger("4.14.1")
+        self.env.update({"BOOTGEAR_SESSION_ID": "shared-session",
+                         "CLAUDE_CODE_SESSION_ID": "legacy-session"})
+        r = self.run_copy(*self.record_argv("--host", "codex"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        calls = [call[1:] for call in self.calls()]
+        for call in calls:
+            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "shared-session"])
+
+    def test_codex_record_uses_claude_session_as_fallback(self) -> None:
+        self.fake_ledger("4.14.1")
+        self.env["CLAUDE_CODE_SESSION_ID"] = "legacy-session"
+        r = self.run_copy(*self.record_argv("--host", "codex"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        calls = [call[1:] for call in self.calls()]
+        for call in calls:
+            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "legacy-session"])
 
     def test_codex_record_writes_through_the_real_memory_ledger(self) -> None:
         (self.cache / "memory-ledger").mkdir()

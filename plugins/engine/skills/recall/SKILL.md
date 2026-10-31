@@ -3,6 +3,8 @@ name: recall
 description: Re-read the session ledger's settlement and open state from disk, never from model context. Use at the start of every engine iteration and whenever settlement is uncertain.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Read the session ledger from disk. Do not reconstruct settlement from context.
 
 The caller (`execute`, `resolve`, `debate`, or the next turn after a hook reminder) passes `<run-id>` and `<session-dir>`. Hand back to that caller one of these outcomes:
@@ -33,7 +35,7 @@ Locate the ledger from the caller's `<session-dir>` → read the settlement, ope
 - Treat `<session-dir>` as the `session-dir` path supplied by the caller.
 - Require the caller (`execute`, or whoever else invokes `recall`) to pass `<session-dir>` explicitly on every call.
 - Receive `<session-dir>` at the caller's handoff and pass it unchanged on every ledger call.
-- Pass `--dir <session-dir>` before reading the ledger.
+- Use the resolved `session_dir` to locate the ledger.
 - Do not attempt to discover `<session-dir>` from `recall`.
 - Do not use a default fallback.
 - Do not guess `~/.bootgear/session` or any other path when `<session-dir>` is unavailable; only the recovery in `When <session-dir> is lost` applies.
@@ -44,15 +46,15 @@ Locate the ledger from the caller's `<session-dir>` → read the settlement, ope
 Call the public session interface. Do not hand-read its Markdown file with a general file tool.
 
 ```text
-task session read <run-id> --dir <session-dir> --section settlement
-task session read <run-id> --dir <session-dir> --open-only
-task session read <run-id> --dir <session-dir> --last 3
+task session read <run-id> --section settlement
+task session read <run-id> --open-only
+task session read <run-id> --last 3
 ```
 
 - Read `--section settlement` to obtain the task type, approach and principles, per-domain sources of truth, debate threshold and convergence policy, autonomy scope, `goal`, and run manifest.
 - Read `--open-only` to obtain unchecked todos.
 - Read `--last N` to obtain recent decisions and pitches.
-- Read the run's state machine with `task state show <run-id> --dir <session-dir>`; it prints the machine in force and its version.
+- Read the run's state machine with `task state show <run-id>`; it prints the machine in force and its version.
 - To resume an in-progress `debate`, read the full decisions section once.
 - Find the last `[qN]` tag and use it as the current question.
 - Do not use `--last N` to identify the current question.
@@ -60,13 +62,13 @@ task session read <run-id> --dir <session-dir> --last 3
 - Then read the question:
 
   ```text
-  task session read <run-id> --dir <session-dir> --section decisions
-  task session read <run-id> --dir <session-dir> --question <qid>
+  task session read <run-id> --section decisions
+  task session read <run-id> --question <qid>
   ```
 
 - Take each party's latest `[debate]` entry for that question as its current position.
 
-- Read `task session read <run-id> --dir <session-dir>` with no flags only when auditing the whole run.
+- Read `task session read <run-id>` with no flags only when auditing the whole run.
 
 Before returning a settlement, run the host adapter's `session validate`
 command with the same run and session directory. Return its grouped refusal
@@ -75,7 +77,7 @@ unchanged; do not reconstruct or repair a failed validation in the skill.
 ## Current node
 
 ```text
-task state current <run-id> --dir <session-dir>
+task state current <run-id>
 ```
 
 - Treat its `do` as the current node's instruction, including which skill to call and how.
@@ -88,7 +90,7 @@ task state current <run-id> --dir <session-dir>
 - Do not use `--last N` or `--open-only` to locate an amendment.
 
 ```text
-task session read <run-id> --dir <session-dir> --section decisions
+task session read <run-id> --section decisions
 ```
 
 - For each field with one or more `AMENDMENT <field>` entries, apply the most recent new value for the rest of the run.
@@ -170,5 +172,5 @@ Reject an amendment in any of these cases. Keep the last valid value:
 
 Resolve `task` to `<plugin-dir>/bin/task`; the wrapper derives its project
 directory from its own location. Invoke `session validate` as `task session
-validate <run-id> --dir <session-dir>`. `<run-id>` is the value of
+validate <run-id>`. `<run-id>` is the value of
 `$CLAUDE_CODE_SESSION_ID`.

@@ -193,6 +193,23 @@ def check_session(args: argparse.Namespace) -> None:
         refuse(args, f"invalid --session {args.session!r}: must be non-empty and not start with '-'")
 
 
+def default_session_id() -> str | None:
+    """The host session ID used when a command does not pass `--session`."""
+    return (os.environ.get("BOOTGEAR_SESSION_ID")
+            or os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or None)
+
+
+def add_session(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
+    default = default_session_id()
+    parser.add_argument(
+        "--session",
+        default=default,
+        required=required and default is None,
+        help="this session's id (default: BOOTGEAR_SESSION_ID, then CLAUDE_CODE_SESSION_ID)",
+    )
+
+
 def check_role(args: argparse.Namespace, value: str, flag: str) -> None:
     if value not in ROLES:
         refuse(args, f"invalid {flag} {value!r}: must be listener or asker", category="invalid_role")
@@ -1076,7 +1093,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser = subparsers.add_parser("register")
     add_channel(register_parser, required=False)
     register_parser.add_argument("--role", required=True)
-    register_parser.add_argument("--session", required=True, help="this party's session/process id")
+    add_session(register_parser, required=True)
     add_output(register_parser)
     register_parser.set_defaults(handler=register)
 
@@ -1128,7 +1145,7 @@ def build_parser() -> argparse.ArgumentParser:
     heartbeat_parser = subparsers.add_parser("heartbeat")
     add_channel(heartbeat_parser)
     heartbeat_parser.add_argument("--role", required=True)
-    heartbeat_parser.add_argument("--session", required=True, help="the session that registered the seat")
+    add_session(heartbeat_parser, required=True)
     heartbeat_parser.add_argument("--interval", type=float, default=HEARTBEAT_INTERVAL_SECONDS)
     heartbeat_parser.add_argument("--max-age", dest="max_age", type=float, default=HEARTBEAT_MAX_AGE_SECONDS)
     add_output(heartbeat_parser)
@@ -1136,7 +1153,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = subparsers.add_parser("list")
     list_parser.add_argument("--live-for", dest="live_for", default=None)
-    list_parser.add_argument("--session", default=None, help="this party's session id, for the printed next step")
+    add_session(list_parser)
     list_parser.add_argument("--wait", type=float, default=None, help="seconds to wait for a live peer")
     add_output(list_parser)
     list_parser.set_defaults(handler=list_channels)
@@ -1147,7 +1164,7 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser.set_defaults(handler=status)
 
     whoami_parser = subparsers.add_parser("whoami")
-    whoami_parser.add_argument("--session", required=True, help="this session's id")
+    add_session(whoami_parser, required=True)
     add_output(whoami_parser)
     whoami_parser.set_defaults(handler=whoami)
 

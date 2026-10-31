@@ -3,6 +3,8 @@ name: spec
 description: Gather requirements, design an approach for real trade-offs, get sign-off, and derive a mechanical task breakdown. Use when requirements, a design choice, or an implementation checklist must be settled before implementation.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Use this process unless an override applies.
 
 ## Inputs and outcomes
@@ -67,7 +69,7 @@ is its own sub-task that may have its own matching entry:
 1. **Active `engine` run.** If the current `<run-id>` has a session ledger, run:
 
    ```text
-   task session read <run-id> --dir <session-dir> --section settlement
+   task session read <run-id> --section settlement
    ```
 
    Read `spec_override` from the settlement, then scan the session ledger's decisions for an `AMENDMENT spec_override` entry — a later, explicit change to this field recorded mid-run. If one exists, its most recent value wins over the field just read.

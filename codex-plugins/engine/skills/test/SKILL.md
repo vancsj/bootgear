@@ -3,6 +3,8 @@ name: test
 description: Write test cases, run them, and read or triage reports. Works standalone and delegates to a project's matching test skill when one exists.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Use this skill when a task needs test cases written, tests run, or a failure understood.
 
 Inputs: the change or requirement, or the failing output to triage. Inside an active `engine` run, also `<run-id>`, `<engine-root>`, `<session-dir>` and the sub-task label passed by `execute`.
@@ -28,7 +30,7 @@ Before any other action:
 1. If running inside an active `engine` run, read the settlement:
 
    ```text
-   task session read <run-id> --dir <session-dir> --section settlement
+   task session read <run-id> --section settlement
    ```
 
    Read `test_override`, then apply the engine `recall` contract for an `AMENDMENT test_override` decision; its latest value, if present, wins.

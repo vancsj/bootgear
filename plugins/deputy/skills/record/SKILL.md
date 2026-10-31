@@ -20,7 +20,7 @@ Outcomes, reported to the caller:
 - `VOTED <slug> n=<count>`: a similar question already has this answer. One vote was added to it; `n` is the vote count.
 - `UNCHANGED <slug>`: this same session ledger's check is already on that answer. Nothing was written.
 - `NEW <slug>`: a different answer was written as a new entry, beside any recorded answer to the question.
-- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no `--session-id`, or the write failed. Report the message and stop.
+- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, or the write failed. Report the message and stop.
 
 ## Procedure
 
@@ -37,4 +37,4 @@ Outcomes, reported to the caller:
 Set `DEPUTY_SCRIPT` to `scripts/deputy.py` in this plugin:
 
 - Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/deputy.py"`. Add no host options.
-- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. Add `--host codex --session-id <session_id>` to the `record` command, with the `session_id` the host gives you in your context; the shell has no environment variable for it.
+- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. Add `--host codex --session-id <session_id>` to the `record` command, using the host-provided ID. If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.

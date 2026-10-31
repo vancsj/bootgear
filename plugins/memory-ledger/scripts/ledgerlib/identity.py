@@ -40,7 +40,11 @@ def resolve_identity(context: InvocationContext | None = None,
     if explicit:
         return explicit
     if context.host == "claude":
-        session_id = context.session_id or os.environ.get("CLAUDE_CODE_SESSION_ID")
+        session_id = context.session_id
+        if session_id is None:
+            session_id = (os.environ.get("BOOTGEAR_SESSION_ID")
+                          or os.environ.get("CLAUDE_CODE_SESSION_ID")
+                          or os.environ.get("MEMORY_LEDGER_SESSION_ID"))
         if not session_id:
             sys.exit("no signer: CLAUDE_CODE_SESSION_ID unset — pass --as <id> to say "
                      "which session ran the evidence")

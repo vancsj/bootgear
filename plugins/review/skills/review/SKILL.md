@@ -3,6 +3,8 @@ name: review
 description: Review a diff, branch, or PR for correctness, architecture, security, simplicity, and convention fit, then apply accepted feedback. Works standalone and delegates to a project review skill when one is registered. Use when a change needs reviewing or review comments need applying.
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Review a change and apply accepted feedback.
 
 ## Inputs and outcomes
@@ -179,12 +181,12 @@ iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
 that file is missing, select anew. Write the enabled pack file names, one per
 line, to `<converge-dir>/<slate>.packs` (an empty file when none). In an
 active run, record
-`task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
+`task session record-decision <run-id> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
 If `init` refuses with a duplicate angle id that names a pack, remove that
 pack from `--angles` and from the `.packs` file, and run `init` again.
 
 In an active run, write the settlement with
-`task session read <run-id> --dir <session-dir> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
+`task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
 and add `--settlement <that file>` to `init`. At `quick`, add `--refuters 1`.
 
 In an active run, add `--snapshot --pass <n>` to `init`; for `<n>` ≥ 2, also
@@ -194,7 +196,7 @@ change under review. Right after `init` succeeds, record the slate so
 `execute` prunes its snapshot however the review ends:
 
 ```text
-task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review slate <slate> snapshot=<sha>"
+task session record-decision <run-id> --mode solo --summary "review slate <slate> snapshot=<sha>"
 ```
 
 If `init` refuses a `--since` check, keep `--pass <n>` and stop: have
@@ -286,7 +288,7 @@ that `init` printed; the caller passes the first two as
 leaving `review`:
 
 ```text
-task session record-decision <run-id> --dir <session-dir> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
+task session record-decision <run-id> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
 ```
 
 ### 6. Apply accepted feedback

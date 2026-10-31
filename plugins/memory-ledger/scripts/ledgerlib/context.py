@@ -27,9 +27,13 @@ class InvocationContext:
         resolved_host = host or os.environ.get("MEMORY_LEDGER_HOST")
         if resolved_host is None:
             resolved_host = "claude" if os.environ.get("CLAUDE_CODE_SESSION_ID") else "standalone"
-        resolved_session = session_id or os.environ.get("MEMORY_LEDGER_SESSION_ID")
-        if resolved_session is None and resolved_host == "claude":
-            resolved_session = os.environ.get("CLAUDE_CODE_SESSION_ID") or None
+        if session_id is not None:
+            resolved_session = session_id
+        else:
+            resolved_session = (os.environ.get("BOOTGEAR_SESSION_ID")
+                                or os.environ.get("CLAUDE_CODE_SESSION_ID")
+                                or os.environ.get("MEMORY_LEDGER_SESSION_ID")
+                                or None)
         return cls(Path(caller).expanduser().resolve(), resolved_host, resolved_session)
 
     def with_scope(self, *, repo: str | None = None, ref: str | None = None) -> InvocationContext:

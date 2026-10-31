@@ -71,10 +71,14 @@ Evidence: test -f example.cfg
   `lint` reports a replaced check as `EVIDENCE-REWRITTEN`. `e=N` is how many checks the
   answer had when signed, and a `>` block is that run's recorded output.
 - **Signer** is the AI session, never the human. Claude: the first segment of
-  `CLAUDE_CODE_SESSION_ID`, overridable by `--as`. Codex: exactly `codex:<session_id>`; `--as`
-  may be omitted, and an unsafe session id or a conflicting `--as` is rejected. Standalone or gear: `--as`, else
-  `--session-id` or `$MEMORY_LEDGER_SESSION_ID`. The host is `--host`, else
-  `$MEMORY_LEDGER_HOST`, else Claude when `CLAUDE_CODE_SESSION_ID` is set, else standalone.
+  `CLAUDE_CODE_SESSION_ID`, overridable by `--as`. Codex: exactly
+  `codex:<session_id>`; keep `--host codex`, then use `--session-id` or the
+  default session sources `BOOTGEAR_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`, and
+  `MEMORY_LEDGER_SESSION_ID` in that order. `--as` may be omitted, and an
+  unsafe session id or conflicting `--as` is rejected. Standalone or gear:
+  `--as`, else `--session-id`, then those same session sources. The host is
+  `--host`, else `$MEMORY_LEDGER_HOST`, else Claude when
+  `CLAUDE_CODE_SESSION_ID` is set, else standalone.
 - **Write gates.** `new` and `rival` run each shell check (180 s timeout) and report the
   result without refusing on it, then record the author's `✓ (author)`. They refuse a claim
   over 40 words and (on `new`) a blatant restatement of an existing question. `new`,
@@ -148,7 +152,7 @@ session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
 |---|---|---|
 | Entry point | `${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py` | `${PLUGIN_ROOT}/scripts/ledger` (prose output by default) |
 | Gear command | `${CLAUDE_PLUGIN_ROOT}/bin/ledger` | `${PLUGIN_ROOT}/bin/ledger` |
-| Signer | first segment of `CLAUDE_CODE_SESSION_ID`, or `--as` | `codex:<id>` from `--host codex --session-id <id>`; `--as`, if given, must equal it |
+| Signer | first segment of `CLAUDE_CODE_SESSION_ID`, or `--as` | `codex:<id>` from `--host codex` and `--session-id` or the default session sources; `--as`, if given, must equal it |
 | Manifest | `.claude-plugin`, `hooks/hooks.json` | `.codex-plugin`, `hooks/codex-hooks.json` |
 | Hook status output | `additionalContext` | `systemMessage`; the hook first validates the session id and stays silent if it is invalid |
 

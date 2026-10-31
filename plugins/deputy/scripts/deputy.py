@@ -95,8 +95,19 @@ def refuse_remote(deputy_root: Path) -> str | None:
     return None
 
 
+def session_id_from_environment(explicit: str | None) -> str | None:
+    """Resolve a Codex signer session from the CLI option and supported host variables."""
+    if explicit is not None:
+        return explicit
+    return (os.environ.get("BOOTGEAR_SESSION_ID")
+            or os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or None)
+
+
 def record(deputy_root: Path, question: str, claim: str, because: str, options: str,
            stakes: str, session_ledger: Path, host: str = "claude", session_id: str | None = None) -> int:
+    if host == "codex":
+        session_id = session_id_from_environment(session_id)
     if host == "codex" and not session_id:
         print("REFUSED codex needs --session-id", file=sys.stderr)
         return 2

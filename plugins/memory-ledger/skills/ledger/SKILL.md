@@ -73,14 +73,16 @@ status message for `unconfigured` or `broken`, and no output for `cooldown` or
 
 - Anything off → `doctor` first.
 - Roots missing or unset → tell the user to run the memory-ledger setup skill.
-- Codex session identity missing, malformed or conflicting → the write is
-  refused; pass the exact identity (see "Host mechanics").
+- Session identity missing, malformed or conflicting → the write is refused.
+  Pass `--session-id` to override the environment value.
 
 ## Host mechanics
 
 Claude command entrypoint: `${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py`. `sign`
-takes the signatory from `CLAUDE_CODE_SESSION_ID`.
+takes an explicit `--session-id`, then `BOOTGEAR_SESSION_ID`, then
+`CLAUDE_CODE_SESSION_ID` as the session identity.
 
 Codex command entrypoint: `${PLUGIN_ROOT}/scripts/ledger`. Pass the exact
-host session identity with `--host codex --session-id <session_id>` and the
-matching `--as codex:<session_id>` on writes.
+host with `--host codex`. If `--session-id` is omitted, the CLI uses
+`BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`. The signer defaults to
+`codex:<session_id>`; if you pass `--as`, it must match that identity.

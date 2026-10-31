@@ -3,6 +3,8 @@ name: execute
 description: "Run the autonomous task loop after clarify confirms goal: dispatch by task type, act, resolve contested decisions, report progress, and end succeeded or failed against goal. Use immediately after clarify hands off a confirmed goal."
 ---
 
+In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+
 Run the loop after `clarify` confirms `goal`. Do not ask work questions before the run ends `succeeded` or `failed`. Permit only the post-compaction recovery path when the run identity cannot be identified.
 
 Hand back to the user a final pitch and a closed session ledger. Every run ends with exactly one of these outcomes:
@@ -36,9 +38,6 @@ Keep semantic checks in the loop: apply the settled source-of-truth domains,
 judge whether the goal is genuinely satisfied or impossible, and preserve the
 debate, safety, fallback, and permitted-mutation rules below.
 
-Pass `session_dir` as `--dir <session-dir>` to every session command for
-this run, unconditionally.
-
 ## Task-type dispatch
 
 `task_type` selects which built-in machine `clarify` resolved into settlement's `state_machine` field. Each node's `reminder.do` states the action and names the skill that does it, and how to call it, if any. Read the current node's `reminder`.
@@ -53,13 +52,13 @@ Recall and goal-check wrap every iteration regardless of which node is current. 
 
 For each iteration, follow these steps:
 
-1. **Recall.** Re-read the settlement and open todos. Run `task state current <run-id> --dir <session-dir>` for this run's node and reminder. Apply the latest valid amendment from the full decisions section. Check for a `[qN]` tag with no closing entry. If one exists, resume it under the public `debate` skill before doing anything else in the iteration. Do not start new work or run goal-check with a debate genuinely open.
+1. **Recall.** Re-read the settlement and open todos. Run `task state current <run-id>` for this run's node and reminder. Apply the latest valid amendment from the full decisions section. Check for a `[qN]` tag with no closing entry. If one exists, resume it under the public `debate` skill before doing anything else in the iteration. Do not start new work or run goal-check with a debate genuinely open.
 
 2. **Act.** Do the current node's `reminder.do`, calling the skill it names. A node with no `reminder` relies on ordinary prose toward `goal`. Only when that work is about to investigate a domain fact this run does not already have from the ticket, the settlement, or this ledger — current behavior, a convention, a prior decision on the same question, not something already established earlier this run or in an earlier iteration of the same node — invoke `memory-ledger:ledger` with the question first (see "Checking and recording in memory-ledger" below) and use a settled hit instead of re-deriving it. A later iteration of the same multi-iteration node (e.g. `test-code` re-running after a fix) skips this when it has no new fact to investigate. Update todos as work starts and completes:
 
    ```text
-   task session update-todo <run-id> --dir <session-dir> "<text>"
-   task session update-todo <run-id> --dir <session-dir> "<text>" --done
+   task session update-todo <run-id> "<text>"
+   task session update-todo <run-id> "<text>" --done
    ```
 
    A debate/resolve node is worked like any other: check the debate threshold, run `resolve`, and run `debate` only if `resolve` escalates. For a reversible, narrow decision below the threshold, first call `deputy:ask` with the decision, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and continue to the existing path. On `answered`, check that every cited slug is in the candidate list; if so, decide solo with the answer and record it with its cited slugs. On `escalate` or `not-applicable`, use the existing debate threshold path (no question is asked mid-run). Production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to `deputy:ask`. Record the decision with its below-threshold basis:
@@ -67,7 +66,7 @@ For each iteration, follow these steps:
    When a debate node's `reminder.do` names `debate_mode`, apply it to that node's choice claims: `mandatory` resolves every claim, while `threshold` decides below-threshold claims solo and resolves only claims at or above `debate_threshold`. A `spec-debate` node returns through `spec`, then `spec-review`.
 
    ```text
-   task session record-decision <run-id> --dir <session-dir> --mode solo --summary "<decision; below-threshold basis>"
+   task session record-decision <run-id> --mode solo --summary "<decision; below-threshold basis>"
    ```
 
 When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this run (a convention, a root cause, a durable "why," not this run's own todo or PR state), judge whether it belongs in memory-ledger and record the `record-decision` entry with a `ledger:<slug>` citation or an explicit `no-ledger:`/`ledger-worthy-unrecorded:` marker per "Checking and recording in memory-ledger" below. Make this judgment every time, whether or not the plugin is installed.
@@ -75,7 +74,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 3. **Transition on an ordinary decision.** Once the current node's work reaches a decision, other than reaching `goal`'s succeeded condition (step 5 handles that one), find the matching destination in its `reminder.branches` and call `transition`:
 
    ```text
-   task state transition <run-id> --dir <session-dir> --to <node> --reason "<why>" [--confirm-leave]
+   task state transition <run-id> --to <node> --reason "<why>" [--confirm-leave]
    ```
 
    Pass `--confirm-leave` when the current node's `reminder.leave` is set, only once the named condition is actually true, never to get past the gate; omit it otherwise. `--to failed` needs no `--confirm-leave`, from any node. Read+merge principles per "Reading and merging principles" below, and state the merged result in the same turn as the `transition` call. Read the printed reminder for the new node before continuing; it is this run's instruction for the next iteration's Act step, not merely a log line.
@@ -85,7 +84,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 4. **Report periodically.** Report meaningful milestones, blockers, and direction changes directly to the user and record each one:
 
    ```text
-   task session record-pitch <run-id> --dir <session-dir> "<what changed>"
+   task session record-pitch <run-id> "<what changed>"
    ```
 
    Use pitches to report progress. Do not use a pitch to ask a question.
@@ -112,14 +111,14 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
 - When the current node's `reminder.do` names `stop_after`, pass it to `spec` on every call from that node, re-entry included.
 - On a `spec` return of `blocked` (a task step that cannot be derived), transition to `failed` with the missing statement as the reason.
-- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the visit number `<n>` of the node that runs it (the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`). On `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. On another result, run `task state show <run-id> --dir <session-dir>` and read the machine in force before you name a node. Then use the first rule that matches:
+- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the visit number `<n>` of the node that runs it (the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`). On `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. On another result, run `task state show <run-id>` and read the machine in force before you name a node. Then use the first rule that matches:
   - `choices` is non-empty: take the review node's branch to its debate node. Pass the claim IDs, render path, slate, converge directory, and the `revise`, `inline`, `deferred` and `follow-up` lists.
   - `revise` is non-empty: take the review node's branch back to the drafting node. Pass the same fields.
   - `ready` with a non-empty `inline` list: take the same branch back to the drafting node. Pass the `inline` list. Apply the patches there. Do not run a new review. Then take the drafting node's inline exit: its branch for applied `inline` patches.
   - `ready` with an empty `inline` list: take the review node's branch for that result.
 
   When you leave the review node, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
-- After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `task session update-todo <run-id> --dir <session-dir> "follow-up [<stage>]: <claim text>"`, where `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists. Record each returned `deferred` claim the same way as `"deferred [spec-review]: <claim text>"`; mark a `deferred` todo done only after `review` has received it, never because a later return no longer lists it.
+- After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `task session update-todo <run-id> "follow-up [<stage>]: <claim text>"`, where `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists. Record each returned `deferred` claim the same way as `"deferred [spec-review]: <claim text>"`; mark a `deferred` todo done only after `review` has received it, never because a later return no longer lists it.
 - When invoking `review`, append the open `deferred [spec-review]:` todos to the linked-ticket input as a "Deferred spec-review findings" section.
 - Under `review_fix_mode: accepted_only`, record each returned `fix-now` claim the same way as `"fix-now [<stage>]: <claim text>"`, never as `follow-up`, and mark done each open `fix-now [<stage>]` todo the new return no longer lists.
 
@@ -151,7 +150,7 @@ Do not add a versioning scheme to `ledger:<slug>` citations.
 Do not rewrite the settlement. Record a user-requested change as its own decision:
 
 ```text
-task session record-decision <run-id> --dir <session-dir> --mode solo --summary "AMENDMENT <field>: <old value> -> <new value>, per user request"
+task session record-decision <run-id> --mode solo --summary "AMENDMENT <field>: <old value> -> <new value>, per user request"
 ```
 
 Prefix the summary with `AMENDMENT <field>`. Name the exact settlement field being changed, such as `permitted_mutations`, `goal`, or `debate_threshold`.
@@ -168,8 +167,8 @@ Do not write a diff, a field name alone, or prose without the complete value.
 To change `state_machine`:
 
 ```text
-task state show <run-id> --dir <session-dir>
-task state amend <run-id> --dir <session-dir> --machine-file <file> --reason "<why>, per user request"
+task state show <run-id>
+task state amend <run-id> --machine-file <file> --reason "<why>, per user request"
 ```
 
 Save the YAML that `show` prints below its `MACHINE` line to `<file>`, edit it, then run `amend`. On a refusal, fix every listed problem and rerun `amend`.
@@ -193,7 +192,7 @@ Reconcile any real conflict yourself. Across levels, task overrides project over
 When that narrow test finds a real conflict and you resolve it, record it:
 
 ```text
-task session record-decision <run-id> --dir <session-dir> --mode solo --summary "principles reconciliation: <source> says <X>, <source> says <Y>, cannot both hold; took <winner> per precedence"
+task session record-decision <run-id> --mode solo --summary "principles reconciliation: <source> says <X>, <source> says <Y>, cannot both hold; took <winner> per precedence"
 ```
 
 `<source>` is the level, plus the principle's position when both come from the same level (e.g. `[project] #2`).
@@ -231,8 +230,6 @@ Call `close` for every run. Treat a run without `close` as invalid.
 
 Pass every free-text argument (`--summary`, todo text, pitch text, or `--reason`) as its own quoted argument in every `session.py` call `execute` makes. Never interpolate free text into one shell string.
 
-Pass `--dir <session-dir>` to every `session.py` call for this run, including every command example.
-
 Do not perform a `goal` done-condition mutation absent from `permitted_mutations`. Report the goal requirement and missing permission. Fail the run if no other path can complete it.
 
 ## Fallbacks
@@ -252,7 +249,7 @@ If `close` refuses because a question is still open, resume and close the named 
 
 - Resolve `task` to `<plugin-root>/scripts/task`; the wrapper derives its
   project directory from its own location and honors `PLUGIN_ROOT` when set.
-- Run `task session validate <run-id> --dir <session-dir>` with the exact run
+- Run `task session validate <run-id>` with the exact run
   and session directory.
 - Supply `<plugin-root>` as `<engine-root>` in the handoff to downstream skills.
 
