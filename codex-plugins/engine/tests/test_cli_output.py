@@ -149,6 +149,15 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(data["fields"]["task_type"], "ticket-to-pr")
         self.assertEqual(data["fields"]["state_machine"], "smoke")
 
+    def test_session_validate_settlement_file_accepts_file_without_session_dir(self):
+        settlement = self.tmp / "no-dir-file.txt"
+        settlement.write_text(SETTLEMENT)
+        result = self._task("session", "validate", "no-dir-run", "--dir",
+                            str(self.session_dir), "--settlement-file", str(settlement),
+                            "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["valid"])
+
     def test_session_validate_groups_strict_refusal_problems(self):
         settlement = self.tmp / "invalid-strict.txt"
         settlement.write_text("task_type: custom\nsession_dir: /wrong\n")
@@ -158,7 +167,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("task_type", result.stderr)
         self.assertIn("approach", result.stderr)
-        self.assertIn("session_dir", result.stderr)
+        self.assertNotIn("session_dir", result.stderr)
 
     def test_session_init_refuses_a_settlement_that_validate_refuses(self):
         settlement = self.tmp / "prose-goal.txt"

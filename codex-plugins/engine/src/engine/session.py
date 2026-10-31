@@ -756,15 +756,28 @@ def cmd_init(args: argparse.Namespace) -> None:
         sys.exit(f"cannot init {_ledger_path(args.run_id, args.dir)}: {e}")
 
 
-def _init(args: argparse.Namespace) -> None:
-    path = _ledger_path(args.run_id, args.dir)
-    resolved_dir = str(path.parent)
+def _check_dir_line(resolved_dir: str) -> None:
+    """Refuse a ledger directory that would break the `session_dir:` line."""
     if "\n" in resolved_dir or "\r" in resolved_dir:
         sys.exit(f"resolved ledger directory contains a line break: {resolved_dir!r} — "
                  f"refusing to write it into the settlement as `session_dir:`, since an "
                  f"embedded newline there would corrupt the ledger's line-based structure "
                  f"(e.g. read as a spurious extra field or heading-like line); pass a "
                  f"--dir with no newline in it")
+
+
+def _bind_session_dir(settlement: str, resolved_dir: str) -> str:
+    """Set the settlement's `session_dir:` to `resolved_dir`, replacing any column-0 value."""
+    lines = [line for line in settlement.split("\n")
+             if not line.startswith("session_dir:")]  # column 0 only, not indented
+    lines.append(f"session_dir: {resolved_dir}")
+    return "\n".join(lines)
+
+
+def _init(args: argparse.Namespace) -> None:
+    path = _ledger_path(args.run_id, args.dir)
+    resolved_dir = str(path.parent)
+    _check_dir_line(resolved_dir)
     if path.exists() and not args.force:
         sys.exit(f"{path} already exists — settlement is written once; "
                   f"pass --force only to intentionally start over")
@@ -776,26 +789,7 @@ def _init(args: argparse.Namespace) -> None:
     settlement = Path(args.settlement_file).read_text().rstrip("\n") \
         if args.settlement_file else sys.stdin.read().rstrip("\n")
     _check_no_embedded_heading(settlement, "the settlement")
-    # session_dir must be the absolute directory this exact process resolved
-    # `--dir` to (path.parent), not a value the caller guessed or computed in
-    # a separate command that might have run from a different working
-    # directory. Inserting it here, in the same process that just resolved
-    # the path, removes that dependency entirely instead of relying on two
-    # separate steps agreeing by convention. A caller-supplied `session_dir:`
-    # line at column 0 is replaced, not merely trusted, since a stale or
-    # wrong value would otherwise silently survive. Matching only at column
-    # 0 (not an indented line that merely contains this text inside some
-    # other field's own free-text value) is a deliberate, narrow choice: the
-    # settlement has no other structural anchor to tell a real top-level
-    # field apart from incidental text, and the correct line is always the
-    # last one appended below regardless, so a stray indented match is
-    # harmless even if left unremoved.
-    settlement_lines = [
-        line for line in settlement.split("\n")
-        if not line.startswith("session_dir:")  # column 0 only, not indented
-    ]
-    settlement_lines.append(f"session_dir: {resolved_dir}")
-    settlement = "\n".join(settlement_lines)
+    settlement = _bind_session_dir(settlement, resolved_dir)
     problems, summary = _validate_settlement(settlement, args.run_id, path.parent, caller_cwd())
     problems += _verb_owned_problems(summary)
     if problems:
@@ -820,6 +814,8 @@ def cmd_validate(args: argparse.Namespace) -> None:
             source = args.settlement_file
             body = source.read_text().rstrip("\n")
             expected_dir = (args.dir or DEFAULT_DIR).resolve()
+            _check_dir_line(str(expected_dir))
+            body = _bind_session_dir(body, str(expected_dir))
         else:
             path = _ledger_path(args.run_id, args.dir)
             source = path
