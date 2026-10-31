@@ -17,6 +17,7 @@
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.
 - A skill states the overall workflow. The model then knows where each step leads and can use its judgment. The CLI prints deterministic detail at the step where it matters (the next command, legal branches, gates, argument tables). That detail comes from validated CLI-owned state or configuration. A skill may include concise examples for common, stable commands. Do not repeat state-dependent branches, gates, or next commands in skill text. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks.
 - A script enforces a rule about data or behavior that the script can check (CLI validation, a gate, a cap). Do not state such a rule in text only. The review standard enforces rules about doc content. Tests and scripts do not, except mechanical repo hygiene such as `check_content.py`.
+- When an AI caller makes an invalid call or omits a required parameter, the CLI must report the error and leave the workflow state ready for a corrected call.
 
 ## Docs and repo content
 
