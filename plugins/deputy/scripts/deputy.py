@@ -174,6 +174,13 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
         outcome = [line for line in r.stdout.splitlines()
                    if line.startswith(("VOTED ", "UNCHANGED "))][-1]
         if outcome.startswith("VOTED "):
+            # The signature makes this session an independent signer. `sign` does not run the
+            # Evidence pointer, so a session ledger that is gone does not block it.
+            _, slug, aid, *_ = outcome.split()
+            r = ledger(deputy_root, "sign", slug, aid, "--only", "deputy", *sign_as, signer=signer)
+            if r.returncode != 0:
+                print(r.stdout + r.stderr, file=sys.stderr)
+                return r.returncode
             return save(deputy_root, outcome, signer)
         print(outcome)
         return 0

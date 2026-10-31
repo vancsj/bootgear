@@ -219,6 +219,33 @@ class DeputyTest(unittest.TestCase):
         self.assertIn("ASSERTED", out)
 
 
+
+    def record_as(self, session_id: str, claim: str = CLAIM) -> tuple[int, str, str]:
+        session = self.base / f"session-{session_id}.md"
+        session.write_text(f"decision: {claim}\n", encoding="utf-8")
+        return self.run_deputy("record", "--question", QUESTION, "--claim", claim, "--because", WHY,
+                               "--options", "uv or pip", "--stakes", "low",
+                               "--session-ledger", str(session), "--host", "codex",
+                               "--session-id", session_id)
+
+    def test_a_vote_from_another_session_signs_the_answer(self) -> None:
+        self.assertEqual(self.record_as("a")[0], 0)
+        code, out, err = self.record_as("b")
+        self.assertEqual(code, 0, err)
+        self.assertIn("VOTED decisions/", out)
+        entry, = self.root.rglob("*.md")
+        signed = [line for line in entry.read_text(encoding="utf-8").splitlines()
+                  if "codex:b" in line]
+        self.assertTrue(signed, "no signature from the second session")
+        self.assertFalse(any("(author)" in line for line in signed))
+
+    def test_two_independent_sessions_read_well_confirmed(self) -> None:
+        for session_id in ("a", "b", "c"):
+            self.assertEqual(self.record_as(session_id)[0], 0)
+        _, listing, _ = self.run_deputy("candidates", QUESTION)
+        self.assertIn("[well-confirmed]", listing)
+
+
 class StandardsTest(unittest.TestCase):
     """The mechanical part of the Q&A standards, checked by `entry_problems`."""
 

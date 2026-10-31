@@ -33,8 +33,8 @@ Outcomes, handed back to the caller:
    Judge by meaning, not by matching words.
 6. Check the rules, in order:
    - **Assertion.** If an assertion covers the question, return `answered` at confidence `1.00` with that assertion's slug, at any stakes. Do not weigh decisions against it.
-   - **Decisions, confirmed.** Answer only when the agreeing answer has memory-ledger band `confirmed` or higher, at least one independent signer, and no conflicting answer has a band at least as high. Confidence is that answer's `conf` value. Otherwise return `escalate`.
-   - **Decisions, not confirmed.** Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
+   - **Decisions, well-confirmed.** Answer only when the agreeing answer has memory-ledger band `well-confirmed`, and no conflicting answer has a band at least as high. Confidence is that answer's `conf` value. Otherwise return `escalate`.
+   - **Decisions, below well-confirmed.** Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
 7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
 8. Return `answered` with: the answer, the confidence, `source: assertion` or `source: votes`, the cited agreeing slugs, the conflicting slugs if any, and one line of reasoning.
 9. After the user answers an escalation, and only when the answer is written in a session ledger file, call the `record` skill with the question, the user's answer, the reason, the options and the stakes shown to the user. Without a session ledger file, do not call it. Do not treat the user's answer as an assertion.

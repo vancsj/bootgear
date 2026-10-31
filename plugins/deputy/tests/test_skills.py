@@ -40,11 +40,10 @@ class SkillTests(unittest.TestCase):
     def test_record_lists_the_rival_outcome(self) -> None:
         self.assertIn("`RIVAL", section(self.text("record"), "## Inputs and outcomes"))
 
-    def test_ask_answers_from_the_memory_ledger_band_not_a_vote_count(self) -> None:
+    def test_ask_answers_only_at_the_well_confirmed_band(self) -> None:
         procedure = section(self.text("ask"), "## Procedure")
         self.assertNotIn("at least 3 votes", procedure)
-        self.assertIn("confirmed", procedure)
-        self.assertIn("independent", procedure)
+        self.assertIn("band `well-confirmed`", procedure)
 
     def test_both_skills_point_at_the_standards_document(self) -> None:
         for name in SKILLS:
