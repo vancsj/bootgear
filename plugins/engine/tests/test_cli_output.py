@@ -154,6 +154,31 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)["valid"])
 
+    def _validate_party_config(self, parties_yaml: str, name: str):
+        settlement = self.tmp / f"{name}.txt"
+        settlement.write_text(SETTLEMENT.replace(
+            "debate_party_config: {}\n", "debate_party_config:\n  parties:\n" + parties_yaml))
+        return self._task("session", "validate", name, "--dir", str(self.session_dir),
+                          "--settlement-file", str(settlement), "--prose")
+
+    def test_session_validate_accepts_party_config_id_in_roster(self):
+        result = self._validate_party_config(
+            "    independent-reviewer:\n      mechanism: native_subagent\n", "party-in-roster")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_session_validate_refuses_party_config_id_missing_from_roster(self):
+        result = self._validate_party_config(
+            "    independnt-reviewer:\n      mechanism: native_subagent\n", "party-typo")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("independnt-reviewer", result.stderr)
+        self.assertIn("not in debate_roster", result.stderr)
+
+    def test_session_validate_refuses_quoted_enabled_flag(self):
+        result = self._validate_party_config(
+            "    independent-reviewer:\n      enabled: 'no'\n", "party-quoted-enabled")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("enabled", result.stderr)
+
     def test_session_validate_groups_strict_refusal_problems(self):
         settlement = self.tmp / "invalid-strict.txt"
         settlement.write_text("task_type: custom\nsession_dir: /wrong\n")

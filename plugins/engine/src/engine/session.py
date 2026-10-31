@@ -661,6 +661,8 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
                 problems.append(("debate_party_config.parties", "must be a mapping when configuration is non-empty"))
             else:
                 for party_id, config in configured.items():
+                    if isinstance(roster, list) and party_id not in roster:
+                        problems.append((f"debate_party_config.parties.{party_id}", "is not in debate_roster"))
                     if not isinstance(config, dict):
                         problems.append((f"debate_party_config.parties.{party_id}", "must be a mapping"))
                         continue
@@ -672,6 +674,9 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
                         problems.append((f"debate_party_config.parties.{party_id}.mechanism",
                                          f"got {config['mechanism']!r}; must be one of: "
                                          + ", ".join(PARTY_MECHANISMS)))
+                    if "enabled" in config and not isinstance(config["enabled"], bool):
+                        problems.append((f"debate_party_config.parties.{party_id}.enabled",
+                                         "must be true or false"))
 
     # `codex_role`, the field's legacy form, is left unchecked so old ledgers resume.
     advisor_roles = data.get("advisor_roles")
