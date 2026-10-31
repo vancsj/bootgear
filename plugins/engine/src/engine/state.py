@@ -48,10 +48,9 @@ from engine.session import (
 START_NODE = "clarify"
 TERMINAL_NODES = {"succeeded", "failed"}
 RESERVED_NODE_NAMES = TERMINAL_NODES
-# Matches "state_machine: |" at column 0 in the settlement body — the block
-# scalar convention settlement already uses for goal: >, applied here to a
-# nested YAML document instead of a paragraph.
-STATE_MACHINE_FIELD_RE = re.compile(r"(?m)^state_machine: \|\n((?:(?:[ \t].*)?\n)*)")
+# Matches the `state_machine:` block scalar header at column 0 in the settlement
+# body, with any chomping indicator (`|`, `|-`, `|+`) that YAML allows.
+STATE_MACHINE_FIELD_RE = re.compile(r"(?m)^state_machine: \|[-+]?\n((?:(?:[ \t].*)?\n)*)")
 CURRENT_STATE_RE = re.compile(r"(?m)^current: (?P<node>\S+)\s*$")
 # A Mermaid stateDiagram-v2 state ID may not contain a hyphen; node names in
 # this schema are hyphenated (spec-debate, debate-findings, ...), so every diagram ID is

@@ -509,6 +509,12 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(set(data), {"current", "terminal", "reminder"})
         self.assertIsNone(data["reminder"])
 
+    def test_state_current_reads_strip_chomping_machine_block(self):
+        self._init_run("strip-run", SETTLEMENT.replace(
+            "state_machine: |\n", "state_machine: |-\n"))
+        data = self._current_json("strip-run")
+        self.assertEqual((data["current"], data["terminal"]), ("clarify", False))
+
     def test_state_current_terminal_on_open_ledger_names_close(self):
         self._transition("succeeded")
         close = (f"{self.prog} session close {self.run_id} --dir "
