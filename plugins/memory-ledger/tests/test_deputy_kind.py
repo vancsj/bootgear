@@ -100,6 +100,19 @@ class DeputyWriteTest(unittest.TestCase):
         self.assertIn("same path", r.stderr)
         self.assertFalse(list(self.shared.rglob("deputy-probe.md")))
 
+    def test_sign_with_only_deputy_signs_the_deputy_entry_as_another_session(self) -> None:
+        self.assertEqual(self.new("--deputy").returncode, 0)
+        r = run_ledger(*self.roots(), "sign", "deputy-probe", "a1", "--only", "deputy",
+                       "--as", "session-b")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        entry, = self.deputy.rglob("deputy-probe.md")
+        self.assertIn("session-b", entry.read_text(encoding="utf-8"))
+
+    def test_sign_without_only_does_not_reach_the_deputy_entry(self) -> None:
+        self.assertEqual(self.new("--deputy").returncode, 0)
+        r = run_ledger(*self.roots(), "sign", "deputy-probe", "a1", "--as", "session-b")
+        self.assertNotEqual(r.returncode, 0)
+
     def test_single_open_ledger_without_a_flag_still_takes_the_entry(self) -> None:
         shutil.rmtree(self.deputy)
         shutil.rmtree(self.local)
