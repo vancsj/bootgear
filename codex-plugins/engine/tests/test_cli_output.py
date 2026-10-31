@@ -489,7 +489,8 @@ class CliOutputTest(unittest.TestCase):
         data = self._current_json()
         self.assertEqual(set(data), {"current", "terminal", "reminder", "next"})
         self.assertEqual((data["current"], data["terminal"]), ("clarify", False))
-        self.assertEqual(set(data["reminder"]), {"do", "branches", "leave", "leave_check"})
+        self.assertEqual(set(data["reminder"]),
+                         {"do", "branches", "leave", "leave_check", "exit_checks"})
         self.assertEqual(data["reminder"]["do"], "check the output contract")
         self.assertEqual(data["next"], "check the output contract")
         prose = self._current(None, "--prose")

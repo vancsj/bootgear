@@ -64,7 +64,7 @@ For each iteration, follow these steps:
 
    A debate/resolve node is worked like any other: check the debate threshold, run `resolve`, and run `debate` only if `resolve` escalates. For a reversible, narrow decision below the threshold, first call `deputy:ask` with the decision, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and continue to the existing path. On `answered`, check that every cited slug is in the candidate list; if so, decide solo with the answer and record it with its cited slugs. On `escalate` or `not-applicable`, use the existing debate threshold path (no question is asked mid-run). Production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to `deputy:ask`. Record the decision with its below-threshold basis:
 
-   When a debate node's `reminder.do` names `spec_debate_mode`, apply it to the choice claims returned by `spec-review`: `mandatory` resolves every claim, while `threshold` decides below-threshold claims solo and resolves only claims at or above the threshold. Debate always returns through the drafting node and then the review node.
+   When a debate node's `reminder.do` names `debate_mode`, apply it to that node's choice claims: `mandatory` resolves every claim, while `threshold` decides below-threshold claims solo and resolves only claims at or above `debate_threshold`. A `spec-debate` node returns through `spec`, then `spec-review`.
 
    ```text
    task session record-decision <run-id> --dir <session-dir> --mode solo --summary "<decision; below-threshold basis>"

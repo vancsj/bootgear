@@ -18,8 +18,8 @@ factual dispute never goes to debate.
 
 Callers: `review` runs every finding through a slate; the engine `change-review` and
 `ticket-to-pr` machines gate their `review` node on `converge gate`; the engine `triage`
-machine gates its `triage-gate` node on `converge gate --kind triage --report <absolute
-file> --base-slate <first visit's slate>`; engine `debate` hands
+machine gates its `triage-review` exit to `succeeded` on `converge gate --kind triage --report
+<absolute file> --base-slate <first visit's slate>`, and a refusal goes back to `triage`; engine `debate` hands
 factual disputes back, briefs parties with the render, and draws its closing angle round from
 the `decide` and `attack` angles.
 
@@ -211,7 +211,7 @@ flowchart LR
   also requires the triage checks on the report to pass. With `--base-slate`, every report row
   must name a claim of that slate. Each triage visit uses a new slate. It requires an absolute
   `--dir`. The engine runs it as
-  the `review` or `triage-gate` node's `leave_check` (see [state-machine.md](state-machine.md)).
+  the `exit_checks` entry of the `review` or `triage-review` node for its forward exit (see [state-machine.md](state-machine.md)).
 - `converge converged` exits 0 when the slate is done and no claim is `disputed` with
   `cut: no`; otherwise it lists the open and disputed claims.
 - `render` builds Markdown from the ledger alone: a summary line

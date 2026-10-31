@@ -27,7 +27,9 @@ nodes:
     reminder:
       do: "Run spec-review. Independently check request fit, clarity and completeness, architecture fit, best practices, simpler alternatives, proportionality, testability, and generic converge coverage; do not use the author transcript or another role's reasoning."
       leave: "The independent review has complete coverage and its findings, evidence, choices, and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        impl:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         spec: "`revise` is non-empty, or the review is ready with a non-empty `inline` list; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to spec."
         spec-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
@@ -35,7 +37,7 @@ nodes:
     next: [spec, spec-debate, impl]
   spec-debate:
     reminder:
-      do: "Apply spec_debate_mode to the spec-review choice claims: decide below-threshold claims solo in threshold mode, resolve every claim in mandatory mode, and debate only unresolved claims at or above the settled threshold; update the artifacts and record the decision."
+      do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Update the artifacts."
       leave: "The decision is recorded in the run ledger and any change to the requirements or design is in the artifact; return through spec for re-review."
       branches:
         spec: "The decision is settled or changes the artifacts; return to spec and then spec-review."
@@ -81,7 +83,9 @@ nodes:
     reminder:
       do: "Review the change with /review; it runs converge on every finding."
       leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        delivery:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         review-debate: "A finding or requested fix needs an above-threshold decision."
         fix: "An accepted finding requires a correction."

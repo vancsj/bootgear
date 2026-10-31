@@ -92,15 +92,16 @@ Every non-terminal node can also move to `failed`.
 
 `task state transition` is a hard gate, not a log: it refuses a move that is not a legal edge,
 a node entered more than its `max_visits`, or leaving a node whose `leave` condition was not
-asserted. A node can also carry a `leave_check` — a command the engine runs itself, such as
-`converge gate` on every review node, which passes once the review is complete, disputed
-findings included. You approve every `leave_check` command at `clarify`.
+asserted. A node can also carry a check — a command the engine runs itself, such as
+`converge gate` on a review node's forward exit, which passes once the review is complete,
+disputed findings included. The engine runs a check only when the run takes the exit it names,
+and a refused exit can route to a named fallback node. You approve every check command at `clarify`.
 
 | Task type | Built-in path |
 |---|---|
 | `ticket-writing` | inspect → ticket → ticket-review → (ticket-debate) → succeeded |
 | `ticket-to-pr` | inspect → spec → spec-review → impl → test-code → (e2e-test, fix) → review → delivery → succeeded |
-| `triage` | inspect → triage → triage-review → (triage-debate) → triage-gate → succeeded |
+| `triage` | inspect → triage → triage-review → (triage-debate) → succeeded (a refused gate goes back to triage) |
 | `change-review` | inspect → review → (review-debate, fix) → succeeded |
 | `design-doc` | inspect → spec → spec-review → (spec-debate) → succeeded |
 

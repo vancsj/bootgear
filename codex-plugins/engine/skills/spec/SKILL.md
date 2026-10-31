@@ -99,7 +99,7 @@ decides an open question itself. Stages 1 and 2 each write two files — see
 Scale the detail, and the stages actually run, to the task:
 
 - For a small, well-scoped ask with no real design trade-off, use a brief investigation, a terse `requirements.md`, no open questions, skip stage 2 entirely, complete the review package check against `requirements.md`, derive a short `task.md`, and return the package.
-- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `spec_debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
+- For a large or ambiguous ask, investigate more deeply, write a fuller (but still terse per doc, not per section count) `requirements.md`, list every identified open question, run stage 2 for any real trade-off, and use `debate_mode`/`debate_threshold` to decide whether the engine needs `resolve`/`debate` after review.
 
 When `stop_after` is `design`, run stage 2 on every path, including the small-ask path. On the small-ask path, check `design.md` in place of `requirements.md`. On every path, do not derive `task.md`. Return **package-design** after stage 3.
 
@@ -231,14 +231,11 @@ prepare for independent review," step 1. Never proceed to stage 4 on a
 failing check, and never let stage 4 make the judgment call this check
 exists to catch upstream.
 
-## spec_debate_mode
+## debate_mode
 
-A settlement field, set once by `clarify`, read by the engine after `spec-review`. Two values:
+A settlement field, set once by `clarify`, read by the engine at each debate node. Two values:
 
-- **`mandatory`** (default): every unresolved choice claim returned by
-  `spec-review` is sent to `resolve`; unresolved claims at or above
-  `debate_threshold` go to `debate` through the `spec-debate` node.
-- **`threshold`**: below-threshold choice claims are decided solo; only
+- **`threshold`** (default): below-threshold choice claims are decided solo; only
   above-threshold claims are sent to `resolve` and possibly `debate`.
 
 ## Host mechanics

@@ -61,7 +61,8 @@ CURRENT_STATE_RE = re.compile(r"(?m)^current: (?P<node>\S+)\s*$")
 # one shadow the other in the emitted diagram.
 _MERMAID_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # A `## state` log entry as cmd_transition writes it:
-# "- <YYYY-MM-DD HH:MM> <from> -> <to> (<reason>)[ [leave_check ...]]".
+# "- <YYYY-MM-DD HH:MM> <from> -> <to> (<reason>)[ [leave_check exit 0: <argv>]]", or on a
+# refused exit check "(<reason>; <first refusal line>)" with <to> the on_refuse node.
 _LOG_ENTRY_DEST_RE = re.compile(r"^- \d{4}-\d{2}-\d{2} \d{2}:\d{2} \S+ -> (?P<dest>\S+) \(")
 LEAVE_CHECK_PLACEHOLDER_RE = re.compile(r"\{(?P<name>[a-z_]+)\}")
 LEAVE_ARG_RE = re.compile(r"\A(?P<name>[a-z_]+)=(?P<value>.*)\Z", re.DOTALL)
@@ -206,6 +207,13 @@ def _node_reminder_text(node: dict) -> str | None:
     leave_check = reminder.get("leave_check")
     if isinstance(leave_check, list) and leave_check:
         lines.append(f"leave_check: {' '.join(str(a) for a in leave_check)}")
+    exit_checks = reminder.get("exit_checks")
+    if isinstance(exit_checks, dict):
+        for exit_dest, check in exit_checks.items():
+            fallback = check.get("on_refuse") if isinstance(check, dict) else None
+            suffix = f" (on refuse: {fallback})" if fallback else ""
+            argv = check.get("argv", []) if isinstance(check, dict) else []
+            lines.append(f"exit_check {exit_dest}: {' '.join(str(a) for a in argv)}{suffix}")
     return "\n".join(lines) if lines else None
 
 
@@ -222,6 +230,7 @@ def _node_reminder_data(node: dict) -> dict | None:
         "leave": reminder.get("leave") or None,
         "leave_check": ([str(a) for a in leave_check]
                         if isinstance(leave_check, list) and leave_check else None),
+        "exit_checks": reminder.get("exit_checks") or None,
     }
 
 
@@ -299,11 +308,19 @@ def _tail(output: str) -> str:
     return "\n".join(f"  | {line}" for line in tail) if tail else "  | (no output)"
 
 
+class LeaveRefused(Exception):
+    """A leave_check program exited non-zero. `message` lists its output."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 def _run_leave_check(current: str, template: list[str],
                      raw_args: list[str]) -> list[str]:
     """Substitute --leave-arg values into `template`, run it without a
-    shell, and return the executed argv. Exits with every problem listed on
-    any refusal, before anything is written."""
+    shell, and return the executed argv. Exits with every argument problem
+    listed; a non-zero check raises LeaveRefused."""
     leave_args, problems = _parse_leave_args(raw_args)
     placeholders: list[str] = []
     for part in template:
@@ -358,9 +375,9 @@ def _run_leave_check(current: str, template: list[str],
                  f"output:\n{_tail(output)}")
     output = out_bytes.decode(errors="replace")
     if proc.returncode != 0:
-        sys.exit(f"'{current}' leave_check exited {proc.returncode}: "
-                 f"{shown}\nlast {LEAVE_CHECK_OUTPUT_TAIL_LINES} lines of "
-                 f"output:\n{_tail(output)}")
+        raise LeaveRefused(f"'{current}' leave_check exited {proc.returncode}: "
+                           f"{shown}\nlast {LEAVE_CHECK_OUTPUT_TAIL_LINES} lines of "
+                           f"output:\n{_tail(output)}")
     return argv
 
 
@@ -474,12 +491,39 @@ def cmd_transition(args: argparse.Namespace) -> None:
 
     log_line = f"- {_now()} {current} -> {dest} ({reason})"
     leave_check = reminder.get("leave_check") if isinstance(reminder, dict) else None
-    if not leave_check and args.leave_arg:
-        sys.exit(f"'{current}' has no leave_check, so --leave-arg "
+    exit_checks = reminder.get("exit_checks") if isinstance(reminder, dict) else None
+    exit_check = (exit_checks.get(dest)
+                  if isinstance(exit_checks, dict) and dest != "failed" else None)
+    refusal = None
+    if not leave_check and exit_check is None and args.leave_arg:
+        sys.exit(f"'{current}' has no leave_check for exit '{dest}', so --leave-arg "
                  f"{', '.join(args.leave_arg)} matches no placeholder")
     if leave_check and dest != "failed":
-        argv = _run_leave_check(current, leave_check, args.leave_arg or [])
+        try:
+            argv = _run_leave_check(current, leave_check, args.leave_arg or [])
+        except LeaveRefused as refused:
+            sys.exit(refused.message)
         log_line += f" [leave_check exit 0: {' '.join(argv)}]"
+    elif exit_check is not None:
+        try:
+            argv = _run_leave_check(current, exit_check["argv"], args.leave_arg or [])
+        except LeaveRefused as refused:
+            fallback = exit_check.get("on_refuse")
+            if fallback is None:
+                sys.exit(refused.message)
+            fallback_visits = (_visit_count(text, fallback)
+                               if isinstance(nodes[fallback].get("max_visits"), int) else 0)
+            limit = nodes[fallback].get("max_visits")
+            if isinstance(limit, int) and fallback_visits >= limit:
+                sys.exit(f"exit check for '{dest}' refused and its fallback '{fallback}' "
+                         f"has max_visits: {limit}, already entered {fallback_visits} "
+                         f"time(s); refusing to enter it again\n{refused.message}")
+            first = refused.message.split("\n")[0]
+            log_line = f"- {_now()} {current} -> {fallback} ({reason}; {first})"
+            refusal = refused.message
+            dest = fallback
+        else:
+            log_line += f" [leave_check exit 0: {' '.join(argv)}]"
     body = _section_body(text, "state")
     new_body = CURRENT_STATE_RE.sub(f"current: {dest}", body, count=1)
     start, end = _section_span(text, "state")
@@ -503,6 +547,8 @@ def cmd_transition(args: argparse.Namespace) -> None:
     reminder_text = _node_reminder_text(dest_node)
     if reminder_text:
         prose.append(reminder_text)
+    if refusal is not None:
+        prose.append(f"REFUSED  {refusal}")
     reminder_data = _node_reminder_data(dest_node)
     confirm = None
     next_step = None
@@ -513,6 +559,8 @@ def cmd_transition(args: argparse.Namespace) -> None:
         prose.append(f"CONFIRM  {confirm}")
         next_step = _close_command(args.run_id, path, dest)
     data = {"from": current, "to": dest, "reminder": reminder_data, "confirm": confirm}
+    if refusal is not None:
+        data["refused"] = refusal
     if args.output_mode == "json" and next_step is None and reminder_data:
         # JSON has no `do:` line, so the reminder's step is its `next`.
         next_step = reminder_data["do"]
@@ -562,6 +610,46 @@ def _validate_leave_check(node_name: str, leave_check: object, leave: object) ->
     return problems
 
 
+def _validate_exit_checks(node_name: str, exit_checks: object, leave: object,
+                          next_list: list) -> list[str]:
+    problems: list[str] = []
+    if leave is None:
+        problems.append(f"node '{node_name}': `reminder.exit_checks` requires `reminder.leave`")
+    if not isinstance(exit_checks, dict) or not exit_checks:
+        problems.append(f"node '{node_name}': `reminder.exit_checks` must be a non-empty "
+                        f"mapping from a `next` node to a check")
+        return problems
+    for exit_dest, check in exit_checks.items():
+        if exit_dest not in next_list:
+            problems.append(f"node '{node_name}': `reminder.exit_checks` names '{exit_dest}', "
+                            f"which is not in `next`")
+        if not isinstance(check, dict):
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}.argv` must "
+                            f"be a non-empty list of strings")
+            continue
+        fallback = check.get("on_refuse")
+        if fallback is not None and fallback not in next_list:
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}.on_refuse` "
+                            f"names '{fallback}', which is not in `next`")
+        if isinstance(fallback, str) and fallback in exit_checks and fallback != exit_dest:
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}.on_refuse` "
+                            f"names '{fallback}', which has its own exit check")
+        if fallback is not None and fallback == exit_dest:
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}.on_refuse` "
+                            f"must name a node other than the checked exit")
+        extra = set(check) - {"argv", "on_refuse"}
+        if extra:
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}` has unknown "
+                            f"key(s): {', '.join(sorted(extra))}")
+        if not isinstance(check.get("argv"), list) or not check["argv"]:
+            problems.append(f"node '{node_name}': `reminder.exit_checks.{exit_dest}.argv` must "
+                            f"be a non-empty list of strings")
+            continue
+        problems.extend(_validate_leave_check(f"{node_name}.exit_checks.{exit_dest}",
+                                              check["argv"], "" if leave is None else leave))
+    return problems
+
+
 def _validate_reminder(node_name: str, node: dict, next_list: list) -> list[str]:
     problems: list[str] = []
     reminder = node.get("reminder")
@@ -583,6 +671,16 @@ def _validate_reminder(node_name: str, node: dict, next_list: list) -> list[str]
 
     if "leave_check" in reminder:
         problems.extend(_validate_leave_check(node_name, reminder.get("leave_check"), leave))
+        if isinstance(next_list, list) and len(next_list) != 1:
+            problems.append(f"node '{node_name}': `reminder.leave_check` runs on every exit; "
+                            f"a node with {len(next_list)} exits names each gated exit in "
+                            f"`reminder.exit_checks`")
+    if "exit_checks" in reminder:
+        problems.extend(_validate_exit_checks(node_name, reminder.get("exit_checks"), leave,
+                                              next_list if isinstance(next_list, list) else []))
+        if "leave_check" in reminder:
+            problems.append(f"node '{node_name}': `reminder.leave_check` and "
+                            f"`reminder.exit_checks` cannot both be set")
 
     branches = reminder.get("branches")
     if branches is not None:
@@ -820,7 +918,7 @@ def _amend_current_problems(current: str, old_node: object,
     old_reminder = old_node.get("reminder") if isinstance(old_node, dict) else None
     new_node = new_nodes[current]
     new_reminder = new_node.get("reminder") if isinstance(new_node, dict) else None
-    for key in ("leave", "leave_check"):
+    for key in ("leave", "leave_check", "exit_checks"):
         old = old_reminder.get(key) if isinstance(old_reminder, dict) else None
         new = new_reminder.get(key) if isinstance(new_reminder, dict) else None
         if old != new:
@@ -938,8 +1036,9 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "`leave` condition, except for 'failed'; bare flag, "
                         "no accompanying text needed")
     s.add_argument("--leave-arg", action="append", metavar="NAME=VALUE",
-                   help="value for a {NAME} placeholder in the current "
-                        "node's `reminder.leave_check`; repeatable")
+                   help="value for a {NAME} placeholder in the leave check "
+                        "of the exit taken (`reminder.leave_check`, or "
+                        "`reminder.exit_checks.<exit>`); repeatable")
     s.set_defaults(func=cmd_transition)
 
     s = sub.add_parser("current", parents=[dir_parent],

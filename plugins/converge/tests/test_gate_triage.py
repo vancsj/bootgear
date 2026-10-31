@@ -1,8 +1,9 @@
 """`gate --kind triage --report <file>`: no claim is disputed or unverified; each surviving
 claim is reproduced and has a report row with the slate tier, a command and an output; each
-row names a slate claim and quotes its text; the report has the four headings; at least one
-claim survives; each surviving claim has a `reproduction-rerun` attack. A killed claim needs no
-tier and no row. A gate call without the options keeps the plain checks."""
+row names a slate claim and quotes its text; the report has the five headings; at least one
+claim survives, or the cause is unresolved (`Status: unresolved` first in `## Cause`) and none
+does; each surviving claim has a `reproduction-rerun` attack. A killed claim needs no tier and no
+row. A gate call without the options keeps the plain checks."""
 from __future__ import annotations
 
 import os
@@ -20,14 +21,14 @@ TRIAGE_ANGLES = FIND_ANGLES + f"""\
   tell: the claim quotes a reproduction command and its output
   asks: does a re-run of the command show the quoted output in substance?
 """
-HEADINGS = ("Cause", "Impact", "Confidence", "Next action")
+HEADINGS = ("Cause", "Impact", "Confidence", "Next action", "Solutions")
 COLUMNS: tuple[str, ...] = ("id", "claim", "tier", "command", "output")
 # The claim and output cells hold an escaped pipe and a line break: a split on `\|` shifts
 # the tier cell, and the tier check then fails.
 COMMAND = "uv run pytest -q tests/test_a.py"
 OUTPUT = "1 failed<br>AssertionError: x is None"
 TRIAGE_EXAMPLE = "gate <slate> --dir <abs-dir> --kind triage --report <abs-file>"
-FAILED_NEXT = "next: no revision is possible after this gate; end the run as failed"
+FAILED_NEXT = "next: revise the report and return to triage"
 
 
 def _claim(cid: str) -> str:
@@ -64,12 +65,15 @@ def _row(cid: str, tier: str = "reproduced", command: str = COMMAND,
 
 
 def _report(cv: Converge, rows: list[tuple[str, ...]],
-            headings: tuple[str, ...] = HEADINGS) -> Path:
+            headings: tuple[str, ...] = HEADINGS, cause: str | None = None) -> Path:
     lines = ["# Triage report", "", "## Claims", "",
              f"| {' | '.join(COLUMNS)} |", "|---|---|---|---|---|",
              *(f"| {' | '.join(row)} |" for row in rows)]
     for heading in headings:
-        lines += ["", f"## {heading}", "", f"{heading} text."]
+        body = cause if heading == "Cause" and cause is not None else f"{heading} text."
+        if heading == "Solutions":
+            body = f"- {rows[0][0]} supports the fix." if rows else "- no-fact: no claim to cite."
+        lines += ["", f"## {heading}", "", body]
     path = cv.root / "s1.triage-report.md"
     path.write_text("\n".join(lines) + "\n")
     return path
@@ -171,7 +175,107 @@ def test_no_surviving_claim(cv: Converge) -> None:
     _cutoff(cv)
     assert _gate(cv)[0].startswith("GATE ok s1 ")
     assert _fail(_triage(cv, _report(cv, [_row(cid)]), code=1)) == [
-        "no claim survived; a triage slate needs at least one surviving cause claim"]
+        ("no claim survived; a triage slate needs at least one surviving cause claim, "
+         "or `Status: unresolved` first in ## Cause")]
+
+
+def test_unresolved_cause_passes_when_no_claim_survives(cv: Converge) -> None:
+    (cid,) = _slate(cv, "reproduced")
+    assert cv.attack(cid, RERUN, outcome="refuted") == []
+    cv.ok("reply", "s1", "--as", FINDER, "--claim", cid, "--batch", "1", "--stance", "decline")
+    _cutoff(cv)
+    report = _report(cv, [_row(cid)], cause="Status: unresolved")
+    assert _triage(cv, report)[0].startswith("GATE ok s1 ")
+
+
+def test_unresolved_cause_refuses_a_surviving_claim(cv: Converge) -> None:
+    (cid,) = _slate(cv, "reproduced")
+    _survive(cv, cid)
+    _cutoff(cv)
+    report = _report(cv, [_row(cid)], cause="Status: unresolved")
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Cause says `Status: unresolved`, but a claim survived"]
+
+
+def test_unresolved_cause_refuses_a_slate_with_no_claim(cv: Converge) -> None:
+    assert _slate(cv) == []
+    _cutoff(cv)
+    report = _report(cv, [], cause="Status: unresolved")
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Cause says `Status: unresolved` for a slate with no claims"]
+
+
+def test_solutions_citing_a_claim_with_no_row_is_refused(cv: Converge) -> None:
+    (cid,) = _slate(cv, "reproduced")
+    _survive(cv, cid)
+    _cutoff(cv)
+    report = _report(cv, [_row(cid)])
+    report.write_text(report.read_text().replace("- F001 supports the fix.",
+                                                 "- F099 is the fix."))
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Solutions cites F099, which has no row in ## Claims"]
+
+
+def _survived_report(cv: Converge, solutions: str) -> Path:
+    """A report on a slate with one surviving reproduced claim; its Solutions body is `solutions`."""
+    (cid,) = _slate(cv, "reproduced")
+    _survive(cv, cid)
+    _cutoff(cv)
+    report = _report(cv, [_row(cid)])
+    report.write_text(report.read_text().replace("- F001 supports the fix.", solutions))
+    return report
+
+
+def test_solutions_entry_without_citation_or_marker_is_refused(cv: Converge) -> None:
+    report = _survived_report(cv, "- The fix is a process step.")
+    assert _fail(_triage(cv, report, code=1)) == [
+        ("## Solutions entry '- The fix is a process step.' cites no row id and has no "
+         "`no-fact: <reason>`")]
+
+
+def test_solutions_heading_in_any_case_is_checked(cv: Converge) -> None:
+    report = _survived_report(cv, "- The fix is a process step.")
+    report.write_text(report.read_text().replace("## Solutions", "## solutions"))
+    assert _fail(_triage(cv, report, code=1)) == [
+        ("## Solutions entry '- The fix is a process step.' cites no row id and has no "
+         "`no-fact: <reason>`")]
+
+
+def test_solutions_citation_matches_a_row_in_any_case(cv: Converge) -> None:
+    report = _survived_report(cv, "- f001 supports the fix.")
+    assert _triage(cv, report)[0].startswith("GATE ok s1 ")
+
+
+def test_solutions_prose_line_is_refused(cv: Converge) -> None:
+    report = _survived_report(cv, "- F001 supports the fix.\nAsk the reporter for logs.")
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Solutions line is not a list item: 'Ask the reporter for logs.'"]
+
+
+def test_solutions_no_fact_entry_with_a_reason_passes(cv: Converge) -> None:
+    report = _survived_report(cv, "- no-fact: the fix asks the reporter for logs.")
+    assert _triage(cv, report)[0].startswith("GATE ok s1 ")
+
+
+def test_solutions_no_fact_entry_needs_a_reason(cv: Converge) -> None:
+    report = _survived_report(cv, "- no-fact:")
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Solutions entry '- no-fact:' cites no row id and has no `no-fact: <reason>`"]
+
+
+def test_solutions_with_no_entry_is_refused(cv: Converge) -> None:
+    report = _survived_report(cv, "")
+    assert _fail(_triage(cv, report, code=1)) == ["## Solutions lists no solution"]
+
+
+def test_unresolved_cause_needs_a_report_row(cv: Converge) -> None:
+    (cid,) = _slate(cv, "reproduced")
+    assert cv.attack(cid, RERUN, outcome="refuted") == []
+    cv.ok("reply", "s1", "--as", FINDER, "--claim", cid, "--batch", "1", "--stance", "decline")
+    _cutoff(cv)
+    report = _report(cv, [], cause="Status: unresolved")
+    assert _fail(_triage(cv, report, code=1)) == [
+        "## Cause says `Status: unresolved`, but ## Claims has no row"]
 
 
 def test_surviving_claim_without_rerun_attack(cv: Converge) -> None:
@@ -236,7 +340,8 @@ def test_every_problem_in_one_run(cv: Converge) -> None:
         f"report row {first}: the command cell is empty",
         f"{second} survived but has no row in the report's ## Claims table",
         "report has no ## Confidence heading",
-        "report has no ## Next action heading"]
+        "report has no ## Next action heading",
+        "report has no ## Solutions heading"]
     assert lines[-1] == FAILED_NEXT
     assert _gate(cv)[0].startswith("GATE ok s1 ")
 

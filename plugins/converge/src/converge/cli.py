@@ -882,7 +882,7 @@ def cmd_coverage(args: argparse.Namespace) -> None:
 # `gate --kind triage`: the report's sections, and the attack angle that re-runs a claim's
 # reproduction command.
 REPORT_COLUMNS = ("command", "output")
-REPORT_HEADINGS = ("Cause", "Impact", "Confidence", "Next action")
+REPORT_HEADINGS = ("Cause", "Impact", "Confidence", "Next action", "Solutions")
 RERUN_ANGLE = "reproduction-rerun"
 _UNESCAPED_PIPE = re.compile(r"(?<!\\)\|")
 _SEPARATOR_CELL = re.compile(r"\A:?-+:?\Z")
@@ -965,10 +965,61 @@ def _triage_report(args: argparse.Namespace) -> tuple[str | None, list[str]]:
         return None, [f"--report {args.report} is unreadable: {exc}"]
 
 
+def _cause_unresolved(report: str) -> bool:
+    """True when the first non-empty line under `## Cause` is `Status: unresolved`."""
+    in_cause = False
+    for line in report.splitlines():
+        if line.startswith("## "):
+            in_cause = line[3:].strip().casefold() == "cause"
+        elif in_cause and line.strip():
+            return line.strip().casefold() == "status: unresolved"
+    return False
+
+
+_LIST_ITEM = re.compile(r"(?:[-*]|\d+[.)])\s+\S")
+_ROW_ID = re.compile(r"\bF\d+\b", re.IGNORECASE)
+_NO_FACT = re.compile(r"\bno-fact:\s*\S", re.IGNORECASE)
+
+
+def _solutions_lines(report: str) -> list[str] | None:
+    """The non-empty lines under `## Solutions`, the heading matched case-folded; None without it."""
+    found, lines, in_solutions = False, [], False
+    for line in report.splitlines():
+        if line.startswith("## "):
+            in_solutions = line[3:].strip().casefold() == "solutions"
+            found = found or in_solutions
+        elif in_solutions and line.strip():
+            lines.append(line.strip())
+    return lines if found else None
+
+
+def _solutions_problems(report: str, row_ids: set[str | None]) -> list[str]:
+    """Each `## Solutions` line is a list item that cites a row id or states `no-fact: <reason>`;
+    a cited id must name a row of `## Claims`."""
+    lines = _solutions_lines(report)
+    if lines is None:
+        return []
+    items = [line for line in lines if _LIST_ITEM.match(line)]
+    problems = [f"## Solutions line is not a list item: {line!r}"
+                for line in lines if not _LIST_ITEM.match(line)]
+    if not items:
+        problems.append("## Solutions lists no solution")
+    known = {str(row_id).upper() for row_id in row_ids if row_id}
+    for line in items:
+        cited = {match.upper() for match in _ROW_ID.findall(line)}
+        if not cited and not _NO_FACT.search(line):
+            problems.append(f"## Solutions entry {line!r} cites no row id and has no "
+                            "`no-fact: <reason>`")
+        problems.extend(f"## Solutions cites {cid}, which has no row in ## Claims"
+                        for cid in sorted(cited - known))
+    return problems
+
+
 def _triage_problems(slate: Slate, report: str, base: Slate | None = None) -> list[str]:
     """No claim is disputed or unverified; each surviving claim is reproduced and has a report
     row with its slate tier, a command and an output; each row names a slate claim and quotes
-    its text; the report has every heading; a claim survives; each surviving claim has a
+    its text; the report has every heading; a claim survives, or the cause is unresolved
+    (`Status: unresolved` first in `## Cause`) and none does; each surviving claim has a
     `reproduction-rerun` attack. A killed claim needs no tier and no row. With `base`, each row
     names a claim of the base slate. Presence checks only: no command runs."""
     unverified = protocol.unverified_ids(slate)
@@ -996,6 +1047,7 @@ def _triage_problems(slate: Slate, report: str, base: Slate | None = None) -> li
         problems.extend(f"report row {row_id}: the {column} cell is empty"
                         for column in REPORT_COLUMNS if not row.get(column))
     row_ids = {row.get("id") for row in rows}
+    problems.extend(_solutions_problems(report, row_ids))
     if base is not None:
         problems.extend(f"report row {row.get('id')} names no claim of the base slate "
                         f"{base.slate_id}; a later visit cannot add a cause claim"
@@ -1004,9 +1056,16 @@ def _triage_problems(slate: Slate, report: str, base: Slate | None = None) -> li
                     for claim in survived if claim.id not in row_ids)
     problems.extend(f"report has no ## {heading} heading"
                     for heading in REPORT_HEADINGS if heading.casefold() not in headings)
-    if not survived:
+    unresolved = _cause_unresolved(report)
+    if not survived and not unresolved:
         problems.append("no claim survived; a triage slate needs at least one surviving "
-                        "cause claim")
+                        "cause claim, or `Status: unresolved` first in ## Cause")
+    if survived and unresolved:
+        problems.append("## Cause says `Status: unresolved`, but a claim survived")
+    if unresolved and not slate.claims:
+        problems.append("## Cause says `Status: unresolved` for a slate with no claims")
+    if unresolved and slate.claims and not rows:
+        problems.append("## Cause says `Status: unresolved`, but ## Claims has no row")
     problems.extend(f"{claim.id} survived with no {RERUN_ANGLE} attack"
                     for claim in survived if RERUN_ANGLE not in claim.used_angles)
     return problems
@@ -1035,7 +1094,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
     data = {"slate": args.slate, "ok": not problems, "problems": problems, "cutoff_seq": cutoff_seq}
     if problems:
         if step is None:
-            step = "no revision is possible after this gate; end the run as failed"
+            step = ("revise the report and return to triage" if report is not None
+                    else "no revision is possible after this gate; end the run as failed")
         emit(args.output_mode, data, [f"GATE fail {args.slate}", *problems], step)
         sys.exit(EXIT_NO)
     shown = "-" if cutoff_seq is None else cutoff_seq

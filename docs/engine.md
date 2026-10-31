@@ -74,7 +74,7 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
 - `autonomy`: `no_further_questions` and an explicit list of permitted mutations;
 - domain overrides `spec_override` / `test_override` / `review_override`, a
   skill name or a `{sub-task-label: skill}` map, optional
-  `spec_review_skill` / `spec_review_override`, and `spec_debate_mode`;
+  `spec_review_skill` / `spec_review_override`, and `debate_mode`;
 - the run manifest: `spec_skill` / `spec_review_skill` / `test_skill` /
   `review_skill`,
   `debate_roster`, `debate_admission`, `review_fix_mode`;
@@ -130,7 +130,7 @@ Only skills listed in `debate_admission` may call `debate` directly.
   `*_override` (including amendments) and hands off to a project skill when one
   is set. A missing required domain skill fails the run.
 - `review` files every finding through converge; `converge gate`, as the
-  review node's `leave_check`, blocks leaving until the slate is complete.
+  review node's exit check on its forward exit, blocks that exit until the slate is complete.
 - `memory-ledger:ledger` is asked before investigating an unknown fact and
   after settling a durable one; the decision carries `ledger:<slug>`,
   `ledger-worthy-unrecorded:<why>` or `no-ledger:not-installed`. Its absence

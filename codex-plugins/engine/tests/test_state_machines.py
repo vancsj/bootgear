@@ -97,7 +97,7 @@ class BuiltInStateMachineTest(unittest.TestCase):
                 self.assertIn(f"ready {review_name}", branch)
                 self.assertIn("`inline`", branch)
                 self.assertEqual(nodes[debate]["next"], [draft])
-                self.assertIn("leave_check", review["reminder"])
+                self.assertEqual(list(review["reminder"]["exit_checks"]), [exit_node])
         for machine_path in self._ticket_writing_machines():
             nodes = yaml.safe_load(machine_path.read_text())["nodes"]
             for name in ("spec", "spec-review", "spec-debate"):
@@ -115,18 +115,20 @@ class BuiltInStateMachineTest(unittest.TestCase):
                 self.assertEqual(self._edges(override), self._edges(builtin))
                 for name, node in builtin.items():
                     reminder = node.get("reminder") or {}
-                    self.assertEqual((override[name].get("reminder") or {}).get("leave_check"),
-                                     reminder.get("leave_check"), f"node '{name}'")
+                    self.assertEqual((override[name].get("reminder") or {}).get("exit_checks"),
+                                     reminder.get("exit_checks"), f"node '{name}'")
         builtin = yaml.safe_load((PLUGIN_DIR / "state-machines" / "triage.yaml").read_text())
         override = yaml.safe_load(
             (REPO_ROOT / ".bootgear" / "config" / "state-machine-triage.yaml").read_text())
-        # The bootgear triage override adds only `disposition`, after the gate.
+        # The bootgear triage override adds only `disposition`, on the exit that the gate names.
         self.assertEqual(set(override["nodes"]), set(builtin["nodes"]) | {"disposition"})
-        for name in ("triage", "triage-review"):
+        for name in ("triage", "triage-debate"):
             self.assertEqual(override["nodes"][name], builtin["nodes"][name], f"node '{name}'")
-        self.assertEqual(override["nodes"]["triage-gate"]["reminder"]["leave_check"],
-                         builtin["nodes"]["triage-gate"]["reminder"]["leave_check"])
-        self.assertEqual(override["nodes"]["triage-gate"]["next"], ["disposition"])
+        review = override["nodes"]["triage-review"]
+        self.assertEqual(review["next"], ["triage", "triage-debate", "disposition"])
+        self.assertEqual(review["reminder"]["exit_checks"]["disposition"],
+                         builtin["nodes"]["triage-review"]["reminder"]["exit_checks"]["succeeded"])
+        self.assertEqual(override["nodes"]["disposition"]["next"], ["succeeded"])
         self.assertEqual(override["nodes"]["disposition"]["next"], ["succeeded"])
 
     def test_no_machine_states_the_handback_precedence_line(self):

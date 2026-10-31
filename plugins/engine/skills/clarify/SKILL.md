@@ -15,7 +15,7 @@ Outcomes:
 
 ## Workflow
 
-Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` list, `advisor_roles`, the seat mapping, and every advisor pairing → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, and every advisor pairing → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 
 ## What to settle
 
@@ -64,7 +64,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    3. Run `task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
    4. Run `task state diagram <path>` on the same resolved machine.
    5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
-      For every node with `reminder.leave_check`, also list its argv verbatim, the tier it came from (built-in, project override, or per-run), and the output of `command -v <argv[0]>`. Flag it when `argv[0]` contains `/` or `command -v` finds no program provided by an installed plugin. These commands run at `transition`; the user's confirmation approves them.
+      For every node with `reminder.leave_check` or `reminder.exit_checks`, also list each argv verbatim (an `exit_checks` argv with the exit it gates), the tier it came from (built-in, project override, or per-run), and the output of `command -v <argv[0]>`. Flag it when `argv[0]` contains `/` or `command -v` finds no program provided by an installed plugin. These commands run at `transition`; the user's confirmation approves them.
    6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement. Do not write settlement without a validated `state_machine`.
 
 4. **Approach and principles are distinct:**
@@ -106,13 +106,12 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Use the project's own sub-task labels. Do not invent a fixed vocabulary. Treat an absent override as the general default. Ask about specialized skills once here. At call time, resolve the current override, including any later `AMENDMENT`, select the entry matching the current sub-task, and fall back to the general default when no mapping label matches.
 
-   When the task type calls `spec`, also settle **`spec_debate_mode`** —
-   `mandatory` (default: resolve every surviving choice claim from
-   `spec-review`, escalating only if unresolved at or above
-   `debate_threshold`) or `threshold` (decide below-threshold choice claims
-   solo and resolve/escalate only at or above the threshold). This field is read by
-   `execute` after independent `spec-review`; an absent value means
-   `mandatory`.
+   For every task type, settle **`debate_mode`** —
+   `threshold` (default: decide choice claims below `debate_threshold` solo,
+   and resolve or escalate those at or above it) or `mandatory` (resolve every
+   choice claim, and escalate only those unresolved at or above
+   `debate_threshold`). `execute` reads it at each debate node; an absent value
+   means `threshold`.
 
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
@@ -170,7 +169,7 @@ After confirmation:
 
 4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
-Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `spec_debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
+Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 

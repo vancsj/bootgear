@@ -16,8 +16,13 @@ nodes:
     next: [spec]
   spec:
     reminder:
-      do: "Draft requirements and design with spec. Pass `stop_after: design`. Pass `<run-id>`, `<engine-root>` and `<session-dir>`. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`. `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. Does not: write `task.md` or review the files."
+      do: "Draft requirements and design with spec. Pass `stop_after: design`. Pass `<run-id>`, `<engine-root>` and `<session-dir>`. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`. `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. When you leave, pass `--leave-arg output_dir=<directory holding requirements.md and design.md>`. Does not: write `task.md` or review the files."
       leave: "requirements.md and design.md are at the output paths and are complete enough for independent review; do not resolve the final spec sign-off here."
+      exit_checks:
+        spec-review:
+          argv: [test, "!", -e, "{output_dir}/task.md"]
+        succeeded:
+          argv: [test, "!", -e, "{output_dir}/task.md"]
       branches:
         spec-review: "The draft is ready for an independent review."
         succeeded: "A ready spec-review returned `inline` patches; they are applied and no new slate runs."
@@ -27,7 +32,9 @@ nodes:
     reminder:
       do: "Run spec-review on requirements and design. Architecture fit applies. Does not: edit requirements or design."
       leave: "The independent review has complete converge coverage; its findings, evidence and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        succeeded:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         spec: "`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to spec."
         spec-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
@@ -35,7 +42,7 @@ nodes:
     next: [spec, spec-debate, succeeded]
   spec-debate:
     reminder:
-      do: "Apply spec_debate_mode to the spec-review choice claims: decide below-threshold claims solo in threshold mode, resolve every claim in mandatory mode, and debate only unresolved claims at or above the settled threshold. Record the decision. Update the artifacts. Does not: re-review or add scope."
+      do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Update the artifacts. Does not: re-review or add scope."
       leave: "The decision is recorded in the run ledger and any change to the requirements or design is in the artifact; return through spec for re-review."
       branches:
         spec: "The decision is recorded; return to spec and then spec-review."

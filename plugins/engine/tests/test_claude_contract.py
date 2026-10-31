@@ -408,12 +408,12 @@ class ClaudePackageContractTest(unittest.TestCase):
     def test_spec_review_settlement_fields_are_optional_and_shaped(self):
         accepted = self._validate(
             "spec_review_skill: spec-review\nspec_review_override: spec-review\n"
-            "spec_debate_mode: threshold\ndebate_party_config: {}\n"
+            "debate_mode: threshold\ndebate_party_config: {}\n"
         )
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
-        refused = self._validate("spec_debate_mode: later\n")
+        refused = self._validate("debate_mode: later\n")
         self.assertEqual(refused.returncode, 1)
-        self.assertIn("spec_debate_mode", refused.stderr)
+        self.assertIn("debate_mode", refused.stderr)
 
     def test_spec_review_angles_resolve_as_find_angles(self):
         angle_file = (PLUGIN_DIR.parents[1] / "plugins" / "spec" / "skills" /

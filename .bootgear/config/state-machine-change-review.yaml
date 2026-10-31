@@ -18,7 +18,9 @@ nodes:
     reminder:
       do: "Review the change with /review; it runs converge on every finding. For a PR stack, review each PR in base-to-top order and report the findings per PR. Does not: apply fixes."
       leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        disposition:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         review-debate: "A finding or requested fix needs an above-threshold decision."
         fix: "An accepted finding requires a correction."
@@ -27,7 +29,7 @@ nodes:
   review-debate:
     max_visits: 3
     reminder:
-      do: "Debate the choice claims from the review render with the public debate skill; factual disputes go back to /review."
+      do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Factual disputes go back to review."
       leave: "The decision is recorded in the run ledger with mode resolve or debate, and any required correction or further review pass is recorded with it."
       branches:
         fix: "The decision requires a correction."

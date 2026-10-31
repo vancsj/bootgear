@@ -33,7 +33,7 @@ OVERRIDE_NODES = {
     "change-review": {"clarify", "disposition", "failed", "fix", "inspect", "review",
                       "review-debate", "succeeded"},
     "triage": {"clarify", "disposition", "failed", "inspect", "succeeded", "triage", "triage-debate",
-               "triage-gate", "triage-review"},
+               "triage-review"},
     "ticket-writing": {"clarify", "failed", "inspect", "succeeded", "ticket", "ticket-debate",
                        "ticket-review"},
 }
@@ -48,7 +48,7 @@ TRIAGE_PROFILES = {"product": REFERENCES / "cutoff-product.yaml",
 TRIAGE_MACHINES = {"built-in": MACHINES / "triage.yaml",
                    "override": OVERRIDES / "state-machine-triage.yaml"}
 # The triage nodes after clarify, in walk order.
-TRIAGE_WALK = ("inspect", "triage", "triage-review", "triage-gate")
+TRIAGE_WALK = ("inspect", "triage", "triage-review")
 GATE_CHECK = ["converge", "gate", "{slate}", "--dir", "{converge_dir}", "--kind", "triage",
               "--base-slate", "{base_slate}", "--report", "{report}"]
 # A task layer that leaves `reproduction-rerun` as the only attack angle and skips cuts.
@@ -254,11 +254,13 @@ class Scratch(unittest.TestCase):
                               "--searches", "uv run pytest -q",
                               "--positive-control", "the output names x", *extra)
 
-    def _report(self, rows=(), headings=("Cause", "Impact", "Confidence", "Next action")):
+    def _report(self, rows=(), headings=("Cause", "Impact", "Confidence", "Next action",
+                                             "Solutions")):
         lines = ["# Triage report", "", "## Claims", "",
                  "| id | claim | tier | command | output |", "|---|---|---|---|---|", *rows]
         for heading in headings:
-            lines += ["", f"## {heading}", "", f"{heading} text."]
+            body = "- no-fact: fixture reason." if heading == "Solutions" else f"{heading} text."
+            lines += ["", f"## {heading}", "", body]
         self.report.write_text("\n".join(lines) + "\n")
 
     # -- triage runs -------------------------------------------------------------------
@@ -380,12 +382,12 @@ class TriageCutoffChecks(Scratch):
 
     def test_check_iii_all_problems_appear_in_one_message(self):
         result = self._validate("ticket-to-pr",
-                                "triage_cutoff: strict\nspec_debate_mode: sometimes\n")
+                                "triage_cutoff: strict\ndebate_mode: sometimes\n")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("3 problem(s)", result.stderr)
         self.assertIn("only a triage run has one, not 'ticket-to-pr'", result.stderr)
         self.assertIn("must be one of: product, one-user", result.stderr)
-        self.assertIn("  spec_debate_mode (1):\n", result.stderr)
+        self.assertIn("  debate_mode (1):\n", result.stderr)
 
 
 class TicketChecks(Scratch):
@@ -511,16 +513,18 @@ class GateChecks(Scratch):
                     self.assertEqual(claim["rating"]["reach"], reach)
                     self.assertEqual(claim["status"], "survived")
 
-    def test_check_x_triage_gate_alone_runs_the_triage_gate(self):
+    def test_check_x_triage_review_alone_runs_the_gate_on_its_exit(self):
         for label, path in TRIAGE_MACHINES.items():
             with self.subTest(machine=label):
                 nodes = _load_yaml(path)["nodes"]
-                self.assertEqual(nodes["triage-gate"]["reminder"]["leave_check"], GATE_CHECK)
                 gate_next = "disposition" if label == "override" else "succeeded"
-                self.assertEqual(nodes["triage-gate"]["next"], [gate_next])
+                self.assertEqual(nodes["triage-review"]["next"],
+                                 ["triage", "triage-debate", gate_next])
+                self.assertEqual(nodes["triage-review"]["reminder"]["exit_checks"],
+                                 {gate_next: {"argv": GATE_CHECK, "on_refuse": "triage"}})
                 checked = [name for name, node in nodes.items()
-                           if "leave_check" in (node.get("reminder") or {})]
-                self.assertEqual(checked, ["triage-gate"])
+                           if {"leave_check", "exit_checks"} & set(node.get("reminder") or {})]
+                self.assertEqual(checked, ["triage-review"])
 
     def test_triage_review_exits_to_triage_and_triage_debate_run_no_gate(self):
         for label, path in TRIAGE_MACHINES.items():
@@ -535,7 +539,7 @@ class GateChecks(Scratch):
                     entry = next(line for line in reversed(log) if line.startswith("- "))
                     self.assertTrue(entry.endswith(f"triage-review -> {dest} (to {dest})"), entry)
 
-    def test_triage_gate_refuses_a_failing_report_and_allows_a_passing_one(self):
+    def test_triage_review_refuses_a_failing_report_back_to_triage(self):
         task_layer = self.tmp / "rerun-only.yaml"
         task_layer.write_text(RERUN_ONLY)
         for label, path in TRIAGE_MACHINES.items():
@@ -549,27 +553,64 @@ class GateChecks(Scratch):
                     self.assertEqual(attacked.returncode, 0, attacked.stderr)
                 cutoff = self._converge("cutoff", slate, "--dir", str(self.ledgers))
                 self.assertEqual(cutoff.returncode, 0, cutoff.stderr)
-                ledger = self._triage_run(run_id, path, "triage-gate")
+                ledger = self._triage_run(run_id, path, "triage-review")
                 leave = ("--leave-arg", f"slate={slate}", "--leave-arg", f"base_slate={slate}",
                          "--leave-arg", f"converge_dir={self.ledgers}",
                          "--leave-arg", f"report={self.report}")
                 row = "| F001 | x is None at a.py:10 | reproduced | uv run pytest -q | 1 failed |"
+                gate_next = "disposition" if label == "override" else "succeeded"
 
                 self._report([row], headings=("Cause", "Impact", "Confidence"))
-                before = ledger.read_bytes()
-                gate_next = "disposition" if label == "override" else "succeeded"
                 refused = self._move(run_id, gate_next, *leave)
-                self.assertNotEqual(refused.returncode, 0, refused.stdout)
-                self.assertIn("'triage-gate' leave_check exited 1", refused.stderr)
-                self.assertIn("report has no ## Next action heading", refused.stderr)
-                self.assertEqual(ledger.read_bytes(), before)
+                self.assertEqual(refused.returncode, 0, refused.stderr)
+                self.assertIn("current: triage\n", ledger.read_text())
+                self.assertIn("'triage-review' leave_check exited 1", refused.stdout)
+                self.assertIn("report has no ## Next action heading", refused.stdout)
+                self.assertIn("report has no ## Solutions heading", refused.stdout)
 
                 self._report([row])
+                self.assertEqual(self._move(run_id, "triage-review").returncode, 0)
                 allowed = self._move(run_id, gate_next, *leave)
                 self.assertEqual(allowed.returncode, 0, allowed.stderr)
                 if gate_next == "disposition":
                     allowed = self._move(run_id, "succeeded")
                     self.assertEqual(allowed.returncode, 0, allowed.stderr)
+                self.assertIn("current: succeeded\n", ledger.read_text())
+
+    def test_triage_review_unresolved_report_walks_to_succeeded(self):
+        task_layer = self.tmp / "rerun-only.yaml"
+        task_layer.write_text(RERUN_ONLY)
+        for label, path in TRIAGE_MACHINES.items():
+            slate, run_id = f"unresolved-{label}", f"unresolved-{label}"
+            with self.subTest(machine=label):
+                self._filed_and_covered(slate, REFERENCES / "cutoff-product.yaml",
+                                        "--config", str(task_layer))
+                refuted = self._converge("attack", slate, "--dir", str(self.ledgers), "--as", "r1",
+                                         "--claim", "F001", "--batch", "1",
+                                         "--angle", "reproduction-rerun", "--tell", "tell applies",
+                                         "--outcome", "refuted", "--evidence", "re-ran it: passes",
+                                         "--searches", "uv run pytest -q",
+                                         "--positive-control", "the output names x")
+                self.assertEqual(refuted.returncode, 0, refuted.stderr)
+                declined = self._converge("reply", slate, "--dir", str(self.ledgers), "--as",
+                                          "finder", "--claim", "F001", "--batch", "1",
+                                          "--stance", "decline")
+                self.assertEqual(declined.returncode, 0, declined.stderr)
+                cutoff = self._converge("cutoff", slate, "--dir", str(self.ledgers))
+                self.assertEqual(cutoff.returncode, 0, cutoff.stderr)
+                ledger = self._triage_run(run_id, path, "triage-review")
+                self._report(["| F001 | x is None at a.py:10 | reproduced | uv run pytest -q | 1 failed |"])
+                self.report.write_text(self.report.read_text().replace(
+                    "## Cause\n\nCause text.", "## Cause\n\nStatus: unresolved"))
+                leave = ("--leave-arg", f"slate={slate}", "--leave-arg", f"base_slate={slate}",
+                         "--leave-arg", f"converge_dir={self.ledgers}",
+                         "--leave-arg", f"report={self.report}")
+                gate_next = "disposition" if label == "override" else "succeeded"
+                moved = self._move(run_id, gate_next, *leave)
+                self.assertEqual(moved.returncode, 0, moved.stderr)
+                if gate_next == "disposition":
+                    moved = self._move(run_id, "succeeded")
+                    self.assertEqual(moved.returncode, 0, moved.stderr)
                 self.assertIn("current: succeeded\n", ledger.read_text())
 
     def test_check_x_gate_refuses_a_triage_slate_with_no_surviving_claim(self):

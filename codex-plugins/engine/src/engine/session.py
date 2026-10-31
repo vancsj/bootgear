@@ -566,9 +566,9 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
         if field in data:
             skill_value(field, override=True)
 
-    spec_debate_mode = data.get("spec_debate_mode")
-    if spec_debate_mode is not None and spec_debate_mode not in {"mandatory", "threshold"}:
-        problems.append(("spec_debate_mode", "must be mandatory or threshold"))
+    debate_mode = data.get("debate_mode")
+    if debate_mode is not None and debate_mode not in {"mandatory", "threshold"}:
+        problems.append(("debate_mode", "must be mandatory or threshold"))
 
     roster = data.get("debate_roster")
     if roster is not None:

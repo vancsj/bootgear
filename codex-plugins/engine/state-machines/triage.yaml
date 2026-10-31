@@ -17,36 +17,32 @@ nodes:
   triage:
     max_visits: 5
     reminder:
-      do: "Reproduce each cause claim with test. Give each claim a reproduction command and its real output. Draft cause claims only. On every visit, write the report file `<session-dir>/<run-id>.triage-report.md`: a `## Claims` table with the columns `id | claim | tier | command | output`, then the headings `## Cause`, `## Impact`, `## Confidence` and `## Next action`. Give the rows the ids F001, F002 and on, in order. Write a row for every cause on the first visit. A later visit cannot add a cause claim. A cause that the first visit misses stays out of this run. On a later visit, revise or test again only the rows of the first visit. Keep the id of each row. Add no row. Set each `tier` cell to `reproduced`. In a cell, write a line break as `<br>` and a `|` as `\\|`. Input: the report and `triage_cutoff`. Output: the claims and the report file. Does not: implement a fix."
-      leave: "Each cause claim has a reproduction command and its real output, and the report file is written on this visit."
+      do: "Reproduce each cause claim and each solution fact with a test. Give each claim a reproduction command and its real output. Draft claims only. On every visit, write the report file `<session-dir>/<run-id>.triage-report.md`: a `## Claims` table with the columns `id | claim | tier | command | output`, then the headings `## Cause`, `## Impact`, `## Confidence`, `## Next action` and `## Solutions`. Give the rows the ids F001, F002 and on, in order. Write a row for every cause claim and every solution fact on the first visit. File at least one cause claim, even when no cause reproduces. A later visit cannot add a claim. A cause that the first visit misses stays out of this run. On a later visit, revise or test again only the rows of the first visit. Keep the id of each row. Add no row. Set each `tier` cell to the claim's tier in the slate (`reproduced`, `traced` or `inferred`). In a cell, write a line break as `<br>` and a `|` as `\\|`. Write `Status: unresolved` as the first line of `## Cause` when no cause reproduces; otherwise write `Status: reproduced`. In `## Solutions`, write each solution as one `- ` list line that names the ids of the rows its facts rest on, or `no-fact: <reason>` when it rests on no fact. A no-fact line asserts that the solution has no fact; the choice of solution goes to triage-debate. Do not pick a solution. Input: the report and `triage_cutoff`. Output: the claims and the report file. Does not: implement a fix."
+      leave: "Each claim has a reproduction command and its real output, and the report file is written on this visit."
       branches:
         triage-review: "The claims are drafted, revised or debated."
     next: [triage-review]
   triage-review:
     max_visits: 5
     reminder:
-      do: "Run converge on a new claim slate `<run-id>-triage-review-<n>` in `<session-dir>/converge`. `<n>` counts this run's triage-review visits from 1. Each visit uses a new slate, and no slate changes after its visit. Use a finder, a refuter and a cutter, each a separate agent. The finder files each row of the current `## Claims` table as one claim, in row order, with the row's claim text, and puts the row's command and output in the evidence. The refuter re-runs each quoted reproduction command and records it as an attack under angle `reproduction-rerun`. Each role brief names `.bootgear/config/principles.md` and each standard file present in `.bootgear/config/`. The main role writes only `init`. Pass these to `converge init`: `--defaults` with `.bootgear/config/cutoff-<triage_cutoff>.yaml` when present, else `<engine-root>/references/cutoff-<triage_cutoff>.yaml`; `--lenses default`; `--angles <engine-root>/references/angles-triage.yaml`; `--settlement <file>`. Write that file with `task session read <run-id> --dir <session-dir> --section settlement --prose > <file>`, so that `r2` seats as `advisor`. Record the slate with `task session record-decision <run-id> --dir <session-dir> --mode solo --summary \"triage slate <slate> converge_dir=<converge-dir>\"`. A row keeps the id of its first-visit row. A later visit cannot add a cause claim, and the gate refuses a new row id. A cause that the first visit misses stays out of this run. If the cause changes, start a new run. Does not: draft claims, write the report or resolve choices."
+      do: "Run converge on a new claim slate `<run-id>-triage-review-<n>` in `<session-dir>/converge`. `<n>` counts this run's triage-review visits from 1. Each visit uses a new slate, and no slate changes after its visit. Use a finder, a refuter and a cutter, each a separate agent. The finder files each row of the current `## Claims` table as one claim, in row order, with the row's claim text, and puts the row's command and output in the evidence. The refuter re-runs each quoted reproduction command and records it as an attack under angle `reproduction-rerun`. Each role brief names `.bootgear/config/principles.md` and each standard file present in `.bootgear/config/`. The main role writes only `init`. Pass these to `converge init`: `--defaults` with `.bootgear/config/cutoff-<triage_cutoff>.yaml` when present, else `<engine-root>/references/cutoff-<triage_cutoff>.yaml`; `--lenses default`; `--angles <engine-root>/references/angles-triage.yaml`; `--settlement <file>`. On visit 2 and later, add `--refuters 1`, so the slate takes no gap hunt and files no claim the base slate lacks. Write that file with `task session read <run-id> --dir <session-dir> --section settlement --prose > <file>`, so that `r2` seats as `advisor`. Record the slate with `task session record-decision <run-id> --dir <session-dir> --mode solo --summary \"triage slate <slate> converge_dir=<converge-dir>\"`. A row keeps the id of its first-visit row. A later visit cannot add a claim, and the gate refuses a new row id. Then choose the exit. A claim refuted or needing a revision, or a report rewrite after a surviving claim, goes to `triage`. Choice claims, including the solution pick, go to `triage-debate`, where `debate_mode` applies. When no cause survives and no cause reproduces, the report must say `Status: unresolved` and keep at least one claim row. With no revision and no choice left, go to `succeeded`, and pass `--leave-arg slate=<slate> --leave-arg base_slate=<run-id>-triage-review-1 --leave-arg converge_dir=<converge-dir> --leave-arg report=<session-dir>/<run-id>.triage-report.md` only on that exit. A failed gate sends the run back to `triage`. Does not: draft claims, write the report or resolve choices."
       leave: "The converge pass on the slate is complete, and its render and slate name are recorded in the run ledger."
       branches:
-        triage: "A claim is refuted or needs a revision."
+        triage: "A claim is refuted or needs a revision, or the report needs a rewrite after a surviving claim."
         triage-debate: "Choice claims remain."
-        triage-gate: "No revisions and no choices remain."
-    next: [triage, triage-debate, triage-gate]
+        succeeded: "No revisions and no choices remain. The gate checks the report."
+      exit_checks:
+        succeeded:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}", --kind, triage, --base-slate, "{base_slate}", --report, "{report}"]
+          on_refuse: triage
+    next: [triage, triage-debate, succeeded]
   triage-debate:
     reminder:
-      do: "Resolve the choice claims with the resolve skill. Use the debate skill when resolve escalates. Record the decision. Does not: revise evidence or run converge."
+      do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Does not: revise evidence or run converge."
       leave: "The decision is recorded in the run ledger with mode resolve or debate."
       branches:
         triage: "The decision is recorded."
     next: [triage]
-  triage-gate:
-    reminder:
-      do: "Gate the final report. The gated slate is named by the latest decision in the run ledger that starts with `triage slate`. The base slate is `<run-id>-triage-review-1`. The leave check runs `converge gate --kind triage --base-slate` on the gated slate, the base slate and the report file `<session-dir>/<run-id>.triage-report.md`. When you leave, pass `--leave-arg slate=<gated slate> --leave-arg base_slate=<run-id>-triage-review-1 --leave-arg converge_dir=<session-dir>/converge --leave-arg report=<session-dir>/<run-id>.triage-report.md`. If the gate refuses, move to `failed` and name the gate problems in the reason. Input: the gated slate, the base slate and the report file. Output: the gate result. Does not: revise claims, edit the report or resume the slate."
-      leave: "`converge gate --kind triage` exited 0 for the gated slate, the base slate and the report."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}", --kind, triage, --base-slate, "{base_slate}", --report, "{report}"]
-      branches:
-        succeeded: "The gate passed."
-    next: [succeeded]
   succeeded:
     terminal: true
   failed:

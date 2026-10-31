@@ -16,7 +16,9 @@ nodes:
     reminder:                          # optional
       do: "Review the change with review."
       leave: "`converge gate` exited 0 for this review's slate."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        succeeded:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         fix: "An accepted finding requires a correction."
         succeeded: "The review is clean."
@@ -41,7 +43,8 @@ Each node may have these fields:
   - `do`: one line saying what to do in the node, naming the skill in its call form.
   - `branches`: one line per destination saying what it means. Its keys must match `next` exactly.
   - `leave`: one line saying what must be true before leaving the node. It turns on the leave gate.
-  - `leave_check`: an argv list the engine runs when the node is left. It requires `leave`. Its only braces may be `{name}` placeholders, with `name` matching `[a-z_]+`.
+  - `leave_check`: an argv list the engine runs when the node is left. It requires `leave`, and only a node with one exit may use it. Its only braces may be `{name}` placeholders, with `name` matching `[a-z_]+`.
+  - `exit_checks`: a mapping from a `next` node to `{argv, on_refuse}`. It requires `leave`. The engine runs a check only when the run takes that exit, so a node with several exits names each gated exit here. `argv` follows the `leave_check` rules. `on_refuse`, when set, names a `next` node that has no exit check of its own: a non-zero exit moves the run there instead of stopping. Use `leave_check` and `exit_checks` on one node: refused. A built-in `review` node gates only its forward exit; its `fix` and `review-debate` exits run without a check.
 
 Every machine has these fixed nodes. `clarify` is the only start node. `succeeded` and `failed` are the only terminal nodes, and they match the two outcomes of `session close`. There is no shared sub-machine. `spec-debate`, `triage-debate` and `review-debate` are ordinary nodes, and each declares its own exits.
 
@@ -55,13 +58,13 @@ It also refuses two node names that map to the same Mermaid ID, because `-` and 
 
 ### The universal failed edge
 
-Every non-terminal node can move to `failed`, even though no `next:` list names it. `validate` counts this edge for reachability, and `transition` always accepts `--to failed` from a non-terminal node. Every other destination, `succeeded` included, must be in the current node's `next:` list. A move to `failed` skips the node's `leave` gate and its `leave_check`, so a run can still fail when the condition cannot hold.
+Every non-terminal node can move to `failed`, even though no `next:` list names it. `validate` counts this edge for reachability, and `transition` always accepts `--to failed` from a non-terminal node. Every other destination, `succeeded` included, must be in the current node's `next:` list. A move to `failed` skips the node's `leave` gate and its checks (`leave_check` and `exit_checks`), so a run can still fail when the condition cannot hold.
 
 ## Override tiers
 
 `clarify` resolves the machine once, before it writes the settlement:
 
-1. **Built-in**: `plugins/engine/state-machines/<task_type>.yaml`. There is one for each task type: `ticket-writing`, `ticket-to-pr`, `triage`, `change-review` and `design-doc`. The files are `ticket-writing.yaml`, `ticket-to-pr.yaml`, `triage.yaml`, `change-review.yaml` and `design-doc.yaml`. Each starts with `clarify -> inspect`. Every `review` node carries the `converge gate` `leave_check`, and every `fix` node, plus `review-debate` in `change-review`, sets `max_visits` so the review and fix loops end.
+1. **Built-in**: `plugins/engine/state-machines/<task_type>.yaml`. There is one for each task type: `ticket-writing`, `ticket-to-pr`, `triage`, `change-review` and `design-doc`. The files are `ticket-writing.yaml`, `ticket-to-pr.yaml`, `triage.yaml`, `change-review.yaml` and `design-doc.yaml`. Each starts with `clarify -> inspect`. Every `review` node carries a `converge gate` exit check on its forward exit, and every `fix` node, plus `review-debate` in `change-review`, sets `max_visits` so the review and fix loops end.
 2. **Project**: `.bootgear/config/state-machine-<task_type>.yaml`. When this file exists, it replaces the built-in machine completely. It is not merged. People own it, and no skill writes it.
 3. **Per-run**: `clarify` can adjust the resolved machine for this run. For example, it can drop `fix` from a review of someone else's PR. It validates the result, shows the diagram and every `leave_check` argv for the user to approve, and records the complete machine in the settlement's `state_machine: |` block scalar.
 
@@ -80,9 +83,12 @@ task state transition <run-id> --dir <session-dir> --to <node> --reason "<why>" 
 - The destination is not a node, or it is neither in `next:` nor `failed`.
 - The destination has reached its `max_visits` limit.
 - The current node has a `leave`, `--confirm-leave` was not passed, and the destination is not `failed`.
-- The current node has a `leave_check` that fails, and the destination is not `failed`.
+- The exit taken has a check that fails, and that exit has no `on_refuse`.
+- The exit taken has `on_refuse`, its check fails, and the `on_refuse` node has reached its `max_visits` limit.
 
-On success, it makes one atomic write. The write updates `current:` and appends `- <ts> <from> -> <to> (<reason>)` to the `## state` log. When a check ran, the log line ends with `[leave_check exit 0: <argv>]`. A refused move writes nothing.
+When the exit taken has an `on_refuse` and its check fails, the move goes to that node instead. The log line reads `- <ts> <from> -> <fallback> (<reason>; <first line of the refusal>)`. The output prints the refusal under `REFUSED`.
+
+On success, it makes one atomic write. The write updates `current:` and appends `- <ts> <from> -> <to> (<reason>)` to the `## state` log. When a check ran, the log line ends with `[leave_check exit 0: <argv>]`. A refused move with no `on_refuse` writes nothing.
 
 `transition` does not check that `/goal` is actually met. When the destination is terminal, it prints a `CONFIRM` line that asks the caller to confirm the goal's matching condition. It then prints the `session close` command as the next step. `session close` refuses to run until `current:` equals the outcome.
 
@@ -90,8 +96,8 @@ On success, it makes one atomic write. The write updates `current:` and appends 
 
 `leave` is enforced only by the caller's word: `--confirm-leave` is a bare flag. The gate guarantees that the model cannot leave a node for any destination other than `failed` without deliberately asserting that the condition holds. `leave_check` adds a check the engine runs itself:
 
-- Each `{name}` placeholder is filled from exactly one `--leave-arg name=value`. `transition` refuses a missing arg, an extra arg, a repeated arg, an empty value, a multi-line value, or a value that starts with `-`. These refusals are skipped for `--to failed`, because the check does not run. `transition` refuses `--leave-arg` on a node without a `leave_check` for every destination.
-- `argv[0]` is resolved on `PATH`, where the Claude plugin `bin/` directories are. On Codex, the plugin's own `scripts/<argv[0]>` is tried first, then `PATH`. The check runs without a shell and with no stdin, in its own process group. Its timeout is 120 s, or the value of `ENGINE_LEAVE_CHECK_TIMEOUT`. `transition` refuses the move on a non-zero exit or a timeout, and quotes the last 40 lines of output.
+- Each `{name}` placeholder is filled from exactly one `--leave-arg name=value`. `transition` refuses a missing arg, an extra arg, a repeated arg, an empty value, a multi-line value, or a value that starts with `-`. These refusals are skipped for `--to failed`, because the check does not run. `transition` refuses `--leave-arg` when the exit taken has no check.
+- `argv[0]` is resolved on `PATH`, where the Claude plugin `bin/` directories are. On Codex, the plugin's own `scripts/<argv[0]>` is tried first, then `PATH`. The check runs without a shell and with no stdin, in its own process group. Its timeout is 120 s, or the value of `ENGINE_LEAVE_CHECK_TIMEOUT`. On a non-zero exit, the move goes to `on_refuse` when set, else `transition` refuses it. A timeout always refuses. A refusal quotes the last 40 lines of output.
 - A passing check never replaces `--confirm-leave`, and `--confirm-leave` never bypasses a failing check.
 
 A `leave_check` is code that the engine runs, so the approval of the check at `clarify` is the point of trust.
@@ -112,7 +118,7 @@ Only when the new machine is valid does it also refuse these:
 
 - The current node is missing from the new machine.
 - The new machine is identical to the machine in force.
-- The new machine changes the current node's `leave` or `leave_check`.
+- The new machine changes the current node's `leave`, `leave_check` or `exit_checks`.
 - No `next:` path leads from the current node to `succeeded`.
 
 On success, it makes one atomic write:
@@ -124,7 +130,7 @@ The machine in force is the newest `## machines` entry. When there is none, it i
 
 ## How reminders reach the model
 
-- **On entry**: `transition` and `amend` print the node's `do`, `branches`, `leave` and `leave_check`. In JSON mode, `do` is returned as `next`.
+- **On entry**: `transition` and `amend` print the node's `do`, `branches`, `leave`, `leave_check` and `exit_checks`. In JSON mode, `do` is returned as `next`.
 - **On demand**: `task state current` prints the current node and its full reminder from disk.
   - A node with no reminder prints `no reminder: work toward /goal`.
   - A terminal node prints `terminal: close the ledger` and the close command.

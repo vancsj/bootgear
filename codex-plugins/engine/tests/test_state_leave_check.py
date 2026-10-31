@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 
 from settlement_fixture import valid_settlement
+from state_validate_fixture import validate_reminder
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_REL = Path("scripts") / "task"
@@ -72,15 +73,7 @@ class LeaveCheckSchemaTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def _validate(self, reminder_lines):
-        path = self.tmp / "machine.yaml"
-        path.write_text(
-            "name: m\nnodes:\n  clarify:\n    reminder:\n"
-            + "".join(f"      {line}\n" for line in reminder_lines)
-            + "    next: [succeeded]\n"
-            "  succeeded:\n    terminal: true\n  failed:\n    terminal: true\n"
-        )
-        return subprocess.run([str(TASK_BIN), "state", "validate", str(path)],
-                              capture_output=True, text=True, check=False)
+        return validate_reminder(self.tmp, TASK_BIN, reminder_lines)
 
     def test_valid_leave_check(self):
         result = self._validate([
@@ -356,6 +349,183 @@ class HostLookupTest(_LeaveCheckLedger):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.argv_file.read_text().splitlines(),
                          ["s", "--dir", "/d"])
+
+
+def _exit_machine(program=PROGRAM):
+    return f"""\
+name: gated
+nodes:
+  clarify:
+    next: [gate]
+  gate:
+    reminder:
+      leave: "The check passed."
+      exit_checks:
+        done:
+          argv: [{program}, "{{slate}}", --dir, "{{converge_dir}}"]
+          on_refuse: retry
+      branches:
+        done: "The check passed."
+        retry: "The check refused."
+    next: [done, retry]
+  retry:
+    max_visits: 1
+    reminder:
+      do: "Fix the refused check."
+      branches:
+        gate: "The fix is ready."
+    next: [gate]
+  done:
+    next: [succeeded]
+  succeeded:
+    terminal: true
+  failed:
+    terminal: true
+"""
+
+
+class ExitCheckTransitionTest(_LeaveCheckLedger):
+    def _init_exit(self, machine=None):
+        settlement = self.tmp / "settlement.txt"
+        settlement.write_text(valid_settlement(machine or _exit_machine()))
+        result = self._task("session", "init", self.run_id,
+                            "--settlement-file", str(settlement))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self._move("gate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def _leave_named(self, **env):
+        return self._leave("--leave-arg", "slate=s1", "--leave-arg", "converge_dir=/abs/dir",
+                           **env)
+
+    def _refuse(self):
+        return self._leave_named(CHECK_EXIT="1", CHECK_LINES="2")
+
+    def test_named_exit_runs_its_check_and_passes(self):
+        self._init_exit()
+        result = self._leave_named()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.argv_file.read_text().splitlines(), ["s1", "--dir", "/abs/dir"])
+        self.assertIn("current: done", self.ledger.read_text())
+
+    def test_other_exit_runs_no_check(self):
+        self._init_exit()
+        self.argv_file.unlink(missing_ok=True)
+        result = self._move("retry", "--confirm-leave")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.argv_file.exists())
+        self.assertIn("current: retry", self.ledger.read_text())
+
+    def test_refused_named_exit_routes_to_its_fallback(self):
+        self._init_exit()
+        result = self._refuse()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("current: retry", self.ledger.read_text())
+        self.assertIn("gate -> retry (to done; 'gate' leave_check exited 1", self._log_lines()[-1])
+        self.assertIn("REFUSED", result.stdout)
+        self.assertIn("| line 2", result.stdout)
+
+    def test_refused_exit_without_fallback_stops_the_run(self):
+        self._init_exit(_exit_machine().replace("          on_refuse: retry\n", ""))
+        before = self.ledger.read_bytes()
+        result = self._refuse()
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("'gate' leave_check exited 1", result.stderr)
+        self.assertEqual(self.ledger.read_bytes(), before)
+
+    def test_refusal_into_a_spent_fallback_is_refused(self):
+        self._init_exit()
+        self.assertEqual(self._refuse().returncode, 0)
+        self.assertEqual(self._move("gate").returncode, 0)
+        before = self.ledger.read_bytes()
+        result = self._refuse()
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("fallback 'retry' has max_visits: 1", result.stderr)
+        self.assertEqual(self.ledger.read_bytes(), before)
+
+    def test_refused_exit_routes_to_a_fallback_without_max_visits(self):
+        self._init_exit(_exit_machine().replace("    max_visits: 1\n", ""))
+        result = self._refuse()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("current: retry", self.ledger.read_text())
+        self.assertNotIn("max_visits", result.stderr)
+
+
+class ExitChecksSchemaTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="engine-exit-checks-schema-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _validate(self, reminder_lines, nexts=("succeeded",)):
+        return validate_reminder(self.tmp, TASK_BIN, reminder_lines, nexts)
+
+    def test_valid_forms_pass(self):
+        cases = {
+            "single exit leave_check": (['leave: "done"', "leave_check: [converge, gate]"],
+                                        ("succeeded",)),
+            "named exit with fallback": (
+                ['leave: "done"',
+                 "exit_checks: {succeeded: {argv: [converge, gate], on_refuse: retry}}"],
+                ("succeeded", "retry")),
+        }
+        for label, (lines, nexts) in cases.items():
+            with self.subTest(case=label):
+                result = self._validate(lines, nexts)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_invalid_forms_are_refused(self):
+        cases = {
+            "leave_check on a node with two exits": (
+                ['leave: "done"', "leave_check: [converge, gate]"], ("succeeded", "retry"),
+                "`reminder.leave_check` runs on every exit"),
+            "exit named outside next": (
+                ['leave: "done"', "exit_checks: {nowhere: {argv: [converge]}}"], ("succeeded",),
+                "names 'nowhere', which is not in `next`"),
+            "fallback outside next": (
+                ['leave: "done"', "exit_checks: {succeeded: {argv: [converge], on_refuse: retry}}"],
+                ("succeeded",), "on_refuse` names 'retry'"),
+            "exit_checks without leave": (
+                ["exit_checks: {succeeded: {argv: [converge]}}"], ("succeeded",),
+                "requires `reminder.leave`"),
+            "empty argv": (
+                ['leave: "done"', "exit_checks: {succeeded: {argv: []}}"], ("succeeded",),
+                "argv` must be a non-empty list"),
+            "unknown key": (
+                ['leave: "done"', "exit_checks: {succeeded: {argv: [converge], timeout: 3}}"],
+                ("succeeded",), "has unknown key(s): timeout"),
+            "both keys": (
+                ['leave: "done"', "leave_check: [converge, gate]",
+                 "exit_checks: {succeeded: {argv: [converge]}}"], ("succeeded",),
+                "cannot both be set"),
+            "bad placeholder": (
+                ['leave: "done"', 'exit_checks: {succeeded: {argv: [converge, "{Slate}"]}}'],
+                ("succeeded",), "is not a {name} placeholder"),
+            "fallback is the checked exit": (
+                ['leave: "done"',
+                 "exit_checks: {succeeded: {argv: [converge], on_refuse: succeeded}}"],
+                ("succeeded", "retry"), "must name a node other than the checked exit"),
+            "fallback is another gated exit": (
+                ['leave: "done"',
+                 ("exit_checks: {succeeded: {argv: [converge], on_refuse: retry}, "
+                  "retry: {argv: [converge]}}")],
+                ("succeeded", "retry"), "names 'retry', which has its own exit check"),
+            "list-valued on_refuse is refused, not a crash": (
+                ['leave: "done"',
+                 "exit_checks: {succeeded: {argv: [converge], on_refuse: [retry]}}"],
+                ("succeeded", "retry"), "names '['retry']', which is not in `next`"),
+        }
+        for label, (lines, nexts, expected) in cases.items():
+            with self.subTest(case=label):
+                result = self._validate(lines, nexts)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(expected, result.stdout)
+
+    def test_every_problem_in_one_exit_check_is_reported(self):
+        result = self._validate(['leave: "done"',
+                                 "exit_checks: {succeeded: {argv: [], timeout: 3}}"])
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("argv` must be a non-empty list", result.stdout)
+        self.assertIn("has unknown key(s): timeout", result.stdout)
 
 
 if __name__ == "__main__":

@@ -122,13 +122,13 @@ class TriageCutoffTest(SettlementCase):
         self.assertIn("must be one of: product, one-user", result.stderr)
 
     def test_other_types_refuse_a_cutoff_and_every_problem_is_in_one_message(self):
-        result = self._validate("ticket-to-pr", "triage_cutoff: strict\nspec_debate_mode: sometimes\n")
+        result = self._validate("ticket-to-pr", "triage_cutoff: strict\ndebate_mode: sometimes\n")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("3 problem(s)", result.stderr)
         self.assertIn("  triage_cutoff (2):\n", result.stderr)
         self.assertIn("only a triage run has one, not 'ticket-to-pr'", result.stderr)
         self.assertIn("must be one of: product, one-user", result.stderr)
-        self.assertIn("  spec_debate_mode (1):\n", result.stderr)
+        self.assertIn("  debate_mode (1):\n", result.stderr)
 
     def test_one_user_needs_the_file_under_the_project_root(self):
         result = self._validate("triage", "triage_cutoff: one-user\n")

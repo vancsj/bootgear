@@ -28,7 +28,9 @@ nodes:
     reminder:
       do: "Run spec-review on the ticket body. Review request fit, clarity and completeness, proportionality, simplicity and testability. Architecture fit does not apply; spec-review marks it not applicable. Does not: edit the body or resolve choices."
       leave: "The independent review has complete converge coverage; its findings, evidence and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
-      leave_check: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+      exit_checks:
+        succeeded:
+          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
       branches:
         ticket: "`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to ticket."
         ticket-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
@@ -36,7 +38,7 @@ nodes:
     next: [ticket, ticket-debate, succeeded]
   ticket-debate:
     reminder:
-      do: "Resolve every choice claim with the public resolve skill, in mandatory mode. Use the public debate skill when resolve escalates above the threshold. Record each decision. Does not: draft or review the body."
+      do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Does not: draft or review the body."
       leave: "Each decision is recorded in the run ledger with mode resolve or debate."
       branches:
         ticket: "Every decision is recorded."

@@ -2,7 +2,7 @@
   tag: find
   lens: default
   tell: The triage report has a row in its `## Claims` table.
-  asks: File each row as one cause claim, in row order, with tier reproduced. The claim id must equal the row id. Put the row command and output in the evidence.
+  asks: File each row as one cause claim, in row order, with the row's tier. The claim id must equal the row id. Put the row command and output in the evidence.
 - id: reproduction-rerun
   tag: attack
   tell: The claim quotes a reproduction command and its output.

@@ -439,6 +439,7 @@ class PrReviewWalkTest(unittest.TestCase):
             reminder = node.get("reminder") or {}
             reminder.pop("leave", None)
             reminder.pop("leave_check", None)
+            reminder.pop("exit_checks", None)
         settlement = self.tmp / "settlement.txt"
         settlement.write_text(_settlement(yaml.safe_dump(machine, sort_keys=False)))
         result = _task("session", "init", "run", "--dir", str(self.tmp),

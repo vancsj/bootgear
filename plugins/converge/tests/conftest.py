@@ -23,7 +23,7 @@ import yaml
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 BIN = PLUGIN_DIR / "bin" / "converge"
-sys.path.insert(0, str(PLUGIN_DIR / "src"))
+sys.path.insert(0, os.environ.get("CONVERGE_SRC", str(PLUGIN_DIR / "src")))
 
 from converge import cli, ledger
 

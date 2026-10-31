@@ -576,7 +576,7 @@ class CodexPackageContractTest(unittest.TestCase):
                 "debate_party_config: {}\ndebate_roster: [main-agent, independent-reviewer]\n"
                 "spec_skill: spec\ntest_skill: test\nreview_skill: review\n"
                 "spec_review_skill: spec-review\nspec_review_override: spec-review\n"
-                "spec_debate_mode: threshold\nreview_fix_mode: accepted_only\n"
+                "debate_mode: threshold\nreview_fix_mode: accepted_only\n"
                 "autonomy:\n  no_further_questions: true\n  permitted_mutations: [run tests]\n"
                 "goal:\n  succeeded: done\n  failed: never\n"
                 "state_machine: |\n  name: smoke\n  nodes:\n    clarify:\n      next: [succeeded]\n"
