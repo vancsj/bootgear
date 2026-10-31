@@ -4,9 +4,11 @@
 
 - Each plugin must install and work on its own. A Claude plugin that needs another plugin declares it in `dependencies`. Codex has no dependencies. A Codex skill that calls a sibling skill states what to do if the sibling is missing. A plugin never assumes that a sibling is installed.
 - Reference only these items. They are the skills, plugins and tools of bootgear, host built-ins, and well-known skills or plugins from outside this repo. Never reference a local personal skill or plugin. The local denylist can carry those names.
-- Skills call each other only through the public interface. The public interface is the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns the settings of a callee when it runs `settings`. It never reads the files of the callee.
+- Skills call each other only through the public interface. The public interface is the skill name, its modes, its handbacks, and its `settings` subcommand. A caller learns the settings of a callee when it runs `settings`. It never reads the files of the callee. A CLI-printed driver step that calls another plugin's script does not break this rule. Only skill prose that names or depends on another skill's files, internals, or script flags breaks it.
 - Built-in defaults (state machines, angles, skills) are project-free. Keep anything that is specific to one project in the `.bootgear/config/` of that project.
 - Host parity: when the Claude and Codex plugins share a behavior, change it on both hosts in the same change.
+- No back compatibility. Do not keep an old version, mode, or format for compatibility or dogfooding. Replace the mechanism in place, delete its paths and tests, and hand-rewrite the run's own old ledgers to the new format.
+- Version bump on every plugin change. A commit that touches a file in a plugin's directory bumps that plugin's `.claude-plugin/plugin.json` `version`, in the same commit or the next one. Do not limit this to contract changes.
 - Shared sections of the Claude and Codex plugins and skills use host-neutral references, terms, paths, and invocation names. Put host-specific adapters in explicit host sections.
 
 ## CLI and enforcement
