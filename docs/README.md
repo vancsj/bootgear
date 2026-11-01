@@ -136,6 +136,8 @@ file is absent, the built-in default applies.
 
 ## Docs index
 
+- [decisions.md](decisions.md): how facts, choices, the deputy, resolve and
+  debate fit together.
 - [engine.md](engine.md): the engine loop, settlement, resolve/debate,
   delegation, hooks.
 - [state-machine.md](state-machine.md): machine schema, override tiers,
