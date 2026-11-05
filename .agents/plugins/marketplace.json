@@ -18,7 +18,7 @@
     {
       "name": "advisor",
       "source": "./plugins/advisor",
-      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex, for a rewrite, an opinion, an adversarial review, or delegated investigation. Runs on Codex CLI or Claude Code — install via `codex plugin add advisor@bootgear`."
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or send a one-shot prompt to either CLI, for a rewrite, an opinion, an adversarial review, or delegated investigation. Runs on Codex CLI or Claude Code — install via `codex plugin add advisor@bootgear`."
     },
     {
       "name": "engine",

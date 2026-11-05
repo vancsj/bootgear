@@ -28,7 +28,7 @@ project-specific knowledge; each project customizes them through
 | `spec` | Requirements domain skill: requirements, design, sign-off, task breakdown. | none |
 | `test` | Testing domain skill: write, run, and triage test results. | none |
 | `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger, a machine-local ledger and a deputy ledger |
-| `advisor` | Pairs Claude Code and Codex CLI through a file mailbox, or makes a one-shot Codex call. | mailbox files |
+| `advisor` | Pairs Claude Code and Codex CLI through a file mailbox, or sends a one-shot prompt to either CLI. | mailbox files |
 | `deputy` | Answers a judgement question from the user's recorded decisions, or escalates it; hooks remind the AI to ask it and to record the user's answer. | deputy ledger |
 
 Dependencies:

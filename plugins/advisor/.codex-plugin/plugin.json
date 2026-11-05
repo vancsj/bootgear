@@ -1,7 +1,7 @@
 {
   "name": "advisor",
-  "version": "1.3.2",
-  "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Either host can listen or ask. Install via `codex plugin add advisor@bootgear`.",
+  "version": "1.3.3",
+  "description": "Pair Claude Code and Codex CLI through a mailbox, or send a one-shot prompt to either CLI. Use for second opinions, reviews, rewrites, or scoped investigations.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
@@ -10,8 +10,8 @@
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Advisor",
-    "shortDescription": "Pair with Claude Code through a shared mailbox, or answer a one-shot call.",
-    "longDescription": "Advisor pairs a Codex CLI session with a Claude Code session through a local file mailbox, or answers a one-shot direct call, for a rewrite, an opinion, an adversarial review, or delegated investigation.",
+    "shortDescription": "Ask Claude Code directly, or pair through a shared mailbox.",
+    "longDescription": "Advisor connects Claude Code and Codex CLI through direct calls or a local mailbox for rewrites, opinions, adversarial reviews, and scoped investigations.",
     "developerName": "vancsj",
     "category": "Productivity",
     "capabilities": []

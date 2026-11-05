@@ -18,11 +18,11 @@ hosts, and either host can sit on either side of the pair.
 
 | | `direct` | `channel` |
 |---|---|---|
-| Mechanism | one `codex exec` call | a request through a shared file mailbox to a live listener session |
+| Mechanism | one `codex exec` or `claude -p` call | a request through a shared file mailbox to a live listener session |
 | State | none | persistent; survives across turns and compaction |
-| What the advisor can see | only the prompt | the files and commands its own session can reach |
+| Task context | supplied in the prompt | the files and commands its own session can reach |
 | Typical time | 30–60 seconds | minutes, over one or more rounds |
-| Platform | wherever the Codex CLI runs | macOS or Linux, with Python 3.11+ and the Codex CLI |
+| Platform | macOS or Linux, with the target CLI installed and signed in | macOS or Linux, with Python 3.11+ and the Codex CLI |
 
 `direct` suits a question whose facts fit in the prompt. `channel` suits a task where the
 advisor needs to look things up itself, or the exchange will take several rounds.
@@ -160,9 +160,8 @@ Requirements:
 
 - macOS or Linux (POSIX); Windows is not supported.
 - Python 3.11 or later.
-- The same advisor version (1.2.1) on both hosts of a pair: a listener from an older version
-  stamps its seat on a different cadence, so its liveness reads wrong.
-- The Codex CLI, installed and signed in, for `direct` mode.
+- For channel mode: the same advisor version on both hosts.
+- For direct mode: the target CLI, installed and signed in. Claude Code calls Codex; Codex calls Claude Code.
 
 On Codex CLI, the mailbox root sits outside the sandbox's writable roots, so every
 `channel.py` call runs with escalated sandbox permissions.
@@ -172,12 +171,14 @@ Configuration:
 | Variable | Effect |
 |---|---|
 | `BOOTGEAR_ADVISOR_DIR` | mailbox root; defaults to `~/.bootgear/advisor` (`--root` overrides it) |
-| `BOOTGEAR_ADVISOR_CODEX_MODEL` | model for `direct` calls; unset leaves Codex's own default |
-| `BOOTGEAR_ADVISOR_CODEX_EFFORT` | reasoning effort for `direct` calls; unset leaves Codex's own default |
+| `BOOTGEAR_ADVISOR_CODEX_MODEL` | model for direct Codex calls; unset leaves Codex's own default |
+| `BOOTGEAR_ADVISOR_CODEX_EFFORT` | reasoning effort for direct Codex calls; unset leaves Codex's own default |
+| `BOOTGEAR_ADVISOR_CLAUDE_MODEL` | model for direct Claude calls; unset keeps Claude Code's native default |
+| `BOOTGEAR_ADVISOR_CLAUDE_EFFORT` | effort for direct Claude calls; unset keeps Claude Code's native default |
 
-`direct` runs `codex exec` read-only from an empty scratch directory with the user's Codex
-config and rules ignored, so no hooks fire on the call. That is why the model and effort come
-from these variables rather than from the Codex config file.
+Direct Codex calls use a read-only sandbox and ignore user config and rules.
+Direct Claude calls use safe mode, disable tools, and save no conversation. They keep the current authentication.
+Both run from an empty scratch directory. Model and effort flags are omitted unless their variables are set.
 
 ---
 

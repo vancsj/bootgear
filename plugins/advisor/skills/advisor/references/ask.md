@@ -4,7 +4,9 @@ A straight opinion or answer — not an adversarial attack (`review`), not deleg
 
 ## Request
 
-State the question plainly, with the facts Codex needs to answer it (same rule as `review`: over `direct`, Codex sees only the prompt; over `channel`, it can look things up itself). Don't frame it as "find objections" — just ask what you want to know.
+State the question plainly. Include the facts the peer needs.
+For direct mode, supply all task facts in the prompt. For channel mode, let the peer inspect sources.
+Ask for an answer, not objections.
 
 ## Handling the response
 

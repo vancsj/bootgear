@@ -1,6 +1,7 @@
 # task=delegate
 
-Hand off investigation (`discuss`) or scoped work (`delegate`) that Codex does on its own — reading files, running commands — over one or more rounds.
+Hand off investigation (`discuss`) or scoped work (`delegate`) to the peer.
+Use channel mode when it must read files, run commands, or exchange several messages.
 
 ## Request body
 
@@ -18,6 +19,6 @@ Include: `discuss` or `delegate`, the actual question/work, relevant paths/symbo
 
 ## Handling the response
 
-- Codex's response is advisory; reconcile against the repo, contracts, and intent.
-- Distinguish Codex's findings from independently verified facts — claim it did work only when the response shows evidence.
+- The peer's response is advisory; reconcile against the repo, contracts, and intent.
+- Distinguish the peer's findings from verified facts. Claim it did work only when its response shows evidence.
 - No commit, push, external contact, production mutation, or irreversible action from a delegated response alone, unless the original scope explicitly and safely authorized it.

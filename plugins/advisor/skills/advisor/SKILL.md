@@ -1,6 +1,6 @@
 ---
 name: advisor
-description: Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex. Use when the user asks Codex a question, wants a second opinion, wants a draft rewritten, wants delegated investigation, or when starting/continuing Codex as the dedicated advisor for Claude Code.
+description: Pair Claude Code and Codex CLI through a mailbox, or send a one-shot prompt to either CLI. Use for second opinions, reviews, rewrites, scoped investigations, or a persistent advisor.
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
@@ -15,33 +15,33 @@ Handback in `mode=asking`, to the caller (the user or the calling skill), one re
 - `rewrite` → the rewritten draft, not posted.
 - `ask` → the answer, with each claim marked verified or unverified.
 - `review` → the list of objections.
-- `delegate` → Codex's findings, separated from independently verified facts.
+- `delegate` → the peer's findings, separated from independently verified facts.
 
 Outcomes:
 
 - answered (the handback above);
 - `--mode` missing → asked the caller to re-invoke;
-- no listener available → told the user to start one;
-- Codex `advisor` plugin not installed → told the user;
+- channel has no listener available → told the user to start one;
+- channel peer `advisor` plugin not installed → told the user;
 - peer heartbeat stale → told the user;
 - protocol error → reported, no guess;
 - `mode=listening` stopped (`stop` request, user interrupt, turn limit, channel closed, or stale peer) → reported the stop reason to the user.
 
 ## Workflow
 
-- **asking**: pick the communication and task docs → verify the facts the prompt relies on → send (`direct`: one `codex exec`; `channel`: pair, send, receive by `parent_id`) → treat the reply as advisory and verify its checkable claims → hand back one reconciled answer (see "Reporting back") → `channel`: close.
+- **asking**: pick the communication and task docs → verify the facts the prompt relies on → send (`direct`: one call to the other CLI; `channel`: pair, send, receive by `parent_id`) → treat the reply as advisory and verify its checkable claims → hand back one reconciled answer (see "Reporting back") → `channel`: close.
 - **listening**: register → report the channel number → heartbeat → durable goal → recover an unfinished request → poll loop (fetch, answer, send response) → stop on `stop`, the user, a stale peer or a closed channel → close and report the stop reason.
 
 ### mode=asking
 
 Two independent choices — load exactly one doc from each row.
 
-**Communication** — how you reach Codex:
+**Communication** — how you reach the peer:
 
 | | Doc | When |
 |---|---|---|
-| `direct` | `references/direct.md` | One-shot, no persistence, Codex sees only the prompt. |
-| `channel` | `references/channel.md` | Persistent mailbox; Codex investigates on its own (files, commands), can take minutes, survives across turns/compaction. |
+| `direct` | `references/direct.md` | One-shot to the other CLI, with the task supplied in the prompt. |
+| `channel` | `references/channel.md` | Persistent mailbox; the peer investigates on its own (files, commands), can take minutes, survives across turns/compaction. |
 
 **Task** — what you want:
 
@@ -50,7 +50,7 @@ Two independent choices — load exactly one doc from each row.
 | `rewrite` | `references/rewrite.md` | Polish a draft before posting. |
 | `ask` | `references/ask.md` | A straight opinion or answer. |
 | `review` | `references/review.md` | Adversarial objections on a decision/conclusion. |
-| `delegate` | `references/delegate.md` | Hand off investigation or scoped work Codex does itself. |
+| `delegate` | `references/delegate.md` | Hand off investigation or scoped work the peer does itself. |
 
 Any task can use either communication doc — pick `channel` when the task needs Codex to look things up itself or the exchange may take several rounds; `direct` otherwise. `delegate` almost always needs `channel`.
 
@@ -137,7 +137,7 @@ After `break`: the loop has closed the channel, so your heartbeat ends with `cha
 
 ### Reporting back
 
-Never echo Codex's banner, streamed reasoning, or raw request/response payload into the transcript — only the final answer, reconciled against verified facts. One call, one clean answer; not the exchange that produced it.
+Never echo the peer's banner, streamed reasoning, or raw request/response payload into the transcript — only the final answer, reconciled against verified facts. One call, one clean answer; not the exchange that produced it.
 
 ### Handling requests (listening)
 
@@ -162,20 +162,21 @@ Never echo Codex's banner, streamed reasoning, or raw request/response payload i
 ## Fallbacks
 
 - No `--mode` → ask the caller to re-invoke with one.
-- No real session id available → fail.
-- Codex `advisor` plugin missing → tell the user it isn't installed; never fall back to `direct`.
+- Channel: no real session id available → fail.
+- Channel peer `advisor` plugin missing → tell the user; never fall back to `direct`.
+- Direct peer CLI missing or refusing a flag → report the exact error and stop.
 - No eligible listener → tell the user to start one and stop.
 - Peer heartbeat stale → close with `--if-peer-stale` (listening) or tell the user instead of waiting again.
 - Protocol error → report it; no guess.
 
 ## Host mechanics
 
-Set `CHANNEL_SCRIPT` to `bin/channel` in this plugin:
+For channel mode, set `CHANNEL_SCRIPT` to `bin/channel` in this plugin:
 
 - Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/channel"`.
 - Codex CLI: `CHANNEL_SCRIPT="<directory holding this SKILL.md>/../../bin/channel"`, as an absolute path.
 
-Set `SESSION_ID` to the host's real session identifier, never an invented one; if none is available, fail.
+For channel mode, set `SESSION_ID` to the real host session ID. If none is available, fail.
 
 The channel CLI resolves `--session` first, then `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
 

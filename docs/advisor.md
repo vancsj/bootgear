@@ -25,8 +25,8 @@ mode.
 
 **Asking** combines two independent choices:
 
-- Communication. `direct` is one `codex exec` call. It has no state, and
-  Codex sees only the prompt. `channel` sends a request through the mailbox to
+- Communication. `direct` is one call to the other CLI: `codex exec` or `claude -p`.
+  It has no mailbox or saved conversation. Task facts come from the prompt. `channel` sends a request through the mailbox to
   a live listener, which can read files and run commands itself and may take
   minutes.
 - Task. `rewrite`, `ask`, `review`, or `delegate`. Each task doc sets the
@@ -122,7 +122,7 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   `next` says to wait with `--wait 120` only for a listener the asker
   started itself or the user said is starting, and otherwise to tell the
   user and stop; `--wait N` polls up to N seconds and exits 1 on timeout.
-  Both hosts must run the same advisor version (1.2.1): a listener from an
+  Both hosts must run the same advisor version: a listener from an
   older version stamps its seat on a different cadence, so its liveness
   reads wrong. The asker claims the most recently updated channel. If another
   session already holds the seat (`seat_claimed`) or the channel has closed
@@ -195,7 +195,10 @@ record, message, and lock file to `0600`, on every call.
   model (`-m`) and reasoning effort (`-c model_reasoning_effort=...`); each
   flag is passed only when its variable is set, otherwise Codex uses its own
   default.
-- **Both.** `SESSION_ID` must be the host's real session identifier. If it is not
+- **Codex direct calls.** Codex calls `claude -p` with safe mode, tools disabled, and no session persistence.
+  Authentication stays unchanged. `BOOTGEAR_ADVISOR_CLAUDE_MODEL` and `BOOTGEAR_ADVISOR_CLAUDE_EFFORT`
+  supply optional overrides; unset values keep native defaults.
+- **Both, channel mode.** `SESSION_ID` must be the host's real session identifier. If it is not
   available, the skill fails instead of making one up. Claude Code passes
   `$CLAUDE_CODE_SESSION_ID`; Codex CLI passes the `session_id` the host gives
   the agent in its context when it runs the direct Python script. The

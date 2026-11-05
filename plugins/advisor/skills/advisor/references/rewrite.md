@@ -4,7 +4,7 @@ Rewrite a draft (issue/ticket body, PR description, review comment, chat message
 
 ## Accuracy
 
-Before rewriting, verify every claim a reader could act on: symbols, behaviour, counts, causes. Remove unverified claims or keep their hedge. Tell Codex not to remove a required hedge.
+Before rewriting, verify every claim a reader could act on: symbols, behaviour, counts, causes. Remove unverified claims or keep their hedge. Tell the peer not to remove a required hedge.
 
 ## Prompt structure
 

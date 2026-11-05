@@ -12,7 +12,7 @@ Include:
 - Options already ruled out and why.
 - The impact if the decision is wrong.
 
-Mark unverified information as unverified — Codex treats stated facts as true.
+Mark unverified information as unverified.
 
 ## Prompt structure
 

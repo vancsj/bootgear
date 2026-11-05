@@ -39,7 +39,7 @@
     {
       "name": "advisor",
       "source": "./plugins/advisor",
-      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or route a one-shot call to Codex — for a rewrite, an opinion, an adversarial review, or delegated investigation. Works standalone; engine's debate uses it for the adversarial reviewer on Claude Code."
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or send a one-shot prompt to either CLI — for a rewrite, an opinion, an adversarial review, or delegated investigation. Works standalone; engine's debate uses it for the adversarial reviewer on Claude Code."
     },
     {
       "name": "deputy",
