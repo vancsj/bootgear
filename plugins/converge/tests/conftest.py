@@ -99,7 +99,7 @@ class Converge:
         # Prose is the CLI default; JSON tests pass --json explicitly.
         self.env = {**os.environ, **UV_DIRS, "HOME": str(self.home), "BOOTGEAR_OUTPUT": "prose"}
         # VIRTUAL_ENV makes uv print a mismatch warning on stderr.
-        for var in ("CONVERGE_HOST", "BOOTGEAR_PROG", "GEAR_CALLER_CWD", "VIRTUAL_ENV"):
+        for var in ("BOOTGEAR_HOST", "BOOTGEAR_PROG", "GEAR_CALLER_CWD", "VIRTUAL_ENV"):
             self.env.pop(var, None)
         # False: call `cli.main` in-process. True: run the real `bin/converge`,
         # which resolves the plugin's own declared dependencies through uv.

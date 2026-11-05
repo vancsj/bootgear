@@ -70,7 +70,7 @@ PROSE_NAMES = {"ticket writing": "ticket-writing", "ticket-to-pr": "ticket-to-pr
 # does not match.
 DRAFT_WITH_SPEC = re.compile(r"\b(?:with|using|via|by)\s+(?:the\s+)?`?(?:/|\$)?spec`?(?![\w-])")
 SCRUBBED = ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "GEAR_CALLER_CWD", "VIRTUAL_ENV",
-            "CONVERGE_HOST", "CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT")
+            "BOOTGEAR_HOST", "CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT")
 SETTLEMENT_MACHINE = """\
 name: fixture
 nodes:

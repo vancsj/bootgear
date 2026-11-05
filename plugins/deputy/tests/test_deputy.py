@@ -313,8 +313,7 @@ class InstalledCopyTest(unittest.TestCase):
         self.log = self.base / "ledger-calls.jsonl"
         self.session = self.base / "session.md"
         self.session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
-        unset = ("GEAR_PY", "BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID",
-                 "MEMORY_LEDGER_HOST", "MEMORY_LEDGER_SESSION_ID")
+        unset = ("GEAR_PY", "BOOTGEAR_HOST", "BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
         self.env = {**{k: v for k, v in os.environ.items() if k not in unset},
                     "FAKE_LEDGER_LOG": str(self.log)}
 
@@ -390,6 +389,22 @@ class InstalledCopyTest(unittest.TestCase):
         calls = [call[1:] for call in self.calls()]
         for call in calls:
             self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "shared-session"])
+
+    def test_record_uses_shared_host_without_explicit_host(self) -> None:
+        self.fake_ledger("4.14.1")
+        self.env.update({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session"})
+        r = self.run_copy(*self.record_argv())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for call in [row[1:] for row in self.calls()]:
+            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "shared-session"])
+
+    def test_explicit_claude_host_overrides_shared_codex_for_child_calls(self) -> None:
+        self.fake_ledger("4.14.1")
+        self.env.update({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session"})
+        r = self.run_copy(*self.record_argv("--host", "claude", "--session-id", "explicit-session"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for call in [row[1:] for row in self.calls()]:
+            self.assertEqual(call[2:6], ["--host", "claude", "--session-id", "explicit-session"])
 
     def test_codex_record_uses_claude_session_as_fallback(self) -> None:
         self.fake_ledger("4.14.1")

@@ -128,7 +128,7 @@ def refuse_remote(deputy_root: Path) -> str | None:
 
 
 def session_id_from_environment(explicit: str | None) -> str | None:
-    """Resolve a Codex signer session from the CLI option and supported host variables."""
+    """Resolve a signer session from the CLI option and shared host variables."""
     if explicit is not None:
         return explicit
     return (os.environ.get("BOOTGEAR_SESSION_ID")
@@ -141,14 +141,15 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     if problems := entry_problems(question, claim, because):
         print("REFUSED " + "; ".join(problems), file=sys.stderr)
         return 2
-    if host == "codex":
-        session_id = session_id_from_environment(session_id)
+    session_id = session_id_from_environment(session_id)
     if host == "codex" and not session_id:
         print("REFUSED codex needs --session-id", file=sys.stderr)
         return 2
     # On Codex the global options set the signer of every ledger call; `new` also takes `--as`.
-    signer = ("--host", "codex", "--session-id", session_id) if host == "codex" and session_id else ()
-    sign_as = ["--as", f"codex:{session_id}"] if signer else []
+    signer = ("--host", host)
+    if session_id:
+        signer += ("--session-id", session_id)
+    sign_as = ["--as", f"codex:{session_id}"] if host == "codex" else []
     if problem := refuse_remote(deputy_root):
         print(f"REFUSED {problem}", file=sys.stderr)
         return 2
@@ -243,7 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
         rc.add_argument(f"--{flag}", required=True)
     rc.add_argument("--session-ledger", dest="session_ledger", required=True, metavar="PATH",
                     help="the session ledger file that must contain the answer text")
-    rc.add_argument("--host", choices=("claude", "codex"), default="claude",
+    rc.add_argument("--host", choices=("claude", "codex"),
+                    default=os.environ.get("BOOTGEAR_HOST", "claude"),
                     help="the host that signs the ledger calls")
     rc.add_argument("--session-id", dest="session_id", metavar="ID",
                     help="the host session id; required with --host codex")

@@ -3,7 +3,7 @@
 `resolve`/`_merge` are copied from engine's `config.py` (not imported: converge
 ships standalone). The caller layer is the file a skill passes to `init --defaults`.
 The user layer is `~/.claude/converge.yaml`, or `~/.codex/converge.yaml` when
-`CONVERGE_HOST=codex`.
+`BOOTGEAR_HOST=codex`.
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class ConfigError(Exception):
 
 
 def user_path() -> Path:
-    host_dir = ".codex" if os.environ.get("CONVERGE_HOST") == "codex" else ".claude"
+    host_dir = ".codex" if os.environ.get("BOOTGEAR_HOST") == "codex" else ".claude"
     return Path.home() / host_dir / f"{NAME}.yaml"
 
 

@@ -23,7 +23,6 @@ class SessionIdentityTests(unittest.TestCase):
         context = self.context({
             "BOOTGEAR_SESSION_ID": "shared-session",
             "CLAUDE_CODE_SESSION_ID": "claude-session",
-            "MEMORY_LEDGER_SESSION_ID": "ledger-session",
         }, host="codex", session_id="explicit-session")
 
         self.assertEqual(context.session_id, "explicit-session")
@@ -44,11 +43,17 @@ class SessionIdentityTests(unittest.TestCase):
         self.assertEqual(context.session_id, "claude-session")
         self.assertEqual(resolve_identity(context), "codex:claude-session")
 
-    def test_memory_ledger_session_remains_a_lower_priority_fallback(self) -> None:
-        context = self.context({"MEMORY_LEDGER_SESSION_ID": "ledger-session"}, host="codex")
+    def test_shared_context_selects_codex_and_preserves_the_session(self) -> None:
+        context = self.context({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session",
+                                "CLAUDE_CODE_SESSION_ID": "claude-session"})
+        self.assertEqual(context.host, "codex")
+        self.assertEqual(resolve_identity(context), "codex:shared-session")
 
-        self.assertEqual(context.session_id, "ledger-session")
-        self.assertEqual(resolve_identity(context), "codex:ledger-session")
+    def test_explicit_host_wins_over_shared_context(self) -> None:
+        context = self.context({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session"},
+                               host="claude")
+        self.assertEqual(context.host, "claude")
+        self.assertEqual(resolve_identity(context), "shared")
 
     def test_bootgear_session_does_not_infer_a_host(self) -> None:
         context = self.context({"BOOTGEAR_SESSION_ID": "shared-session"})

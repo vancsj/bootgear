@@ -1,0 +1,11 @@
+[plugin]
+name = "engine"
+
+[commands.task]
+exec = ["./scripts/task"]
+
+[commands.converge]
+exec = ["./scripts/converge"]
+
+[commands.context-hook]
+exec = ["python3", "hooks/pre_tool_use_task_identity.py", "--host", "codex"]

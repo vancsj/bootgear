@@ -119,7 +119,13 @@ def _load_plugin(path: Path, *, repository_root: Path) -> Plugin:
 
 def _registration_paths(root: Path, plugin_roots: Sequence[Path]) -> list[Path]:
     roots = [root / "plugins", root / "codex-plugins"]
-    registrations = [path for base in roots if base.exists() for path in base.glob("*/gear.toml")]
+    if os.environ.get("BOOTGEAR_HOST") != "codex":
+        roots.reverse()
+    selected: dict[str, Path] = {}
+    for base in roots:
+        if base.exists():
+            selected.update({path.parent.name: path for path in base.glob("*/gear.toml")})
+    registrations = list(selected.values())
     registrations.extend(plugin_root / "gear.toml" for plugin_root in plugin_roots)
     seen: set[Path] = set()
     unique: list[Path] = []

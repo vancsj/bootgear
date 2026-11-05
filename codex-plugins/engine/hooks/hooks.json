@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/hooks/pre_tool_use_task_identity.py\"",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/pre_tool_use_task_identity.py\" --host codex",
             "statusMessage": "Checking Gear command"
           }
         ]

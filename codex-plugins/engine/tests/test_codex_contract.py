@@ -29,6 +29,29 @@ def _roles(*roles: str) -> str:
 
 
 class CodexPackageContractTest(unittest.TestCase):
+    def test_shared_host_selects_user_config_and_explicit_path_wins(self):
+        with tempfile.TemporaryDirectory(prefix="engine-host-config-") as tmp:
+            root = Path(tmp)
+            for host in ("claude", "codex"):
+                folder = root / f".{host}"
+                folder.mkdir()
+                (folder / "profile.yaml").write_text(f"source: {host}\n")
+            explicit = root / "explicit.yaml"
+            explicit.write_text("source: explicit\n")
+            for host in ("claude", "codex"):
+                for override in (False, True):
+                    with self.subTest(host=host, override=override):
+                        args = [str(TASK), "config", "resolve", "--name", "profile",
+                                "--project-root", str(root), "--json"]
+                        if override:
+                            args.extend(("--user-config", str(explicit)))
+                        result = subprocess.run(
+                            args, env={**os.environ, "HOME": str(root), "BOOTGEAR_HOST": host},
+                            capture_output=True, text=True, check=True,
+                        )
+                        self.assertEqual(json.loads(result.stdout)["effective"]["source"],
+                                         "explicit" if override else host)
+
     def test_manifest_and_hooks_are_codex_package_shape(self):
         manifest = json.loads(MANIFEST.read_text())
         self.assertEqual(manifest["name"], "engine")
@@ -103,7 +126,7 @@ class CodexPackageContractTest(unittest.TestCase):
         script = CONVERGE.read_text()
         self.assertTrue(os.access(CONVERGE, os.X_OK))
         self.assertIn('PLUGIN_ROOT=${PLUGIN_ROOT:-', script)
-        self.assertIn("export CONVERGE_HOST=codex", script)
+        self.assertIn('export BOOTGEAR_HOST="${BOOTGEAR_HOST:-codex}"', script)
         self.assertIn('uv run --project "$PLUGIN_ROOT" -m converge.cli', script)
 
     def test_converge_script_reports_missing_uv(self):

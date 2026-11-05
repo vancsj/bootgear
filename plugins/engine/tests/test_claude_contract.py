@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,29 @@ def _roles(*roles: str) -> str:
 
 
 class ClaudePackageContractTest(unittest.TestCase):
+    def test_shared_host_selects_user_config_and_explicit_path_wins(self):
+        with tempfile.TemporaryDirectory(prefix="engine-host-config-") as tmp:
+            root = Path(tmp)
+            for host in ("claude", "codex"):
+                folder = root / f".{host}"
+                folder.mkdir()
+                (folder / "profile.yaml").write_text(f"source: {host}\n")
+            explicit = root / "explicit.yaml"
+            explicit.write_text("source: explicit\n")
+            for host in ("claude", "codex"):
+                for override in (False, True):
+                    with self.subTest(host=host, override=override):
+                        args = [str(TASK), "config", "resolve", "--name", "profile",
+                                "--project-root", str(root), "--json"]
+                        if override:
+                            args.extend(("--user-config", str(explicit)))
+                        result = subprocess.run(
+                            args, env={**os.environ, "HOME": str(root), "BOOTGEAR_HOST": host},
+                            capture_output=True, text=True, check=True,
+                        )
+                        self.assertEqual(json.loads(result.stdout)["effective"]["source"],
+                                         "explicit" if override else host)
+
     def test_debate_party_config_merges_stable_ids(self):
         with tempfile.TemporaryDirectory(prefix="engine-debate-config-") as tmp:
             root = Path(tmp)

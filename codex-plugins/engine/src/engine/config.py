@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -103,8 +104,9 @@ def resolve(name: str, project_root: Path, user_path: Path | None,
     if not project_root.is_dir():
         _fail(f"project root is not a directory: {project_root}")
 
+    host_dir = (".claude" if os.environ.get("BOOTGEAR_HOST") == "claude" else ".codex")
     paths = {
-        "user": (user_path or (Path.home() / ".codex" / f"{name}.yaml")).expanduser(),
+        "user": (user_path or (Path.home() / host_dir / f"{name}.yaml")).expanduser(),
         "project": project_path or (project_root / ".bootgear" / "config" / f"{name}.yaml"),
         "task": task_path,
     }

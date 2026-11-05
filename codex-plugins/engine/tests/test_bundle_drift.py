@@ -19,6 +19,12 @@ def _files(root: Path) -> dict[str, bytes]:
 
 
 class BundleDriftTest(unittest.TestCase):
+    def test_host_context_hook_matches_claude_source(self):
+        self.assertSameBytes(
+            CLAUDE_ENGINE / "hooks" / "pre_tool_use_task_identity.py",
+            PLUGIN_DIR / "hooks" / "pre_tool_use_task_identity.py",
+        )
+
     def assertSameTree(self, source: Path, copy: Path):
         expected, actual = _files(source), _files(copy)
         self.assertTrue(expected, f"{source} is empty or missing")

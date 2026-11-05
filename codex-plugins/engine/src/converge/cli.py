@@ -348,7 +348,7 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
 
 def _converge_path() -> Path:
     """This host's converge wrapper, for a listener that does not share PATH."""
-    wrapper = "scripts" if os.environ.get("CONVERGE_HOST") == "codex" else "bin"
+    wrapper = "scripts" if os.environ.get("BOOTGEAR_HOST") == "codex" else "bin"
     return Path(__file__).resolve().parents[2] / wrapper / "converge"
 
 
@@ -365,7 +365,7 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
         else:
             named, brief = advisor["roles"], advisor["brief"]
         body = shlex.quote(str(abs_dir / f"{slate_id}.{seat}.request.txt"))
-        channel = 'python3 "$CHANNEL_SCRIPT"'
+        channel = '"$CHANNEL_SCRIPT"'
         converge = shlex.quote(str(_converge_path()))
         quoted_dir = shlex.quote(str(abs_dir))
         drivers.append({
@@ -374,7 +374,7 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                      f"--kind request --body-file {body} && "
                      f'{channel} receive --channel "$CHANNEL" --for asker --timeout 300'),
             "placeholders": ("a fresh shell keeps no variables, so write the step with the "
-                             "literal channel.py path and channel number the pairing printed in "
+                             "literal bin/channel path and channel number the pairing printed in "
                              'place of "$CHANNEL_SCRIPT" and "$CHANNEL"'),
             "then": ("do not run the while-loop next that send prints; a turn has 5 receives in "
                      "total, the one in the step included; on receive exit 1 run that receive "

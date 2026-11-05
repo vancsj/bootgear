@@ -2073,13 +2073,14 @@ class ListenerLoopTests(unittest.TestCase):
         marker = self.root / "asker-returned"
         wrapper = self.root / "channel-wrapper.py"
         wrapper.write_text(
-            "import os, subprocess, sys\n"
+            "#!/usr/bin/env python3\nimport os, subprocess, sys\n"
             f"real, marker = {str(CHANNEL)!r}, {str(marker)!r}\n"
             "if 'close' in sys.argv[1:] and not os.path.exists(marker):\n"
             "    open(marker, 'w').close()\n"
             "    subprocess.run([sys.executable, real, 'register', '--channel', '0001', '--role', 'asker',\n"
             "                    '--session', 'c1'], check=True, capture_output=True)\n"
             "os.execv(sys.executable, [sys.executable, real, *sys.argv[1:]])\n")
+        wrapper.chmod(0o755)
         env = {**os.environ, "BOOTGEAR_ADVISOR_DIR": str(self.root), "CHANNEL_SCRIPT": str(wrapper),
                "CHANNEL": "0001"}
         process = subprocess.Popen(["bash", "-c", self.loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,

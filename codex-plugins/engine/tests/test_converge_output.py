@@ -565,9 +565,10 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     step = _one(lines, "DRIVER r2 step (one background step per turn): ")
     assert f"--body-file {ledger}/s1.r2.request.txt && " in step
     assert step.endswith(' receive --channel "$CHANNEL" --for asker --timeout 300')
+    assert 'python3 "$CHANNEL_SCRIPT"' not in step
     assert step.count(" receive ") == 1 and "while" not in step
     placeholders = _one(lines, "DRIVER r2 placeholders: ")
-    assert "literal channel.py path and channel number" in placeholders
+    assert "literal bin/channel path and channel number" in placeholders
     assert '"$CHANNEL_SCRIPT"' in placeholders and '"$CHANNEL"' in placeholders
     then = _one(lines, "DRIVER r2 then: ")
     assert "5 receives in total, the one in the step included" in then

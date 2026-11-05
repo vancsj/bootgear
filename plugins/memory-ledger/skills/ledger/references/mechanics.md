@@ -3,8 +3,8 @@
 ## Commands
 
 ```
-Claude: `ledger.py = ${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py`
-Codex: `ledger.py = ${PLUGIN_ROOT}/scripts/ledger`
+Claude: `ledger.py = ${CLAUDE_PLUGIN_ROOT}/bin/ledger`
+Codex: `ledger.py = ${PLUGIN_ROOT}/bin/ledger`
 
 ledger.py resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
 ledger.py show <slug> [--data | --all-sigs]    # answers, conf, evidence, sigs (every ✗, newest 5 ✓ by file position, newest first; --all-sigs for all), recorded output; --data as JSON, refuses --all-sigs
@@ -55,7 +55,7 @@ ledger.py selftest                             # pin the conf/hash constants
 - Each ledger is a git repo. `resolve-roots` prints where yours are; missing or unset → tell the user to run the memory-ledger setup skill.
 - Defaults: `~/.memory-ledger/shared` and `~/.memory-ledger/local`.
 - Roots come from, each beating the last: `--root` / `--local-root` → `$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` → `memory.root` / `memory.local_root` in the config file → the defaults. Relative paths resolve from the caller context, including `GEAR_CALLER_CWD` on the gear route.
-- Codex writes pass `--host codex`. If `--session-id` is omitted, the CLI uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`. The signer defaults to `codex:<session_id>`. If you pass `--as`, it must match that identity. A missing, malformed, or conflicting identity is rejected before a write.
+- Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`. Explicit `--host` and `--session-id` take precedence. Without hook context, supply both flags before the subcommand. The native Claude session ID is a fallback. Codex signers use `codex:<full-session-id>`; `--as`, when supplied, must match. Invalid or missing Codex identity is rejected before a write.
 - The config file is the first that exists: `./.memory-ledger/config.yaml` → `./.bootgear/config.yaml` → `~/.memory-ledger/config.yaml` → `~/.bootgear/config.yaml`.
 - Shared has a remote and reaches the team; local never does.
 - The two must be separate repos; the tool refuses if both roots resolve to one path.

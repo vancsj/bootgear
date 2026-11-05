@@ -80,7 +80,7 @@ def test_codex_host_reads_codex_user_path(cv: Converge) -> None:
     (cv.home / ".codex").mkdir()
     (cv.home / ".codex" / "converge.yaml").write_text("caps: {per_lens: {default: 9}}\n")
     assert _effective(cv)["caps"]["per_lens"] == {"default": 7}
-    assert _effective(cv, env={"CONVERGE_HOST": "codex"})["caps"]["per_lens"] == {"default": 9}
+    assert _effective(cv, env={"BOOTGEAR_HOST": "codex"})["caps"]["per_lens"] == {"default": 9}
 
 
 def test_missing_task_config_refused(cv: Converge) -> None:

@@ -217,10 +217,14 @@ yes, because it is a new empty directory and reversible with `rm -rf`.
 ## Host mechanics
 
 ```
-Claude: ledger.py = ${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py
-Codex: ledger.py = ${PLUGIN_ROOT}/scripts/ledger.py
+Claude: ledger.py = ${CLAUDE_PLUGIN_ROOT}/bin/ledger
+Codex: ledger.py = ${PLUGIN_ROOT}/bin/ledger
 Claude: instructions file = ~/.claude/CLAUDE.md
 Codex: instructions file = ~/.codex/AGENTS.md
 ```
 
 `ledger.py` is not on `PATH`; type the full form.
+
+Use the resolved literal absolute entrypoint in each tool call.
+Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
+Without hook context, pass `--host <claude|codex> --session-id <full-session-id>` before the subcommand.

@@ -1,6 +1,7 @@
-"""Add Codex's session identity to a registered Gear executable call."""
+"""Supply shared host and session context to a registered Gear executable call."""
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import os
@@ -14,8 +15,8 @@ _SESSION_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
 _SHELL_PUNCTUATION = frozenset(";&|<>()!")
 
 
-def _plugin_root() -> Path | None:
-    root = os.environ.get("PLUGIN_ROOT")
+def _plugin_root(host: str) -> Path | None:
+    root = os.environ.get("PLUGIN_ROOT" if host == "codex" else "CLAUDE_PLUGIN_ROOT")
     path = Path(root).expanduser() if root else Path(__file__).resolve().parent.parent
     try:
         return path.resolve(strict=True)
@@ -170,8 +171,8 @@ def _registered_executable(executable: Path) -> bool:
     return False
 
 
-def _codex_task_executable(executable: Path, plugin_root: Path) -> bool:
-    expected = plugin_root / "scripts" / "task"
+def _task_executable(executable: Path, plugin_root: Path, host: str) -> bool:
+    expected = plugin_root / ("scripts" if host == "codex" else "bin") / "task"
     try:
         return (expected.is_file() and os.access(expected, os.X_OK)
                 and not expected.is_symlink()
@@ -184,7 +185,7 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
-def _updated_command(hook_input: object) -> str | None:
+def _updated_command(hook_input: object, host: str) -> str | None:
     if not isinstance(hook_input, dict):
         return None
     if hook_input.get("hook_event_name") != "PreToolUse":
@@ -207,8 +208,8 @@ def _updated_command(hook_input: object) -> str | None:
     if executable is None:
         return None
 
-    plugin_root = _plugin_root()
-    if plugin_root is not None and _codex_task_executable(executable, plugin_root):
+    plugin_root = _plugin_root(host)
+    if plugin_root is not None and _task_executable(executable, plugin_root, host):
         known_commands = _task_commands(plugin_root)
         if (len(tokens) < 3 or known_commands is None
                 or (tokens[1], tokens[2]) not in known_commands):
@@ -216,15 +217,19 @@ def _updated_command(hook_input: object) -> str | None:
     elif not _registered_executable(executable):
         return None
 
-    return f"export BOOTGEAR_SESSION_ID={_shell_quote(session_id)} && {command}"
+    return (f"export BOOTGEAR_HOST={_shell_quote(host)} "
+            f"BOOTGEAR_SESSION_ID={_shell_quote(session_id)} && {command}")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", required=True, choices=("claude", "codex"))
+    args = parser.parse_args()
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return
-    updated = _updated_command(hook_input)
+    updated = _updated_command(hook_input, args.host)
     if updated is None:
         return
     print(json.dumps({

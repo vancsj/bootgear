@@ -26,7 +26,7 @@ Outcomes, reported to the caller:
 
 ## Procedure
 
-1. Run `python3 "$DEPUTY_SCRIPT" record --question "<question>" --claim "<answer>" --because "<reason>" --options "<options>" --stakes "<stakes>" --session-ledger "<session-ledger-file>"`, with the host options from `## Host mechanics`. Pass every free-text value as its own quoted argument.
+1. Run `"$DEPUTY_SCRIPT" record --question "<question>" --claim "<answer>" --because "<reason>" --options "<options>" --stakes "<stakes>" --session-ledger "<session-ledger-file>"`, with the host options from `## Host mechanics`. Pass every free-text value as its own quoted argument.
 2. Report the outcome line to the caller.
 
 ## Rules
@@ -36,8 +36,12 @@ Outcomes, reported to the caller:
 
 ## Host mechanics
 
-Set `DEPUTY_SCRIPT` to `scripts/deputy.py` in this plugin:
+Set `DEPUTY_SCRIPT` to `bin/deputy` in this plugin:
 
 - The standards file is `${CLAUDE_PLUGIN_ROOT}/references/qa-standards.md` on Claude Code.
-- Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/deputy.py"`. Add no host options.
-- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../scripts/deputy.py"`, as an absolute path. The standards file is `<directory holding this SKILL.md>/../../references/qa-standards.md`. Add `--host codex --session-id <session_id>` to the `record` command, using the host-provided ID. If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
+- Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/deputy"`. Use shared context when supplied by the hook.
+- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../bin/deputy"`, as an absolute path. The standards file is `<directory holding this SKILL.md>/../../references/qa-standards.md`. Without shared context, add `--host codex --session-id <session_id>` using the full host session ID. If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
+
+Resolve `DEPUTY_SCRIPT` to its literal absolute path before each tool call.
+Host hooks supply shared host and session context.
+Without hook context, pass explicit host and session options to `record`.

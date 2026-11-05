@@ -78,11 +78,12 @@ status message for `unconfigured` or `broken`, and no output for `cooldown` or
 
 ## Host mechanics
 
-Claude command entrypoint: `${CLAUDE_PLUGIN_ROOT}/scripts/ledger.py`. `sign`
-takes an explicit `--session-id`, then `BOOTGEAR_SESSION_ID`, then
-`CLAUDE_CODE_SESSION_ID` as the session identity.
+Claude entrypoint: `${CLAUDE_PLUGIN_ROOT}/bin/ledger`.
+Codex entrypoint: `${PLUGIN_ROOT}/bin/ledger`.
+Use the resolved literal absolute entrypoint in each tool call.
 
-Codex command entrypoint: `${PLUGIN_ROOT}/scripts/ledger`. Pass the exact
-host with `--host codex`. If `--session-id` is omitted, the CLI uses
-`BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`. The signer defaults to
-`codex:<session_id>`; if you pass `--as`, it must match that identity.
+Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
+Explicit `--host` and `--session-id` values take precedence.
+Without hook context, pass both flags before the subcommand.
+The native Claude session ID remains a fallback when shared context is absent.
+Codex signers are `codex:<full-session-id>`; `--as`, when given, must match.

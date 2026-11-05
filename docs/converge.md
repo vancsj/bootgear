@@ -224,7 +224,7 @@ flowchart LR
 
 `converge.yaml` layers deep-merge, later winning: built-in defaults < caller
 (`init --defaults FILE`, a calling skill's policy) < user (`~/.claude/converge.yaml`, or
-`~/.codex/converge.yaml` when `CONVERGE_HOST=codex`) < project
+`~/.codex/converge.yaml` when `BOOTGEAR_HOST=codex`) < project
 (`<project-root>/.bootgear/config/converge.yaml`) < task (`--config FILE`).
 Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 `caps.{cut_rounds, per_lens, agents, angles_per_claim, batch_items}`,
@@ -239,7 +239,7 @@ Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 On Claude, converge is its own plugin, and `review` and `engine` declare it as a
 dependency. It has no Codex plugin of its own; on Codex it ships inside
 `codex-plugins/engine`. `src/converge/` is a byte-identical copy of the package;
-`scripts/converge` sets `CONVERGE_HOST=codex` and defaults output to prose;
+`scripts/converge` sets `BOOTGEAR_HOST=codex` and defaults output to prose;
 `skills/converge/SKILL.md` carries the Claude body above `## Host mechanics`, and its host
 section spawns native subagents, drives advisor seats through the separately installed
 `advisor` plugin, and names the script path. Advisor drivers print the absolute

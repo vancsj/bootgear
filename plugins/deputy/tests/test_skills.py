@@ -62,8 +62,8 @@ class SkillTests(unittest.TestCase):
         for name in SKILLS:
             with self.subTest(skill=name):
                 mechanics = section(self.text(name), "## Host mechanics")
-                self.assertIn("${CLAUDE_PLUGIN_ROOT}/scripts/deputy.py", mechanics)
-                self.assertIn("<directory holding this SKILL.md>/../../scripts/deputy.py", mechanics)
+                self.assertIn("${CLAUDE_PLUGIN_ROOT}/bin/deputy", mechanics)
+                self.assertIn("<directory holding this SKILL.md>/../../bin/deputy", mechanics)
                 self.assertNotIn("${PLUGIN_ROOT}", self.text(name))
 
     def test_record_passes_the_codex_session_on_codex(self) -> None:

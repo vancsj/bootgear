@@ -18,6 +18,11 @@ REPO = Path(__file__).parents[2]
 
 
 class RepoRegistrationTests(unittest.TestCase):
+    def test_shared_host_selects_its_engine_registration(self) -> None:
+        for host, directory in (("claude", "plugins"), ("codex", "codex-plugins")):
+            with self.subTest(host=host), patch.dict(os.environ, {"BOOTGEAR_HOST": host}):
+                self.assertEqual(gear.discover(REPO)["engine"].root, REPO / directory / "engine")
+
     def test_repo_registers_converge_and_advisor(self) -> None:
         plugins = gear.discover(REPO)
 

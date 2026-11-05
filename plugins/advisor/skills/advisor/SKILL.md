@@ -59,7 +59,7 @@ Any task can use either communication doc — pick `channel` when the task needs
 Right after `register`, start the heartbeat in the background (see "Host mechanics") and keep it running until `close`:
 
 ```sh
-python3 "$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
+"$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
 ```
 
 - It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
@@ -68,7 +68,7 @@ python3 "$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session
 
 ### After compaction (channel, both modes)
 
-Do what the `next` of the injected seat status says. With no status in context, run `python3 "$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
+Do what the `next` of the injected seat status says. With no status in context, run `"$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
 
 ### mode=listening
 
@@ -87,7 +87,7 @@ Create the durable goal: *continuously poll the mailbox and process requests unt
 #### 3. Check for unfinished work
 
 ```sh
-python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 5
+"$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 5
 ```
 Read-only, safe anytime. Check the last 3 for a request from `<peer>` with `answered: false` — that's open; handle it in the loop below as if freshly arrived. `answered: true` means you already sent a response naming it as `parent_id`.
 
@@ -103,13 +103,13 @@ Never return to the human after one empty poll while claiming to still be listen
 
 ```sh
 while :; do
-  python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
-  RECEIVE_JSON=$(python3 "$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
+  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
+  RECEIVE_JSON=$("$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
   RECEIVE_STATUS=$?
   if [ "$RECEIVE_STATUS" -eq 1 ]; then
     PEER_LIVE=$(printf '%s' "$RECEIVE_JSON" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["peer_live"]))')
     if [ "$PEER_LIVE" = false ] &&
-      python3 "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
+      "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
       break
     fi
     continue
@@ -117,13 +117,13 @@ while :; do
   if [ "$RECEIVE_STATUS" -ne 0 ]; then exit "$RECEIVE_STATUS"; fi
   # The message_id that RECEIVE_JSON's `next` fetches (the newest unread request):
   REQUEST_ID=<message_id>
-  python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value busy >/dev/null
-  python3 "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$REQUEST_ID"
+  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value busy >/dev/null
+  "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$REQUEST_ID"
   # Answer it, then:
-  printf '%s\n' "$RESPONSE" | python3 "$CHANNEL_SCRIPT" send \
+  printf '%s\n' "$RESPONSE" | "$CHANNEL_SCRIPT" send \
     --channel "$CHANNEL" --from <mine> --to <peer> \
     --kind response --parent-id "$REQUEST_ID" --body-file -
-  python3 "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting
+  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting
 done
 ```
 
@@ -156,7 +156,7 @@ Never echo Codex's banner, streamed reasoning, or raw request/response payload i
 - Out-of-scope request → return the boundary, ask the peer to get human direction.
 - Close on session end:
   ```sh
-  python3 "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL"
+  "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL"
   ```
 
 ## Fallbacks
@@ -170,10 +170,10 @@ Never echo Codex's banner, streamed reasoning, or raw request/response payload i
 
 ## Host mechanics
 
-Set `CHANNEL_SCRIPT` to `scripts/channel.py` in this skill's directory:
+Set `CHANNEL_SCRIPT` to `bin/channel` in this plugin:
 
-- Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/skills/advisor/scripts/channel.py"`.
-- Codex CLI: `CHANNEL_SCRIPT="<directory holding this SKILL.md>/scripts/channel.py"`, as an absolute path.
+- Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/channel"`.
+- Codex CLI: `CHANNEL_SCRIPT="<directory holding this SKILL.md>/../../bin/channel"`, as an absolute path.
 
 Set `SESSION_ID` to the host's real session identifier, never an invented one; if none is available, fail.
 
@@ -188,3 +188,6 @@ Background heartbeat:
 
 - Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000`.
 - Codex CLI: a terminal session left running, as for `receive`.
+
+Resolve `CHANNEL_SCRIPT` to its literal absolute path before each standalone tool call.
+Keep explicit session values for compound and background calls without hook context.

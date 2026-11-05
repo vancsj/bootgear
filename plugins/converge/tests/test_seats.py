@@ -97,9 +97,10 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
     assert ' send --channel "$CHANNEL" --from asker --to listener --kind request --body-file ' in step
     assert f"--body-file {cv.dir}/s1.r2.request.txt && " in step
     assert step.endswith(' receive --channel "$CHANNEL" --for asker --timeout 300')
+    assert 'python3 "$CHANNEL_SCRIPT"' not in step
     assert step.count(" receive ") == 1 and "while" not in step
     placeholders = _line(lines, "DRIVER r2 placeholders: ")
-    for fragment in ("literal channel.py path and channel number", "pairing printed",
+    for fragment in ("literal bin/channel path and channel number", "pairing printed",
                      '"$CHANNEL_SCRIPT"', '"$CHANNEL"'):
         assert fragment in placeholders, placeholders
     then = _line(lines, "DRIVER r2 then: ")

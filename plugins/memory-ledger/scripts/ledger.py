@@ -138,7 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     def signer_arg(p_):
         p_.add_argument("--as", dest="as_", metavar="ID",
                         help="signer id (default: this session, from BOOTGEAR_SESSION_ID, "
-                             "then CLAUDE_CODE_SESSION_ID, then MEMORY_LEDGER_SESSION_ID)")
+                             "then CLAUDE_CODE_SESSION_ID)")
 
     def authoring_args(p_):
         p_.add_argument("--ref", help="code ref this claim is about; omit for claims that are "
@@ -222,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     only_arg(s)
     s.add_argument("--as", dest="as_", metavar="ID",
                    help="signer id (default: this session, from BOOTGEAR_SESSION_ID, "
-                        "then CLAUDE_CODE_SESSION_ID, then MEMORY_LEDGER_SESSION_ID)")
+                        "then CLAUDE_CODE_SESSION_ID)")
 
     li = sub.add_parser("lint", help="recompute conf, report drift/voids/orphans")
     li.add_argument("--fix", action="store_true")

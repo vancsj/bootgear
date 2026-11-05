@@ -12,6 +12,7 @@ from pathlib import Path
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 HOOK = PLUGIN_DIR / "hooks" / "pre_tool_use_task_identity.py"
 HOOKS = PLUGIN_DIR / "hooks" / "hooks.json"
+HOST = "codex"
 TASK = PLUGIN_DIR / "scripts" / "task"
 
 
@@ -31,7 +32,7 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
         if env_extra:
             env.update(env_extra)
         result = subprocess.run(
-            ["python3", str(HOOK)],
+            ["python3", str(HOOK), "--host", HOST],
             input=json.dumps(hook_input),
             capture_output=True,
             text=True,
@@ -65,7 +66,7 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
         rewritten = specific["updatedInput"]["command"]
         self.assertEqual(
             rewritten,
-            f"export BOOTGEAR_SESSION_ID='thr_123' && {original}",
+            f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
         )
         self.assertIn("'/tmp/session dir'", rewritten)
         self.assertIn("'a quoted pitch with spaces'", rewritten)
@@ -119,16 +120,16 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             output = self._run(original)
             self.assertEqual(
                 output["hookSpecificOutput"]["updatedInput"]["command"],
-                f"export BOOTGEAR_SESSION_ID='thr_123' && {original}",
+                f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
             )
 
     def test_bundled_task_executable_is_recognized_through_path(self):
-        original = "task session recall run-id"
+        original = "task session read run-id"
         path = os.pathsep.join((str(PLUGIN_DIR / "scripts"), os.environ.get("PATH", "")))
         output = self._run(original, env_extra={"PATH": path})
         self.assertEqual(
             output["hookSpecificOutput"]["updatedInput"]["command"],
-            f"export BOOTGEAR_SESSION_ID='thr_123' && {original}",
+            f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
         )
 
     def test_registered_executable_is_recognized_through_path(self):
@@ -147,7 +148,7 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             output = self._run(original, env_extra={"PATH": path})
             self.assertEqual(
                 output["hookSpecificOutput"]["updatedInput"]["command"],
-                f"export BOOTGEAR_SESSION_ID='thr_123' && {original}",
+                f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
             )
 
     def test_same_directory_path_alias_to_registered_executable_is_allowed(self):
@@ -168,7 +169,7 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             output = self._run(original, env_extra={"PATH": path})
             self.assertEqual(
                 output["hookSpecificOutput"]["updatedInput"]["command"],
-                f"export BOOTGEAR_SESSION_ID='thr_123' && {original}",
+                f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
             )
 
     def test_path_alias_outside_wrapper_directory_is_not_allowed(self):
