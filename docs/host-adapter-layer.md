@@ -86,8 +86,9 @@ layer.
 The canonical parameterized fixture corpus lives under
 `plugins/engine/tests/fixtures/host_adapter/`; Claude and Codex runners execute
 it through their respective adapters. The Codex bundle drift test compares the
-mirrored executable core, policy, contracts, and wrapper support files with a
-narrow host-path/rendering adaptation allowlist.
+mirrored adapter core, policy, and contracts byte for byte. Engine configuration,
+session, and state modules use a narrow host-adaptation allowlist; their comparison
+ignores blank lines.
 
 The exact host contracts are checked against the official Claude Code and Codex
 hook references and fresh-host smoke checks. Fixture tests remain authoritative

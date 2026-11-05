@@ -82,6 +82,8 @@ on both in the same change. Second, drift tests in the Codex engine package
 fail when a copy diverges from its Claude source. The tests check that the
 converge package, the `clikit.py` copies, the `seats.py` copies and the host adapter core files
 (`host_adapter.py`, `host_contracts.py`, `policy.py`) are byte-identical.
+The engine `config.py`, `session.py`, and `state.py` comparisons permit explicit
+host adaptations and ignore blank lines.
 
 ## `gear.py` CLI
 
