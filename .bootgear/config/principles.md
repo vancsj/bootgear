@@ -14,6 +14,7 @@
 ## CLI and enforcement
 
 - Every plugin script is a `gear` command. Register it under `[commands]` in the `gear.toml` of its plugin. It runs as `gear.py <plugin> <command>` and also on its own. When `GEAR_CALLER_CWD` is set, the script resolves the relative paths of the caller against it.
+- Shared host context: host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID` to registered Gear commands. Host-aware CLIs read both values; explicit host and session arguments take precedence. Skills use registered Gear entrypoints. Standalone calls can supply the same context explicitly.
 - Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
 - Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.
