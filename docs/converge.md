@@ -72,10 +72,13 @@ flowchart LR
   `converge_seats` and `advisor_roles` from the engine settlement, re-checks the engine's
   rules (only `r2` may be `advisor`; `refuter` or `gap-hunter` needs
   `r2: advisor`) with a byte-identical copy of the engine's `seats.py`, and records the
-  slate's `seats` and the advisor's `{roles, brief}` in the `init` event. Without
+  slate's `seats` and the advisor's `{roles, brief, startup}` plus its optional approved `launcher` in the `init` event. Without
   `--settlement`, or when the `init` event has no `seats`, every seat is `native_subagent`. An
   `advisor` `r2` with no advisor role takes `refuter` and `gap-hunter` and a stock brief, with
   a `NOTE`; a settlement `r2: advisor` on a slate without `r2` gets a `NOTE`, not a refusal.
+- **Startup.** Early timing reclaims the run's existing pairing during initialization.
+  Deferred timing lets finder work proceed and prepares the listener at its first assigned task.
+  Recorded channels are reused; a failed pairing does not select a different mechanism.
 - **Advisor driver.** For an `advisor` seat, `init` and `status` print the driver: one
   background step that sends the request over the advisor channel and starts one
   `receive --timeout 300`, the receive budget, how to discard a late reply, the request

@@ -9,7 +9,7 @@ from typing import Any
 from conftest import BIN, PLUGIN_DIR, Converge
 from converge import ledger, model
 
-ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2."}
+ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
 FULL_SEATS = {"main": "native_subagent", "finder": "native_subagent", "r1": "native_subagent",
               "r2": "advisor", "cutter": "native_subagent"}
 
@@ -66,7 +66,7 @@ def test_init_without_seats_replays_all_native(cv: Converge, tmp_path: Path) -> 
 
 PIPE = {"BOOTGEAR_OUTPUT": ""}
 ADVISOR_SETTLEMENT = ("converge_seats:\n  r2: advisor\n"
-                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n")
+                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: early\n")
 
 
 def _settlement(cv: Converge, text: str) -> Path:
@@ -157,7 +157,7 @@ def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> N
     event = cv.events()[0]
     assert event["seats"] == {"main": "native_subagent", "finder": "native_subagent",
                               "r1": "native_subagent", "r2": "advisor", "cutter": "native_subagent"}
-    assert event["advisor"] == {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2."}
+    assert event["advisor"] == {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
 
 
 def test_init_with_advisor_settlement_json(cv: Converge) -> None:
@@ -191,7 +191,7 @@ NEXT_FIX = ("next: correct converge_seats or advisor_roles in {path} so they agr
 
 def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
     settlement = _settlement(cv, "converge_seats: {r2: native_subagent}\n"
-                                 "advisor_roles: {roles: [refuter], brief: Act only as r2.}\n")
+                                 "advisor_roles: {roles: [refuter], brief: Act only as r2., startup: early}\n")
     lines = _refused_lines(cv, settlement)
     assert lines[0].startswith("example: converge init ")
     message = lines.index("converge: settlement seats do not match its advisor roles:")
@@ -206,7 +206,7 @@ def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
 
 
 def test_init_refusal_json_carries_example_and_next(cv: Converge) -> None:
-    settlement = _settlement(cv, "advisor_roles: {roles: [gap-hunter], brief: Act only as r2.}\n")
+    settlement = _settlement(cv, "advisor_roles: {roles: [gap-hunter], brief: Act only as r2., startup: early}\n")
     result = cv(*_init_args(cv, "--settlement", str(settlement), "--json"), code=2, env=PIPE)
     error = json.loads(result.stderr)["error"]
     assert error["message"] == "converge: settlement seats do not match its advisor roles:"
@@ -252,7 +252,7 @@ def test_init_r2_advisor_without_roles_uses_defaults(cv: Converge) -> None:
                               "slate s1. Act only as this seat on this slate; do not extend the role.")
     assert cv.events()[0]["advisor"] == {
         "roles": ["refuter", "gap-hunter"],
-        "brief": "Act only as this seat on this slate; do not extend the role."}
+        "brief": "Act only as this seat on this slate; do not extend the role.", "startup": "early"}
     assert lines[-1].startswith("next: reclaim the advisor channel for r2")
 
 
@@ -311,3 +311,68 @@ def test_status_of_a_native_slate_shows_no_advisor(cv: Converge) -> None:
 def test_manifest_declares_advisor_dependency() -> None:
     manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["dependencies"] == ["memory-ledger", "advisor", "deputy"]
+
+
+def test_deferred_advisor_waits_until_gap_hunt_and_preserves_startup(cv: Converge) -> None:
+    text = ADVISOR_SETTLEMENT.replace("  startup: early\n", "") + "  startup: deferred\n  launcher: start-advisor\n"
+    settlement = _settlement(cv, text)
+    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json")).stdout)
+    assert "continue the finder" in data["next"]
+    assert "reclaim" not in data["next"] and "start-advisor" not in data["next"]
+    assert cv.events()[0]["advisor"]["startup"] == "deferred"
+    assert cv.events()[0]["advisor"]["launcher"] == "start-advisor"
+    cv.cover(lenses=("correctness",))
+    state = json.loads(cv.ok("status", "s1", "--json").stdout)
+    assert "start-advisor" in state["next"]
+    assert "gap hunt" in state["next"]
+    assert "reuse" in state["drivers"][0]["prepare"]
+
+
+def test_deferred_advisor_stays_unstarted_when_no_task_needs_it(cv: Converge) -> None:
+    settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+                             + "  startup: deferred\n  launcher: start-advisor\n")
+    cv.init("s1", "correctness", "orch", "--settlement", str(settlement),
+            config={"steps": {"gap_hunt": False, "escalate": False, "cut": "none"}})
+    cv.cover(lenses=("correctness",))
+    state = json.loads(cv.ok("status", "s1", "--json").stdout)
+    assert state["phase"] == "cutoff"
+    assert "start-advisor" not in state["next"] and "reclaim" not in state["next"]
+
+
+def test_deferred_choice_is_preserved_when_seat_uses_stock_roles(cv: Converge) -> None:
+    settlement = _settlement(cv, "converge_seats: {r2: advisor}\n"
+                             "advisor_roles: {roles: [], brief: Use stock roles., "
+                             "startup: deferred, launcher: start-advisor}\n")
+    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json")).stdout)
+    assert "continue the finder" in data["next"]
+    assert cv.events()[0]["advisor"]["startup"] == "deferred"
+
+
+def test_deferred_advisor_first_use_can_be_fresh_eye_without_gap_hunt(cv: Converge) -> None:
+    settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+                             + "  startup: deferred\n  launcher: start-advisor\n")
+    cv.init("s1", "correctness", "orch", "--settlement", str(settlement),
+            config={"steps": {"gap_hunt": False, "escalate": False, "cut": "none"}})
+    cv.file()
+    cv.cover(lenses=("correctness",))
+    while True:
+        state = json.loads(cv.ok("status", "s1", "--json").stdout)
+        batch = state["plan"][0]
+        if batch[0]["agent_role"] == "r2":
+            assert batch[0]["batch"] == "fresh-eye"
+            assert "start-advisor" in state["next"]
+            break
+        assert "start-advisor" not in state["next"]
+        for row in batch:
+            assert row["agent_role"] == "r1" and row["action"] == "attack"
+            for angle in row["angles"]:
+                assert cv.attack(row["claim"], angle, agent="r1", batch=row["batch"]) == []
+
+
+def test_invalid_startup_refuses_without_writing_a_slate(cv: Converge) -> None:
+    for options, field in (("  startup: later\n", "startup"),
+                           ("  startup: deferred\n", "launcher")):
+        settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "") + options)
+        result = cv(*_init_args(cv, "--settlement", str(settlement)), code=2)
+        assert f"advisor_roles.{field}" in result.stderr
+        assert not cv.path().exists()

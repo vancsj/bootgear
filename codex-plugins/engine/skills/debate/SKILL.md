@@ -439,7 +439,10 @@ assessment. Do not claim that a retry occurred.
   `advisor` skill with `--mode asking`, communication `channel` (never
   `direct`), and its `review` task. Use the debate channel named in the run
   ledger's `advisor channels:` decision (read through `recall`), never the `r2`
-  channel. Before each advisor request, reclaim that channel's live seat
+  channel. For deferred startup without a debate channel, run the settled launcher at the first advisor request.
+  Pair through `advisor` with `--mode asking` and communication `channel`, then record the debate channel in the run ledger.
+  Preserve any recorded `r2` channel. If startup is early, require the existing debate pairing.
+  Before each advisor request, reclaim that channel's live seat
   through the `advisor` skill's scan and claim (the scan offers a seat this session
   holds).
 - A party is unavailable when its native subagent cannot be created or times

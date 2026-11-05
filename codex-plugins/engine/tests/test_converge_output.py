@@ -532,7 +532,7 @@ def test_bundled_status_prints_claims_plan_and_next(tmp_path: Path) -> None:
 # -- advisor seats: init --settlement / --refuters and status ---------------------------
 
 ADVISOR_SETTLEMENT = ("converge_seats:\n  r2: advisor\n"
-                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n")
+                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: early\n")
 FIX_NEXT = ("next: correct converge_seats or advisor_roles in {path} so they agree, then rerun "
             "init; in an engine run the settlement is fixed: stop blocked and report this refusal")
 
@@ -596,7 +596,7 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
 def test_bundled_init_refuses_seat_mismatch(tmp_path: Path) -> None:
     ledger = tmp_path / "ledgers"
     settlement = _settlement(tmp_path, "converge_seats: {r2: native_subagent}\n"
-                                       "advisor_roles: {roles: [refuter], brief: Act only as r2.}\n")
+                                       "advisor_roles: {roles: [refuter], brief: Act only as r2., startup: early}\n")
     lines = _seat_init(tmp_path, ledger, "--settlement", str(settlement), code=2).stderr.splitlines()
     assert lines[0].startswith("example: ") and lines[0].endswith("--settlement <file>")
     message = lines.index("converge: settlement seats do not match its advisor roles:")
@@ -798,3 +798,67 @@ def test_bundled_cut_rate_help_points_to_the_evaluate_angles(tmp_path: Path) -> 
     assert "call sites" not in out and "production queries" not in out
     assert ("--rate RATE the count an evaluate angle with field rate asks for (converge angles "
             "--tag evaluate --angles <file>)") in out
+
+
+def test_bundled_deferred_advisor_waits_for_gap_hunt(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+                             + "  startup: deferred\n  launcher: start-advisor\n")
+    data = json.loads(slate.ok("init", "--as", MAIN, "--lenses", "correctness",
+                              "--angles", str(slate.angles), "--project-root", str(tmp_path),
+                              "--settlement", str(settlement), "--json").stdout)
+    assert "continue the finder" in data["next"]
+    assert "reclaim" not in data["next"] and "start-advisor" not in data["next"]
+    slate.cover()
+    state = json.loads(slate.ok("status", "--json").stdout)
+    assert "start-advisor" in state["next"] and "gap hunt" in state["next"]
+    assert "reuse" in state["drivers"][0]["prepare"]
+
+
+def test_bundled_deferred_choice_with_stock_roles(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    settlement = _settlement(tmp_path, "converge_seats: {r2: advisor}\n"
+                             "advisor_roles: {roles: [], brief: Use stock roles., "
+                             "startup: deferred, launcher: start-advisor}\n")
+    data = json.loads(_seat_init(tmp_path, ledger, "--settlement", str(settlement), "--json").stdout)
+    assert "continue the finder" in data["next"]
+    state = json.loads(_ok(tmp_path, "status", "s1", "--dir", str(ledger), "--json").stdout)
+    assert "start-advisor" in state["drivers"][0]["prepare"]
+
+
+def test_bundled_unused_deferred_advisor_is_not_started(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+                             + "  startup: deferred\n  launcher: start-advisor\n")
+    slate.init("--settlement", str(settlement),
+               config="steps: {gap_hunt: false, escalate: false, cut: none}\n")
+    slate.cover()
+    state = json.loads(slate.ok("status", "--json").stdout)
+    assert state["phase"] == "cutoff"
+    assert "start-advisor" not in state["next"] and "reclaim" not in state["next"]
+
+
+def test_bundled_deferred_advisor_waits_for_fresh_eye_when_gap_hunt_is_off(tmp_path: Path) -> None:
+    slate = Slate(tmp_path)
+    settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+                             + "  startup: deferred\n  launcher: start-advisor\n")
+    config = STEPS.replace("cut: both", "cut: none").replace("escalate: true", "escalate: false")
+    slate.init("--settlement", str(settlement), config=config)
+    slate.file()
+    slate.cover()
+    assert "start-advisor" not in slate.status()["next"]
+    slate.batch_1()
+    state = slate.status()
+    assert state["plan"][0][0]["agent_role"] == "r2"
+    assert state["plan"][0][0]["batch"] == "fresh-eye"
+    assert "start-advisor" in state["next"]
+
+
+def test_bundled_invalid_startup_writes_no_slate(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    for options, field in (("  startup: later\n", "startup"),
+                           ("  startup: deferred\n", "launcher")):
+        settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT.replace("  startup: early\n", "") + options)
+        result = _seat_init(tmp_path, ledger, "--settlement", str(settlement), code=2)
+        assert f"advisor_roles.{field}" in result.stderr
+        assert not (ledger / "s1.jsonl").exists()

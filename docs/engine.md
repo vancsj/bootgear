@@ -61,7 +61,7 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `debate_parties`, and the resolved `debate_party_config` snapshot (party
   `label`/`prompt`/`mechanism`/`enabled` only; model and profile stay in the
   `task config resolve` report);
-- advisor settings: `advisor_roles` (`{roles, brief}`; the roles the other
+- advisor settings: `advisor_roles` (`{roles, brief, startup}`; the roles the other
   vendor's host takes, from `independent-reviewer`, `adversarial-reviewer`,
   `refuter` and `gap-hunter`) and `converge_seats` (each converge seat `main`,
   `finder`, `r1`, `r2`, `cutter` mapped to `native_subagent` or `advisor`;
@@ -71,6 +71,9 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `session validate` refuse every violation in one message; a `codex_role`
   string is accepted unchecked. `task config resolve --name converge-seats`
   prints the five-seat mapping;
+  startup is the user's `early` or `deferred` choice. Deferred channel startup also stores
+  the approved single-line `launcher`. Early listeners are paired during clarify; deferred
+  listeners start at their first advisor task. Direct calls need no paired listener;
 - `autonomy`: `no_further_questions` and an explicit list of permitted mutations;
 - domain overrides `spec_override` / `test_override` / `review_override`, a
   skill name or a `{sub-task-label: skill}` map, optional

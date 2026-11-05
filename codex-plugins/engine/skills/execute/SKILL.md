@@ -38,6 +38,15 @@ Keep semantic checks in the loop: apply the settled source-of-truth domains,
 judge whether the goal is genuinely satisfied or impossible, and preserve the
 debate, safety, fallback, and permitted-mutation rules below.
 
+## Advisor startup
+
+Honor `advisor_roles.startup` and its approved `launcher` after recall. Pass this metadata unchanged to debate and converge.
+Use recorded pairings for early startup. For deferred startup, let the consumer start its listener at the first advisor task.
+Do not start deferred listeners merely because execute or a review slate begins.
+Record each new channel with `task session record-decision` in `solo` mode, using `advisor channels: r2=<n>, debate=<m>`.
+Preserve the other use's channel in later updates. Reuse recorded channels; do not launch replacements on a stale-peer failure.
+Follow the consumer's unavailable-advisor outcome. Keep direct calls unchanged.
+
 ## Task-type dispatch
 
 `task_type` selects which built-in machine `clarify` resolved into settlement's `state_machine` field. Each node's `reminder.do` states the action and names the skill that does it, and how to call it, if any. Read the current node's `reminder`.

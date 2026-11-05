@@ -25,10 +25,42 @@ EXPECTED_SKILLS = {
 
 
 def _roles(*roles: str) -> str:
-    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n"
+    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n  startup: early\n"
 
 
 class CodexPackageContractTest(unittest.TestCase):
+    def test_advisor_startup_choice_validates_and_round_trips(self):
+        for startup in ("early", "deferred"):
+            with self.subTest(startup=startup), tempfile.TemporaryDirectory() as tmp:
+                settings = _roles("refuter").replace("  startup: early\n", "") + f"  startup: {startup}\n"
+                if startup == "deferred":
+                    settings += "  launcher: start-advisor\n"
+                settings += "converge_seats: {r2: advisor}\ndebate_party_config: {}\n"
+                self.assertEqual(self._validate(settings).returncode, 0)
+                root = Path(tmp)
+                path = root / "settlement.yaml"
+                path.write_text(self._settlement(settings))
+                init = subprocess.run([str(TASK), "session", "init", "startup-run", "--dir", tmp,
+                                       "--settlement-file", str(path)],
+                                      capture_output=True, text=True, check=False)
+                self.assertEqual(init.returncode, 0, init.stderr)
+                read = subprocess.run([str(TASK), "session", "read", "startup-run", "--dir", tmp,
+                                       "--section", "settlement", "--json"],
+                                      capture_output=True, text=True, check=True)
+                self.assertIn(f"startup: {startup}", read.stdout)
+                if startup == "deferred":
+                    self.assertIn("launcher: start-advisor", read.stdout)
+
+    def test_advisor_startup_requires_a_choice_and_a_deferred_launcher(self):
+        for options, field in (("", "startup"), ("  startup: later\n", "startup"),
+                               ("  startup: deferred\n", "launcher")):
+            with self.subTest(options=options):
+                settings = (_roles("refuter").replace("  startup: early\n", "") + options
+                            + "converge_seats: {r2: advisor}\ndebate_party_config: {}\n")
+                result = self._validate(settings)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(f"advisor_roles.{field}", result.stderr)
+
     def test_shared_host_selects_user_config_and_explicit_path_wins(self):
         with tempfile.TemporaryDirectory(prefix="engine-host-config-") as tmp:
             root = Path(tmp)

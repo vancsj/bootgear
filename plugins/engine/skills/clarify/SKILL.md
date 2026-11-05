@@ -17,7 +17,7 @@ Outcomes:
 
 ## Workflow
 
-Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, and every advisor pairing → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, startup choice, approved launcher, and existing advisor pairings → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 
 ## What to settle
 
@@ -130,15 +130,39 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Record what this run may call. Do not record a prediction of what it will call.
 
-10. **Advisor roles and seats** — the advisor is the other vendor's host: Codex on Claude Code, a Claude Code listener on Codex. It can take any of four roles: the debate parties `independent-reviewer` and `adversarial-reviewer`, and `refuter` and `gap-hunter` on converge seat `r2`.
-   - Check availability by pairing through the `advisor` skill (`--mode asking`, communication `channel`: scan, claim, heartbeat). Keep each pairing for the run; do not run the asking workflow's close. `## Host mechanics` says which advisor uses need a listener of their own.
-   - Unavailable: show the diagnostic and offer no role that needs it. The debate roles need no listener, so they stay on offer.
-   - Otherwise resolve `converge-seats` without a task file: `task config resolve --name converge-seats --project-root <project-root> --json`. Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when that resolution shows `r2: native_subagent`. Ask which of the four roles the advisor takes; "no" means none.
-   - Pair one listener per chosen use that needs its own, and show every pairing in the goal confirmation. One use needs only its own listener; none needs none. Record a debate party `native_subagent`, with its role left out of `advisor_roles`, only when the user explicitly declines its listener, and show the diagnostic. While a pairing is unanswered, do not write the settlement.
-   - Write a task-layer debate-parties file setting `mechanism` for `independent-reviewer` and `adversarial-reviewer` (`advisor` when named, else `native_subagent`), and a task-layer converge-seats file whose `seats` names all five seats: `r2: advisor` when `refuter` or `gap-hunter` is named, every other seat (and `r2` otherwise) `native_subagent`; a lower layer's value survives for any seat the task layer leaves out. Resolve both with `--task-config-file` and follow each `next`.
-   - Record `advisor_roles: {roles, brief}` (brief: one line limiting the advisor to its roles) and `converge_seats` together.
-   - After `init`, record the channels: `task session record-decision <run-id> --mode solo --summary "advisor channels: r2=<n>, debate=<m>"`, naming only the channels that exist; skip it when none does.
-   - While the run lasts, whenever a channel's heartbeat task ends, run its printed `next` at once, inside the 720-second restart grace.
+10. **Advisor roles, seats, and startup** — settle the advisor's roles and channel startup timing.
+   - Check the required CLI and `advisor` skill availability without starting or pairing a listener.
+     Use `## Host mechanics` to identify uses that need a listener. Report actual availability errors.
+   - Resolve `converge-seats` without a task file: `task config resolve --name converge-seats --project-root <project-root> --json`.
+     Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when `r2` is `native_subagent`.
+     Ask which roles the advisor takes: `independent-reviewer`, `adversarial-reviewer`, `refuter`, or `gap-hunter`.
+     "No" means none. Offer only roles whose required capabilities are available.
+   - For selected channel uses, present both startup choices. Reuse a choice already explicit in the conversation.
+     Otherwise, ask the user. Do not infer timing from a launcher's presence.
+   - **Early startup** (`early`): start and pair each selected channel use before goal confirmation.
+     Ask the user to start a listener when no approved launcher is available.
+     Show every pairing. Keep each pairing for the run; do not close it after each task.
+   - **Deferred startup** (`deferred`): start a listener only when its first advisor task is due.
+     Settle the exact approved automatic launcher command or capability. Verify its availability without starting it.
+     Obtain permission to run it under item 7. Show the launcher and planned channel uses at goal confirmation.
+     Do not require live pairings during clarify. Settle unavailable launchers here; do not defer questions to execute.
+   - Direct calls need no listener. For direct-only roles, record `startup: early` without a launcher.
+     Keep their direct dispatch unchanged.
+   - Pair one listener per selected channel use. Never share the debate and `r2` channels.
+     Record a party as `native_subagent` only after the user explicitly declines its advisor use.
+     If early pairing fails, show the diagnostic and settle another available choice before writing the settlement.
+   - Write task-layer debate-parties and converge-seats files for the chosen roles.
+     Set each selected debate party's `mechanism` to `advisor`; set other parties to `native_subagent`.
+     Name all five converge seats. Set `r2: advisor` for `refuter` or `gap-hunter`; set all other seats to `native_subagent`.
+     Resolve both with `--task-config-file` and follow each `next`.
+   - Record `advisor_roles: {roles, brief, startup}` and `converge_seats` together.
+     Limit `brief` to the chosen roles in one line. Deferred startup also records the single-line approved `launcher`.
+     When no advisor role is selected, omit startup and launcher.
+   - After `init`, record channels that already exist with `task session record-decision` in `solo` mode.
+     Use summary `advisor channels: r2=<n>, debate=<m>`, naming only existing channels.
+     For deferred startup, record each new pairing when it happens. Preserve the other use's channel when updating the decision.
+   - While a channel exists, run its heartbeat task's printed `next` at once when that task ends.
+     Keep the 720-second restart grace.
 
 ## Drafting `goal`
 

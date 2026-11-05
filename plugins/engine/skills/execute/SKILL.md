@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Run the autonomous task loop after clarify confirms `goal`: dispatch by task type, act, resolve contested decisions, report progress, and end succeeded or failed against `goal`. Use immediately after clarify hands off a confirmed goal.
+description: "Run the autonomous task loop after clarify confirms `goal`: dispatch by task type, act, resolve contested decisions, report progress, and end succeeded or failed against `goal`. Use immediately after clarify hands off a confirmed goal."
 ---
 
 In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
@@ -37,6 +37,15 @@ silently repair the settlement in the skill.
 Keep semantic checks in the loop: apply the settled source-of-truth domains,
 judge whether the goal is genuinely satisfied or impossible, and preserve the
 debate, safety, fallback, and permitted-mutation rules below.
+
+## Advisor startup
+
+Honor `advisor_roles.startup` and its approved `launcher` after recall. Pass this metadata unchanged to debate and converge.
+Use recorded pairings for early startup. For deferred startup, let the consumer start its listener at the first advisor task.
+Do not start deferred listeners merely because execute or a review slate begins.
+Record each new channel with `task session record-decision` in `solo` mode, using `advisor channels: r2=<n>, debate=<m>`.
+Preserve the other use's channel in later updates. Reuse recorded channels; do not launch replacements on a stale-peer failure.
+Follow the consumer's unavailable-advisor outcome. Keep direct calls unchanged.
 
 ## Task-type dispatch
 

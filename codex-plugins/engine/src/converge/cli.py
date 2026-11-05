@@ -183,10 +183,17 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
         return _step(args, "render")
     step = (_step(args, "cutoff") if phase == "cutoff"
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
-    if _gap_hunt_open(slate):
+    gap_open = _gap_hunt_open(slate)
+    if gap_open:
         gap = _step(args, "file", "--as r2 --origin gap-hunt --lens <lens> --angle <angle>")
-        return (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
+        step = (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
                 f"escalate, cut or attack; then {step}")
+    plan = protocol.batch_plan(slate)
+    advisor_due = gap_open or any(row["agent_role"] == seats.ADVISOR_SEAT
+                                 for row in (plan[0] if plan else []))
+    if (advisor_due and slate.mechanism(seats.ADVISOR_SEAT) == "advisor"
+            and slate.advisor is not None and slate.advisor.get("startup") == "deferred"):
+        step = f"{_reclaim_step(seats.ADVISOR_SEAT, slate.advisor)}; then {step}"
     return step
 
 
@@ -339,7 +346,10 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
                          "the advisor holds no seat on this slate")
         else:
             named, brief, defaulted = seats.seat_roles(roles, seats.ADVISOR_SEAT)
-            fields["advisor"] = {"roles": named, "brief": brief}
+            fields["advisor"] = {"roles": named, "brief": brief,
+                                 "startup": roles.get("startup", "early") if roles is not None else "early"}
+            if roles and "launcher" in roles:
+                fields["advisor"]["launcher"] = roles["launcher"]
             if defaulted:
                 notes.append("r2 is advisor with no advisor role in the settlement; it takes "
                              f"{', '.join(named)} and the stock brief")
@@ -370,6 +380,7 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
         quoted_dir = shlex.quote(str(abs_dir))
         drivers.append({
             "seat": seat,
+            "prepare": _reclaim_step(seat, advisor),
             "step": (f'{channel} send --channel "$CHANNEL" --from asker --to listener '
                      f"--kind request --body-file {body} && "
                      f'{channel} receive --channel "$CHANNEL" --for asker --timeout 300'),
@@ -413,7 +424,8 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
 
 def _driver_lines(driver: dict[str, str]) -> list[str]:
     seat = driver["seat"]
-    return [f"DRIVER {seat} step (one background step per turn): {driver['step']}",
+    return [f"DRIVER {seat} prepare (before this seat's first task): {driver['prepare']}",
+            f"DRIVER {seat} step (one background step per turn): {driver['step']}",
             f"DRIVER {seat} placeholders: {driver['placeholders']}",
             f"DRIVER {seat} then: {driver['then']}",
             f"DRIVER {seat} other messages: {driver['other_messages']}",
@@ -422,13 +434,21 @@ def _driver_lines(driver: dict[str, str]) -> list[str]:
             *driver["request"].splitlines()]
 
 
-def _reclaim_step(seat: str) -> str:
-    return (f"reclaim the advisor channel for {seat} (the {seat} channel in the run ledger's "
+def _reclaim_step(seat: str, advisor: dict[str, Any] | None = None) -> str:
+    reclaim = (f"reclaim the advisor channel for {seat} (the {seat} channel in the run ledger's "
             f"advisor channels decision, when there is one) through the advisor skill's channel "
             f"pairing (--mode asking, communication channel: scan and claim, and start the "
             f"heartbeat if none runs); it prints the channel.py path and the channel number to "
             f"put in the driver step; keep the channel open after this slate; if it hands back "
             f"no listener, stop blocked naming {seat}")
+
+    if advisor is None or advisor.get("startup") != "deferred":
+        return reclaim
+    return (f"reuse the recorded {seat} channel if one exists; only when no {seat} channel is recorded, "
+            f"start its listener with the approved launcher: {advisor['launcher']}; "
+            f"then {reclaim}; record the newly paired {seat} channel in the run ledger's "
+            f"advisor channels decision when this is an engine run; never replace a recorded "
+            f"channel or switch mechanisms on failure")
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +503,9 @@ def cmd_init(args: argparse.Namespace) -> None:
         for driver in drivers:
             lines.extend(_driver_lines(driver))
         lines.extend(f"NOTE {note}" for note in notes)
-    step = "; ".join(_reclaim_step(driver["seat"]) for driver in drivers) or None
+    early = event.get("advisor", {}).get("startup") != "deferred"
+    step = (("; ".join(driver["prepare"] for driver in drivers) or None) if early
+            else _next_step(args, _read(args)))
     emit(args.output_mode, data, lines, step)
 
 

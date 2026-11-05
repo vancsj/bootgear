@@ -11,6 +11,7 @@ from typing import Any
 SEATS = ("main", "finder", "r1", "r2", "cutter")
 MECHANISMS = ("advisor", "native_subagent")
 ADVISOR_SEAT = "r2"
+ADVISOR_STARTUP = ("early", "deferred")
 ADVISOR_ROLES = ("independent-reviewer", "adversarial-reviewer", "refuter", "gap-hunter")
 # Converge roles the advisor takes on a seat; only r2 holds any.
 SEAT_ROLES: dict[str, tuple[str, ...]] = {"r2": ("refuter", "gap-hunter")}
@@ -31,12 +32,12 @@ def roles_problems(advisor_roles: Any) -> list[Problem]:
     if advisor_roles is None:
         return []
     if not isinstance(advisor_roles, dict):
-        return [("advisor_roles", "must be a mapping {roles: [...], brief: <one line>}")]
+        return [("advisor_roles", "must be a mapping {roles: [...], brief: <one line>, startup: early|deferred}")]
     problems: list[Problem] = []
-    extra = sorted(str(key) for key in advisor_roles if key not in ("roles", "brief"))
+    extra = sorted(str(key) for key in advisor_roles if key not in ("roles", "brief", "startup", "launcher"))
     if extra:
         problems.append(("advisor_roles", (f"unknown fields {', '.join(extra)}; "
-                                           f"only roles and brief are allowed")))
+                                           f"only roles, brief, startup and launcher are allowed")))
     roles = advisor_roles.get("roles")
     if not isinstance(roles, list):
         problems.append(("advisor_roles.roles",
@@ -55,6 +56,15 @@ def roles_problems(advisor_roles: Any) -> list[Problem]:
     if not isinstance(brief, str) or not brief.strip() or "\n" in brief or "\r" in brief:
         problems.append(("advisor_roles.brief",
                          "must be a non-empty single-line string limiting the advisor to its roles"))
+    startup = advisor_roles.get("startup")
+    if (roles or startup is not None) and startup not in ADVISOR_STARTUP:
+        problems.append(("advisor_roles.startup", "must be early or deferred; record the user's choice"))
+    launcher = advisor_roles.get("launcher")
+    if ((startup == "deferred" or launcher is not None)
+            and (not isinstance(launcher, str) or not launcher.strip()
+                 or "\n" in launcher or "\r" in launcher)):
+        problems.append(("advisor_roles.launcher",
+                         "must be a non-empty single-line approved launcher for deferred startup"))
     return problems
 
 
