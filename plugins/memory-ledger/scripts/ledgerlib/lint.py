@@ -13,7 +13,6 @@ from .constants import (
     REGROUP_MIN_FOLDER,
 )
 from .model import (
-    confidence,
     local_today,
     machine_path,
     mainline_ref,
@@ -217,12 +216,12 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                     problems += 1
                 if no:
                     print(f"ASSERTED-CONTESTED {e.slug} {a.aid} — pinned at 1.00 with {no}✗ "
-                          f"standing; the tally counts {confidence(a.independent(), no):.2f}. "
+                          f"standing; the tally counts {a.counted_confidence():.2f}. "
                           f"A pin is not a veto: answer the ✗ with `refute`, or `assert "
                           f"--clear`")
                     problems += 1
             else:
-                conf = confidence(a.independent(), no)
+                conf = a.counted_confidence()
                 if abs(conf - a.conf) >= 0.005:
                     print(f"DRIFT      {e.slug} {a.aid}  header {a.conf:.2f} → computed "
                           f"{conf:.2f}" + ("  [fixed]" if args.fix else ""))

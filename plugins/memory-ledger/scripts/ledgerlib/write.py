@@ -186,7 +186,7 @@ def cmd_assert(args, root):
     a = _get_answer(e, args.answer)
     before = a.hash
     yes, no, _ = a.tally()
-    counted = confidence(a.independent(), no)
+    counted = a.counted_confidence()
 
     if args.clear:
         if not a.asserted:
@@ -389,7 +389,7 @@ def show_siblings(e: Entry) -> None:
     print(f"EXISTING answers on {e.slug} — say in your `Because:` how yours differs:")
     for a0 in e.answers:
         yes, no, _ = a0.tally()
-        conf0 = 1.00 if a0.asserted else confidence(a0.independent(), no)
+        conf0 = 1.00 if a0.asserted else a0.counted_confidence()
         print(f"   {a0.aid} · conf {conf0:.2f} [{band(conf0)}] · {yes}✓/{no}✗, "
               f"{a0.independent()} independent")
         print(f"      {a0.claim}")
@@ -514,7 +514,7 @@ def cmd_sign(args, root):
     e = find_entry(root, args.slug)
     a = _get_answer(e, args.answer)
     yes, no, _ = a.tally()
-    conf = confidence(a.independent(), no)
+    conf = a.counted_confidence()
     # A pinned header is the human's; a vote joins the tally without rewriting it.
     # `checked` advances only on a new vote or a flipped one. `sign` never runs the
     # checks, so a correction that leaves the verdict alone must not be able to
@@ -576,7 +576,7 @@ def cmd_refute(args, root):
     e = find_entry(root, args.slug)
     a = _get_answer(e, args.answer)
     yes, no, _ = a.tally()
-    conf = confidence(a.independent(), no)
+    conf = a.counted_confidence()
     # A pinned header is the human's; a vote joins the tally without rewriting it.
     if not a.asserted:
         e.lines[a.header_idx] = render_header(a, conf, str(local_today()))

@@ -377,6 +377,13 @@ class Answer:
         return sum(1 for s in self.sigs
                    if s["hash"] == current and not s["author"])
 
+    def counted_confidence(self) -> float:
+        """Confidence from valid independent passes and failures."""
+        current = self.hash
+        marks = [s["mark"] for s in self.sigs
+                 if s["hash"] == current and not s["author"]]
+        return confidence(marks.count("✓"), marks.count("✗"))
+
 
 def sig_line(mark: str, who: str, h: str, depth: int, author: bool = False) -> str:
     """`e=N` is how many checks the answer carried when this was cast.

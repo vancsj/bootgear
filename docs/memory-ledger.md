@@ -94,8 +94,8 @@ Evidence: test -f example.cfg
 conf = min(round((1 − 0.70 × 0.55^yes) × 0.80^no, 2), 0.99)
 ```
 
-- `yes` counts valid `✓` from sessions other than the author; `no` counts valid `✗`. Valid
-  means the `h=` matches the current body.
+- `yes` and `no` count valid `✓` and `✗` from sessions other than the author.
+  A signature is valid when its `h=` matches the current body.
 - One session, one vote per body: signing again from the live session rewrites its own
   line, and `refute <signer>` casts an opposing vote with its output, never striking one.
 - Anchors: author alone 0.30, one independent `✓` 0.61, two 0.79. Bands (unconfirmed

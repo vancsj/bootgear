@@ -15,7 +15,7 @@ from .constants import (
     SHOW_MAX_YES_SIGS,
 )
 from .gitops import _git
-from .model import Answer, band, confidence, local_today, split_evidence
+from .model import Answer, band, local_today, split_evidence
 from .scoring import build_scorer, cut_candidates, mint_slug, normalize, query_coverage
 from .store import Entry, all_entries, all_index, find_entry, tag_of
 
@@ -61,7 +61,7 @@ def render_answer_brief(a: Answer, width: int = 240,
                         stale_after: int | None = None) -> list[str]:
     """The lines a reader needs to decide sign-vs-rival, without a second call."""
     yes, no, _ = a.tally()
-    counted = confidence(a.independent(), no)
+    counted = a.counted_confidence()
     conf = 1.00 if a.asserted else counted
     state = "asserted" if a.asserted else band(conf)
     claim = a.claim if len(a.claim) <= width else a.claim[: width - 1] + "…"
@@ -212,7 +212,7 @@ def print_entry_json(e: Entry) -> None:
     answers = []
     for a in e.answers:
         yes, no, void = a.tally()
-        counted = confidence(a.independent(), no)
+        counted = a.counted_confidence()
         answers.append({
             "aid": a.aid,
             "claim": a.claim,
@@ -268,7 +268,7 @@ def cmd_show(args, root):
     left_out_by = []
     for a in e.answers:
         yes, no, void = a.tally()
-        counted = confidence(a.independent(), no)
+        counted = a.counted_confidence()
         conf = 1.00 if a.asserted else counted
         state = "asserted" if a.asserted else band(conf)
         print(f"\n## {a.aid} · conf {conf:.2f} [{state}] · {yes}✓/{no}✗"
@@ -327,8 +327,7 @@ def cmd_list(args, root):
             label = f"{top[1]}" + (f"   [{e.kind}]" if e.kind and len(ledgers) > 1 else "")
             print(f"\n## {label}")
         for a in e.answers:
-            _, no, _ = a.tally()
-            counted = confidence(a.independent(), no)
+            counted = a.counted_confidence()
             conf = 1.00 if a.asserted else counted
             state = "asserted" if a.asserted else band(conf)
             claim = a.claim if len(a.claim) <= 110 else a.claim[:109] + "…"
