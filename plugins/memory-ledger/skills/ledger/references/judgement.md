@@ -126,5 +126,7 @@ An answer that contradicts, narrows or corrects an existing one is a **rival**, 
 2. **It starts at `0.30 unconfirmed`, inheriting no votes**, and the answer it corrects keeps what it earned.
 3. **Carry forward the checks you still agree with** via `--keep-evidence a1`, but expect new signatures — a check re-homed onto a different claim is a different assertion.
 4. **There is no `Superseded-by:` and no ordering between answers.** Which answer is right is a judgement the reader makes by running the checks.
-5. **Promote when `lint` reports `REF-LANDED`**; the new mainline answer earns its own votes. `REF-GONE` means abandoned — drop the entry.
+5. **Promote when `lint` reports `REF-LANDED`**; the new mainline answer earns its own votes.
+   For `REF-GONE`, check the stored `Ref:` and `Repo:`. Verify whether the work landed or was abandoned.
+   If it landed, add a verified mainline answer. Drop the entry only after you confirm abandonment.
 6. **Invert a proven-false answer with the two commands, never a header.** `sign <slug> aN --fail --output "<what it printed>"` records the disproof under the original; `rival` adds the flipped claim carrying the proof as its own `Evidence:`. The flipped answer starts at `0.30` and earns its votes like any other.
