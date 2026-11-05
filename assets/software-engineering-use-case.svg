@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1100" viewBox="0 0 1800 1100">
+<rect width="1800" height="1100" fill="white"/>
+<text x="900" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#172b4d">Bootgear use case: software engineering</text>
+<text x="900" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="normal" fill="#52627a">The user guides intent and decisions. Shared services support each stage.</text>
+<path d="M285,200 L325,200" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="325,200 313.0,195.0 313.0,205.0" fill="#52627a"/>
+<path d="M575,200 L615,200" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="615,200 603.0,195.0 603.0,205.0" fill="#52627a"/>
+<path d="M865,200 L905,200" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="905,200 893.0,195.0 893.0,205.0" fill="#52627a"/>
+<path d="M1155,200 L1195,200" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1195,200 1183.0,195.0 1183.0,205.0" fill="#52627a"/>
+<path d="M1445,200 L1485,200" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1485,200 1473.0,195.0 1473.0,205.0" fill="#52627a"/>
+<path d="M160,275 L160,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="160,350 165.0,338.0 155.0,338.0" fill="#9aa9bd"/>
+<path d="M450,275 L450,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="450,350 455.0,338.0 445.0,338.0" fill="#9aa9bd"/>
+<path d="M740,275 L740,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="740,350 745.0,338.0 735.0,338.0" fill="#9aa9bd"/>
+<path d="M1030,275 L1030,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="1030,350 1035.0,338.0 1025.0,338.0" fill="#9aa9bd"/>
+<path d="M1320,275 L1320,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="1320,350 1325.0,338.0 1315.0,338.0" fill="#9aa9bd"/>
+<path d="M1610,275 L1610,350" fill="none" stroke="#9aa9bd" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="1610,350 1615.0,338.0 1605.0,338.0" fill="#9aa9bd"/>
+<path d="M300,555 L300,435" fill="none" stroke="#2f7d63" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="300,435 295.0,447.0 305.0,447.0" fill="#2f7d63"/>
+<rect x="210.0" y="472" width="180" height="28" rx="4" fill="white"/>
+<text x="300" y="493" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">settled answer +</text>
+<rect x="220.0" y="496" width="160" height="28" rx="4" fill="white"/>
+<text x="300" y="517" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">rerun evidence</text>
+<path d="M900,555 L900,435" fill="none" stroke="#52627a" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="900,435 895.0,447.0 905.0,447.0" fill="#52627a"/>
+<polygon points="900,555 905.0,543.0 895.0,543.0" fill="#52627a"/>
+<rect x="775.0" y="465" width="250" height="28" rx="4" fill="white"/>
+<text x="900" y="486" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">claims / factual status</text>
+<path d="M1500,555 L1500,435" fill="none" stroke="#7b5ea7" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1500,435 1495.0,447.0 1505.0,447.0" fill="#7b5ea7"/>
+<polygon points="1500,555 1505.0,543.0 1495.0,543.0" fill="#7b5ea7"/>
+<rect x="1390.0" y="456" width="220" height="28" rx="4" fill="white"/>
+<text x="1500" y="477" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">judgment questions /</text>
+<rect x="1370.0" y="480" width="260" height="28" rx="4" fill="white"/>
+<text x="1500" y="501" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">advice + cited decisions</text>
+<path d="M900,785 L900,848 L500,848 L500,785" fill="none" stroke="#2f7d63" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="500,785 495.0,797.0 505.0,797.0" fill="#2f7d63"/>
+<rect x="605.0" y="816" width="270" height="28" rx="4" fill="white"/>
+<text x="740" y="837" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">durable verified findings</text>
+<path d="M300,785 L300,945 L1500,945 L1500,785" fill="none" stroke="#7b5ea7" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1500,785 1495.0,797.0 1505.0,797.0" fill="#7b5ea7"/>
+<rect x="775.0" y="913" width="250" height="28" rx="4" fill="white"/>
+<text x="900" y="934" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">recorded user decisions</text>
+<path d="M1725,675 L1770,675 L1770,108 L160,108 L160,125" fill="none" stroke="#b7791f" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 6"/>
+<polygon points="160,125 165.0,113.0 155.0,113.0" fill="#b7791f"/>
+<rect x="1345.0" y="83" width="290" height="28" rx="4" fill="white"/>
+<text x="1490" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="normal" fill="#52627a">unanswered judgments → user</text>
+<rect x="35.0" y="125.0" width="250" height="150" rx="17" fill="#e7f5ed" stroke="#7f96b6" stroke-width="2"/>
+<text x="160" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">User</text>
+<text x="160" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Intent and decisions</text>
+<text x="160" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Required confirmations</text>
+<rect x="325.0" y="125.0" width="250" height="150" rx="17" fill="#eef4ff" stroke="#7f96b6" stroke-width="2"/>
+<text x="450" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Spec authoring</text>
+<text x="450" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Investigate and model</text>
+<text x="450" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Write and self-review</text>
+<rect x="615.0" y="125.0" width="250" height="150" rx="17" fill="#eef4ff" stroke="#7f96b6" stroke-width="2"/>
+<text x="740" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Spec review</text>
+<text x="740" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Check the design</text>
+<text x="740" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">against requirements</text>
+<rect x="905.0" y="125.0" width="250" height="150" rx="17" fill="#eef4ff" stroke="#7f96b6" stroke-width="2"/>
+<text x="1030" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Implementation</text>
+<text x="1030" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Build and verify</text>
+<text x="1030" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Self-review code</text>
+<rect x="1195.0" y="125.0" width="250" height="150" rx="17" fill="#eef4ff" stroke="#7f96b6" stroke-width="2"/>
+<text x="1320" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Code review</text>
+<text x="1320" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Check code and tests</text>
+<text x="1320" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Contracts and standards</text>
+<rect x="1485.0" y="125.0" width="250" height="150" rx="17" fill="#e7f5ed" stroke="#7f96b6" stroke-width="2"/>
+<text x="1610" y="163.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Authorised handoff</text>
+<text x="1610" y="201.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Follow the task’s</text>
+<text x="1610" y="229.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">delivery rules</text>
+<rect x="65" y="350" width="1670" height="85" rx="16" fill="#f8fafc" stroke="#9aa9bd" stroke-width="2"/>
+<text x="900" y="386" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">Engine / caller</text>
+<text x="900" y="417" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="normal" fill="#172b4d">Routes work and questions, carries project context, and enforces permitted actions.</text>
+<rect x="75.0" y="555.0" width="450" height="230" rx="17" fill="#f0f7ff" stroke="#7f96b6" stroke-width="2"/>
+<text x="300" y="593.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">memory-ledger</text>
+<text x="300" y="631.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Settled facts and past decisions</text>
+<text x="300" y="659.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Re-run evidence before reuse</text>
+<text x="300" y="687.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Record durable findings</text>
+<rect x="590.0" y="555.0" width="620" height="230" rx="17" fill="#fff7df" stroke="#7f96b6" stroke-width="2"/>
+<text x="900" y="593.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">converge</text>
+<text x="900" y="631.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Check factual claims independently</text>
+<text x="900" y="659.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Attack → finder reply → verdict</text>
+<text x="900" y="687.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Finder can narrow, rebut or withdraw</text>
+<rect x="1275.0" y="555.0" width="450" height="230" rx="17" fill="#f3effa" stroke="#7f96b6" stroke-width="2"/>
+<text x="1500" y="593.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="bold" fill="#172b4d">deputy</text>
+<text x="1500" y="631.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Advice from recorded user decisions</text>
+<text x="1500" y="659.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Answer with cited support or escalate</text>
+<text x="1500" y="687.0" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="normal" fill="#172b4d">Advice never grants action permission</text>
+<rect x="75" y="985" width="1650" height="85" rx="15" fill="#e7f5ed" stroke="#7f96b6" stroke-width="2"/>
+<text x="900" y="1019" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="normal" fill="#172b4d">Ask the user when models are uncertain or materially changed, or when a judgment needs escalation.</text>
+<text x="900" y="1050" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="normal" fill="#172b4d">The user grants required permissions. Factual agreement and deputy advice do not grant them.</text>
+</svg>

@@ -71,6 +71,26 @@ Claude Code / Codex CLI plugins
 
 Plugins are authored and loaded in their host's native format.
 
+## Use case: software engineering
+
+Bootgear can connect spec authoring, implementation and review in one engineering workflow.
+The user supplies intent, resolves escalated questions and grants required permissions.
+Project context supplies the domain rules and conventions.
+
+![Software-engineering workflow with the user, engine, memory-ledger, converge and deputy](assets/software-engineering-use-case.png)
+
+Spec review checks the design. Code review checks the implementation, tests and contracts.
+Shared support works across these stages:
+
+| Gear | Role |
+|---|---|
+| [memory-ledger](plugins/memory-ledger) | Reuse settled answers after rerunning their evidence. Record durable findings. |
+| [converge](plugins/converge) | Check factual claims through independent attacks, finder replies and verdicts. |
+| [deputy](plugins/deputy) | Advise on judgment questions from recorded user decisions, or escalate them to the user. |
+
+Factual agreement and deputy advice do not grant action permission.
+The [SVG version](assets/software-engineering-use-case.svg) keeps the diagram editable.
+
 ## Repository layout
 
 ```
