@@ -274,8 +274,10 @@ def test_init_one_refuter_notes_the_unseated_advisor(cv: Converge) -> None:
 
 def test_init_refuters_out_of_range_is_a_usage_refusal(cv: Converge) -> None:
     err = cv(*_init_args(cv, "--refuters", "3"), code=2).stderr
-    assert "argument --refuters: invalid choice:" in err and "(choose from 1, 2)" in err, err
+    assert "argument --refuters: invalid choice:" in err, err
+    assert "(choose from 1, 2)" in err.replace("'", ""), err
     assert "example: converge init " in err
+    assert not cv.path().exists()
 
 
 def test_codex_role_settlement_matches_plain_init(cv: Converge) -> None:

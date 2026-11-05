@@ -647,6 +647,15 @@ def test_bundled_refuters_one_notes_unseated_advisor(tmp_path: Path) -> None:
     assert init["refuters"] == 1
 
 
+def test_bundled_init_refuters_out_of_range_is_a_usage_refusal(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledgers"
+    err = _seat_init(tmp_path, ledger, "--refuters", "3", code=2).stderr
+    assert "argument --refuters: invalid choice:" in err, err
+    assert "(choose from 1, 2)" in err.replace("'", ""), err
+    assert f"example: {TASK} init " in err
+    assert not (ledger / "s1.jsonl").exists()
+
+
 def test_bundled_status_reprints_drivers(tmp_path: Path) -> None:
     ledger = tmp_path / "ledgers"
     settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT)
