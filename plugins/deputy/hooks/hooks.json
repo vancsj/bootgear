@@ -2,13 +2,34 @@
   "hooks": {
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "AskUserQuestion",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+          }
+        ]
       }
     ]
   }

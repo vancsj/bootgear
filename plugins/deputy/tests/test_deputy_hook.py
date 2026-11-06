@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -41,24 +42,22 @@ class ReminderTests(unittest.TestCase):
     def setUp(self) -> None:
         self.hook = load_hook()
 
-    def test_user_prompt_gets_the_ask_reminder(self) -> None:
-        self.assertEqual(self.hook.reminder({"hook_event_name": "UserPromptSubmit"}), self.hook.ASK)
+    def test_user_prompt_gets_the_record_reminder(self) -> None:
+        self.assertEqual(self.hook.reminder({"hook_event_name": "UserPromptSubmit"}), self.hook.RECORD)
 
     def test_an_answered_question_tool_gets_the_record_reminder(self) -> None:
-        for tool in ("AskUserQuestion", "request_user_input"):
+        for tool in ("AskUserQuestion", "request_user_input", "request_user_input_async"):
             with self.subTest(tool=tool):
                 payload = {"hook_event_name": "PostToolUse", "tool_name": tool}
                 self.assertEqual(self.hook.reminder(payload), self.hook.RECORD)
 
     def test_other_tools_get_no_reminder(self) -> None:
-        for tool in ("request_user_input_async", "Bash"):
+        for tool in ("Read", "Bash"):
             with self.subTest(tool=tool):
                 self.assertIsNone(self.hook.reminder({"hook_event_name": "PostToolUse", "tool_name": tool}))
 
-    def test_both_reminders_gate_the_record_call_on_a_session_ledger_file(self) -> None:
-        for text in (self.hook.ASK, self.hook.RECORD):
-            with self.subTest(text=text[:40]):
-                self.assertIn("session ledger file", text)
+    def test_record_reminder_requires_a_session_ledger_file(self) -> None:
+        self.assertIn("session ledger file", self.hook.RECORD)
 
 
 class HookTests(unittest.TestCase):
@@ -66,7 +65,8 @@ class HookTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name) / "deputy"
         self.root.mkdir()
-        self.env = {**os.environ, "LEDGER_DEPUTY_ROOT": str(self.root)}
+        self.env = {**os.environ, "LEDGER_DEPUTY_ROOT": str(self.root), "HOME": self._tmp.name,
+                    "BOOTGEAR_HOST": "claude"}
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -84,8 +84,8 @@ class HookTests(unittest.TestCase):
         self.assertEqual(output["hookEventName"], payload["hook_event_name"])
         return output["additionalContext"]
 
-    def test_claude_prompt_prints_the_ask_reminder(self) -> None:
-        self.assertEqual(self.context(CLAUDE_PROMPT), load_hook().ASK)
+    def test_claude_prompt_prints_the_record_reminder(self) -> None:
+        self.assertEqual(self.context(CLAUDE_PROMPT), load_hook().RECORD)
 
     def test_claude_answered_question_prints_the_record_reminder(self) -> None:
         self.assertEqual(self.context(CLAUDE_ANSWER), load_hook().RECORD)
@@ -127,30 +127,35 @@ class HookFileTests(unittest.TestCase):
     def groups(self, name: str) -> dict[str, list[dict]]:
         return json.loads((PLUGIN / "hooks" / name).read_text(encoding="utf-8"))["hooks"]
 
-    def assert_registers(self, name: str, matcher: str, command: str) -> None:
+    def assert_registers(self, name: str, host: str, variable: str) -> None:
         groups = self.groups(name)
-        self.assertEqual(set(groups), {"UserPromptSubmit", "PostToolUse"})
+        events = {"UserPromptSubmit", "PostToolUse"}
+        if host == "claude":
+            events.add("PostToolUseFailure")
+        self.assertEqual(set(groups), events)
         prompt, = groups["UserPromptSubmit"]
-        answer, = groups["PostToolUse"]
         self.assertNotIn("matcher", prompt)
-        self.assertEqual(answer["matcher"], matcher)
-        for group in (prompt, answer):
+        command = f'uv run --quiet --script "{variable}/hooks/deputy_hook.py" --host {host}'
+        for event in events:
+            group, = groups[event]
+            if event != "UserPromptSubmit":
+                self.assertEqual(group["matcher"], ".*")
             self.assertEqual(group["hooks"], [{"type": "command", "command": command}])
 
-    def test_claude_hooks_register_the_prompt_and_the_question_tool(self) -> None:
-        self.assert_registers("hooks.json", "AskUserQuestion",
-                              "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py")
+    def test_claude_hooks_register_prompts_and_all_completions(self) -> None:
+        self.assert_registers("hooks.json", "claude", "${CLAUDE_PLUGIN_ROOT}")
 
-    def test_codex_hooks_register_the_prompt_and_the_question_tool(self) -> None:
-        self.assert_registers("codex-hooks.json", "request_user_input",
-                              "python3 ${PLUGIN_ROOT}/hooks/deputy_hook.py")
+    def test_codex_hooks_register_prompts_and_all_visible_completions(self) -> None:
+        self.assert_registers("codex-hooks.json", "codex", "${PLUGIN_ROOT}")
 
     def test_both_hosts_run_the_same_script(self) -> None:
         scripts = set()
         for name in ("hooks.json", "codex-hooks.json"):
             for groups in self.groups(name).values():
                 for group in groups:
-                    scripts.update(hook["command"].split("}/", 1)[1] for hook in group["hooks"])
+                    for hook in group["hooks"]:
+                        args = shlex.split(hook["command"])
+                        scripts.add(args[args.index("--script") + 1].split("}/", 1)[1])
         self.assertEqual(scripts, {"hooks/deputy_hook.py"})
         self.assertTrue(HOOK.is_file())
 

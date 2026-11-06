@@ -2,13 +2,23 @@
   "hooks": {
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${PLUGIN_ROOT}/hooks/deputy_hook.py\" --host codex"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "request_user_input",
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/deputy_hook.py" }]
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${PLUGIN_ROOT}/hooks/deputy_hook.py\" --host codex"
+          }
+        ]
       }
     ]
   }

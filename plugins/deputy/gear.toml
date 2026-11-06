@@ -3,3 +3,6 @@ name = "deputy"
 
 [commands.deputy]
 exec = ["./bin/deputy"]
+
+[commands.hook]
+exec = ["uv", "run", "--quiet", "--script", "./hooks/deputy_hook.py"]
