@@ -12,6 +12,7 @@ Review a change and apply accepted feedback.
 Inputs: the diff, branch, or PR under review; the linked ticket, if any; the
 depth label `quick` or `full`; in an active run, also `<run-id>`,
 `<engine-root>`, `<session-dir>`, the sub-task label, and `review_fix_mode`.
+Authoring callers also supply authoring context, the fixed task folder and any current self-review checkpoint reference.
 
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
@@ -38,7 +39,7 @@ A new review ends with exactly one outcome:
   has no finding, no `fix-now` claim and no follow-up.
 - **`below_cutoff`:** The render has no finding, no `fix-now` claim and at
   least one follow-up.
-- **`blocked`:** A role or find coverage is missing, a finding has status
+- **`blocked`:** Required author checking is incomplete or unavailable, a source selection needs confirmation, a role or find coverage is missing, a finding has status
   `disputed`, a finding or `fix-now` claim needs a mutation outside the mode's
   permission — an unaccepted claim under `accepted_only`, an undecided
   `choice`, or a mutation outside `permitted_mutations` — or the `converge`
@@ -78,6 +79,9 @@ ids) in place of the applied-feedback accounting; nothing was applied. For
 
 ## Workflow
 
+For authoring paths, complete the author checkpoint below before delegating a new independent review.
+Pure review of another author's change does not require the reviewer to act as its author.
+
 1. Check for an override; delegate if one applies.
 2. An apply-only request runs sub-task 6, then reports.
 3. A new review runs sub-task 1 (depth), 2 (start the slate), 3 (find
@@ -86,6 +90,22 @@ ids) in place of the applied-feedback accounting; nothing was applied. For
 4. In an active run, end with `handoff`, `comment_only`, or the render's
    outcome. Standalone, apply what the fix mode permits, re-review on a new
    slate, and repeat until one outcome applies.
+
+## Author checkpoint
+
+Before a new independent slate or override delegation, check whether independent feedback changed the artifact after its author check.
+If it did, invoke self-review with the related independent reference and renew the closed checkpoint before delegation.
+Otherwise, reuse a completed checkpoint only when public status confirms clean or limit-reached for this handoff.
+If no completed checkpoint applies, invoke self-review for stage code on authoring paths.
+Give the author check the complete current diff and fixed task folder.
+Ordinary edits and retries never reset the open checkpoint's count.
+Return the public author-review reference and all still-open references to the caller, separately from independent findings.
+Keep author hypotheses and suspect lists out of independent role briefs.
+
+On needs-selection, return blocked with checkpoint kind source-selection, candidates, pending scope and missing confirmation.
+The direct caller obtains confirmation; an active execute caller uses clarify checkpoint mode.
+On unavailable, return blocked with the actual diagnostic and named missing mechanism. Never bypass the author check.
+A completed cap leaves deeper issues open. The caller retains them until explicit independent disposition.
 
 ## Check for an override first
 
@@ -278,9 +298,8 @@ slate holds no finding; otherwise record `fail`, and the claim goes in the fix
 list marked `revert`. Then rerun `converge cutoff` on the previous slate.
 
 In an active run, record the slate, the converge dir and the `snapshot=<sha>`
-that `init` printed; the caller passes the first two as
-`--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>` when
-leaving `review`:
+that `init` printed. Keep the slate and converge directory in the handback.
+Use the selected exit's public check for leave arguments:
 
 ```text
 task session record-decision <run-id> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
@@ -363,6 +382,8 @@ stay within — a standalone caller selecting this mode gets `accepted_only`
 behavior instead: report every claim, apply none.
 
 ## Fallbacks
+
+If required self-review is missing, return blocked and name the missing skill.
 
 If the `converge` skill hands back `blocked` (a role agent was
 unavailable), stop and report `blocked`, naming the missing role. Claims start

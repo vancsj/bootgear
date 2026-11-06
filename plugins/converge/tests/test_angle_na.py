@@ -44,7 +44,7 @@ def test_status_shows_a_fresh_eye_attack_on_a_not_applicable_angle(cv: Converge)
     assert claim["fresh_eye"] == [BATCH_1[0]]
     [line] = [line for line in cv.ok("status", "s1").stdout.splitlines()
               if line.startswith("F001 ")]
-    assert f"fresh-eye={BATCH_1[0]} na[{BATCH_1[0]}]=no time window" in line
+    assert f"fresh-eye={BATCH_1[0]} artifact_patch_eligible=false na[{BATCH_1[0]}]=no time window" in line
 
 
 def test_roles_and_shape(cv: Converge) -> None:

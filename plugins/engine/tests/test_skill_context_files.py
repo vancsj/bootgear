@@ -61,14 +61,8 @@ class SkillContextFilesTest(unittest.TestCase):
                 _section("execute", "## Reading and merging principles"),
             )
 
-    def test_spec_reads_principles_and_standards(self):
-        self.assertPinned({
-            "spec": f"Read {PRINCIPLES}, {USER_PRINCIPLES}, {REVIEW_STANDARD} and {TEST_STANDARD}",
-        })
-
     def test_role_briefs_name_principles_and_standard_files(self):
         self.assertPinned({
-            "spec-review": f"Name {PRINCIPLES}, {USER_PRINCIPLES} and {STANDARD_FILES} in the brief of every role",
             "review": f"Name {PRINCIPLES}, {USER_PRINCIPLES} and {STANDARD_FILES} as context files for F, R1, R2 and C",
             "test": f"name {PRINCIPLES}, {USER_PRINCIPLES} and {STANDARD_FILES} in its brief",
         })

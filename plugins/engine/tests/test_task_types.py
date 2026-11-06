@@ -28,10 +28,10 @@ MACHINES = PLUGIN_DIR / "state-machines"
 REFERENCES = PLUGIN_DIR / "references"
 OVERRIDES = REPO_ROOT / ".bootgear" / "config"
 TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc")
-# Static override files and their full node sets after the change (C41).
+# Static project override node sets.
 OVERRIDE_NODES = {
     "change-review": {"clarify", "disposition", "failed", "fix", "inspect", "review",
-                      "review-debate", "succeeded"},
+                      "review-debate", "spec", "spec-review", "spec-debate", "succeeded"},
     "triage": {"clarify", "disposition", "failed", "inspect", "succeeded", "triage", "triage-debate",
                "triage-review"},
     "ticket-writing": {"clarify", "failed", "inspect", "succeeded", "ticket", "ticket-debate",

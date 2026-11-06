@@ -1,4 +1,5 @@
 cutoff:
+  difficulty_basis: implementation
   cheap: {enabled: false}
   lenses:
     default: &normal

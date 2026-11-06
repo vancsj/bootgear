@@ -9,3 +9,9 @@ exec = ["./scripts/converge"]
 
 [commands.context-hook]
 exec = ["python3", "hooks/pre_tool_use_task_identity.py", "--host", "codex"]
+
+[commands.self-review]
+exec = ["./scripts/self-review"]
+
+[commands.spec-feedback]
+exec = ["./scripts/spec-feedback"]

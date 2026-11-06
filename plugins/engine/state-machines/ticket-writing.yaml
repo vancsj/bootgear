@@ -9,33 +9,57 @@ nodes:
     next: [inspect]
   inspect:
     reminder:
-      do: "Inspect the request and the settled context. Record the evidence that the issue body needs. Input: the request. Output: the evidence in the run ledger. Does not: draft the body, write design or task lists, or call `spec`."
-      leave: "The relevant evidence and open unknowns are recorded in the run ledger."
+      do: 'Inspect the request and the settled context. Record the evidence that the issue body needs. Input: the
+        request. Output: the evidence in the run ledger. Does not: draft the body, write design or task lists, or
+        call `spec`. Record task-local investigation conclusions, checked boundaries and unresolved facts before drafting.'
+      leave: The relevant evidence and open unknowns are recorded in the run ledger.
       branches:
-        ticket: "The evidence is sufficient to draft the issue body."
-    next: [ticket]
+        ticket: The evidence is sufficient to draft the issue body.
+    next:
+    - ticket
   ticket:
     max_visits: 5
     reminder:
-      do: "Draft the five parts as the Markdown headings `## Problem`, `## Outcome`, `## Acceptance criteria`, `## Scope` and `## Verification notes`, in that order. List the open interpretations. Do not answer them. Write the body only with `task session write-ticket <run-id> --dir <session-dir> --body-file <file>`. The verb checks the five headings. ticket-review checks the body content. Input: the request. Output: the issue body. Does not: call `spec`, write design or task lists, or answer open interpretations."
-      leave: "`task session write-ticket` exited 0 for this draft, and the open interpretations are listed in the body."
+      do: 'Draft the five parts as the Markdown headings `## Problem`, `## Outcome`, `## Acceptance criteria`, `##
+        Scope` and `## Verification notes`, in that order. List the open interpretations. Do not answer them. Write
+        the body only with `task session write-ticket <run-id> --dir <session-dir> --body-file <file>`. The verb checks
+        the five headings. ticket-review checks the body content. Input: the request. Output: the issue body. Does
+        not: call `spec`, write design or task lists, or answer open interpretations. Complete spec-stage self-review
+        in the stored ticket_path parent before independent ticket review.'
+      leave: '`task session write-ticket` exited 0 for this draft, and the open interpretations are listed in the
+        body.'
       branches:
-        ticket-review: "The body is drafted, revised or debated."
-        succeeded: "A ready ticket-review returned `inline` patches; they are applied with `task session write-ticket` and no new slate runs."
-    next: [ticket-review, succeeded]
+        ticket-review: The body is drafted, revised or debated.
+        succeeded: A ready ticket-review returned `inline` patches; they are applied with `task session write-ticket`
+          and no new slate runs.
+    next:
+    - ticket-review
+    - succeeded
   ticket-review:
     max_visits: 5
     reminder:
-      do: "Run spec-review on the ticket body. Architecture fit does not apply; spec-review marks it not applicable. Does not: edit the body or resolve choices."
-      leave: "The independent review has complete converge coverage; its findings, evidence and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
+      do: 'Run spec-review on the ticket body. Architecture fit does not apply; spec-review marks it not applicable.
+        Does not: edit the body or resolve choices. Keep author hypotheses private. Receive complete primary artifacts,
+        confirmed intent, raw evidence and standards.'
+      leave: The independent review has complete converge coverage; its findings, evidence and the handback lists
+        (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded.
       exit_checks:
         succeeded:
-          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+          argv:
+          - converge
+          - gate
+          - '{slate}'
+          - --dir
+          - '{converge_dir}'
       branches:
-        ticket: "`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to ticket."
-        ticket-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
-        succeeded: "`revise`, `choices` and `inline` are empty."
-    next: [ticket, ticket-debate, succeeded]
+        ticket: '`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`,
+          `choices`, `inline` and `deferred` lists back to ticket.'
+        ticket-debate: '`choices` remain (carry the `revise`, `inline` and `deferred` lists along).'
+        succeeded: '`revise`, `choices` and `inline` are empty.'
+    next:
+    - ticket
+    - ticket-debate
+    - succeeded
   ticket-debate:
     reminder:
       do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Does not: draft or review the body."

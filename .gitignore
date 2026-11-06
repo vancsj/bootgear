@@ -5,4 +5,6 @@ __pycache__/
 .DS_Store
 .venv/
 !plugins/engine/bin/
+!plugins/review/bin/
+!plugins/spec/bin/
 .bootgear/session/

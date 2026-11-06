@@ -32,6 +32,34 @@ class BuiltInStateMachineTest(unittest.TestCase):
             check=False,
         )
 
+    def test_feedback_subgraphs_bind_intake_and_gate_both_ready_exits(self):
+        for directory, prefix in ((PLUGIN_DIR / "state-machines", ""),
+                                  (REPO_ROOT / ".bootgear/config", "state-machine-")):
+            for kind, resume in (("ticket-to-pr", "impl"), ("change-review", "fix")):
+                path = directory / f"{prefix}{kind}.yaml"
+                with self.subTest(path=str(path)):
+                    nodes = yaml.safe_load(path.read_text())["nodes"]
+                    for name in ("spec", "spec-review", "spec-debate"):
+                        self.assertIn(name, nodes)
+                    self.assertEqual(nodes["spec-review"]["max_visits"], 5)
+                    self.assertEqual(nodes["spec-debate"]["next"], ["spec"])
+                    for name in ("spec", "spec-review"):
+                        argv = nodes[name]["reminder"]["exit_checks"][resume]["argv"]
+                        self.assertEqual(argv, ["spec-feedback", "gate", "--task-folder", "{task_folder}",
+                                                "--slate", "{slate}", "--converge-dir", "{converge_dir}",
+                                                "--observations", "{observations}", "--checks", "{checks}"])
+                    entries = (("impl", "spec-review"), ("fix", "spec-review")) if kind == "ticket-to-pr" else (("fix", "spec"), ("fix", "spec-review"))
+                    for source, destination in entries:
+                        self.assertIn(destination, nodes[source]["next"])
+                        argv = nodes[source]["reminder"]["exit_checks"][destination]["argv"]
+                        self.assertEqual(argv, ["spec-feedback", "intake", "--task-folder", "{task_folder}",
+                                                "--observations", "{observations}", "--destination", destination])
+                    if kind == "change-review":
+                        self.assertIn("fix", nodes["review"]["next"])
+                        self.assertIn("fix", nodes["review-debate"]["next"])
+                        self.assertEqual(nodes["fix"]["max_visits"], 4)
+                        self.assertEqual(nodes["review-debate"]["max_visits"], 3)
+
     def test_every_v1_task_type_has_a_valid_diagrammable_machine(self):
         for task_type in TASK_TYPES:
             path = PLUGIN_DIR / "state-machines" / f"{task_type}.yaml"
@@ -197,7 +225,7 @@ class BuiltInStateMachineTest(unittest.TestCase):
             self.assertNotIn("review", nodes["review"]["next"], path)
             self.assertIn("fix", nodes["review"]["next"], path)
             self.assertIn("fix", nodes["review-debate"]["next"], path)
-            self.assertEqual(nodes["fix"]["next"], ["review"], path)
+            self.assertEqual(nodes["fix"]["next"], ["review", "spec", "spec-review"], path)
             self.assertNotIn("max_visits", nodes["review"], path)
             self.assertEqual(nodes["fix"]["max_visits"], 4, path)
             self.assertEqual(nodes["review-debate"]["max_visits"], 3, path)
@@ -206,11 +234,19 @@ class BuiltInStateMachineTest(unittest.TestCase):
         for path in self._pr_review_machines():
             machine = yaml.safe_load(path.read_text())
             nodes = machine["nodes"]
-            del nodes["fix"]
+            removed = {"fix", "spec", "spec-review", "spec-debate"}
+            for name in removed:
+                nodes.pop(name, None)
             for node in nodes.values():
-                if "fix" in (node.get("next") or []):
-                    node["next"].remove("fix")
-                    node["reminder"]["branches"].pop("fix")
+                if "next" in node:
+                    node["next"] = [name for name in node["next"] if name not in removed]
+                reminder = node.get("reminder", {})
+                for key in ("branches", "exit_checks"):
+                    if key in reminder:
+                        reminder[key] = {name: value for name, value in reminder[key].items()
+                                         if name not in removed}
+                        if not reminder[key]:
+                            reminder.pop(key)
             with tempfile.TemporaryDirectory(prefix="engine-change-review-no-fix-") as tmp:
                 stripped = Path(tmp) / "change-review.yaml"
                 stripped.write_text(yaml.safe_dump(machine, sort_keys=False))

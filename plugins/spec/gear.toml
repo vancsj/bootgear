@@ -1,0 +1,5 @@
+[plugin]
+name = "spec"
+
+[commands.spec-feedback]
+exec = ["./bin/spec-feedback"]

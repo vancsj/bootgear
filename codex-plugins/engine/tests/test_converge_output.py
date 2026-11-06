@@ -521,10 +521,12 @@ def test_bundled_status_prints_claims_plan_and_next(tmp_path: Path) -> None:
     slate.attack(BATCH_1[0])
     out = slate.lines("status")
     assert out[0] == ("SLATE s1 lenses=correctness phase=attack cutoff=none claims=2 "
-                      "agents=4/5 advisor=-")
+                      "difficulty_basis=artifact agents=4/5 advisor=-")
     assert out[-2] == f"PLAN 1 F001 attack r1 batch=1 angles={','.join(BATCH_1[1:])}"
     assert out[-1] == f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"
     data = slate.status()
+    assert data["difficulty_basis"] == "artifact"
+    assert all(row["artifact_patch_eligible"] is False for row in data["claims"])
     assert data["caps"] == {"cut_rounds": 5, "per_lens": {"default": 50}, "agents": 5,
                             "angles_per_claim": 5, "batch_items": 30}
 
@@ -704,6 +706,8 @@ def test_bundled_fix_now_flow(tmp_path: Path) -> None:
     assert out[1] == "F001 fix-now status=survived cut=no rank=1 reason=cheap (local)"
     data = json.loads(slate.ok("render", "--json").stdout)
     assert data["fix_now"] == [{"claim": "F001", "patch": PATCH}]
+    assert data["difficulty_basis"] == "artifact"
+    assert data["claims"][0]["artifact_patch_eligible"] is True
     task = tmp_path / "review.yaml"
     task.write_text(AFTER_ONLY)
     review = ("s2", "--dir", str(slate.dir))

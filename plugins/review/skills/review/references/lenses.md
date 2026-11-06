@@ -17,6 +17,22 @@ and records every other angle as not applicable.
 | `contract` | full | Public API, schema, CLI, event and file-format surfaces; callers and consumers. | Find a caller or consumer that the changed surface breaks or leaves unstated. |
 | `consistency` | full | Fit with peer files and neighbours: naming, structure, error handling, docs, tests of the same kind. | Find where the change deviates from its cross-file and intra-file peers, citing each peer with `file:line`; file `tier: traced` only when every compared peer is cited, else `inferred`. |
 
+## Changed behavior checks
+
+Trace changed values from input through writers, copies, timing, readers and observable output.
+Keep similarly named fields distinct when their writers or meaning differ.
+Check validation order against application order, including reversals, later edits, retries, recovery and caches where affected.
+Check relationship ownership and required updates or deletion across affected callers.
+Test hidden assumptions in code, tests and diagrams against primary evidence.
+Use current confirmed intent and amendments when a stale ticket conflicts with the required result.
+Check that each test oracle rejects a concrete wrong output. A passing command alone does not prove the behavior.
+
+Apply STRIDE when a change adds untrusted input, authentication, authorization, sensitive data or a trust boundary.
+Trace applicable spoofing, tampering, repudiation, disclosure, denial-of-service and privilege threats through controls and observable tests.
+Give short reasons for inapplicable categories. Keep local changes proportionate.
+Use normal Converge treatment for findings. Do not create a separate direct-proof path.
+Independent roles receive the full diff, request, standards and raw evidence; exclude author-only reasoning and suspect lists.
+
 ## Cut dimensions per lens
 
 The cutter rates each claim's `impact`, `size` and `reach`, `rate` when its

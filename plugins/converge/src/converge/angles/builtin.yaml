@@ -125,13 +125,15 @@
   field: difficulty
   tell: a fix changes code
   asks: >-
-    Which files does the fix touch? Check it against (1) one non-test file; (2) at most 10
+    Read the effective difficulty_basis. Under artifact, which files does the artifact fix touch?
+    Under implementation, cite production remedy paths, scope, callers and migration needs.
+    Check the applicable remedy against (1) one non-test file; (2) at most 10
     changed lines; (3) no caller change (no signature, output format or config key); (4) no
     data or interface migration; (5) at most one test file edited or added; (6) one reasonable
     fix, shown by the finder's accept of the after-cut round.
   values:
     redesign: fails 6, whatever else fails
-    cross-cutting: otherwise, fails any of 1, 2, 3, 4 or 5; no patch means cross-cutting
+    cross-cutting: otherwise, fails any of 1, 2, 3, 4 or 5; under artifact, no patch means cross-cutting
     trivial: otherwise, passes 1-6 with at most 3 changed lines
     local: otherwise, passes 1-6
 - id: callers-affected

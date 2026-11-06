@@ -212,9 +212,9 @@ def test_status_emits_trigger_evidence_tier(cv: Converge) -> None:
     rendered = json.loads(cv.ok("render", "s1", "--json").stdout)
     assert rendered["claims"] == [
         {"id": "F001", "trigger": "caller passes None",
-         "evidence": "pytest -k parse: TypeError at a.py:10", "tier": "reproduced"},
+         "evidence": "pytest -k parse: TypeError at a.py:10", "tier": "reproduced", "artifact_patch_eligible": False},
         {"id": "F002", "trigger": "caller passes None", "evidence": FILE_EVIDENCE,
-         "tier": "inferred"}]
+         "tier": "inferred", "artifact_patch_eligible": False}]
 
 
 def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
@@ -222,12 +222,12 @@ def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
     _attack(cv, BATCH_1[0])
     out = _lines(cv, "status", "s1")
     assert out[0] == ("SLATE s1 lenses=correctness,security phase=attack cutoff=none claims=2 "
-                      "agents=4/5 advisor=-")
+                      "difficulty_basis=artifact agents=4/5 advisor=-")
     assert out[1:] == [
         (f"F001 status=survived cut=no tier=traced batch=1 batch_state=open escalated=yes "
-        f"fixed_remaining={','.join(BATCH_1[1:])}"),
+        f"fixed_remaining={','.join(BATCH_1[1:])} artifact_patch_eligible=false"),
         ("F002 status=unverified cut=yes tier=traced batch=- batch_state=- escalated=yes "
-        f"fixed_remaining={','.join(BATCH_1)}"),
+        f"fixed_remaining={','.join(BATCH_1)} artifact_patch_eligible=false"),
         "ADHOC -",
         f"PLAN 1 F001 attack r1 batch=1 angles={','.join(BATCH_1[1:])}",
         f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]

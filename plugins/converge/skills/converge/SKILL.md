@@ -61,7 +61,7 @@ Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as
 - Spawn each role once and reuse it across the slate by continuing that agent; never spawn a new agent for a role that already has one.
 - For an advisor seat, run its printed preparation when its first task is due. Honor the settled startup choice.
   Let a deferred listener stay unstarted while other roles work. Reuse its recorded channel for later tasks.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
 
 ## 3. Find
 
@@ -97,11 +97,14 @@ Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON statu
      also set `difficulty`. Back each with an applicable evaluate angle and
      decide each value by the `<value>: <test>` lines that
      `converge angles --tag evaluate` prints.
-   - After the attack, `trivial` or `local` needs the fix as a unified diff
-     that touches only the claim's `loc` file and its tests, passed as
-     `--patch "$(cat fix.diff)"`, with `--callers none` and
-     `--migration none`; the CLI measures the patch and refuses a class it
-     does not earn. Otherwise set `cross-cutting` or `redesign`.
+   - Read public status `difficulty_basis` before rating remedy difficulty.
+     Under `artifact`, `trivial` and `local` need a measured unified diff within the CLI's limits.
+     Pass it with `--patch`, `--callers none`, and `--migration none`.
+     Otherwise rate `cross-cutting` or `redesign`.
+   - Under `implementation`, cite concrete production paths, scope, affected callers, and migration needs in evaluate evidence.
+     Supply `--callers` and `--migration`. Rate the production remedy, independently of document patch size.
+     A document patch is optional. Public status and render measure `artifact_patch_eligible` separately.
+     Never assert eligibility. Implementation difficulty grants no automatic fix permission.
    - Add `--choice` naming the options when the facts are agreed but a remedy
      still needs a decision; the CLI refuses a cut that needs one without it.
    - Record the cut through the public CLI.

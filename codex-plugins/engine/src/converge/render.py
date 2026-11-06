@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from . import effort, model, protocol
 from .model import Slate
@@ -68,9 +69,10 @@ def _killed_lines(slate: Slate) -> list[str]:
     return lines
 
 
-def claim_inputs(slate: Slate) -> list[dict[str, str]]:
+def claim_inputs(slate: Slate) -> list[dict[str, Any]]:
     """Each claim's filed trigger, evidence and tier, in filing order."""
-    return [{"id": c.id, "trigger": c.trigger, "evidence": c.evidence, "tier": c.tier}
+    return [{"id": c.id, "trigger": c.trigger, "evidence": c.evidence, "tier": c.tier,
+             "artifact_patch_eligible": protocol.artifact_patch_eligible(slate, c)}
             for c in slate.claims.values()]
 
 
@@ -152,10 +154,14 @@ def render(slate: Slate) -> str:
     follow_up = [r for r in rows if r.result == "follow-up"]
     choices = [r for r in findings if (r.claim.state.rating or {}).get("choice")]
     lines = [f"# converge slate `{slate.slate_id}`", "",
+             f"difficulty_basis: {slate.config['cutoff']['difficulty_basis']}", "",
              f"{counts(rows)} converged={'yes' if converged(slate) else 'no'}", "",
              (f"lenses: {', '.join(slate.lenses)} · claims: {len(slate.claims)} · "
               f"phase: {slate_phase(slate)} · cutoff: {cutoff_state}"), "",
              *_snapshot_lines(slate)]
+    lines += ["## Artifact patches", "",
+              *[f"- {c.id}: artifact_patch_eligible={str(protocol.artifact_patch_eligible(slate, c)).lower()}"
+                for c in slate.claims.values()], ""]
     lines += ["## Findings", "", *_table(findings, with_cut=True)]
     lines += ["", "## Fix now", "", *_fix_table(slate, fix_now)]
     lines += ["", "## Fixed", "", *_fix_table(slate, fixed)]

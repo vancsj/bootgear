@@ -59,6 +59,7 @@ CHECKS = (
             "plugins/engine",
             "plugins/converge",
             "plugins/review",
+            "plugins/spec",
             "plugins/deputy",
             "plugins/memory-ledger",
             "codex-plugins/engine",

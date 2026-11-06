@@ -9,23 +9,39 @@ nodes:
     next: [inspect]
   inspect:
     reminder:
-      do: "Inspect the change target: a PR, PR stack, branch or diff. Also inspect the ticket, changed files, tests, contracts and settled context. Record the evidence before review. For a PR stack, inspect each PR in base-to-top order and record the evidence per PR. Input: the change target. Output: the evidence in the run ledger. Does not: review or fix the change."
-      leave: "The reviewed scope, relevant evidence, and open unknowns are recorded in the run ledger."
+      do: 'Inspect the change target: a PR, PR stack, branch or diff. Also inspect the ticket, changed files, tests,
+        contracts and settled context. Record the evidence before review. For a PR stack, inspect each PR in base-to-top
+        order and record the evidence per PR. Input: the change target. Output: the evidence in the run ledger. Does
+        not: review or fix the change. Record task-local investigation conclusions, checked boundaries and unresolved
+        facts before drafting.'
+      leave: The reviewed scope, relevant evidence, and open unknowns are recorded in the run ledger.
       branches:
-        review: "The evidence is sufficient to review the change."
-    next: [review]
+        review: The evidence is sufficient to review the change.
+    next:
+    - review
   review:
     reminder:
-      do: "Review the change with /review; it runs converge on every finding. For a PR stack, review each PR in base-to-top order and report the findings per PR. Does not: apply fixes."
-      leave: "`converge gate` exited 0 for this review's slate and its render is recorded in the run ledger."
+      do: 'Review the change with /review; it runs converge on every finding. For a PR stack, review each PR in base-to-top
+        order and report the findings per PR. Does not: apply fixes. Keep author hypotheses private. Receive complete
+        primary artifacts, confirmed intent, raw evidence and standards. On authoring paths, complete code-stage self-review
+        before independent review or override delegation.'
+      leave: '`converge gate` exited 0 for this review''s slate and its render is recorded in the run ledger.'
       exit_checks:
         disposition:
-          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+          argv:
+          - converge
+          - gate
+          - '{slate}'
+          - --dir
+          - '{converge_dir}'
       branches:
-        review-debate: "A finding or requested fix needs an above-threshold decision."
-        fix: "An accepted finding requires a correction."
-        disposition: "The review outcome is settled and no further review pass is required."
-    next: [review-debate, fix, disposition]
+        review-debate: A finding or requested fix needs an above-threshold decision.
+        fix: An accepted finding requires a correction.
+        disposition: The review outcome is settled and no further review pass is required.
+    next:
+    - review-debate
+    - fix
+    - disposition
   review-debate:
     max_visits: 3
     reminder:
@@ -39,11 +55,44 @@ nodes:
   fix:
     max_visits: 4
     reminder:
-      do: "Apply the accepted findings within permitted_mutations and run the affected tests."
-      leave: "Every accepted claim id is applied or recorded as rejected, and the affected suite result is recorded in the run ledger."
+      do: Apply the accepted findings within permitted_mutations and run the affected tests. Preserve checkpoint counts;
+        renew closed checkpoints only from related independent feedback. Check recurrence causes before another review.
+        A sound-contract code defect follows the ordinary correction path. For a contract gap use public spec-feedback
+        intake and the fixed feedback destination. First authoring uses spec; existing requirements with optional
+        design uses spec-review. Intake guards both entries.
+      leave: Every accepted claim id is applied or recorded as rejected, and the affected suite result is recorded in the
+        run ledger. Alternatively, a requirement or design gap has raw evidence and is ready for intake.
       branches:
-        review: "The fixes are applied and need a fresh review pass."
-    next: [review]
+        review: The fixes are applied and need a fresh review pass.
+        spec: A requirement or design gap is recorded; public intake validates this destination within the authorized
+          scope.
+        spec-review: A requirement or design gap is recorded; public intake validates this destination within the
+          authorized scope.
+      exit_checks:
+        spec:
+          argv:
+          - spec-feedback
+          - intake
+          - --task-folder
+          - '{task_folder}'
+          - --observations
+          - '{observations}'
+          - --destination
+          - spec
+        spec-review:
+          argv:
+          - spec-feedback
+          - intake
+          - --task-folder
+          - '{task_folder}'
+          - --observations
+          - '{observations}'
+          - --destination
+          - spec-review
+    next:
+    - review
+    - spec
+    - spec-review
   disposition:
     reminder:
       do: "Record the review outcome, finding disposition, impact and confidence where relevant, owner or next action, and supporting evidence."
@@ -51,6 +100,81 @@ nodes:
       branches:
         succeeded: "The review disposition is recorded and the goal is met."
     next: [succeeded]
+  spec:
+    reminder:
+      do: Draft or refresh requirements, optional design and tasks with spec for the authorized correction scope only.
+        Complete bounded spec-stage self-review. Preserve run identity and permissions.
+      leave: The primary package and author check are complete enough for independent spec review. Keep final sign-off
+        with spec-review. The author checkpoint is clean or limit-reached; retain remaining caller work. For
+        the inline exit to fix only, apply its approved patches and pass both gates with finder-written
+        checks.
+      branches:
+        spec-review: The authorized correction package is ready for independent spec review.
+        fix: A ready spec-review returned inline patches; apply them and use the same slate and checks.
+      exit_checks:
+        fix:
+          argv:
+          - spec-feedback
+          - gate
+          - --task-folder
+          - '{task_folder}'
+          - --slate
+          - '{slate}'
+          - --converge-dir
+          - '{converge_dir}'
+          - --observations
+          - '{observations}'
+          - --checks
+          - '{checks}'
+    next:
+    - spec-review
+    - fix
+  spec-review:
+    max_visits: 5
+    reminder:
+      do: Run spec-review. Independently check request fit, clarity and completeness, architecture fit, best
+        practices, simpler alternatives, proportionality, testability, and generic converge coverage; do not
+        use the author transcript or another role's reasoning. Keep author hypotheses private. Receive
+        complete primary artifacts, confirmed intent, raw evidence and standards. Give the finder raw
+        observations; it writes independent checks, including explicit empty initial reports.
+      leave: The independent review has complete coverage and its findings, evidence and choices are recorded. Record the
+        revise, choices, inline, deferred, unchecked and follow_up lists. Only resumption at fix requires
+        the full spec-feedback gate and normal converge gate with finder-written checks.
+      exit_checks:
+        fix:
+          argv:
+          - spec-feedback
+          - gate
+          - --task-folder
+          - '{task_folder}'
+          - --slate
+          - '{slate}'
+          - --converge-dir
+          - '{converge_dir}'
+          - --observations
+          - '{observations}'
+          - --checks
+          - '{checks}'
+      branches:
+        spec: '`revise` is non-empty, or the review is ready with a non-empty `inline` list; carry the claim IDs,
+          evidence and the `revise`, `choices`, `inline` and `deferred` lists back to spec.'
+        spec-debate: '`choices` remain (carry the `revise`, `inline` and `deferred` lists along).'
+        fix: The review is ready with no revise, choices or inline work.
+    next:
+    - spec
+    - spec-debate
+    - fix
+  spec-debate:
+    reminder:
+      do: Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and
+        resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved
+        claims at or above debate_threshold. Record each decision. Update the artifacts.
+      leave: The decision is recorded in the run ledger and any change to the requirements or design is in the artifact;
+        return through spec for re-review.
+      branches:
+        spec: The decision is settled or changes the artifacts; return to spec and then spec-review.
+    next:
+    - spec
   succeeded:
     terminal: true
   failed:

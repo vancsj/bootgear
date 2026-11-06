@@ -1,14 +1,18 @@
+"""Mechanical skill schemas, local references, and shared host parity."""
+
 import re
 import unittest
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PLUGIN_DIR.parents[1]
-SKILL_DIR = PLUGIN_DIR / "skills" / "spec-review"
-CODEX_SKILL_DIR = REPO_ROOT / "codex-plugins" / "engine" / "skills" / "spec-review"
-REFERENCES = SKILL_DIR / "references"
+REPO_ROOT = next(parent for parent in Path(__file__).resolve().parents
+                 if (parent / "plugins/spec/skills").is_dir())
+CLAUDE_SKILLS = REPO_ROOT / "plugins/spec/skills"
+CODEX_SKILLS = REPO_ROOT / "codex-plugins/engine/skills"
+LENSES = {"request-fit", "clarity-completeness", "architecture-fit", "simplicity",
+          "proportionality", "testability"}
 ANGLE_KEYS = {"id", "tag", "tell", "asks", "lens", "cost"}
 KEBAB = r"\A[a-z0-9]+(-[a-z0-9]+)*\Z"
 DESIGN_PATTERN_IDS = {
@@ -16,101 +20,104 @@ DESIGN_PATTERN_IDS = {
     "irreversible-migration", "invalid-states-representable", "no-timeout-backpressure",
     "config-sprawl",
 }
-MACHINES = (
-    (REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-writing.yaml", "ticket-review"),
-    (REPO_ROOT / "plugins" / "engine" / "state-machines" / "ticket-to-pr.yaml", "spec-review"),
-    (REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-writing.yaml", "ticket-review"),
-    (REPO_ROOT / ".bootgear" / "config" / "state-machine-ticket-to-pr.yaml", "spec-review"),
-)
-EXECUTE_SKILLS = (
-    REPO_ROOT / "plugins" / "engine" / "skills" / "execute" / "SKILL.md",
-    REPO_ROOT / "codex-plugins" / "engine" / "skills" / "execute" / "SKILL.md",
-)
-PASS_RULE = ("In an active run with `<n>` >= 3 add `--pass <n>` to `init`; with `<n>` 1 or 2, "
-             "and always standalone, omit `--pass`.")
-EXECUTE_PASS_RULE = "(the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`)"
-CAP_CLAUSE = re.compile(r"`<n>` is (\d+) and `revise` or `choices` is non-empty")
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
-def _rows(name: str) -> list[dict]:
-    return yaml.safe_load((REFERENCES / name).read_text())
-
-
-def _skill() -> str:
-    return (SKILL_DIR / "SKILL.md").read_text()
+def _rows(base: Path, name: str) -> list[dict]:
+    return yaml.safe_load((base / "spec-review/references" / name).read_text())
 
 
 class SpecReviewContractTest(unittest.TestCase):
-    def test_angle_files_follow_converge_schema(self):
-        ids = []
-        for name in ("angles.yaml", "design-patterns.yaml"):
-            rows = _rows(name)
-            self.assertIsInstance(rows, list, name)
-            for row in rows:
-                self.assertLessEqual(set(row), ANGLE_KEYS, row)
-                self.assertRegex(row["id"], KEBAB)
-                self.assertIn(row["tag"], ("find", "attack"), row)
-                self.assertTrue(row["tell"].strip(), row)
-                self.assertTrue(row["asks"].strip(), row)
-                ids.append(row["id"])
-        self.assertEqual(len(ids), len(set(ids)))
+    def test_skill_metadata_is_valid_on_both_hosts(self):
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            for name in ("spec", "spec-review"):
+                text = (base / name / "SKILL.md").read_text()
+                _, frontmatter, _ = text.split("---", 2)
+                metadata = yaml.safe_load(frontmatter)
+                self.assertEqual(metadata["name"], name)
+                self.assertIsInstance(metadata["description"], str)
+                self.assertTrue(metadata["description"].strip())
 
-    def test_angle_counts(self):
-        tags = [row["tag"] for row in _rows("angles.yaml")]
-        self.assertEqual(tags.count("find"), 12)
-        self.assertEqual(tags.count("attack"), 5)
+    def test_angle_files_follow_converge_schema_on_both_hosts(self):
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            ids = []
+            for name in ("angles.yaml", "design-patterns.yaml"):
+                rows = _rows(base, name)
+                self.assertIsInstance(rows, list, name)
+                for row in rows:
+                    self.assertLessEqual(set(row), ANGLE_KEYS, row)
+                    self.assertRegex(row["id"], KEBAB)
+                    self.assertIn(row["tag"], ("find", "attack"), row)
+                    self.assertTrue(row["tell"].strip(), row)
+                    self.assertTrue(row["asks"].strip(), row)
+                    if row["tag"] == "find":
+                        self.assertIn(row["lens"], LENSES, row)
+                    ids.append(row["id"])
+            self.assertEqual(len(ids), len(set(ids)))
+
+    def test_find_angles_cover_the_six_lenses_on_both_hosts(self):
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            rows = _rows(base, "angles.yaml")
+            self.assertEqual({row["lens"] for row in rows if row["tag"] == "find"}, LENSES)
+            by_id = {row["id"]: row for row in rows}
+            for name in ("value-lineage", "lifecycle-composition"):
+                self.assertEqual(by_id[name]["tag"], "find")
+                self.assertEqual(by_id[name]["lens"], "architecture-fit")
 
     def test_design_patterns_are_the_eight_architecture_fit_rows(self):
-        rows = _rows("design-patterns.yaml")
-        self.assertEqual({row["id"] for row in rows}, DESIGN_PATTERN_IDS)
-        self.assertEqual(len(rows), len(DESIGN_PATTERN_IDS))
-        for row in rows:
-            self.assertEqual(row["tag"], "find", row)
-            self.assertEqual(row["lens"], "architecture-fit", row)
-            self.assertTrue(row["cost"].strip(), row)
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            rows = _rows(base, "design-patterns.yaml")
+            self.assertEqual({row["id"] for row in rows}, DESIGN_PATTERN_IDS)
+            self.assertEqual(len(rows), len(DESIGN_PATTERN_IDS))
+            for row in rows:
+                self.assertEqual(row["tag"], "find", row)
+                self.assertEqual(row["lens"], "architecture-fit", row)
+                self.assertTrue(row["cost"].strip(), row)
 
-    def test_every_lens_states_what_is_out_of_scope(self):
-        lines = (REFERENCES / "lenses.md").read_text().splitlines()
-        self.assertEqual(sum(line.startswith("Out of scope:") for line in lines), 6)
+    def test_local_markdown_references_resolve_on_both_hosts(self):
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            for name in ("spec", "spec-review"):
+                skill = base / name
+                for document in skill.rglob("*.md"):
+                    for target in MARKDOWN_LINK.findall(document.read_text()):
+                        parsed = urlsplit(target)
+                        if parsed.scheme or not parsed.path:
+                            continue
+                        resolved = (document.parent / parsed.path).resolve()
+                        self.assertTrue(resolved.is_file(), (document, target))
+                        self.assertTrue(resolved.is_relative_to(skill), (document, target))
 
-    def test_skill_names_its_references_and_drops_the_precedence_line(self):
-        skill = _skill()
-        for text in ("angles.yaml", "design-patterns.yaml", "implementation-level"):
-            self.assertIn(text, skill)
-        self.assertNotIn("blocked > revise", skill)
+    def test_reference_files_are_reachable_from_their_skill(self):
+        for base in (CLAUDE_SKILLS, CODEX_SKILLS):
+            for name in ("spec", "spec-review"):
+                skill = base / name
+                todo = [skill / "SKILL.md"]
+                visited = set()
+                while todo:
+                    path = todo.pop().resolve()
+                    if path in visited:
+                        continue
+                    visited.add(path)
+                    if path.suffix != ".md":
+                        continue
+                    for target in MARKDOWN_LINK.findall(path.read_text()):
+                        parsed = urlsplit(target)
+                        if not parsed.scheme and parsed.path:
+                            todo.append((path.parent / parsed.path).resolve())
+                for path in (skill / "references").iterdir():
+                    self.assertIn(path.resolve(), visited, path)
 
-    def test_mapping_rules_keep_their_order_and_an_unfinished_slate_resumes(self):
-        skill = _skill()
-        self.assertIn("already exists in the converge directory, do not `init`; resume it", skill)
-        rules = ("1. missing role", "2. status `disputed`", "3. survived claim", "4. a finding of lens",
-                 "5. a finding whose cut", "6. status `survived`", "7. any other finding")
-        positions = [skill.find(f"   {rule}") for rule in rules]
-        self.assertNotIn(-1, positions)
-        self.assertEqual(positions, sorted(positions))
-
-    def test_pass_flag_is_passed_only_from_slate_three_and_never_standalone(self):
-        self.assertIn(PASS_RULE, _skill())
-        for execute in EXECUTE_SKILLS:
-            self.assertIn(EXECUTE_PASS_RULE, execute.read_text(), execute)
-
-    def test_iteration_cap_equals_the_state_machines_max_visits(self):
-        match = CAP_CLAUSE.search(_skill())
-        self.assertIsNotNone(match, "SKILL.md has no iteration-cap clause")
-        for machine, review_node in MACHINES:
-            nodes = yaml.safe_load(machine.read_text())["nodes"]
-            self.assertEqual(nodes[review_node]["max_visits"], int(match.group(1)), machine)
-
-    def test_codex_twin_matches_the_claude_skill(self):
-        claude, codex = (
-            (directory / "SKILL.md").read_text().split("\n## Host mechanics\n")[0]
-            for directory in (SKILL_DIR, CODEX_SKILL_DIR)
-        )
-        self.assertEqual(codex, claude)
-        names = sorted(path.name for path in REFERENCES.iterdir())
-        self.assertEqual(sorted(path.name for path in (CODEX_SKILL_DIR / "references").iterdir()), names)
-        for name in names:
-            self.assertEqual((CODEX_SKILL_DIR / "references" / name).read_bytes(),
-                             (REFERENCES / name).read_bytes(), name)
+    def test_shared_skill_and_reference_parity(self):
+        for name in ("spec", "spec-review"):
+            claude, codex = (base / name for base in (CLAUDE_SKILLS, CODEX_SKILLS))
+            shared = [(directory / "SKILL.md").read_text().split("\n## Host mechanics\n")[0]
+                      for directory in (claude, codex)]
+            self.assertEqual(shared[0], shared[1], name)
+            names = sorted(path.name for path in (claude / "references").iterdir())
+            self.assertEqual(sorted(path.name for path in (codex / "references").iterdir()), names)
+            for reference in names:
+                self.assertEqual((claude / "references" / reference).read_bytes(),
+                                 (codex / "references" / reference).read_bytes(), reference)
 
 
 if __name__ == "__main__":

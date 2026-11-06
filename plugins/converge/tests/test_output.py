@@ -169,8 +169,10 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
         "next": _next(cv, "converged s1 --dir {dir}")}
     rendered = _json(cv, "render", "s1", "--dir", d)
     assert rendered == {"slate": "s1", "markdown": cv.ok("render", "s1").stdout,
-                        "choices": [], "fix_now": [], "claims": [{"id": "F001", "trigger": "t",
-                                                   "evidence": FILE_ARGS[1], "tier": "traced"}]}
+                        "choices": [], "fix_now": [], "difficulty_basis": "artifact",
+                        "claims": [{"id": "F001", "trigger": "t",
+                                                   "evidence": FILE_ARGS[1], "tier": "traced",
+                                    "artifact_patch_eligible": False}]}
     assert "findings=1 follow-up=0 killed=0 converged=yes" in rendered["markdown"]
     assert _json(cv, "converged", "s1", "--dir", d) == {
         "converged": True, "phase": "done", "pending": [],

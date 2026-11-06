@@ -42,6 +42,7 @@ from engine.session import (
     _section_body,
     _section_span,
     _single_line,
+    _task_folder_problems,
     _write_atomic,
 )
 
@@ -324,11 +325,15 @@ class LeaveRefused(Exception):
 
 
 def _run_leave_check(current: str, template: list[str],
-                     raw_args: list[str]) -> list[str]:
+                     raw_args: list[str], task_folder: str | None = None) -> list[str]:
     """Substitute --leave-arg values into `template`, run it without a
     shell, and return the executed argv. Exits with every argument problem
     listed; a non-zero check raises LeaveRefused."""
     leave_args, problems = _parse_leave_args(raw_args)
+    if "task_folder" in leave_args:
+        problems.append("task_folder is reserved; omit the caller override")
+    if task_folder is not None:
+        leave_args["task_folder"] = task_folder
     placeholders: list[str] = []
     for part in template:
         for m in LEAVE_CHECK_PLACEHOLDER_RE.finditer(part):
@@ -339,7 +344,7 @@ def _run_leave_check(current: str, template: list[str],
             problems.append(f"leave_check placeholder '{{{name}}}' has no "
                             f"--leave-arg {name}=<value>")
     for name in leave_args:
-        if name not in placeholders:
+        if name not in placeholders and name != "task_folder":
             problems.append(f"--leave-arg '{name}' matches no placeholder in "
                             f"'{current}''s leave_check")
     if problems:
@@ -464,6 +469,17 @@ def cmd_transition(args: argparse.Namespace) -> None:
     text = _read_text(path)
     _check_open(text, path)
     reason = _single_line(args.reason, "--reason")
+    if any(item.split("=", 1)[0] == "task_folder" for item in (args.leave_arg or [])):
+        sys.exit("task_folder is reserved; omit --leave-arg task_folder and use the run binding")
+    settlement = yaml.safe_load(_section_body(text, "settlement"))
+    if not isinstance(settlement, dict):
+        sys.exit("settlement must be a mapping")
+    folder_problems = _task_folder_problems(settlement, settlement.get("task_type"))
+    if folder_problems:
+        sys.exit("task_folder refused: " + "; ".join(message for _, message in folder_problems))
+    task_folder = settlement.get("task_folder")
+    if task_folder is not None:
+        task_folder = str(Path(task_folder).expanduser().resolve())
 
     nodes, current, current_node = _current_node_lookup(text, path)
     if current_node.get("terminal"):
@@ -507,13 +523,13 @@ def cmd_transition(args: argparse.Namespace) -> None:
                  f"{', '.join(args.leave_arg)} matches no placeholder")
     if leave_check and dest != "failed":
         try:
-            argv = _run_leave_check(current, leave_check, args.leave_arg or [])
+            argv = _run_leave_check(current, leave_check, args.leave_arg or [], task_folder)
         except LeaveRefused as refused:
             sys.exit(refused.message)
         log_line += f" [leave_check exit 0: {' '.join(argv)}]"
     elif exit_check is not None:
         try:
-            argv = _run_leave_check(current, exit_check["argv"], args.leave_arg or [])
+            argv = _run_leave_check(current, exit_check["argv"], args.leave_arg or [], task_folder)
         except LeaveRefused as refused:
             fallback = exit_check.get("on_refuse")
             if fallback is None:

@@ -219,3 +219,45 @@ def test_report_rules_claim_is_never_fix_now(cv: Converge) -> None:
     cv.clean("F001")
     cv.rate("F001", **cheap(patch(lines=4)))
     assert _results(cv) == {"F001": ("finding", "report_rules[R002]")}
+
+
+def test_implementation_basis_separates_remedy_from_artifact(cv: Converge) -> None:
+    _attacked(cv, cutoff={"difficulty_basis": "implementation", "cheap": {"enabled": False}})
+    assert _cut(cv, difficulty="local", callers="none", migration="none") == []
+    cv.append("accept", FINDER, claim="F001", round=1, when="after")
+    data = cv.status()
+    assert data["difficulty_basis"] == "implementation"
+    assert data["by_id"]["F001"]["artifact_patch_eligible"] is False
+    assert _results(cv)["F001"][0] == "finding"
+    assert "difficulty_basis: implementation" in cv.ok("render", "s1").stdout
+
+
+def test_implementation_patch_eligibility(cv: Converge) -> None:
+    _attacked(cv, claims=3, cutoff={"difficulty_basis": "implementation", "cheap": {"enabled": False}})
+    for cid, text in (("F001", patch(lines=2)), ("F002", patch(lines=40)),
+                      ("F003", patch("src/b.py", lines=2))):
+        cv.rate(cid, difficulty="trivial", patch=text, callers="none", migration="none")
+    status = cv.status()["by_id"]
+    assert [status[c]["artifact_patch_eligible"] for c in status] == [True, False, False]
+    rendered = json.loads(cv.ok("render", "s1", "--json").stdout)
+    assert [c["artifact_patch_eligible"] for c in rendered["claims"]] == [True, False, False]
+    assert all(row[0] != "fix-now" for row in _results(cv).values())
+
+
+def test_implementation_basis_needs_remedy_callers_and_migration(cv: Converge) -> None:
+    _attacked(cv, cutoff={"difficulty_basis": "implementation", "cheap": {"enabled": False}})
+    problems = _cut(cv, difficulty="redesign", callers=None, migration=None)
+    assert any("implementation remedy needs `callers`" in p for p in problems)
+    assert any("implementation remedy needs `migration`" in p for p in problems)
+    evidence = {k: v for k, v in {"entry-points": "route", "blast-radius": "one",
+                                "affected-count": "one"}.items()}
+    problems = _cut(cv, difficulty="local", callers="none", migration="none", evidence=evidence)
+    assert any("no evidence for `difficulty`" in p for p in problems)
+
+
+def test_implementation_local_remedy_cannot_change_callers(cv: Converge) -> None:
+    _attacked(cv, cutoff={"difficulty_basis": "implementation", "cheap": {"enabled": False}})
+    problems = _cut(cv, difficulty="local", callers="changed", migration="needed")
+    assert any("needs `callers` none" in p for p in problems)
+    assert any("needs `migration` none" in p for p in problems)
+    assert _cut(cv, difficulty="redesign", callers="changed", migration="needed") == []

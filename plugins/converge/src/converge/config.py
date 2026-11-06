@@ -21,6 +21,7 @@ LAYER_NAMES = ("caller", "user", "project", "task")
 
 DEFAULTS: dict[str, Any] = {
     "cutoff": {
+        "difficulty_basis": "artifact",
         "report_rules": [],
         "lenses": {"default": {
             "attack_if": [
@@ -44,7 +45,7 @@ DEFAULTS: dict[str, Any] = {
     "steps": {"escalate": True, "gap_hunt": True, "cut": "both"},
 }
 SCHEMA = {
-    "cutoff": ("report_rules", "lenses", "rereview", "cheap"),
+    "cutoff": ("report_rules", "lenses", "rereview", "cheap", "difficulty_basis"),
     "caps": ("cut_rounds", "per_lens", "agents", "angles_per_claim", "batch_items"),
     "angles": ("files", "disable"),
     "steps": ("escalate", "gap_hunt", "cut"),
@@ -213,7 +214,10 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
                     problems.append(f"{where} is missing")
                 continue
             item = body[key]
-            if section == "cutoff" and key == "lenses":
+            if section == "cutoff" and key == "difficulty_basis":
+                if item not in ("artifact", "implementation"):
+                    problems.append(f"{where} must be one of artifact, implementation; got {item!r}")
+            elif section == "cutoff" and key == "lenses":
                 _lens_tables(item, where, complete, problems)
             elif section == "cutoff" and key == "rereview":
                 _rereview(item, where, complete, problems)
@@ -235,6 +239,10 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
                     problems.append(f"{where} must be true or false; got {item!r}")
             elif not isinstance(item, list) or not all(isinstance(x, str) and x for x in item):
                 problems.append(f"{where} must be a list of non-empty strings")
+    cutoff = value.get("cutoff")
+    if (complete and isinstance(cutoff, dict) and cutoff.get("difficulty_basis") == "implementation"
+            and isinstance(cutoff.get("cheap"), dict) and cutoff["cheap"].get("enabled") is not False):
+        problems.append(f"{label}: implementation requires cutoff.cheap.enabled false")
     return problems
 
 

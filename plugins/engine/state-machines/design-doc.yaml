@@ -9,37 +9,68 @@ nodes:
     next: [inspect]
   inspect:
     reminder:
-      do: "Inspect the request and the settled context. Record the evidence that requirements and design need. Input: the request. Output: the evidence in the run ledger. Does not: draft requirements, design or a task list."
-      leave: "The relevant evidence and open unknowns are recorded in the run ledger."
+      do: 'Inspect the request and the settled context. Record the evidence that requirements and design need. Input:
+        the request. Output: the evidence in the run ledger. Does not: draft requirements, design or a task list.
+        Record task-local investigation conclusions, checked boundaries and unresolved facts before drafting.'
+      leave: The relevant evidence and open unknowns are recorded in the run ledger.
       branches:
-        spec: "The evidence is sufficient to draft requirements and design."
-    next: [spec]
+        spec: The evidence is sufficient to draft requirements and design.
+    next:
+    - spec
   spec:
     reminder:
-      do: "Draft requirements and design with spec. Pass `stop_after: design`. Pass `<run-id>`, `<engine-root>` and `<session-dir>`. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`. `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. When you leave, pass `--leave-arg output_dir=<directory holding requirements.md and design.md>`. Does not: write `task.md` or review the files."
-      leave: "requirements.md and design.md are at the output paths and are complete enough for independent review; do not resolve the final spec sign-off here."
+      do: 'Draft requirements and design with spec. Pass `stop_after: design`. Pass `<run-id>`, `<engine-root>` and
+        `<session-dir>`. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`.
+        `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. When you leave, pass `--leave-arg
+        output_dir=<directory holding requirements.md and design.md>`. Does not: write `task.md` or review the files.
+        Form mental and conceptual models. Confirm only uncertain or materially changed models. Use five status sections
+        in requirements and design. Complete bounded spec-stage self-review before handoff.'
+      leave: requirements.md and design.md are at the output paths and are complete enough for independent review;
+        do not resolve the final spec sign-off here. The author checkpoint is clean or limit-reached; retain remaining
+        caller work.
       exit_checks:
         spec-review:
-          argv: [test, "!", -e, "{output_dir}/task.md"]
+          argv:
+          - test
+          - '!'
+          - -e
+          - '{output_dir}/task.md'
         succeeded:
-          argv: [test, "!", -e, "{output_dir}/task.md"]
+          argv:
+          - test
+          - '!'
+          - -e
+          - '{output_dir}/task.md'
       branches:
-        spec-review: "The draft is ready for an independent review."
-        succeeded: "A ready spec-review returned `inline` patches; they are applied and no new slate runs."
-    next: [spec-review, succeeded]
+        spec-review: The draft is ready for an independent review.
+        succeeded: A ready spec-review returned `inline` patches; they are applied and no new slate runs.
+    next:
+    - spec-review
+    - succeeded
   spec-review:
     max_visits: 5
     reminder:
-      do: "Run spec-review on requirements and design. Architecture fit applies. Does not: edit requirements or design."
-      leave: "The independent review has complete converge coverage; its findings, evidence and the handback lists (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded."
+      do: 'Run spec-review on requirements and design. Architecture fit applies. Does not: edit requirements or design.
+        Keep author hypotheses private. Receive complete primary artifacts, confirmed intent, raw evidence and standards.'
+      leave: The independent review has complete converge coverage; its findings, evidence and the handback lists
+        (`revise`, `choices`, `inline`, `deferred`, `unchecked`, `follow_up`) are recorded.
       exit_checks:
         succeeded:
-          argv: [converge, gate, "{slate}", --dir, "{converge_dir}"]
+          argv:
+          - converge
+          - gate
+          - '{slate}'
+          - --dir
+          - '{converge_dir}'
       branches:
-        spec: "`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`, `choices`, `inline` and `deferred` lists back to spec."
-        spec-debate: "`choices` remain (carry the `revise`, `inline` and `deferred` lists along)."
-        succeeded: "`revise`, `choices` and `inline` are empty."
-    next: [spec, spec-debate, succeeded]
+        spec: '`revise` is non-empty, or `inline` is non-empty; carry the claim IDs, evidence and the `revise`, `choices`,
+          `inline` and `deferred` lists back to spec.'
+        spec-debate: '`choices` remain (carry the `revise`, `inline` and `deferred` lists along).'
+        succeeded: '`revise`, `choices` and `inline` are empty.'
+    next:
+    - spec
+    - spec-debate
+    - succeeded
   spec-debate:
     reminder:
       do: "Apply debate_mode to the choice claims. In threshold mode, decide claims below debate_threshold solo, and resolve or debate claims at or above it. In mandatory mode, resolve every claim and debate only unresolved claims at or above debate_threshold. Record each decision. Update the artifacts. Does not: re-review or add scope."

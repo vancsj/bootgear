@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Load the feedback helper from this plugin's own source package."""
+import os
+import sys
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root / "src"))
+os.environ.setdefault("BOOTGEAR_OUTPUT", "prose")
+from spec_feedback.cli import main
+
+raise SystemExit(main())

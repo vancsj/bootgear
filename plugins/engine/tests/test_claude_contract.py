@@ -29,7 +29,7 @@ class ClaudePackageContractTest(unittest.TestCase):
                 self.assertEqual(self._validate(settings).returncode, 0)
                 root = Path(tmp)
                 path = root / "settlement.yaml"
-                path.write_text(self._settlement(settings))
+                path.write_text(self._settlement(settings, task_folder=root / "task"))
                 init = subprocess.run([str(TASK), "session", "init", "startup-run", "--dir", tmp,
                                        "--settlement-file", str(path)],
                                       capture_output=True, text=True, check=False)
@@ -105,9 +105,10 @@ class ClaudePackageContractTest(unittest.TestCase):
             self.assertEqual(party["prompt"], "Verify the proposal independently.")
             self.assertTrue(party["enabled"])
 
-    def _settlement(self, extra: str, roster: str = ROSTER) -> str:
+    def _settlement(self, extra: str, roster: str = ROSTER, *, task_folder: Path) -> str:
         return (
             "task_type: ticket-to-pr\napproach: fixture\nprinciples: none\n"
+            f"task_folder: {task_folder.resolve()}\n"
             "goal:\n  succeeded: done\n  failed: never\n"
             "state_machine: |\n  name: smoke\n  nodes:\n    clarify:\n"
             "      next: [succeeded]\n    succeeded:\n      terminal: true\n"
@@ -123,9 +124,9 @@ class ClaudePackageContractTest(unittest.TestCase):
         )
 
     def _validate(self, extra: str, roster: str = ROSTER):
-        settlement = self._settlement(extra, roster)
         with tempfile.TemporaryDirectory(prefix="engine-debate-mechanism-") as tmp:
             path = Path(tmp) / "settlement.txt"
+            settlement = self._settlement(extra, roster, task_folder=Path(tmp) / "task")
             path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n")
             return subprocess.run(
                 [str(TASK), "session", "validate", "mech-run", "--dir", tmp,
@@ -202,7 +203,8 @@ class ClaudePackageContractTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory(prefix="engine-skill-fields-") as tmp:
             path = Path(tmp) / "settlement.txt"
-            path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n")
+            path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n"
+                            f"task_folder: {(Path(tmp) / 'task').resolve()}\n")
             return subprocess.run(
                 [str(TASK), "session", "validate", "skill-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
@@ -356,7 +358,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             path = Path(tmp) / "settlement.txt"
             path.write_text(self._settlement(
                 _roles("refuter") + "converge_seats: {r2: native_subagent}\n"
-                "debate_party_config: {}\n"))
+                "debate_party_config: {}\n", task_folder=Path(tmp) / "task"))
             result = subprocess.run(
                 [str(TASK), "session", "init", "seat-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
@@ -480,7 +482,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(json.loads(result.stdout)["angles"]), 12)
+        self.assertEqual(len(json.loads(result.stdout)["angles"]), 14)
 
         attack = subprocess.run(
             [str(converge), "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],

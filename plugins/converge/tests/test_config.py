@@ -43,7 +43,8 @@ def test_defaults(cv: Converge) -> None:
     assert eff["caps"] == DEFAULT_CAPS
     assert eff["steps"] == {"escalate": True, "gap_hunt": True, "cut": "both"}
     assert eff["angles"] == {"files": [], "disable": []}
-    assert set(eff["cutoff"]) == {"report_rules", "lenses", "rereview", "cheap"}
+    assert set(eff["cutoff"]) == {"report_rules", "lenses", "rereview", "cheap", "difficulty_basis"}
+    assert eff["cutoff"]["difficulty_basis"] == "artifact"
     assert eff["cutoff"]["lenses"] == {"default": {
         "attack_if": [{"reach": ["normal", "crafted"],
                        "impact": ["security", "data-loss", "wrong-output"]},
@@ -417,7 +418,7 @@ def test_default_test_globs(cv: Converge) -> None:
 
 def test_old_cutoff_keys_are_refused(cv: Converge) -> None:
     err = _validate(cv, "cutoff: {report_if: [], report_if_gap_hunt: []}\n")
-    assert ("unknown key cutoff.report_if (allowed: report_rules, lenses, rereview, cheap)"
+    assert ("unknown key cutoff.report_if (allowed: report_rules, lenses, rereview, cheap, difficulty_basis)"
             in err)
     assert "unknown key cutoff.report_if_gap_hunt" in err
     assert not hasattr(config_mod, "REREVIEW_CUTOFF")
@@ -433,3 +434,12 @@ def test_cheap_values_validate(cv: Converge) -> None:
                      ("cutoff.cheap: unknown key 'speed' (allowed: enabled, files, lines, "
                       "trivial_lines, tests, test_globs)")):
         assert fragment in err, err
+
+
+def test_implementation_difficulty_disables_automatic_cheap_fixes(cv: Converge) -> None:
+    err = _validate(cv, "cutoff: {difficulty_basis: implementation}\n")
+    assert "implementation requires cutoff.cheap.enabled false" in err
+    assert "CONFIG valid" in _validate(
+        cv, "cutoff: {difficulty_basis: implementation, cheap: {enabled: false}}\n", code=0)
+    assert "difficulty_basis must be one of artifact, implementation" in _validate(
+        cv, "cutoff: {difficulty_basis: document}\n")

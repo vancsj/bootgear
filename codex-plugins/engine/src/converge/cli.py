@@ -778,6 +778,7 @@ def _claim_status(slate: Slate, claim: model.Claim, flags: dict[str, bool],
         "escalated": claim.escalation is not None,
         "rating": ({f: rating.get(f) for f in (*model.CUT_FIELDS, *model.AFTER_FIELDS)}
                    if rating else None),
+        "artifact_patch_eligible": protocol.artifact_patch_eligible(slate, claim),
         "fixed_remaining": slate.remaining_angles(claim),
         "fresh_eye": [e["angle"] for e in claim.state.attacks.get(protocol.FRESH_EYE, [])],
         "na_reasons": claim.na_reasons,
@@ -793,6 +794,7 @@ def _claim_line(c: dict[str, Any]) -> str:
     return (f"{c['id']} status={c['status']} cut={c['cut']} tier={c['tier']} batch={batch} "
             f"batch_state={c['batch_state'] or '-'} escalated={'yes' if c['escalated'] else 'no'} "
             f"fixed_remaining={','.join(c['fixed_remaining']) or '-'}{fresh}"
+            f" artifact_patch_eligible={str(c['artifact_patch_eligible']).lower()}"
             + (f" {na}" if na else ""))
 
 
@@ -841,6 +843,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     if args.json:
         data: dict[str, Any] = {
             "slate": slate.slate_id, "lenses": slate.lenses, "refuters": slate.init_refuters,
+            "difficulty_basis": slate.config["cutoff"]["difficulty_basis"],
             "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
             "phase": phase, "steps": slate.config["steps"], "caps": slate.config["caps"],
             "plan": plan,
@@ -852,6 +855,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
     lines = [(f"SLATE {slate.slate_id} lenses={','.join(slate.lenses) or '-'} "
               f"phase={phase} cutoff={cutoff} claims={len(claims)} "
+              f"difficulty_basis={slate.config['cutoff']['difficulty_basis']} "
               f"agents={len(agents)}/{slate.cap('agents')} advisor={advisor or '-'}"),
              *map(_claim_line, claims), _adhoc_line(adhoc), *_plan_lines(plan)]
     emit(args.output_mode, {}, lines, step)
@@ -1133,7 +1137,9 @@ def cmd_render(args: argparse.Namespace) -> None:
                    for row in protocol.compute_cutoff(slate) if row.result == "fix-now"]
         emit(args.output_mode, {"slate": args.slate, "markdown": markdown,
                                 "choices": _unresolved_choices(slate),
-                                "claims": render.claim_inputs(slate), "fix_now": fix_now}, [])
+                                "claims": render.claim_inputs(slate),
+                                "difficulty_basis": slate.config["cutoff"]["difficulty_basis"],
+                                "fix_now": fix_now}, [])
         return
     sys.stdout.write(markdown)
 
@@ -1171,6 +1177,16 @@ def cmd_angles(args: argparse.Namespace) -> None:
         rows = angles_mod.resolve(args.angles, resolved["effective"], Path(resolved["project_root"]))
     except (config_mod.ConfigError, angles_mod.AngleError) as exc:
         _refuse(exc.problems)
+    basis = resolved["effective"]["cutoff"]["difficulty_basis"]
+    if basis == "implementation":
+        rows = [{**row, "asks": "Cite concrete production remedy paths, scope, affected callers, "
+                 "migration needs, and testing work. Rate that remedy independently of document patch size.",
+                 "values": {
+                     "redesign": "the production remedy needs a choice between reasonable designs",
+                     "cross-cutting": "otherwise, production paths, callers, migration or testing cross the local limits",
+                     "trivial": "otherwise, the production remedy fits one non-test file and at most three changed lines",
+                     "local": "otherwise, the production remedy fits one non-test file, ten changed lines and one test file"}}
+                if row["id"] == "files-touched" else row for row in rows]
     rows = [row for row in rows if not args.tag or row["tag"] == args.tag]
     if args.tag == "find" and not rows:
         _refuse_next(
@@ -1185,7 +1201,7 @@ def cmd_angles(args: argparse.Namespace) -> None:
         extra = "".join(f" {k}={row[k]}" for k in ("field", "lens") if k in row)
         lines.append(f"{row['tag']} {row['id']}{extra} — tell: {row['tell']} — asks: {row['asks']}")
         lines.extend(f"  {value}: {test}" for value, test in row.get("values", {}).items())
-    emit(args.output_mode, {"angles": rows}, lines)
+    emit(args.output_mode, {"angles": rows, "difficulty_basis": basis}, lines)
 
 
 def cmd_config(args: argparse.Namespace) -> None:

@@ -9,11 +9,15 @@ nodes:
     next: [inspect]
   inspect:
     reminder:
-      do: "Inspect the report, the relevant code and tests, and the settled context. Record the evidence that the diagnosis needs. Input: the report. Output: the evidence in the run ledger. Does not: draft cause claims or implement a fix."
-      leave: "The report context, relevant evidence, and open unknowns are recorded in the run ledger."
+      do: 'Inspect the report, the relevant code and tests, and the settled context. Record the evidence that the
+        diagnosis needs. Input: the report. Output: the evidence in the run ledger. Does not: draft cause claims or
+        implement a fix. Record task-local investigation conclusions, checked boundaries and unresolved facts before
+        drafting.'
+      leave: The report context, relevant evidence, and open unknowns are recorded in the run ledger.
       branches:
-        triage: "The evidence is sufficient to diagnose the report."
-    next: [triage]
+        triage: The evidence is sufficient to diagnose the report.
+    next:
+    - triage
   triage:
     max_visits: 5
     reminder:

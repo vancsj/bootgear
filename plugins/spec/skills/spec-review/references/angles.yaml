@@ -1,8 +1,9 @@
 - id: request-criterion
   tag: find
   lens: request-fit
-  tell: The request or acceptance criteria names an outcome, constraint, or boundary.
-  asks: Is it represented in the requirements and design with the same meaning?
+  tell: The request, confirmed intent, or acceptance criteria names an outcome, constraint, boundary, or stage.
+  asks: Does the artifact preserve current intent? Check stale ticket assumptions and exclusions that prevent the
+    requested result.
 - id: missing-requirement
   tag: find
   lens: clarity-completeness
@@ -16,8 +17,9 @@
 - id: architecture-call
   tag: find
   lens: architecture-fit
-  tell: The design adds or changes a call path, module boundary, or state transition.
-  asks: Does it follow the established architecture and existing contracts?
+  tell: The artifact changes a call path, boundary, relation, ownership, or state transition.
+  asks: Trace affected callers, relation ownership, update/deletion rules, and side effects. Do they meet established
+    contracts?
 - id: architecture-choice
   tag: find
   lens: architecture-fit
@@ -36,8 +38,9 @@
 - id: unverifiable-outcome
   tag: find
   lens: testability
-  tell: An acceptance condition or task has no observable verification path.
-  asks: What test or evidence would distinguish the intended behavior from a wrong implementation?
+  tell: An acceptance condition or task needs verification of an observable outcome or boundary.
+  asks: Inspect its fixture and assertion. Which plausible wrong result must fail? Check unchanged paths, event
+    sequences, and verification limits.
 - id: implied-requirement
   tag: find
   lens: clarity-completeness
@@ -46,8 +49,9 @@
 - id: design-assumption
   tag: find
   lens: architecture-fit
-  tell: The design assumes something about existing code, configuration or a contract.
-  asks: Is the assumption true? Cite file:line or a run for each.
+  tell: Any prose, diagram, table, or task assumes behaviour, configuration, a contract, or an exact representation.
+  asks: Verify each assumption with evidence, including version, region, form, and configuration where relevant.
+    Would failure invalidate requirements or architecture?
 - id: whole-design-alternative
   tag: find
   lens: simplicity
@@ -57,11 +61,24 @@
   tag: find
   lens: architecture-fit
   tell: A statement is sound but leaves a code-level detail open (naming, local structure, message text).
-  asks: Would fixing it in code leave the design unchanged? If yes, file the claim with a `trigger` that starts `implementation-level:`.
+  asks: Can implementation choose this detail while keeping requirement and design contracts sound? Only then use
+    the trigger prefix implementation-level:.
+- id: value-lineage
+  tag: find
+  lens: architecture-fit
+  tell: The artifact changes stored, copied, derived, overlaid, or similarly named values.
+  asks: Trace origin, writers, storage, capture time, live/copy readers, and output. Does each required output use
+    the intended source?
+- id: lifecycle-composition
+  tag: find
+  lens: architecture-fit
+  tell: Required behaviour depends on action sequences, ordering, reversals, later updates, recovery, dependencies,
+    or caches.
+  asks: Check invariants across allowed sequences. Does validation use the same effective state and order as application?
 - id: request-quote
   tag: attack
-  tell: The claim says the request requires or excludes something.
-  asks: Quote the request sentence. If it does not say so, the claim fails.
+  tell: The claim says authoritative intent requires or excludes something.
+  asks: Quote the request or confirmed amendment. Does it support the claim within its current scope?
 - id: settled-elsewhere
   tag: attack
   tell: The claim calls something missing or undecided.

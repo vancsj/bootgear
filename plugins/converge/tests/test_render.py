@@ -45,13 +45,16 @@ def test_render_after_cutoff(cv: Converge) -> None:
     cv.ok("cutoff", "s1")
     out = cv.ok("render", "s1").stdout
     lines = out.splitlines()
-    assert lines[:5] == ["# converge slate `s1`", "",
+    assert lines[:7] == ["# converge slate `s1`", "",
+                         "difficulty_basis: artifact", "",
                          "fix-now=0 fixed=0 findings=2 follow-up=1 killed=1 converged=yes", "",
                          ("lenses: correctness, security · claims: 4 · phase: done · "
                          "cutoff: current")]
     sections = _sections(out)
-    assert list(sections) == ["Findings", "Fix now", "Fixed", "Choices", "Follow-up", "Killed",
+    assert list(sections) == ["Artifact patches", "Findings", "Fix now", "Fixed", "Choices", "Follow-up", "Killed",
                               "Coverage"]
+    assert sections["Artifact patches"].splitlines() == [
+        f"- F{i:03d}: artifact_patch_eligible=false" for i in range(1, 5)]
     assert sections["Findings"].splitlines() == [
         FINDINGS, "|" + "---|" * 13,
         ("| 1 | F004 | correctness | src/a.py:10 | claim 4 | data-loss | one | normal | 0 | "

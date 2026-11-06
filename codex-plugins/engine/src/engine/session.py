@@ -146,7 +146,7 @@ def _has_hidden_tag(entry: str) -> bool:
     return any(_TAG_CONTENT_RE.fullmatch(g[1:-1].strip())
                for g in _BRACKET_GROUP_RE.findall(m.group(1)))
 AMENDMENT_RE = re.compile(r"\AAMENDMENT (\S+):")
-UNAMENDABLE_FIELDS = {"session_dir"}
+UNAMENDABLE_FIELDS = {"session_dir", "task_folder"}
 # Amendments an engine command writes itself, with the command that does.
 ENGINE_OWNED_AMENDMENTS = {"state_machine": "task state amend"}
 # The only two valid shapes for a --mode debate summary, per debate/SKILL.md's
@@ -474,6 +474,44 @@ def _work_dir_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
     return [("work_dir", "must be an absolute path or start with '~'")]
 
 
+def _task_folder_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
+    """Validate the authoring folder before creating any task storage."""
+    if "task_folder" not in data:
+        if task_type in {"ticket-to-pr", "change-review"}:
+            return [("task_folder", f"is required for a {task_type} run")]
+        return []
+    value = data["task_folder"]
+    if (not isinstance(value, str) or not value.strip() or _has_line_break(value)
+            or not os.path.isabs(os.path.expanduser(value))):
+        return [("task_folder", "must be an absolute or home path without line breaks")]
+    try:
+        folder = Path(value).expanduser().resolve()
+        parent = folder
+        while not parent.exists() and parent != parent.parent:
+            parent = parent.parent
+        if not parent.is_dir():
+            return [("task_folder", f"is not a usable directory: {parent}")]
+        if not os.access(parent, os.W_OK | os.X_OK):
+            return [("task_folder", f"directory is unavailable: {parent}")]
+    except (OSError, ValueError, RuntimeError) as exc:
+        return [("task_folder", f"cannot resolve directory: {exc}")]
+    return []
+
+
+def _bind_task_folder(settlement: str) -> tuple[str, Path | None]:
+    """Canonicalise the validated scalar without changing other YAML fields."""
+    node = yaml.compose(settlement)
+    if not isinstance(node, yaml.MappingNode):
+        return settlement, None
+    for key, value in node.value:
+        if key.value == "task_folder":
+            folder = Path(value.value).expanduser().resolve()
+            start, end = value.start_mark.index, value.end_mark.index
+            suffix = "\n" if settlement[start:end].endswith("\n") else ""
+            return settlement[:start] + json.dumps(str(folder)) + suffix + settlement[end:], folder
+    return settlement, None
+
+
 def _ticket_path(run_id: str, session_dir: Path) -> Path:
     """The one path a run's ticket body can have."""
     return session_dir / f"{run_id}.artifacts" / TICKET_FILE
@@ -561,6 +599,7 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
         problems.append(("task_type", f"must be one of: {', '.join(sorted(TASK_TYPES))}"))
     problems.extend(_triage_cutoff_problems(data, task_type, project_root))
     problems.extend(_work_dir_problems(data, task_type))
+    problems.extend(_task_folder_problems(data, task_type))
     if "ticket_path" in data:
         problems.extend(_ticket_path_problems(data["ticket_path"], task_type, run_id, session_dir))
     problems.extend(_owned_artifacts_problems(data))
@@ -790,7 +829,6 @@ def _init(args: argparse.Namespace) -> None:
         sys.exit(f"{path} lists owned artifacts ({', '.join(owned)}) — --force is refused, "
                  f"since it would drop the record that this run owns them; the ledger is "
                  f"unchanged, ask the user how to proceed")
-    path.parent.mkdir(parents=True, exist_ok=True)
     settlement = Path(args.settlement_file).read_text().rstrip("\n") \
         if args.settlement_file else sys.stdin.read().rstrip("\n")
     _check_no_embedded_heading(settlement, "the settlement")
@@ -799,6 +837,13 @@ def _init(args: argparse.Namespace) -> None:
     problems += _verb_owned_problems(summary)
     if problems:
         refuse(f"session init refused for {path}: {len(problems)} problem(s)", problems)
+    settlement, task_folder = _bind_task_folder(settlement)
+    try:
+        if task_folder is not None:
+            task_folder.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        sys.exit(f"session init directory setup failed: {exc}; no ledger was written")
     text = (
         f"# session: {args.run_id} — {datetime.now().astimezone().strftime('%Y-%m-%d')}\n\n"
         f"## settlement\n{settlement}\n\n"
@@ -1522,7 +1567,10 @@ def cmd_record_decision(args: argparse.Namespace) -> None:
                             f"value and records the amendment itself; run "
                             + _command(f"state amend {_ledger_args(args.run_id, path)} "
                                        f"--machine-file <file> --reason \"<why>\""))
-        if field in UNAMENDABLE_FIELDS:
+        if field == "task_folder":
+            problems.append("task_folder cannot be recorded as an AMENDMENT; "
+                            "the authoring folder is immutable for this run")
+        elif field in UNAMENDABLE_FIELDS:
             problems.append(f"'{field}' cannot be recorded as an AMENDMENT — recall needs "
                             f"--dir to find the ledger before it can read anything out of "
                             f"it, including an amendment to the field that supplies --dir; "

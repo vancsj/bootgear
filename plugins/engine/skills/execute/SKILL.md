@@ -5,7 +5,8 @@ description: "Run the autonomous task loop after clarify confirms `goal`: dispat
 
 In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
 
-Run the loop after `clarify` confirms `goal`. Do not ask work questions before the run ends `succeeded` or `failed`. Permit only the post-compaction recovery path when the run identity cannot be identified.
+Run the loop after `clarify` confirms `goal`. Do not ask routine work questions before the run ends `succeeded` or `failed`.
+Required model or source-selection confirmations use clarify checkpoint mode, as defined below. Permit only the post-compaction recovery path when the run identity cannot be identified.
 
 Hand back to the user a final pitch and a closed session ledger. Every run ends with exactly one of these outcomes:
 
@@ -119,17 +120,60 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - On `comment_only`, report the claims and take the branch that matches the reported outcome.
 - Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
 - When the current node's `reminder.do` names `stop_after`, pass it to `spec` on every call from that node, re-entry included.
-- On a `spec` return of `blocked` (a task step that cannot be derived), transition to `failed` with the missing statement as the reason.
+- Handle a required model or source-selection checkpoint before the ordinary blocked-spec failure path.
+  Invoke `engine:clarify` with `mode: checkpoint`, kind, pending payload, task folder and confirmation evidence.
+  Preserve the caller's run ID, engine root and session directory. Do not initialize or select another run.
+  Complete the public mode invocation; reading a reference alone does not complete the checkpoint.
+  On `checkpoint-confirmed`, re-enter the original skill with the confirmed values and typed references.
+  On `needs-confirmation` or `unavailable`, retain pending work and use the existing stopped path with its actual diagnostic.
+  This exception permits no routine design question or extra mutation.
+- On any other `spec` return of `blocked`, transition to `failed` with the missing statement as the reason.
 - For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the visit number `<n>` of the node that runs it (the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`). On `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. On another result, run `task state show <run-id>` and read the machine in force before you name a node. Then use the first rule that matches:
   - `choices` is non-empty: take the review node's branch to its debate node. Pass the claim IDs, render path, slate, converge directory, and the `revise`, `inline`, `deferred` and `follow-up` lists.
   - `revise` is non-empty: take the review node's branch back to the drafting node. Pass the same fields.
   - `ready` with a non-empty `inline` list: take the same branch back to the drafting node. Pass the `inline` list. Apply the patches there. Do not run a new review. Then take the drafting node's inline exit: its branch for applied `inline` patches.
   - `ready` with an empty `inline` list: take the review node's branch for that result.
 
-  When you leave the review node, pass `--leave-arg slate=<slate> --leave-arg converge_dir=<converge-dir>`.
+  Pass only the leave arguments required by the selected exit's public check.
+  Keep the slate and converge directory in the handback, including for exits without checks.
 - After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `task session update-todo <run-id> "follow-up [<stage>]: <claim text>"`, where `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists. Record each returned `deferred` claim the same way as `"deferred [spec-review]: <claim text>"`; mark a `deferred` todo done only after `review` has received it, never because a later return no longer lists it.
 - When invoking `review`, append the open `deferred [spec-review]:` todos to the linked-ticket input as a "Deferred spec-review findings" section.
 - Under `review_fix_mode: accepted_only`, record each returned `fix-now` claim the same way as `"fix-now [<stage>]: <claim text>"`, never as `follow-up`, and mark done each open `fix-now [<stage>]` todo the new return no longer lists.
+
+## Authoring handoffs and feedback
+
+Use the stored `task_folder` for ticket-to-pr and change-review primary specs and author records.
+Require override paths and record references to use that same folder. Block incompatible handbacks.
+Design-doc keeps its work-dir/run-id folder. Direct ticket drafting uses the public stored ticket_path parent after every re-entry.
+Other callers retain their fixed task folder throughout the task.
+
+Before independent spec or ticket review, require spec-stage self-review through the public self-review skill.
+Before independent code review on an authoring path, require code-stage self-review, including before override delegation.
+Pass authoring context, the complete artifact and the closed checkpoint reference to review.
+Check related independent feedback before reusing public completed status.
+If that feedback changed the artifact after its author check, require a renewed checkpoint before delegation.
+Otherwise, accept only clean or limit-reached for this handoff; never treat ready as a completed author pass.
+Obtain a missing author check before delegation. Do not duplicate a checkpoint already completed for this handoff.
+Edits and retries keep open checkpoint counts. Closed renewal needs related independent feedback or confirmed intent.
+
+Keep author-open references in separate caller todos. Never include private lists, suspect lines or author reasoning in independent briefs.
+An omitted later handback never closes these todos. Require explicit independent disposition and evidence before closing each item.
+Give independent roles primary artifacts, required behavior, raw evidence and standards. Link their results to caller todos afterward.
+Keep normal deferred Converge claims and their evidence in the existing deferred handoff.
+
+When implementation, tests, fixes or review expose a requirement or design gap, retain the raw evidence and blocking caller todo.
+For ticket-to-pr and authorized change-review fixes, use spec-feedback's public intake and gate contracts.
+Use the engine-bound folder and the machine's fixed destination. Never override the reserved task_folder leave token.
+Initial affected reviews supply explicit empty observations and finder-written checks. Feedback reviews supply the actual observation inventory.
+The independent finder writes checks. Pass its file unchanged; never add the author's hypothesis to its brief.
+Refresh affected specs, tasks, tests, diagrams and verification before the fixed resumption destination.
+Preserve unrelated work, deferred claims, permission limits and cumulative visit caps.
+A passing rerun alone cannot close a behavioral gap. Require a disposition addressing required behavior.
+When authoring is forbidden, keep the gap pending with its evidence and next action.
+
+Before another repeated round, compare artifacts, prior evidence and repeated findings.
+Record the supported cause and corrective action: missed change, incomplete fix, evidence gap, changed intent or new regression.
+Do not start an identical round without this check. Propagate changed intent across all affected artifacts.
 
 ## Briefing sub-agents
 
@@ -182,7 +226,8 @@ task state amend <run-id> --machine-file <file> --reason "<why>, per user reques
 
 Save the YAML that `show` prints below its `MACHINE` line to `<file>`, edit it, then run `amend`. On a refusal, fix every listed problem and rerun `amend`.
 
-Reject an amendment to `session_dir` and end the run as `failed` (see "Fallbacks" below). Report that the ledger location cannot change without a fresh `clarify`/`init`.
+Reject an amendment to `session_dir` or `task_folder` and end the run as `failed` (see "Fallbacks" below).
+Report the rejected identity field and its actual CLI diagnostic. Preserve the current ledger and task folder.
 
 Treat an `AMENDMENT <field>` decision as authoritative for that field from the next `recall` onward. Apply the latest valid amendment from a full decisions scan rather than `--last N`.
 
@@ -247,7 +292,7 @@ End each of these as `failed`: call `transition --to failed`, then `close ... fa
 
 - **Validation refusal:** report the refusal's grouped field-level problems; that refusal is the reason.
 - **Missing required dependency:** if the task type requires a missing dependency, such as `test` for ticket-to-PR, report it once and name the dependency as the reason. Do not retry.
-- **`session_dir` amendment:** the rejected amendment is the reason.
+- **Identity amendment:** a rejected `session_dir` or `task_folder` amendment is the reason.
 - **Missing override skill:** if the named override skill is not installed, it is a missing required dependency; report it and name it as the reason. Do not use the general default.
 
 If `memory-ledger` is missing or unconfigured, record its status marker and continue.

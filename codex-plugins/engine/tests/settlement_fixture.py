@@ -3,7 +3,10 @@
 Tests import `valid_settlement` and supply only the state machine they need.
 The text has no `session_dir:` line: `init` adds it.
 """
+import json
+import tempfile
 import textwrap
+from pathlib import Path
 
 FIELDS = """\
 principles: none
@@ -32,6 +35,7 @@ def valid_settlement(machine: str, *, approach: str = "smoke test",
     """The settlement text for `machine`; `extra` is raw text placed before the fields."""
     return (
         "task_type: ticket-to-pr\n"
+        f"task_folder: {json.dumps(str(Path(tempfile.gettempdir()).resolve()))}\n"
         f"approach: {approach}\n"
         f"{extra}"
         f"{FIELDS}"

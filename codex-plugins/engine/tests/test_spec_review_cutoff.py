@@ -55,8 +55,10 @@ def test_table_is_a_valid_config_layer() -> None:
     table = _table()
     assert validate_config(table, str(CLAUDE_CUTOFF)) == []
     assert set(table) == {"cutoff"}
-    assert set(table["cutoff"]) == {"cheap", "lenses", "rereview"}
+    assert set(table["cutoff"]) == {"cheap", "difficulty_basis", "lenses", "rereview"}
     assert table["cutoff"]["cheap"] == {"enabled": False}
+    assert table["cutoff"]["difficulty_basis"] == "implementation"
+    assert _rereview_cutoff()["difficulty_basis"] == "implementation"
     assert set(table["cutoff"]["lenses"]) == LENSES
 
 

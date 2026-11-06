@@ -180,6 +180,19 @@ class BundleDriftTest(unittest.TestCase):
     def assertSameBytes(self, source: Path, copy: Path):
         self.assertEqual(copy.read_bytes(), source.read_bytes(), f"{copy} differs from {source}")
 
+    def test_author_helpers_match_claude_source(self):
+        for plugin, package, command in (("review", "self_review", "self-review"),
+                                          ("spec", "spec_feedback", "spec-feedback")):
+            with self.subTest(package=package):
+                source = REPO_ROOT / "plugins" / plugin
+                self.assertSameTree(source / "src" / package, PLUGIN_DIR / "src" / package)
+                self.assertSameBytes(source / "bin" / command, PLUGIN_DIR / "scripts" / command)
+
+    def test_self_review_skill_and_cases_match(self):
+        source = REPO_ROOT / "plugins" / "review"
+        self.assertSameTree(source / "skills/self-review", PLUGIN_DIR / "skills/self-review")
+        self.assertSameBytes(source / "tests/test_self_review.py", PLUGIN_DIR / "tests/test_self_review.py")
+
     def test_converge_package_matches_claude_source(self):
         self.assertSameTree(
             CLAUDE_CONVERGE / "src" / "converge", PLUGIN_DIR / "src" / "converge"

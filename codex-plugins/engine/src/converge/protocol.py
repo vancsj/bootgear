@@ -762,9 +762,22 @@ def _cut_choice(slate: Slate, claim: Claim, event: dict[str, Any], problems: lis
 
 
 def _cut_patch(slate: Slate, claim: Claim, event: dict[str, Any], problems: list[str]) -> None:
-    """An after cut's patch measures; `trivial` and `local` need a patch within
-    `cutoff.cheap` whose non-test files are all the claim's loc file, `callers: none` and
-    `migration: none`, and a patch within `trivial_lines` is trivial."""
+    """Validate production remedy context or artifact-based patch classification."""
+    if slate.config["cutoff"]["difficulty_basis"] == "implementation":
+        for key in ("callers", "migration"):
+            if not _given(event, key):
+                problems.append(f"cut: {claim.id} implementation remedy needs `{key}`")
+            elif event.get("difficulty") in model.CHEAP_DIFFICULTY and event[key] != "none":
+                problems.append(f"cut: {claim.id} difficulty {event.get('difficulty')} "
+                                f"needs `{key}` none; got {event[key]!r}")
+        patch = event.get("patch")
+        if isinstance(patch, str) and patch.strip():
+            try:
+                effort.measure(patch, slate.config["cutoff"]["cheap"]["test_globs"],
+                               Path(slate.project_root) if slate.project_root else None)
+            except effort.EffortError as exc:
+                problems.append(f"cut: {claim.id} `patch`: {exc}")
+        return
     difficulty = event.get("difficulty")
     cheap_class = difficulty in model.CHEAP_DIFFICULTY
     where = f"cut: {claim.id} difficulty {difficulty}"
@@ -804,6 +817,25 @@ def _cut_patch(slate: Slate, claim: Claim, event: dict[str, Any], problems: list
     if difficulty == "local" and size["lines"] <= limits["trivial_lines"]:
         problems.append(f"{where}: the patch changes {size['lines']} lines, within "
                         f"cutoff.cheap.trivial_lines {limits['trivial_lines']}; type trivial")
+
+
+def artifact_patch_eligible(slate: Slate, claim: Claim) -> bool:
+    """Measure artifact patch limits separately from implementation remedy difficulty."""
+    rating = claim.state.rating or {}
+    patch = rating.get("patch")
+    if not isinstance(patch, str) or not patch.strip() or slate.project_root is None:
+        return False
+    limits = slate.config["cutoff"]["cheap"]
+    root = Path(slate.project_root)
+    try:
+        size = effort.measure(patch, limits["test_globs"], root)
+    except effort.EffortError:
+        return False
+    line_limit = limits["trivial_lines"] if rating.get("difficulty") == "trivial" else limits["lines"]
+    loc_path = claim.loc.rsplit(":", 1)[0]
+    return (size["files"] <= limits["files"] and size["test_files"] <= limits["tests"]
+            and size["lines"] <= line_limit
+            and all(effort.same_file(path, loc_path, root) for path in size["paths"]))
 
 
 def _validate_cut(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:

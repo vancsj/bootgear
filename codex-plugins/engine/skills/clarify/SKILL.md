@@ -1,6 +1,6 @@
 ---
 name: clarify
-description: Settle task type, approach, source-of-truth order, debate threshold, and autonomy scope; draft a goal for confirmation. Use at the start of any engine run, before execute. The only stage that asks the user work questions; recall's lost-session_dir recovery is a documented exception, not work.
+description: Settle task type, approach, source-of-truth order, debate threshold, and autonomy scope; draft a goal for confirmation. Use at the start of any engine run, before execute. Use checkpoint mode for required model confirmation or source-skill choices during an existing task.
 ---
 
 In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
@@ -14,6 +14,20 @@ Outcomes:
 - **Ledger already exists** — `init` refuses; follow `## Recovery`.
 - **`task state validate` fails after the fallback** — follow `## Recovery`.
 - **Settlement fails validation** — `init` refuses and writes no ledger; follow `## Recovery`.
+
+## Checkpoint mode
+
+For `mode: checkpoint`, dispatch before initial assessment, advisor startup, goal sign-off or session initialization.
+Inputs: checkpoint kind (`models` or `source-selection`), task folder, pending payload, scope and existing confirmation references.
+Active callers also supply run ID, engine root and session directory.
+For this mode, read [references/confirmation-checkpoints.md](references/confirmation-checkpoints.md).
+Return to the requesting caller:
+
+- `checkpoint-confirmed`: kind, confirmed values, scope and typed user confirmation references.
+- `needs-confirmation`: kind, pending payload, unresolved question and next caller action.
+- `unavailable`: actual diagnostic, missing interaction mechanism and next caller action.
+
+This mode never initializes a run, restarts advisors, or grants mutation permission.
 
 ## Workflow
 
@@ -60,9 +74,13 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    If `task_type` is `design-doc`, settle `work_dir`. For a design-doc run, `work_dir` is required. It is an absolute path or a path that starts with `~`.
 
+   For `ticket-to-pr` or `change-review`, settle one `task_folder` for primary specs and author self-review.
+   Supply an absolute or home path. `init` validates, creates and canonicalises it before storing the run identity.
+   Reuse the stored folder through overrides, retries and compaction. Never amend it or supply it through leave arguments.
+
 3. **State machine** — resolve the run's `state_machine` settlement field before drafting `goal`. Follow these override tiers exactly:
    1. Resolve the built-in machine for `<task_type>` and tier 2 (`.bootgear/config/state-machine-<task_type>.yaml`, if present — wholly replaces tier 1 for this task type).
-   2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `change-review` of a change the user did not author, remove the `fix` node. The user authored the change when its git author matches the user's git identity. The git author is the author of the branch commits or the diff. For a PR, it is the PR author. A mismatch or a missing author means the user did not author the change. Remove every `next:` entry and `reminder.branches` key that names it. Keep the fix node when the user asks to push fixes to the change.
+   2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `change-review` of a change the user did not author, remove `fix`, `spec`, `spec-review` and `spec-debate`. The user authored the change when its git author matches the user's git identity. The git author is the author of the branch commits or the diff. For a PR, it is the PR author. A mismatch or a missing author means the user did not author the change. Remove every incident next edge, reminder branch and exit check. Keep this authoring subgraph when the user requests fixes. Preserve the clarified correction scope and permitted mutations.
    3. Run `task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
    4. Run `task state diagram <path>` on the same resolved machine.
    5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
@@ -91,7 +109,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - Set `consented_stop_allowed` to `true` by default. Use `unanimous_convergence`, `consented_stop`, and `round_cap` as the debate outcomes. Set `consented_stop_allowed` to `false` to remove `consented_stop`. End debate only in `unanimous_convergence` or `round_cap` when `consented_stop_allowed` is `false`.
 
 7. **Autonomy has two parts:**
-   - Set `no_further_questions: true` after `goal` confirmation. Do not ask for decisions during the run. Ask a work question only when compaction leaves the run identity unclear; recover `<session-dir>` and resume the existing ledger.
+   - Set `no_further_questions: true` after `goal` confirmation. Do not ask routine work questions during the run. Required model or source-selection checkpoints use checkpoint mode. Recovery may also ask for an unclear run identity after compaction.
    - **Permitted mutations** — ask which actions `execute` may take without asking again, including commit, push, open a PR, edit the ticket, post review comments, merge, and force-push. Require a specific list. Do not accept "go ahead autonomously" as the list.
 
 8. **Domain-skill overrides** — map task types to domain skills as follows:
@@ -118,7 +136,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
 
    Write:
-   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `change-review` run records `review_skill` alone. A `design-doc` run records `spec_skill`. A `ticket-writing` run records `spec_review_skill`.
+   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `change-review` run records `spec_skill` too when its authorized authoring subgraph remains. A `design-doc` run records `spec_skill`. A `ticket-writing` run records `spec_review_skill`.
      - **Bare `<skill-name>`** when the override or its absence names one skill. Use the override, or the general default (`spec`, `test`, `review`) when absent.
      - **`{sub-task-label: <skill-name>}` mapping** when the override is a mapping. Mirror it exactly.
 
@@ -196,13 +214,13 @@ After confirmation:
 
 4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
 
-Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
+Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `task_folder` for `ticket-to-pr` or `change-review`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
 Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
 
 ## Rules
 
-- Ask the user work questions only in this stage. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
+- Ask routine work questions only during initial clarify. Use checkpoint mode only for required model or source-selection confirmation. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
 - After `init`, record each deputy-answered item in the run ledger as a `solo` decision that names its cited slugs (`task session record-decision … --mode solo`). Do not write it to the deputy ledger. Only the user's own answers go to `deputy:record`.
 - Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
 

@@ -1,0 +1,5 @@
+[plugin]
+name = "review"
+
+[commands.self-review]
+exec = ["./bin/self-review"]
