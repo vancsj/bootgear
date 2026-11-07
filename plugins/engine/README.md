@@ -39,7 +39,7 @@ flowchart TD
 | Item | What it fixes |
 |---|---|
 | Request assessment | observed scope, a `small`/`medium`/`large` estimate and the files or commands behind it |
-| Task type | exactly one of `ticket-writing`, `ticket-to-pr`, `triage`, `change-review`, `design-doc` |
+| Task type | exactly one of `ticket-writing`, `ticket-to-pr`, `triage`, `change-review`, `design-doc`, `artefact-review` |
 | State machine | the workflow graph for this run, validated and shown to you as a diagram |
 | Approach and principles | the concrete steps, and the run-wide constraints (merged with project and user principles; `clarify` also reads the project's review and test standards) |
 | Source of truth, per domain | who decides scope and outcome, current behaviour, implementation approach, correctness |
@@ -104,6 +104,7 @@ and a refused exit can route to a named fallback node. You approve every check c
 | `triage` | inspect → triage → triage-review → (triage-debate) → succeeded (a refused gate goes back to triage) |
 | `change-review` | inspect → review → (review-debate, fix) → succeeded |
 | `design-doc` | inspect → spec → spec-review → (spec-debate) → succeeded |
+| `artefact-review` | inspect → criteria → assess → challenge → verify-facts → judge → coverage → report → succeeded |
 
 A project can replace a built-in machine wholesale with
 `.bootgear/config/state-machine-<task_type>.yaml`, and `clarify` can adjust it for one run —

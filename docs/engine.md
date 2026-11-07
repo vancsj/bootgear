@@ -1,7 +1,7 @@
 # engine
 
-`engine` drives one coding task (ticket writing, design docs, triage,
-ticket-to-PR, change review) from the user's framing to a `succeeded` or
+`engine` drives one task (ticket writing, design docs, triage,
+ticket-to-PR, change review, artefact review) from the user's framing to a `succeeded` or
 `failed` end, unattended
 after a single clarification stage. The loop is generic; projects customize it
 through configuration and registered skills, never by editing the loop.
@@ -49,7 +49,7 @@ start -> clarify --(goal confirmed, settlement written)--> execute
 Written once by `clarify` into the session ledger and never rewritten. It holds:
 
 - `task_type` (one of `ticket-writing`, `ticket-to-pr`, `triage`,
-  `change-review`, `design-doc`), `request_assessment`, and the complete
+  `change-review`, `design-doc`, `artefact-review`), `request_assessment`, and the complete
   resolved `state_machine`;
 - `triage_cutoff` (`product` or `one-user`), required for a `triage` run;
 - `work_dir` (an absolute path or a path that starts with `~`), required for a `design-doc` run;

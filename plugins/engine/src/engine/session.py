@@ -391,7 +391,7 @@ def _check_no_embedded_heading(body: str, label: str) -> None:
                   f"real ledger structure")
 
 
-TASK_TYPES = {"ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc"}
+TASK_TYPES = {"ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc", "artefact-review"}
 TRIAGE_CUTOFFS = ("product", "one-user")
 # The one-user profile is a project override, read under the caller's project root.
 ONE_USER_CUTOFF = Path(".bootgear") / "config" / "cutoff-one-user.yaml"
@@ -476,7 +476,7 @@ def _work_dir_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
 def _task_folder_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
     """Validate the authoring folder before creating any task storage."""
     if "task_folder" not in data:
-        if task_type in {"ticket-to-pr", "change-review"}:
+        if task_type in {"ticket-to-pr", "change-review", "artefact-review"}:
             return [("task_folder", f"is required for a {task_type} run")]
         return []
     value = data["task_folder"]
@@ -495,6 +495,44 @@ def _task_folder_problems(data: dict, task_type: object) -> list[tuple[str, str]
     except (OSError, ValueError, RuntimeError) as exc:
         return [("task_folder", f"cannot resolve directory: {exc}")]
     return []
+
+
+def _artefact_review_problems(data: dict, task_type: object) -> list[tuple[str, str]]:
+    """Validate review inputs before the run creates any storage."""
+    value = data.get("artefact_review")
+    if task_type != "artefact-review":
+        return [("artefact_review", "is only valid for artefact-review")] if "artefact_review" in data else []
+    if not isinstance(value, dict):
+        return [("artefact_review", "requires request and inputs mapping")]
+    problems = []
+    for key in value:
+        if key not in {"request", "inputs", "config"}:
+            problems.append(("artefact_review", f"unknown field {key}"))
+    if not isinstance(value.get("request"), str) or not value["request"].strip():
+        problems.append(("artefact_review.request", "requires a nonempty string"))
+    inputs = value.get("inputs")
+    if not isinstance(inputs, list) or not inputs:
+        problems.append(("artefact_review.inputs", "requires nonempty local input paths"))
+        inputs = []
+    paths = [(f"inputs[{i}]", item) for i, item in enumerate(inputs)]
+    if "config" in value:
+        paths.append(("config", value["config"]))
+    canonical = []
+    for key, item in paths:
+        if (not isinstance(item, str) or not item.strip() or _has_line_break(item)
+                or not os.path.isabs(os.path.expanduser(item))):
+            problems.append((f"artefact_review.{key}", "requires an absolute or home file path"))
+            continue
+        path = Path(item).expanduser()
+        if not path.is_file():
+            problems.append((f"artefact_review.{key}", f"is not a readable local file: {path}"))
+        elif not os.access(path, os.R_OK):
+            problems.append((f"artefact_review.{key}", f"cannot read local file: {path}"))
+        if key.startswith("inputs"):
+            canonical.append(str(path.resolve()))
+    if len(canonical) != len(set(canonical)):
+        problems.append(("artefact_review.inputs", "must name distinct input files"))
+    return problems
 
 
 def _bind_task_folder(settlement: str) -> tuple[str, Path | None]:
@@ -599,6 +637,7 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
     problems.extend(_triage_cutoff_problems(data, task_type, project_root))
     problems.extend(_work_dir_problems(data, task_type))
     problems.extend(_task_folder_problems(data, task_type))
+    problems.extend(_artefact_review_problems(data, task_type))
     if "ticket_path" in data:
         problems.extend(_ticket_path_problems(data["ticket_path"], task_type, run_id, session_dir))
     problems.extend(_owned_artifacts_problems(data))

@@ -1,0 +1,238 @@
+rubric:
+  criteria:
+    purpose-audience:
+      label: Purpose and audience
+      applies_when: The artefact serves an intended reader, understanding, decision or action.
+      meets: The reader gets the context and information needed for the intended understanding, decision
+        or action.
+      needs_change: An observed omission, mismatch or emphasis prevents or weakens that outcome.
+    narrative-navigation:
+      label: Narrative and navigation
+      applies_when: The task needs sequence, reasoning or retrieval, including a single reference table.
+      meets: Order, reasoning, connections and signposts help the reader follow or find what the task
+        needs.
+      needs_change: A missing connection, unsupported conclusion or poor navigation impairs the task.
+    accuracy-evidence:
+      label: Accuracy and evidence
+      applies_when: The artefact contains factual claims, values, citations or qualifications.
+      meets: Material claims match checked sources. Values agree, relevant status is current, and uncertainty
+        and illustrative data stay clear.
+      needs_change: An observed contradiction, misleading source, hidden uncertainty or stale claim changes
+        the reader's understanding.
+    completeness-focus:
+      label: Completeness and focus
+      applies_when: The reader needs information selected or focused for the stated purpose.
+      meets: Information the reader needs or would reasonably expect for the stated purpose is present.
+        Detail and repetition serve the purpose.
+      needs_change: Missing essentials or distracting material blocks or weakens use.
+    readability-voice:
+      label: Readability and voice
+      applies_when: The artefact contains words, labels or supplied spoken support.
+      meets: Terms, wording, density, emphasis and register suit the reader and applicable style.
+      needs_change: A specific wording, density or style defect impairs use or breaches an applicable
+        convention.
+    presentation-access:
+      label: Presentation and reader access
+      applies_when: The inspected representation has relevant structure, layout or reader-access properties.
+      meets: Inspected layout and relevant semantic structure let the reader perceive and use essential
+        content.
+      needs_change: Observed clipping, unreadable labels, reading order or another relevant barrier impairs
+        use.
+  guidance:
+  - 'Establish the intended audience, purpose, delivery mode and applicable requirements from the original
+    request and supplied context.
+
+    Distinguish evidenced context from assumptions. Uncertainty limits dependent judgements; continue
+    checks supported by evidence.
+
+    Do not invent audience needs or require an explicit purpose heading.'
+  - Apply every dimension that belongs to the requested review scope.
+  - 'Narrative covers sequence, dependencies and navigation across multi-part artefacts.
+
+    Narration covers supplied spoken support, including notes, scripts, transcripts or recordings.
+
+    Assess supplied narration against the artefact and purpose. Do not invent delivery quality or timing
+    from slides alone.
+
+    For a live presentation, assess slides with the supplied notes or script.
+
+    Do not invent a standalone handout or assume the presenter omits supplied narration.
+
+    Spoken support can repeat a slide''s message. Establish a reader problem before calling that repetition
+    a defect.
+
+    Keep the meaning of caveats, uncertainty and hypothetical or simulated labels in paraphrases, findings
+    and proposed corrections.
+
+    Judge the qualified claim. Do not turn an illustrative scenario into a claimed real result.'
+  - Use these applications where relevant. They do not impose universal sections or templates.
+  - '- **Slides:** connect messages, evidence and the overall purpose. Check the sequence and supplied
+    narration against the delivery mode.
+
+    - **Documents:** check reasoning, section order, definitions and retrieval paths against the reader''s
+    use.
+
+    - **Tickets:** check the problem, intended behaviour, useful boundaries and observable acceptance
+    when implementation is the purpose.
+
+    - **Skills:** check triggers, inputs, decisions, outputs, permissions and relevant failure behaviour.
+
+    - **Messages:** check whether recipients can understand the point and any requested action from the
+    context they have.
+
+    - **Mixed artefacts:** retain every relevant application, including embedded charts, images, tickets
+    and links.'
+  - 'A reference document can use lookup order. Expert terms can suit experts. An informational note needs
+    no invented action.
+
+    Do not demand assertion titles, exclusions, dependency markers or a story arc without a relevant requirement
+    or reader problem.
+
+    Concision has no universal word-count target.
+
+    Flag unneeded padding, repetition or restatements of what the reader already knows.
+
+    Repetition or density can be material when it hides essential meaning.
+
+    Use supplied house format and style. Do not impose a language variant without an applicable requirement.
+
+    Check that register and voice stay consistent with the required style. Flag accidental drift into
+    a different author''s style.
+
+    Keep an applicable convention breach as a finding; do not treat an unsupported preference as a convention.'
+  - 'Check source integrity: links, quotations and identifiers must match the content they claim.
+
+    Report verified fabrication; failed access alone does not establish it.
+
+    Checked evidence includes inspected content, direct calculation, observed output and authoritative
+    sources opened during review.
+
+    Memory alone does not establish checked external accuracy. Use Cannot judge when the needed check
+    is unavailable.'
+  - 'Use these states for each dimension within scope:'
+  - '- **Meets:** an inspected passage, object, source or observation supports the applicable anchor.
+
+    - **Needs change:** observed evidence establishes a specific defect.
+
+    - **Cannot judge:** missing context, source access or format evidence prevents that judgement.
+
+    - **Not applicable:** the condition does not apply; state which condition.'
+  - 'Retain evidence locators in the review context. Do not infer Meets from an empty findings list.
+
+    Positive evidence must cover the stated reviewed scope. One good passage cannot establish quality
+    for uninspected material.
+
+    A separate working-notes file is not required for a simple review.
+
+    Do not average states or award an aggregate score. Do not issue a publication-readiness certificate.'
+  - 'Separate reviewer access from reader access. Failed access alone proves neither a false claim nor
+    a broken link.
+
+    An independently observed lack of support in the artefact can still be a defect.
+
+    Name the inspected evidence: text, render, extraction order, semantic structure or supplied narration.
+
+    Text extraction cannot establish layout. A screenshot cannot establish semantic reading order.
+
+    Reader-access findings name their actual observable and stay within it. Do not claim a full accessibility
+    audit.
+
+    A render supports only the slides and supplied reveal/build states inspected. Identify that scope.
+
+    Relevant uninspected states remain Cannot judge. Do not invent unseen content or states.
+
+    Do not extend one image, excerpt or reveal state into a claim about the whole artefact or delivery.'
+  - 'A finding needs an applicable Needs change anchor or a verified convention breach.
+
+    Before keeping it:'
+  - '1. Name the applicable anchor or requirement. Do not infer a mandatory section from the artefact
+    type alone.
+
+    2. Re-read the exact passage against the whole supplied context, including notes, labels and qualifiers.
+
+    3. Try to refute the finding. Check whether that context already supplies the allegedly missing information
+    or resolves the ambiguity.
+
+    4. Establish the defect before describing its impact. A possible failure or missing reviewer access
+    does not establish a defect.
+
+    5. Connect the observed defect to the reader''s actual task. Do not invent another task to justify
+    the finding.'
+  - 'An omitted useful item alone does not establish a defect in a concise selection or briefing.
+
+    Do not substitute a complete procedure, exhaustive reference or standalone slide task for the requested
+    output.
+
+    Do not infer missing reader knowledge merely because the reviewer lacks that context.'
+  - 'Drop a preference-only finding. Keep an applicable convention breach, even when its reader impact
+    is small.
+
+    If the evidence supports only uncertainty, state Cannot judge and the precise limit instead.
+
+    Apply this gate to Minor findings too. A low severity does not excuse weak evidence.'
+  - '- **Critical:** defeats the main purpose or creates a serious risk of materially wrong understanding
+    or action.
+
+    - **Worth fixing:** meaningfully impairs understanding, trust or use without defeating the main purpose.
+
+    - **Minor:** a supported local defect or applicable convention breach has limited reader impact.'
+  - 'Any dimension can reach any severity. Opening a source or naming a defect category does not determine
+    severity.
+
+    Keep Critical and Worth fixing defects visible. Presentation cannot compensate for a material falsehood
+    or an unusable outcome.
+
+    Critical needs an evidenced reader outcome and an explanation of how the defect changes it.
+
+    The outcome can concern understanding, a decision or an action. Informational material needs no invented
+    action.
+
+    An arithmetic error or a label such as "checked" does not establish Critical severity by itself.'
+  - 'Explain how the inspected artefact serves its stated reader and purpose.
+
+    Link each synthesis statement to criterion or finding records and their evidence.
+
+    Keep material defects, uncertainty, unresolved judgements and inspection limits prominent.
+
+    Separate that quality explanation from publication approval or the user''s tolerance for remaining
+    defects.'
+find_angles:
+  reader-purpose:
+    tell: The request names a reader, understanding, decision or action.
+    asks: Which observed mismatch impairs that actual task? Do not invent another reader or purpose.
+  narrative-navigation:
+    tell: The artefact uses sequence, reasoning, dependencies or lookup structure.
+    asks: Can the reader follow or find what the task needs? Reference order can suit a single table.
+  supplied-narration:
+    tell: Notes, scripts, transcripts or recordings accompany the artefact.
+    asks: Assess them with the declared delivery mode. Do not invent a standalone handout or unspoken
+      notes.
+  claims-values:
+    tell: The artefact states facts, values, totals or status.
+    asks: Check the actual claim and qualifications against inspected evidence or direct calculation.
+      Memory is not verification.
+  source-integrity:
+    tell: The artefact cites a source, link, quote or identifier.
+    asks: Does the inspected source support the claim? Failed access alone proves neither fabrication
+      nor a broken link.
+  completeness-focus:
+    tell: The request calls for selected information, an explanation or an observable outcome.
+    asks: Establish missing essentials for that purpose. Useful additions do not make a concise selection
+      defective.
+  readability-voice:
+    tell: Words, labels, density or register affect understanding or retrieval.
+    asks: Identify a specific reader problem or applicable convention breach. Do not substitute a preferred
+      style.
+  presentation-access:
+    tell: Inspected layout, structure or media affects perception or use.
+    asks: Use the actual inspected representation. Distinguish textual structure, visual layout and semantic
+      reading order.
+  scope-evidence:
+    tell: A judgement relies on partial material, unknown context or uninspected states.
+    asks: Does the judgement stay within reviewed scope? Account for unseen pages, reveals, sources and
+      delivery.
+  severity-impact:
+    tell: A candidate finding is ranked by reader impact.
+    asks: Does the evidence support the rank? A false number or checked label alone does not prove Critical
+      impact.
+report: {}

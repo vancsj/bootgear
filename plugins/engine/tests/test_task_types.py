@@ -1,4 +1,4 @@
-"""C30a checks for the five engine task types, on the Claude host.
+"""C30a checks for the six engine task types, on the Claude host.
 
 Host paths: `plugins/engine/` (`bin/task`, the `converge` wrapper of plugins/converge) and
 the bootgear overrides in `.bootgear/config/`. The cross-host byte copies and the shared docs
@@ -27,7 +27,7 @@ ENGINE_SRC = PLUGIN_DIR / "src"
 MACHINES = PLUGIN_DIR / "state-machines"
 REFERENCES = PLUGIN_DIR / "references"
 OVERRIDES = REPO_ROOT / ".bootgear" / "config"
-TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc")
+TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc", "artefact-review")
 # Static project override node sets.
 OVERRIDE_NODES = {
     "change-review": {"clarify", "disposition", "failed", "fix", "inspect", "review",
@@ -64,8 +64,14 @@ CUT_EVIDENCE = ("--evidence", "entry-points=no caller reaches it",
                 "--evidence", "affected-count=one record",
                 "--evidence", "files-touched=a.py")
 # The docs/engine.md overview writes the types in prose.
-PROSE_NAMES = {"ticket writing": "ticket-writing", "ticket-to-pr": "ticket-to-pr",
-               "triage": "triage", "change review": "change-review", "design docs": "design-doc"}
+PROSE_NAMES = {
+    "ticket writing": "ticket-writing",
+    "ticket-to-pr": "ticket-to-pr",
+    "triage": "triage",
+    "change review": "change-review",
+    "design docs": "design-doc",
+    "artefact review": "artefact-review",
+}
 # A reminder that names `spec` as the skill to draft with. A "does not: call `spec`" clause
 # does not match.
 DRAFT_WITH_SPEC = re.compile(r"\b(?:with|using|via|by)\s+(?:the\s+)?`?(?:/|\$)?spec`?(?![\w-])")
@@ -294,7 +300,7 @@ class Scratch(unittest.TestCase):
 
 
 class StaticChecks(Scratch):
-    def test_check_i_task_types_are_the_five_values(self):
+    def test_check_i_task_types_are_the_six_values(self):
         self.assertEqual(set(_session_module().TASK_TYPES), set(TASK_TYPES))
 
     def test_check_ii_each_builtin_machine_validates(self):
@@ -324,13 +330,13 @@ class StaticChecks(Scratch):
                 codex = (REPO_ROOT / "codex-plugins" / "engine" / rel).read_bytes()
                 self.assertEqual(claude, codex)
 
-    def test_check_vii_every_copy_of_the_five_value_list_names_the_same_values(self):
+    def test_check_vii_every_copy_of_the_six_value_list_names_the_same_values(self):
         clarify = (PLUGIN_DIR / "skills" / "clarify" / "SKILL.md").read_text()
         clarify_list = re.search(r"^2\. \*\*Task type\*\*[^\n]*:\n((?:   - [^\n]*\n)+)",
                                  clarify, re.MULTILINE)
         assert clarify_list is not None, "clarify item 2 has no type list"
         engine_doc = (REPO_ROOT / "docs" / "engine.md").read_text()
-        overview = re.search(r"drives one coding task \(([^)]*)\)", engine_doc)
+        overview = re.search(r"drives one task \(([^)]*)\)", engine_doc)
         task_field = re.search(r"`task_type` \(one of ([^)]*)\)", engine_doc)
         state_doc = (REPO_ROOT / "docs" / "state-machine.md").read_text()
         built_in = re.search(r"There is one for each task type: ([^.]*)\.", state_doc)

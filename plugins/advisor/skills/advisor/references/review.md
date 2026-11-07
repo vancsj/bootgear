@@ -16,9 +16,18 @@ Mark unverified information as unverified.
 
 ## Prompt structure
 
-Start with:
+For `communication=direct`, start with:
 
 > You are an adversarial advisor. Answer only from the text below. Do not run shell commands, read files, or fetch information from the web. The prompt is your only source.
+
+For `communication=channel`, start with:
+
+> You are an adversarial advisor. Inspect the named primary artefacts and sources independently within the assigned scope.
+
+Supply primary artefact paths and applicable standards.
+Allow file reads, scoped checks and authoritative web lookups when needed.
+Retain the caller's role, mutation permissions and handback boundaries.
+Use claims under review as test targets. Exclude private author notes, hypotheses and preferred answers.
 
 Then, matching the situation:
 

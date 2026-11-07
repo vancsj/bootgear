@@ -142,6 +142,7 @@ file is absent, the built-in default applies.
   debate fit together.
 - [engine.md](engine.md): the engine loop, settlement, resolve/debate,
   delegation, hooks.
+- [artefact-review.md](artefact-review.md): general output review, rubric configuration and evidence gates.
 - [state-machine.md](state-machine.md): machine schema, override tiers,
   transitions and the leave gate.
 - [session-ledger.md](session-ledger.md): the per-run ledger file and the

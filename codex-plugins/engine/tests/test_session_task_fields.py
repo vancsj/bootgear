@@ -1,5 +1,5 @@
 """Settlement task fields and the ticket write verb, through the real `task`
-wrapper: the five task types, `triage_cutoff`, `work_dir`, `ticket_path`,
+wrapper: the six task types, `triage_cutoff`, `work_dir`, `ticket_path`,
 `owned_artifacts`, and `session write-ticket`.
 
 Each subprocess runs from a temporary project root with `GEAR_CALLER_CWD`
@@ -19,7 +19,7 @@ from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "scripts" / "task"
-TASK_TYPES = ("change-review", "design-doc", "ticket-to-pr", "ticket-writing", "triage")
+TASK_TYPES = ("artefact-review", "change-review", "design-doc", "ticket-to-pr", "ticket-writing", "triage")
 UNKNOWN_TASK_TYPES = ("retired-review", "retired-triage", "pr-review", "bug-triage")
 
 MACHINE = """\
@@ -66,7 +66,20 @@ class SettlementCase(unittest.TestCase):
                               check=False, cwd=cwd or self.project, env=_env(**env))
 
     def _settlement(self, task_type: str, extra: str = "") -> str:
+        task_folder = self.tmp / "artefact-task"
+        if task_type == "artefact-review":
+            input_path = self.tmp / "artefact-review-input.md"
+            input_path.write_text("A supplied review input.\n")
+            task_folder.mkdir(exist_ok=True)
+            extra = ("artefact_review:\n"
+                     "  request: Review this supplied input.\n"
+                     f"  inputs: [{json.dumps(str(input_path))}]\n" + extra)
         text = valid_settlement(self.machine, extra=extra)
+        if task_type == "artefact-review":
+            default_folder = json.dumps(str(Path(tempfile.gettempdir()).resolve()))
+            task_folder_value = json.dumps(str(task_folder))
+            text = text.replace(f"task_folder: {default_folder}\n",
+                                f"task_folder: {task_folder_value}\n", 1)
         return text.replace("task_type: ticket-to-pr\n", f"task_type: {task_type}\n", 1)
 
     def _settlement_file(self, task_type: str, extra: str = "") -> Path:
@@ -83,14 +96,14 @@ class SettlementCase(unittest.TestCase):
 
 
 class TaskTypeTest(SettlementCase):
-    def test_validator_accepts_the_five_task_types(self):
+    def test_validator_accepts_the_six_task_types(self):
         extras = {"triage": "triage_cutoff: product\n", "design-doc": "work_dir: ~/notes\n"}
         for task_type in TASK_TYPES:
             with self.subTest(task_type=task_type):
                 result = self._validate(task_type, extras.get(task_type, ""))
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_validator_refuses_unknown_labels_and_lists_the_five_values(self):
+    def test_validator_refuses_unknown_labels_and_lists_the_six_values(self):
         for task_type in UNKNOWN_TASK_TYPES:
             with self.subTest(task_type=task_type):
                 result = self._validate(task_type)

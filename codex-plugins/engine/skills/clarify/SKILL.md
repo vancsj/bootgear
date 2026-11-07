@@ -53,16 +53,18 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Later nodes reassess scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
 
-2. **Task type** — record exactly one of the five values:
+2. **Task type** — record exactly one of the six values:
    - `ticket-writing` — an issue body, with no design.
    - `ticket-to-pr` — implement a ticket.
    - `triage` — one reported problem.
    - `change-review` — a change already made.
    - `design-doc` — requirements and design, with no task list.
+   - `artefact-review` — independently assess supplied output against a configurable quality rubric.
 
    Show the node reminders of each machine before the type pick.
 
-   A request to review a draft is not a task type. Refuse it. Point the user to `spec-review`. `design-doc` writes its own requirements and design and does not review drafts.
+   Use `artefact-review` for quality review of supplied output. Use `change-review` for correctness review of code changes.
+   `design-doc` writes requirements and design; it does not review supplied drafts.
 
    Pick `task_type` by matching the request to the machine descriptions and node reminders. Do not record another spelling or a paraphrase.
 
@@ -74,9 +76,17 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    If `task_type` is `design-doc`, settle `work_dir`. For a design-doc run, `work_dir` is required. It is an absolute path or a path that starts with `~`.
 
-   For `ticket-to-pr` or `change-review`, settle one `task_folder` for primary specs and author self-review.
+   For `ticket-to-pr`, `change-review` or `artefact-review`, settle one fixed `task_folder` for task records.
    Supply an absolute or home path. `init` validates, creates and canonicalises it before storing the run identity.
    Reuse the stored folder through overrides, retries and compaction. Never amend it or supply it through leave arguments.
+
+   For `artefact-review`, record `artefact_review` with the raw request and nonempty local `inputs` paths.
+   Use absolute or home paths. Save supplied messages or remote extracts locally with provenance when needed.
+   Include an optional task `config` path when the workflow needs custom rubric criteria or finding angles.
+   Use `task artefact settings` to resolve defaults, host user configuration, project configuration and the task file.
+   Show the effective criteria, disabled items, evidence limits and configured source paths before goal confirmation.
+   Establish audience, purpose, reader task and delivery mode from evidence; keep unknown or inferred context explicit.
+   The default machine reviews supplied inputs without changing or publishing them.
 
 3. **State machine** — resolve the run's `state_machine` settlement field before drafting `goal`. Follow these override tiers exactly:
    1. Resolve the built-in machine for `<task_type>` and tier 2 (`.bootgear/config/state-machine-<task_type>.yaml`, if present — wholly replaces tier 1 for this task type).
@@ -117,6 +127,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - `ticket-writing` drafts without a skill and reviews with `spec-review`.
    - `ticket-to-pr` and `triage` use `test`.
    - `change-review` uses `review`.
+   - `artefact-review` uses its machine stages and public `converge`, `resolve` and `debate` capabilities.
 
    Ask whether the project has a specialized skill for every domain the task type calls.
 

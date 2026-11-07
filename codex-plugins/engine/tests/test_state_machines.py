@@ -10,7 +10,7 @@ import yaml
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 REPO_ROOT = PLUGIN_DIR.parents[1]
-TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc")
+TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc", "artefact-review")
 # design-doc has no Bootgear override.
 OVERRIDE_TYPES = ("change-review", "ticket-to-pr", "triage", "ticket-writing")
 # Machines whose review node runs spec-review: (review node, drafting node, debate node, exit).
@@ -284,7 +284,7 @@ class BuiltInStateMachineTest(unittest.TestCase):
             REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
             for task_type in OVERRIDE_TYPES
         ]
-        self.assertEqual(len(paths), 14)
+        self.assertEqual(len(paths), 16)
         for path in paths:
             machine = yaml.safe_load(path.read_text())
             for name, node in machine["nodes"].items():
@@ -299,7 +299,7 @@ class BuiltInStateMachineTest(unittest.TestCase):
             REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
             for task_type in OVERRIDE_TYPES
         ]
-        self.assertEqual(len(paths), 14)
+        self.assertEqual(len(paths), 16)
         for path in paths:
             machine = yaml.safe_load(path.read_text())
             for name, node in machine["nodes"].items():

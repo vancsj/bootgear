@@ -14,11 +14,16 @@ from __future__ import annotations
 
 import argparse
 
-from engine import config, session, state
+from engine import artefact, config, session, state
 from engine.clikit import Catalog, add_mode_flags, caller_path, parser_class, run
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
+    "artefact settings": "artefact settings --project-root <dir>",
+    "artefact prepare": "artefact prepare <run-id> --dir <session-dir>",
+    "artefact record": "artefact record --task-folder <folder> --stage inspect --record-file <file>",
+    "artefact gate": "artefact gate --task-folder <folder> --stage inspect",
+    "artefact report": "artefact report --task-folder <folder>",
     "session init": "session init <run-id> --settlement-file <file>",
     "session validate": "session validate <run-id> --dir <session-dir>",
     "session read": "session read <run-id> --dir <session-dir> --section state",
@@ -70,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_parser = top.add_parser("config", help="resolve layered configuration")
     config_sub = config_parser.add_subparsers(dest="cmd", required=True)
     config.add_subparsers(config_sub)
+
+    artefact_parser = top.add_parser("artefact", help="bound artefact review")
+    artefact.add_subparsers(artefact_parser.add_subparsers(dest="cmd", required=True), dir_parent)
 
     add_mode_flags(p)
     return p
