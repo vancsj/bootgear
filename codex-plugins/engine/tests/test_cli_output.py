@@ -818,6 +818,7 @@ class CliOutputTest(unittest.TestCase):
             self.assertEqual(denied.returncode, 1, denied.stderr)
             self.assertNotIn("Traceback", denied.stderr)
             self.assertIn("cannot init", denied.stderr)
+            self.assertIn("Permission denied", denied.stderr)
         binary = self.tmp / "binary.yaml"
         binary.write_bytes(b"\xff\xfe\x00")
         invalid = self._task("state", "validate", str(binary), "--prose")

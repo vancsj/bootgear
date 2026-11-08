@@ -882,7 +882,7 @@ def _init(args: argparse.Namespace) -> None:
             task_folder.mkdir(parents=True, exist_ok=True)
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        sys.exit(f"session init directory setup failed: {exc}; no ledger was written")
+        sys.exit(f"cannot init {path}: directory setup failed: {exc}; no ledger was written")
     text = (
         f"# session: {args.run_id} — {datetime.now().astimezone().strftime('%Y-%m-%d')}\n\n"
         f"## settlement\n{settlement}\n\n"
