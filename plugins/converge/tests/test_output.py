@@ -12,12 +12,13 @@ from typing import Any
 import yaml
 from conftest import (
     BATCH_1,
-    BIN,
     CUT_EVIDENCE,
     CUTTER,
     DISABLED,
     FILE_ARGS,
     FINDER,
+    GEAR_ARGS,
+    GEAR_COMMAND,
     MAIN,
     PLUGIN_DIR,
     R1,
@@ -26,7 +27,8 @@ from conftest import (
 )
 
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
-from converge import cli, clikit
+from bootgear_cli import clikit
+from converge import cli
 
 # An invalid mode value is ignored, so the shared default is prose.
 PIPE = {"BOOTGEAR_OUTPUT": ""}
@@ -71,7 +73,7 @@ def _attack_args(cv: Converge, angle: str, agent: str, batch: str, outcome: str)
 
 
 def _next(cv: Converge, rest: str) -> str:
-    return f"converge {rest.format(dir=shlex.quote(str(cv.dir)))}"
+    return f"{GEAR_COMMAND} {rest.format(dir=shlex.quote(str(cv.dir)))}"
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +81,7 @@ def _next(cv: Converge, rest: str) -> str:
 
 
 def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
-    # Through the shipped wrapper, so every subcommand runs on the plugin's own declared
-    # dependencies at least once.
-    cv.use_bin = True
+    # Run through Gear so every command uses the prepared shared runtime.
     d = str(cv.dir)
     plan = _next(cv, "status s1 --dir {dir} --json")
     init = _json(cv, *_init_args(cv))
@@ -135,7 +135,7 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     assert _json(cv, "gate", "s1", "--dir", d, code=1) == {
         "slate": "s1", "ok": False, "cutoff_seq": None,
         "problems": ["F001 is open in attack",
-                     "no current cutoff (run `converge cutoff` after the last state change)"],
+                     f"no current cutoff (run `{GEAR_COMMAND} cutoff` after the last state change)"],
         "next": attack_step}
     assert _json(cv, "converged", "s1", "--dir", d, code=1) == {
         "converged": False, "phase": "attack", "pending": ["F001 open in attack"],
@@ -207,7 +207,7 @@ def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Pat
     cv.init()
     out = tmp_path / "out.txt"
     with out.open("w") as handle:
-        subprocess.run([str(BIN), "status", "s1", "--dir", str(cv.dir)], stdout=handle,
+        subprocess.run([*GEAR_ARGS, "status", "s1", "--dir", str(cv.dir)], stdout=handle,
                        env={**cv.env, **PIPE}, cwd=cv.project, check=True)
     assert out.read_text().startswith("SLATE s1 lenses=")
     piped = cv("status", "s1", "--dir", str(cv.dir), "--prose", env=PIPE).stdout
@@ -218,7 +218,7 @@ def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Pat
 def test_both_mode_flags_refused(cv: Converge) -> None:
     cv.init()
     err = cv("status", "s1", "--dir", str(cv.dir), "--json", "--prose", code=2).stderr
-    assert err.startswith(f"example: converge {cli.EXAMPLES['status']}\n")
+    assert err.startswith(f"example: {GEAR_COMMAND} {cli.EXAMPLES['status']}\n")
     assert err.endswith("--json and --prose are mutually exclusive\n")
 
 
@@ -229,11 +229,11 @@ def test_both_mode_flags_refused(cv: Converge) -> None:
 def test_argparse_refusal_prose(cv: Converge) -> None:
     err = cv("cut", "s1", "--dir", str(cv.dir), "--as", CUTTER, code=2).stderr
     lines = err.splitlines()
-    assert lines[-1].startswith("converge cut: error: the following arguments are required: ")
+    assert lines[-1].startswith(f"{GEAR_COMMAND} cut: error: the following arguments are required: ")
     assert "usage:" not in err
-    assert lines[0] == f"example: converge {cli.EXAMPLES['cut']}"
+    assert lines[0] == f"example: {GEAR_COMMAND} {cli.EXAMPLES['cut']}"
     assert lines[1] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "cut")
-    assert lines[2:-1] == [f"  converge {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
+    assert lines[2:-1] == [f"  {GEAR_COMMAND} {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
 
 
 def test_domain_refusal_prose_ends_with_the_problems(cv: Converge) -> None:
@@ -243,18 +243,18 @@ def test_domain_refusal_prose_ends_with_the_problems(cv: Converge) -> None:
     assert lines[-3:-1] == ["converge: refused:",
                             "  - unknown find angle 'nope' (not in this slate's init snapshot)"]
     assert lines[-1].startswith("next: ")
-    assert lines[0] == f"example: converge {cli.EXAMPLES['file']}"
+    assert lines[0] == f"example: {GEAR_COMMAND} {cli.EXAMPLES['file']}"
     assert lines[1].startswith("commands: init, escalate, ")
 
 
 def test_domain_refusal_json_and_display_prog(cv: Converge) -> None:
     cv.init()
     result = cv(*_file_args(cv, angle="nope"), "--json", code=2,
-                env={**PIPE, "BOOTGEAR_PROG": "/p/scripts/converge"})
+                env={**PIPE, "BOOTGEAR_PROG": GEAR_COMMAND})
     error = json.loads(result.stderr)["error"]
     assert error["command"] == "file"
     assert error["message"] == "converge: refused:"
-    assert error["example"] == f"/p/scripts/converge {cli.EXAMPLES['file']}"
+    assert error["example"] == f"{GEAR_COMMAND} {cli.EXAMPLES['file']}"
     assert "file" not in error["commands"] and "init" in error["commands"]
     assert set(error["examples"]) == set(cli.FREQUENT) - {"file"}
 
@@ -262,8 +262,8 @@ def test_domain_refusal_json_and_display_prog(cv: Converge) -> None:
 def test_argparse_refusal_json(cv: Converge) -> None:
     error = _error(cv, "init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--refuters", "3")
     assert error["command"] == "init"
-    assert error["message"].startswith("converge init: error: argument --refuters: invalid choice")
-    assert error["example"] == f"converge {cli.EXAMPLES['init']}"
+    assert error["message"].startswith(f"{GEAR_COMMAND} init: error: argument --refuters: invalid choice")
+    assert error["example"] == f"{GEAR_COMMAND} {cli.EXAMPLES['init']}"
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +301,7 @@ def test_gate_still_refuses_relative_dir(cv: Converge) -> None:
     err = cv("gate", "s1", "--dir", rel, code=2, env={"GEAR_CALLER_CWD": str(cv.root)}).stderr
     lines = err.splitlines()
     assert lines[-2:] == ["converge: refused:", f"  - gate needs an absolute --dir; got {rel!r}"]
-    assert lines[0] == "example: converge gate <slate> --dir <abs-dir>"
+    assert lines[0] == f"example: {GEAR_COMMAND} gate <slate> --dir <abs-dir>"
 
 
 # ---------------------------------------------------------------------------

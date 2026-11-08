@@ -28,10 +28,11 @@ import sys
 from pathlib import Path
 
 import yaml
+from bootgear_cli.clikit import gear_command
 
 NUDGE_MESSAGE = (
     "This session just compacted. If an engine run is active, run "
-    "`<plugin-root>/scripts/task session recall <run-id> --dir "
+    f"`{gear_command('engine', 'task')} session recall <run-id> --dir "
     "<session-dir>` outside the sandbox with host-level access before "
     "anything else — re-read the session ledger's settlement from disk "
     "rather than trusting whatever this compaction summarized."

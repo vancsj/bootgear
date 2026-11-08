@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[1]
+REPO = PLUGIN.parents[1]
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
 SLUG = "tech/confidence"
 Ledger = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -27,8 +28,8 @@ def ledger(tmp_path: Path, host: str) -> Ledger:
         subprocess.run(["git", "init", "-q", str(root)], check=True)
     home = tmp_path / "home"
     home.mkdir()
-    command = ([sys.executable, str(PLUGIN / "scripts" / "ledger.py")]
-               if host == "claude" else [str(PLUGIN / "scripts" / "ledger")])
+    command = [str(GEAR), "--host", host, "--root", str(REPO),
+               "memory-ledger", "ledger"]
     env = {k: v for k, v in os.environ.items()
            if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "GEAR_CALLER_CWD")}
     env.update(HOME=str(home), BOOTGEAR_OUTPUT="prose")

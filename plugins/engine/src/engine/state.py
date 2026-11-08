@@ -25,8 +25,9 @@ import sys
 from pathlib import Path
 
 import yaml
+from bootgear_cli.clikit import ENV_MODE, caller_path, emit, refuse
+from bootgear_cli.gear import resolve_command
 
-from engine.clikit import ENV_MODE, caller_path, emit, refuse
 from engine.session import (
     MACHINES_SECTION,
     _append_to_section,
@@ -283,10 +284,13 @@ def _parse_leave_args(raw: list[str]) -> tuple[dict[str, str], list[str]]:
     return args, problems
 
 
-def _resolve_program(program: str) -> str | None:
-    """Claude host: plugin `bin/` directories are on the Bash PATH, so a
-    leave_check program resolves by PATH lookup only."""
-    return shutil.which(program)
+def _resolve_program(program: str) -> list[str] | None:
+    """Resolve a registered Gear command, then fall back to PATH."""
+    command = resolve_command(program)
+    if command is not None:
+        return command
+    path_program = shutil.which(program)
+    return [path_program] if path_program else None
 
 
 def _leave_check_timeout() -> float:
@@ -351,7 +355,7 @@ def _run_leave_check(current: str, template: list[str],
     if resolved is None:
         sys.exit(f"leave_check program '{argv[0]}' not found — install the "
                  f"plugin that provides it")
-    argv = [resolved, *argv[1:]]
+    argv = [*resolved, *argv[1:]]
     timeout = _leave_check_timeout()
     shown = " ".join(argv)
     try:

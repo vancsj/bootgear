@@ -4,9 +4,10 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
+
+from bootgear_cli.clikit import gear_argv
 
 from . import model, store
 from .constants import BROKEN_EVIDENCE, HASH_LEN, OUTPUT_RE
@@ -305,12 +306,13 @@ def cmd_selftest(args, root):
                      + f"    ✓ mine 2024-01-06  h={real_hash}  e=1  (author)\n"
                      + f"    ✗ dave 2024-01-07  h={real_hash}  e=1\n"
                      + "    > dave's counter-example\n", encoding="utf-8")
-        env = dict(os.environ, CLAUDE_CODE_SESSION_ID="mine-0000-0000",
+        env = dict(os.environ, BOOTGEAR_HOST=os.environ.get("BOOTGEAR_HOST") or "claude",
+                   BOOTGEAR_SESSION_ID="mine-0000-0000",
+                   CLAUDE_CODE_SESSION_ID="mine-0000-0000",
                    LEDGER_ROOT=str(shared_root), LEDGER_LOCAL_ROOT=str(local_root))
         def run_sign(*extra: str) -> tuple[int, str]:
             p = subprocess.run(
-                [sys.executable, str(Path(__file__).resolve().parents[1] / "ledger.py"),
-                 "sign", "tech/asif", "a1", *extra],
+                [*gear_argv("memory-ledger", "ledger"), "sign", "tech/asif", "a1", *extra],
                 capture_output=True, text=True, env=env, check=False)
             return p.returncode, (p.stdout + p.stderr)
         impersonate_rc, impersonate_out = run_sign("--as", "dave")

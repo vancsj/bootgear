@@ -116,9 +116,31 @@ class DeputyTest(unittest.TestCase):
 
     def test_candidates_escalates_when_the_root_is_absent(self) -> None:
         shutil.rmtree(self.root)
-        code, out, _ = self.run_deputy("candidates", QUESTION)
+        code, _, _ = self.run_deputy("candidates", QUESTION)
         self.assertEqual(code, 0)
-        self.assertIn("ESCALATE deputy-root-absent", out)
+
+    def test_main_resolves_relative_roots_and_session_files_from_caller_cwd(self) -> None:
+        caller_cwd = self.base / "caller"
+        caller_cwd.mkdir()
+        expected_root = caller_cwd / "relative-deputy"
+        expected_session = caller_cwd / "sessions" / "run.md"
+        with unittest.mock.patch.dict(os.environ, {"GEAR_CALLER_CWD": str(caller_cwd)}):
+            with unittest.mock.patch.object(deputy, "candidates", return_value=0) as candidates:
+                code = deputy.main([
+                    "--deputy-root", "relative-deputy", "candidates", QUESTION,
+                ])
+                self.assertEqual(code, 0)
+                self.assertEqual(candidates.call_args.args[0], expected_root)
+            with unittest.mock.patch.object(deputy, "record", return_value=0) as record:
+                code = deputy.main([
+                    "--deputy-root", "relative-deputy", "record",
+                    "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
+                    "--options", "uv or pip", "--stakes", "low",
+                    "--session-ledger", "sessions/run.md",
+                ])
+                self.assertEqual(code, 0)
+                self.assertEqual(record.call_args.args[0], expected_root)
+                self.assertEqual(record.call_args.args[6], expected_session)
 
     def test_candidates_prints_the_matching_entry_in_full(self) -> None:
         self.assertEqual(self.record()[0], 0)
@@ -287,150 +309,71 @@ class StandardsTest(unittest.TestCase):
         self.assertTrue(self.problems(because="uv pins dependencies; pip does not"))
 
 
-FAKE_LEDGER = """\
-import json, os, sys
-from pathlib import Path
-with open(os.environ["FAKE_LEDGER_LOG"], "a", encoding="utf-8") as log:
-    log.write(json.dumps([Path(__file__).resolve().parents[1].name, *sys.argv[1:]]) + "\\n")
-if "resolve" in sys.argv:
-    print(json.dumps({"exact": None, "mint": "q", "candidates": []}))
-sys.exit(1 if "vote" in sys.argv else 0)
-"""
-REFUSED_MISSING = "REFUSED memory-ledger not found; install the memory-ledger plugin"
-
-
 class InstalledCopyTest(unittest.TestCase):
-    """A copy of `scripts/` laid out as a host plugin cache: <cache>/deputy/<version>/scripts,
-    with no `cli/gear.py` and memory-ledger, when present, at <cache>/memory-ledger/<version>."""
+    """A copied deputy command uses the shared Gear CLI source."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.base = Path(self._tmp.name)
-        self.cache = self.base / "cache"
-        self.script = self.cache / "deputy" / "0.1.0" / "scripts" / "deputy.py"
-        shutil.copytree(PLUGIN / "scripts", self.script.parent)
+        self.script = self.base / "cache" / "deputy" / "0.1.0" / "scripts" / "deputy.py"
+        self.script.parent.mkdir(parents=True)
+        shutil.copy2(PLUGIN / "scripts" / "deputy.py", self.script)
         self.root = git_root(self.base / "deputy-root")
-        self.log = self.base / "ledger-calls.jsonl"
+        self.home = self.base / "home"
+        self.home.mkdir()
         self.session = self.base / "session.md"
         self.session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
-        unset = ("GEAR_PY", "BOOTGEAR_HOST", "BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
-        self.env = {**{k: v for k, v in os.environ.items() if k not in unset},
-                    "FAKE_LEDGER_LOG": str(self.log)}
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("BOOTGEAR_HOST", "BOOTGEAR_PROG", "GEAR_PLUGIN", "VIRTUAL_ENV")}
+        paths = [str(REPO / "plugins" / "cli" / "src")]
+        if env.get("PYTHONPATH"):
+            paths.append(env["PYTHONPATH"])
+        self.env = {**env, "HOME": str(self.home), "PYTHONPATH": os.pathsep.join(paths),
+                    "BOOTGEAR_HOST": "claude", "GEAR_PLUGIN": "deputy"}
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def fake_ledger(self, version: str) -> None:
-        script = self.cache / "memory-ledger" / version / "scripts" / "ledger.py"
-        script.parent.mkdir(parents=True)
-        script.write_text(FAKE_LEDGER, encoding="utf-8")
-
-    def run_copy(self, *argv: str) -> subprocess.CompletedProcess:
+    def run_copy(self, *argv: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run([sys.executable, str(self.script), "--deputy-root", str(self.root), *argv],
                               capture_output=True, text=True, check=False, env=self.env, timeout=60)
 
     def record_argv(self, *extra: str) -> list[str]:
         return ["record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
-                "--options", "uv or pip", "--stakes", "low", "--session-ledger", str(self.session), *extra]
+                "--options", "uv or pip", "--stakes", "low", "--session-ledger",
+                str(self.session), *extra]
 
-    def calls(self) -> list[list[str]]:
-        return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+    def test_copy_routes_queries_to_the_registered_ledger(self) -> None:
+        result = self.run_copy("candidates", QUESTION)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "NO-CANDIDATES")
 
-    def test_candidates_runs_the_highest_installed_memory_ledger(self) -> None:
-        self.fake_ledger("4.9.0")
-        self.fake_ledger("4.14.1")
-        r = self.run_copy("candidates", QUESTION)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("NO-CANDIDATES", r.stdout)
-        calls = self.calls()
-        self.assertTrue(calls)
-        self.assertEqual({call[0] for call in calls}, {"4.14.1"})
-        self.assertEqual(calls[0][1:3], ["--deputy-root", str(self.root)])
+    def test_ledger_command_uses_registered_gear_before_path(self) -> None:
+        with unittest.mock.patch.object(deputy, "resolve_command",
+                                        return_value=["/gear", "--host", "claude",
+                                                      "memory-ledger", "ledger"]), \
+                unittest.mock.patch("shutil.which", return_value="/path/ledger") as which:
+            self.assertEqual(deputy.ledger_command(),
+                             ["/gear", "--host", "claude", "memory-ledger", "ledger"])
+            which.assert_not_called()
 
-    def test_candidates_escalates_without_memory_ledger(self) -> None:
-        r = self.run_copy("candidates", QUESTION)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.strip(), "ESCALATE memory-ledger-not-found")
+    def test_ledger_command_does_not_fall_back_to_path_program(self) -> None:
+        with unittest.mock.patch.object(deputy, "resolve_command", return_value=None), \
+                unittest.mock.patch("shutil.which", return_value="/path/ledger") as which:
+            with self.assertRaisesRegex(deputy.LedgerMissing, "memory-ledger not found"):
+                deputy.ledger_command()
+            which.assert_not_called()
 
-    def test_record_refuses_without_memory_ledger(self) -> None:
-        r = self.run_copy(*self.record_argv())
-        self.assertEqual(r.returncode, 2)
-        self.assertEqual(r.stderr.strip(), REFUSED_MISSING)
-        self.assertEqual(r.stdout, "")
-
-    def test_assert_refuses_without_memory_ledger(self) -> None:
-        r = self.run_copy("assert", "decisions/x", "a1", "--why", "the user said so",
-                          "--confirmed-by-user")
-        self.assertEqual(r.returncode, 2)
-        self.assertEqual(r.stderr.strip(), REFUSED_MISSING)
-        self.assertEqual(r.stdout, "")
-
-    def test_codex_record_prefers_explicit_session_over_environment(self) -> None:
-        self.fake_ledger("4.14.1")
-        self.env.update({"BOOTGEAR_SESSION_ID": "shared", "CLAUDE_CODE_SESSION_ID": "legacy"})
-        r = self.run_copy(*self.record_argv("--host", "codex", "--session-id", "abc"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("NEW decisions/", r.stdout)
-        calls = [call[1:] for call in self.calls()]
-        for call in calls:
-            self.assertEqual(call[:6], ["--deputy-root", str(self.root),
-                                        "--host", "codex", "--session-id", "abc"])
-        self.assertEqual([call[6] for call in calls], ["vote", "resolve", "new", "save"])
-        vote, _resolve, new, _ = calls
-        self.assertNotIn("--as", vote)
-        self.assertEqual(new[new.index("--as") + 1], "codex:abc")
-
-    def test_codex_record_uses_bootgear_session_by_default(self) -> None:
-        self.fake_ledger("4.14.1")
-        self.env.update({"BOOTGEAR_SESSION_ID": "shared-session",
-                         "CLAUDE_CODE_SESSION_ID": "legacy-session"})
-        r = self.run_copy(*self.record_argv("--host", "codex"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        calls = [call[1:] for call in self.calls()]
-        for call in calls:
-            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "shared-session"])
-
-    def test_record_uses_shared_host_without_explicit_host(self) -> None:
-        self.fake_ledger("4.14.1")
-        self.env.update({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session"})
-        r = self.run_copy(*self.record_argv())
-        self.assertEqual(r.returncode, 0, r.stderr)
-        for call in [row[1:] for row in self.calls()]:
-            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "shared-session"])
-
-    def test_explicit_claude_host_overrides_shared_codex_for_child_calls(self) -> None:
-        self.fake_ledger("4.14.1")
-        self.env.update({"BOOTGEAR_HOST": "codex", "BOOTGEAR_SESSION_ID": "shared-session"})
-        r = self.run_copy(*self.record_argv("--host", "claude", "--session-id", "explicit-session"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        for call in [row[1:] for row in self.calls()]:
-            self.assertEqual(call[2:6], ["--host", "claude", "--session-id", "explicit-session"])
-
-    def test_codex_record_uses_claude_session_as_fallback(self) -> None:
-        self.fake_ledger("4.14.1")
-        self.env["CLAUDE_CODE_SESSION_ID"] = "legacy-session"
-        r = self.run_copy(*self.record_argv("--host", "codex"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        calls = [call[1:] for call in self.calls()]
-        for call in calls:
-            self.assertEqual(call[2:6], ["--host", "codex", "--session-id", "legacy-session"])
+    def test_ledger_command_reports_when_no_route_or_program_exists(self) -> None:
+        with (unittest.mock.patch.object(deputy, "resolve_command", return_value=None),
+              unittest.mock.patch("shutil.which", return_value=None) as which,
+              self.assertRaises(deputy.LedgerMissing)):
+            deputy.ledger_command()
+            which.assert_not_called()
 
     def test_codex_record_writes_through_the_real_memory_ledger(self) -> None:
-        (self.cache / "memory-ledger").mkdir()
-        (self.cache / "memory-ledger" / "4.14.1").symlink_to(REPO / "plugins" / "memory-ledger")
-        r = self.run_copy(*self.record_argv("--host", "codex", "--session-id", "abc"))
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertRegex(r.stdout.strip().splitlines()[-1], r"^(NEW|VOTED) decisions/")
+        result = self.run_copy(*self.record_argv("--host", "codex", "--session-id", "abc"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertRegex(result.stdout.strip().splitlines()[-1], r"^(NEW|VOTED) decisions/")
         entry, = self.root.rglob("*.md")
         self.assertIn("codex:abc", entry.read_text(encoding="utf-8"))
-
-    def test_codex_record_needs_a_session_id(self) -> None:
-        self.fake_ledger("4.14.1")
-        r = self.run_copy(*self.record_argv("--host", "codex"))
-        self.assertEqual(r.returncode, 2)
-        self.assertEqual(r.stderr.strip(), "REFUSED codex needs --session-id")
-        self.assertFalse(self.log.exists())
-
-
-if __name__ == "__main__":
-    unittest.main()

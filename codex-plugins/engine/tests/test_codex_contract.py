@@ -2,17 +2,19 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import CONVERGE, GEAR, TASK, display
+from gear_commands import command as gear_command
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 MANIFEST = PLUGIN_DIR / ".codex-plugin" / "plugin.json"
 HOOKS = PLUGIN_DIR / "hooks" / "hooks.json"
-TASK = PLUGIN_DIR / "scripts" / "task"
-CONVERGE = PLUGIN_DIR / "scripts" / "converge"
+TASK_DISPLAY = display("engine", "task")
 ROSTER = "[main-agent, independent-reviewer, adversarial-reviewer, critic]"
 ADVISOR_PARTY = ("debate_party_config:\n  parties:\n    adversarial-reviewer:\n"
                  "      mechanism: advisor\n")
@@ -40,11 +42,11 @@ class CodexPackageContractTest(unittest.TestCase):
                 root = Path(tmp)
                 path = root / "settlement.yaml"
                 path.write_text(self._settlement(settings, task_folder=root / "task"))
-                init = subprocess.run([str(TASK), "session", "init", "startup-run", "--dir", tmp,
+                init = subprocess.run([*TASK, "session", "init", "startup-run", "--dir", tmp,
                                        "--settlement-file", str(path)],
                                       capture_output=True, text=True, check=False)
                 self.assertEqual(init.returncode, 0, init.stderr)
-                read = subprocess.run([str(TASK), "session", "read", "startup-run", "--dir", tmp,
+                read = subprocess.run([*TASK, "session", "read", "startup-run", "--dir", tmp,
                                        "--section", "settlement", "--json"],
                                       capture_output=True, text=True, check=True)
                 self.assertIn(f"startup: {startup}", read.stdout)
@@ -73,7 +75,7 @@ class CodexPackageContractTest(unittest.TestCase):
             for host in ("claude", "codex"):
                 for override in (False, True):
                     with self.subTest(host=host, override=override):
-                        args = [str(TASK), "config", "resolve", "--name", "profile",
+                        args = [*gear_command("engine", "task", host), "config", "resolve", "--name", "profile",
                                 "--project-root", str(root), "--json"]
                         if override:
                             args.extend(("--user-config", str(explicit)))
@@ -91,8 +93,14 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertNotIn("hooks", manifest)
 
         hooks = json.loads(HOOKS.read_text())["hooks"]
+        self.assertIn(
+            '"${PLUGIN_ROOT}/hooks/gear" --host codex context-hook',
+            hooks["PreToolUse"][0]["hooks"][0]["command"],
+        )
         session_start = hooks["SessionStart"][0]
         self.assertEqual(session_start["matcher"], "^(startup|resume|compact)$")
+        self.assertIn('"${PLUGIN_ROOT}/hooks/gear" --host codex adapter',
+                      session_start["hooks"][0]["command"])
         self.assertIn(
             "--matcher-pattern '^(startup|resume|compact)$'",
             session_start["hooks"][0]["command"],
@@ -100,7 +108,7 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertIn("${PLUGIN_ROOT}", session_start["hooks"][0]["command"])
         self.assertIn("--handler session_recall", session_start["hooks"][0]["command"])
         stop = hooks["Stop"][0]["hooks"][0]
-        self.assertIn("${PLUGIN_ROOT}/hooks/adapter.py", stop["command"])
+        self.assertIn('"${PLUGIN_ROOT}/hooks/gear" --host codex adapter', stop["command"])
         self.assertIn("--handler stop_reminder", stop["command"])
         post_tool_commands = [
             hook["command"]
@@ -134,68 +142,68 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertIn("allow_implicit_invocation: false", metadata)
         self.assertIn("$engine:start", metadata)
 
-    def test_runtime_resolves_installed_root_and_reports_missing_uv(self):
-        text = TASK.read_text()
-        self.assertIn('PLUGIN_ROOT=${PLUGIN_ROOT:-', text)
-        self.assertIn('uv run --project "$PLUGIN_ROOT"', text)
+    def test_cli_setup_reports_missing_uv(self):
+        with tempfile.TemporaryDirectory(prefix="engine-runtime-home-") as tmp:
+            python_bin = str(Path(sys.executable).parent)
+            env = {
+                "PATH": os.pathsep.join((python_bin, "/usr/bin:/bin")),
+                "HOME": str(Path(tmp) / "home"),
+                "CODEX_HOME": str(Path(tmp) / "codex"),
+                "CLAUDE_CONFIG_DIR": str(Path(tmp) / "claude"),
+                "XDG_DATA_HOME": str(Path(tmp) / "xdg"),
+                "THROTTLE_OFF": "1",
+            }
+            result = subprocess.run(
+                [str(GEAR), "--host", "codex", "cli", "setup"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
 
-        env = {
-            "PATH": "/usr/bin:/bin",
-            "PLUGIN_ROOT": str(PLUGIN_DIR),
-            "HOME": tempfile.mkdtemp(prefix="engine-contract-home-"),
-        }
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("uv is missing", result.stderr)
+        self.assertIn("run cli:setup", result.stderr)
+
+    def test_converge_command_runs_through_gear(self):
         result = subprocess.run(
-            [str(TASK), "--help"],
+            [*CONVERGE, "--help"],
             capture_output=True,
             text=True,
-            env=env,
             check=False,
         )
-        self.assertEqual(result.returncode, 127)
-        self.assertIn("uv is required", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage:", result.stdout)
 
-    def test_converge_wrapper_runs_bundled_script(self):
-        script = CONVERGE.read_text()
-        self.assertTrue(os.access(CONVERGE, os.X_OK))
-        self.assertIn('PLUGIN_ROOT=${PLUGIN_ROOT:-', script)
-        self.assertIn('export BOOTGEAR_HOST="${BOOTGEAR_HOST:-codex}"', script)
-        self.assertIn('uv run --project "$PLUGIN_ROOT" -m converge.cli', script)
+    def test_converge_without_runtime_reports_setup_guidance(self):
+        with tempfile.TemporaryDirectory(prefix="converge-runtime-") as tmp:
+            result = subprocess.run(
+                [*CONVERGE, "--help"],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "XDG_DATA_HOME": str(Path(tmp) / "xdg")},
+                check=False,
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Shared runtime is missing", result.stderr)
+        self.assertIn("Run cli:setup", result.stderr)
 
-    def test_converge_script_reports_missing_uv(self):
-        result = subprocess.run(
-            [str(CONVERGE), "--help"],
-            capture_output=True,
-            text=True,
-            env={
-                "PATH": "/usr/bin:/bin",
-                "PLUGIN_ROOT": str(PLUGIN_DIR),
-                "HOME": tempfile.mkdtemp(prefix="converge-contract-home-"),
-            },
-            check=False,
-        )
-        self.assertEqual(result.returncode, 127)
-        self.assertIn("uv is required", result.stderr)
-
-    def test_wrappers_default_prose_and_name_themselves(self):
-        for wrapper in (TASK, CONVERGE):
-            script = wrapper.read_text()
-            self.assertIn('export BOOTGEAR_OUTPUT="${BOOTGEAR_OUTPUT:-prose}"', script)
-            self.assertIn('export BOOTGEAR_PROG="$0"', script)
-            self.assertLess(script.index("BOOTGEAR_PROG"), script.index("exec "))
+    def test_gear_defaults_to_prose_and_names_the_public_command(self):
+        self.assertTrue(os.access(GEAR, os.X_OK))
+        self.assertIn("/plugins/cli/bin/gear", str(GEAR))
 
         machine = PLUGIN_DIR / "state-machines" / "ticket-writing.yaml"
         nodes = yaml.safe_load(machine.read_text())["nodes"]
         self.assertNotIn("spec", nodes)
         for name, node in nodes.items():
             self.assertNotIn("spec", node.get("next", []), name)
-            # The text after "Does not:" may name spec to forbid it.
             do = ((node.get("reminder") or {}).get("do") or "").split("Does not:")[0]
             self.assertIsNone(re.search(r"(?<![\w-])spec(?![\w-])", do), f"{name}: {do}")
         env = {k: v for k, v in os.environ.items()
                if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "VIRTUAL_ENV")}
 
         def validate(*extra, **more):
-            return subprocess.run([str(TASK), "state", "validate", str(machine), *extra],
+            return subprocess.run([*TASK, "state", "validate", str(machine), *extra],
                                   capture_output=True, text=True, check=False,
                                   env={**env, **more})
 
@@ -206,15 +214,17 @@ class CodexPackageContractTest(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout),
                              {"path": str(machine), "ok": True, "problems": []})
 
-        refused = subprocess.run([str(TASK), "state", "validate"], capture_output=True,
+        refused = subprocess.run([*TASK, "state", "validate"], capture_output=True,
                                  text=True, check=False, env=env)
         self.assertEqual(refused.returncode, 2)
         self.assertTrue(
-            refused.stderr.startswith(f"example: {TASK} state validate <machine.yaml>\n"),
+            refused.stderr.startswith(f"example: {TASK_DISPLAY} state validate <machine.yaml>\n"),
             refused.stderr)
         self.assertIn("error:", refused.stderr.splitlines()[-1])
-        self.assertIn(f"\n  {TASK} session recall <run-id> --dir <session-dir>\n",
-                      refused.stderr)
+        self.assertIn(
+            f"\n  {TASK_DISPLAY} session recall <run-id> --dir <session-dir>\n",
+            refused.stderr,
+        )
 
     def _settlement(self, extra: str, roster: str = ROSTER, *, task_folder: Path) -> str:
         return (
@@ -240,7 +250,7 @@ class CodexPackageContractTest(unittest.TestCase):
             settlement = self._settlement(extra, roster, task_folder=Path(tmp) / "task")
             path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n")
             return subprocess.run(
-                [str(TASK), "session", "validate", "mech-run", "--dir", tmp,
+                [*TASK, "session", "validate", "mech-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -264,7 +274,7 @@ class CodexPackageContractTest(unittest.TestCase):
             path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n"
                             f"task_folder: {(Path(tmp) / 'task').resolve()}\n")
             return subprocess.run(
-                [str(TASK), "session", "validate", "skill-run", "--dir", tmp,
+                [*TASK, "session", "validate", "skill-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -403,7 +413,7 @@ class CodexPackageContractTest(unittest.TestCase):
                 _roles("refuter") + "converge_seats: {r2: native_subagent}\n"
                 "debate_party_config: {}\n", task_folder=Path(tmp) / "task"))
             result = subprocess.run(
-                [str(TASK), "session", "init", "seat-run", "--dir", tmp,
+                [*TASK, "session", "init", "seat-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -416,7 +426,7 @@ class CodexPackageContractTest(unittest.TestCase):
                               task: str | None, *extra: str) -> str:
         with tempfile.TemporaryDirectory(prefix="engine-seat-config-") as tmp:
             root = Path(tmp)
-            args = [str(TASK), "config", "resolve", "--name", "converge-seats",
+            args = [*TASK, "config", "resolve", "--name", "converge-seats",
                     "--project-root", str(root)]
             for flag, text in (("--user-config", user), ("--project-config", project),
                                ("--task-config-file", task)):
@@ -471,7 +481,7 @@ class CodexPackageContractTest(unittest.TestCase):
             task = root / "task.yaml"
             task.write_text("parties:\n  critic:\n    enable: false\n    profile: p\n")
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root), "--user-config", str(root / "none.yaml"),
                  "--project-config", str(root / "none.yaml"),
                  "--task-config-file", str(task), "--json"],
@@ -492,7 +502,7 @@ class CodexPackageContractTest(unittest.TestCase):
                 "    mechanism: native_subagent\n    enabled: true\n"
             )
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root), "--user-config", str(root / "none.yaml"),
                  "--project-config", str(root / "none.yaml"),
                  "--task-config-file", str(task), "--report", "models", "--json"],
@@ -525,7 +535,7 @@ class CodexPackageContractTest(unittest.TestCase):
             path = root / "settlement.txt"
             path.write_text(settlement)
             result = subprocess.run(
-                [str(TASK), "session", "validate", "cfg-run", "--dir", tmp,
+                [*TASK, "session", "validate", "cfg-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -549,7 +559,7 @@ class CodexPackageContractTest(unittest.TestCase):
                 "    enabled: true\n"
             )
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root),
                  "--user-config", str(user),
                  "--project-config", str(project),
@@ -580,7 +590,7 @@ class CodexPackageContractTest(unittest.TestCase):
             project.write_text("mapping:\n  replace: project\nitems: [project]\n")
             task.write_text("scalar: task\nmapping:\n  add: task\n")
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "arbitrary",
+                [*TASK, "config", "resolve", "--name", "arbitrary",
                  "--project-root", str(root), "--user-config", str(user),
                  "--project-config", str(project), "--task-config-file", str(task),
                  "--json"], capture_output=True, text=True, check=True,
@@ -644,7 +654,7 @@ class CodexPackageContractTest(unittest.TestCase):
                 f"task_folder: {(root / 'task').resolve()}\n"
             )
             accepted = subprocess.run(
-                [str(TASK), "session", "validate", "spec-review-fields", "--dir", tmp,
+                [*TASK, "session", "validate", "spec-review-fields", "--dir", tmp,
                  "--settlement-file", str(settlement), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -653,14 +663,14 @@ class CodexPackageContractTest(unittest.TestCase):
     def test_spec_review_angles_resolve_as_find_angles(self):
         angle_file = PLUGIN_DIR / "skills" / "spec-review" / "references" / "angles.yaml"
         result = subprocess.run(
-            [str(CONVERGE), "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
+            [*CONVERGE, "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(json.loads(result.stdout)["angles"]), 14)
 
         attack = subprocess.run(
-            [str(CONVERGE), "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
+            [*CONVERGE, "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(attack.returncode, 0, attack.stderr)

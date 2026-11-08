@@ -9,7 +9,7 @@ project-specific knowledge; each project customizes them through
 
 | Term | Meaning |
 |---|---|
-| gear | One bootgear plugin, or a command it registers with `gear.py`. |
+| Gear | Shared CLI that discovers and runs registered plugin commands. |
 | run | One engine task from `clarify` to `succeeded` or `failed`, recorded in its own session ledger. |
 | settlement | What `clarify` settles with the user before a run starts: task type, approach, principles, sources of truth, autonomy, `goal`, and the state machine. Written once. |
 | `goal` | The settlement's done condition: when the run has `succeeded`, and when it has `failed` because the task cannot be done. |
@@ -22,6 +22,7 @@ project-specific knowledge; each project customizes them through
 
 | Plugin | What it is | Durable state |
 |---|---|---|
+| `cli` | Shared Gear CLI, plugin discovery and Python runtime setup. | shared runtime under `~/.bootgear/runtimes/` |
 | `engine` | Autonomous task loop: clarify once, then execute a state machine to `succeeded`/`failed`. | `~/.bootgear/session/<run-id>.md` |
 | `converge` | Settles facts behind a claim slate: find, attack, cut by separate agents; computes which claims are findings. | `~/.bootgear/converge/` |
 | `review` | Review domain skill: lens finders plus converge attack and cut, and applying accepted feedback. | via converge |
@@ -34,10 +35,15 @@ project-specific knowledge; each project customizes them through
 Dependencies:
 
 ```
-engine ──needs──> converge, spec, test, review, advisor, memory-ledger   (declared dependencies, Claude Code)
-review ──needs──> converge                       (declared dependency)
-converge ──needs──> memory-ledger, advisor       (declared dependencies)
-deputy ──needs──> memory-ledger                  (declared dependency, Claude Code)
+Each Claude plugin that uses Gear declares `cli` as a dependency.
+engine ──needs──> cli, converge, spec, test, review, advisor, memory-ledger, deputy
+review ──needs──> cli, converge, deputy
+converge ──needs──> cli, memory-ledger, advisor, deputy
+spec ──needs──> cli, converge, review
+test ──needs──> cli
+advisor ──needs──> cli
+memory-ledger ──needs──> cli
+deputy ──needs──> cli, memory-ledger
 ```
 
 `spec`, `test` and `review` each work standalone. Each first checks the active
@@ -49,20 +55,20 @@ when one is set.
 ```
 plugins/<name>/            one source tree per plugin
   .claude-plugin/          Claude Code manifest (all plugins)
-  .codex-plugin/           Codex manifest (memory-ledger, advisor, deputy)
+  .codex-plugin/           Codex manifest (cli, memory-ledger, advisor, deputy)
 codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
                            review, converge
-.claude-plugin/marketplace.json   Claude marketplace: all seven plugins
-.agents/plugins/marketplace.json  Codex marketplace: memory-ledger, advisor, deputy, engine
+.claude-plugin/marketplace.json   Claude marketplace: all plugins
+.agents/plugins/marketplace.json  Codex marketplace: cli, memory-ledger, advisor, deputy, engine
 ```
 
-- `memory-ledger`, `advisor` and `deputy` serve both hosts from one directory
+- `cli`, `memory-ledger`, `advisor` and `deputy` serve both hosts from one directory
   with two manifests.
-- `engine` has a separate Codex package that bundles the skills and code it
-  needs, because Codex has no cross-plugin dependency mechanism. Converge and
-  review therefore have no separate Codex install.
+- `engine` has a separate Codex package that bundles the engine, converge,
+  review, spec and test code and skills. It has no separate Codex installs for
+  converge, review, spec or test. It uses the shared CLI, Advisor, Ledger and Deputy plugins.
 - Host-specific parts: manifests, hook registrations and output envelopes,
-  wrapper paths (`engine`: `bin/<cmd>` on Claude, `scripts/<cmd>` on Codex), session
+  native hook loaders, session
   identity delivery, user config directory (`~/.claude` vs `~/.codex`),
   advisor dispatch (both hosts accept the party and seat mechanisms
   `native_subagent` and `advisor`; on Claude Code an `advisor` debate party is
@@ -71,24 +77,19 @@ codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
   use), and the Codex-only `task session recall` command. The Codex compact
   hook tells the agent to run this command outside the sandbox; Claude's hook
   tells the agent to call the `recall` skill.
-- Shared parts: the ledger formats, the `task` and `converge` CLIs apart
-  from `session recall`, and the built-in state machines. The converge,
-  resolve and review skill bodies above `## Host mechanics` are identical on
-  both hosts; the clarify, debate, execute, recall, spec and test bodies, and
-  start, carry host-specific wording in their shared sections too.
+- Shared parts: Gear routing, the Python runtime, clikit, ledger formats and built-in state machines.
+  Shared command examples use host-neutral placeholders.
+  Each skill's Host mechanics section supplies the host and provider values.
 
-Parity is kept by two rules. First, a behavior shared by both hosts changes
-on both in the same change. Second, drift tests in the Codex engine package
-fail when a copy diverges from its Claude source. The tests check that the
-converge package, the `clikit.py` copies, the `seats.py` copies and the host adapter core files
-(`host_adapter.py`, `host_contracts.py`, `policy.py`) are byte-identical.
-The engine `config.py`, `session.py`, and `state.py` comparisons permit explicit
-host adaptations and ignore blank lines.
+Shared behavior changes on both hosts in the same change.
+Parity tests compare source copies and check explicit host adapters.
+Gear, the runtime and clikit each have one shared implementation.
+The Engine, Converge, review and spec source copies retain their declared host adaptations.
 
-## `gear.py` CLI
+## Gear CLI
 
-`cli/gear.py` routes commands and lifecycle events to plugins. It never imports
-plugin code.
+`plugins/cli/bin/gear` routes commands and lifecycle events to plugins. It
+discovers registrations from `gear.toml` and does not use a fixed plugin list.
 
 - **Registration.** Each plugin declares a `gear.toml` file. The file has a
   `[plugin] name`, `[commands.<name>] exec = [...]`, and optional
@@ -97,13 +98,12 @@ plugin code.
 - **Discovery.** Discovery reads `plugins/*/gear.toml` and
   `codex-plugins/*/gear.toml` under the repository root. Two registrations with
   the same plugin name are an error.
-- **Routing.** `gear.py <plugin> <command> [args]` runs the declared
-  executable. The working directory is the plugin root. The environment gets
-  `GEAR_CALLER_CWD`, `GEAR_ROOT`, `GEAR_PLUGIN_ROOT`, `GEAR_PLUGIN` and
-  `GEAR_COMMAND`. An executable starting with `./` or `../` resolves from the
-  plugin root and must stay inside it; any other executable runs as given.
-  The child's exit code is returned unchanged.
-- **Events.** `gear.py event <event>` runs every matching reminder in
+- **Routing.** `<gear> --host <host> <plugin> <command> [args]` runs the declared
+  executable. Gear preserves caller paths and provider roots. The child's exit
+  code is returned unchanged.
+- **Runtime.** Python commands use the prepared shared interpreter and imports.
+  `cli:setup` prepares dependencies. Normal commands and hooks do not install them.
+- **Events.** `<gear> --host <host> event <event>` runs every matching reminder in
   (`order`, plugin name, `dedupe`) order, skipping repeated `dedupe` keys. A
   failing `gate` reminder stops the run and returns its code. A failing
   `reminder` is reported on stderr and routing continues.
@@ -111,7 +111,7 @@ plugin code.
   unknown, or when an event has no reminders. It adds enabled host-installed
   plugin roots from `claude plugin list --json` and `codex plugin list --json`.
   A repository-local registration wins over an installed one with the same
-  name. gear.py then retries the original route exactly once. A second miss
+  name. Gear then retries the original route exactly once. A second miss
   on a plugin or command is a final error; an event that still has no
   reminders exits 0 silently. Reconciliation only reads host metadata. It never
   installs, enables or trusts anything. Host query failures are warnings on
@@ -120,9 +120,8 @@ plugin code.
   prints the root and the plugin names. `reconcile` runs a reconciliation and
   exits 1 when it produced warnings.
 
-The engine, converge and memory-ledger CLIs each carry a copy of one
-`clikit.py`. It resolves relative path arguments against `GEAR_CALLER_CWD` and
-chooses prose or JSON output from `--json`/`--prose`, then `BOOTGEAR_OUTPUT`.
+The shared CLI owns `clikit`. Provider commands import it through Gear's
+prepared runtime and resolve caller-relative paths through `GEAR_CALLER_CWD`.
 
 ## Project config: `.bootgear/config/`
 

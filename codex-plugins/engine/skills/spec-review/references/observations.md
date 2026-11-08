@@ -37,8 +37,8 @@ An empty `claim_ids` list is valid when independent investigation found no defec
 A passing rerun or an empty claim list alone cannot close a blocking behavioural gap.
 Do not claim coverage from a report copied from another slate.
 
-Use public `spec-feedback settings` for complete schemas.
-Use public `spec-feedback gate` with both sidecar paths and the current slate before an affected ready exit.
+Use the public Spec feedback settings interface for complete schemas.
+Run its gate with both sidecar paths and the current slate before an affected ready exit.
 Explicit empty arrays serve initial reviews on the two bound engine paths. Other reviews need no empty files.
 A ready-inline correction uses the same slate and checks, with no added review slate.
 The gate checks report scope, fields, IDs, raw file readability, coverage, known claims, and normal converge completion.

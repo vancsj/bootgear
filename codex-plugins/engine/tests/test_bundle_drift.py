@@ -44,30 +44,6 @@ ENGINE_ADAPTATIONS: dict[str, list[tuple[str, str]]] = {
     ],
     "state.py": [
         (
-            '',
-            (
-                '# <plugin-root>/src/engine/state.py -> <plugin-root>\n'
-                'PLUGIN_ROOT = Path(__file__).resolve().parents[2]'
-            ),
-        ),
-        (
-            (
-                'def _resolve_program(program: str) -> str | None:\n'
-                '    """Claude host: plugin `bin/` directories are on the Bash PATH, so a\n'
-                '    leave_check program resolves by PATH lookup only."""\n'
-                '    return shutil.which(program)'
-            ),
-            (
-                'def _resolve_program(program: str) -> str | None:\n'
-                '    """Codex host: a leave_check program bundled in this plugin\'s\n'
-                '    `scripts/` wins; otherwise fall back to PATH lookup."""\n'
-                '    bundled = PLUGIN_ROOT / "scripts" / program\n'
-                '    if bundled.is_file() and os.access(bundled, os.X_OK):\n'
-                '        return str(bundled)\n'
-                '    return shutil.which(program)'
-            ),
-        ),
-        (
             'no reminder: work toward /goal',
             'no reminder: work toward goal',
         ),
@@ -185,18 +161,75 @@ class BundleDriftTest(unittest.TestCase):
                                           ("spec", "spec_feedback", "spec-feedback")):
             with self.subTest(package=package):
                 source = REPO_ROOT / "plugins" / plugin
-                self.assertSameTree(source / "src" / package, PLUGIN_DIR / "src" / package)
-                self.assertSameBytes(source / "bin" / command, PLUGIN_DIR / "scripts" / command)
+                claude_files = _files(source / "src" / package)
+                codex_files = _files(PLUGIN_DIR / "src" / package)
+                self.assertEqual(sorted(codex_files), sorted(claude_files))
+                codex_source = codex_files["cli.py"].decode()
+                claude_source = claude_files["cli.py"].decode()
+                claude_route = f'current_program("{plugin}", "{command}")'
+                codex_route = f'current_program("engine", "{command}")'
+                self.assertEqual(codex_source.count(codex_route), 1)
+                codex_source = codex_source.replace(codex_route, claude_route, 1)
+                self.assertEqual(codex_source, claude_source, f"{package}/cli.py differs")
+                for name in claude_files.keys() - {"cli.py"}:
+                    self.assertEqual(codex_files[name], claude_files[name], f"{package}/{name} differs")
+                self.assertIn(f"[commands.{command}]", (source / "gear.toml").read_text())
+                self.assertIn(f"[commands.{command}]", (PLUGIN_DIR / "gear.toml").read_text())
 
     def test_self_review_skill_and_cases_match(self):
         source = REPO_ROOT / "plugins" / "review"
-        self.assertSameTree(source / "skills/self-review", PLUGIN_DIR / "skills/self-review")
-        self.assertSameBytes(source / "tests/test_self_review.py", PLUGIN_DIR / "tests/test_self_review.py")
+        claude_skill = (source / "skills/self-review/SKILL.md").read_text()
+        codex_skill = (PLUGIN_DIR / "skills/self-review/SKILL.md").read_text()
+        codex_fallback = "If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`."
+        claude_fallback = ("If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. "
+                           "On Codex, run `codex plugin add cli@bootgear`.")
+        self.assertEqual(codex_skill.replace(codex_fallback, claude_fallback, 1), claude_skill)
+        claude_cases = (source / "tests/test_self_review.py").read_text()
+        codex_cases = (PLUGIN_DIR / "tests/test_self_review.py").read_text()
+        def test_methods(text: str) -> dict[str, str]:
+            tree = ast.parse(text)
+            cls = next(node for node in tree.body
+                       if isinstance(node, ast.ClassDef) and node.name == "SelfReviewTest")
+            return {node.name: ast.get_source_segment(text, node) or ""
+                    for node in cls.body if isinstance(node, ast.FunctionDef)
+                    and node.name.startswith("test_")}
+
+        claude_methods, codex_methods = test_methods(claude_cases), test_methods(codex_cases)
+        self.assertEqual(claude_methods.keys(), codex_methods.keys())
+        usage = "test_usage_error_names_commands_example_and_next"
+        for name in claude_methods.keys() - {usage}:
+            self.assertEqual(claude_methods[name], codex_methods[name], name)
+        for source_text in (claude_methods[usage], codex_methods[usage]):
+            for fragment in ("Example:", "Commands:", "Next:"):
+                self.assertIn(fragment, source_text)
+        self.assertIn('PROGRAM = display("engine", "self-review")', codex_cases)
+        self.assertIn("Example: {PROGRAM} open --task-folder TASK", codex_methods[usage])
 
     def test_converge_package_matches_claude_source(self):
-        self.assertSameTree(
-            CLAUDE_CONVERGE / "src" / "converge", PLUGIN_DIR / "src" / "converge"
-        )
+        claude_root = CLAUDE_CONVERGE / "src" / "converge"
+        codex_root = PLUGIN_DIR / "src" / "converge"
+        claude_files, codex_files = _files(claude_root), _files(codex_root)
+        self.assertEqual(sorted(codex_files), sorted(claude_files))
+        for name, claude_source in claude_files.items():
+            codex_source = codex_files[name]
+            if name in {"cli.py", "ledger.py", "protocol.py"}:
+                codex_text = codex_source.decode()
+                if name in {"ledger.py", "protocol.py"}:
+                    codex_route = 'current_program("engine", "converge")'
+                    claude_route = 'current_program("converge", "converge")'
+                    self.assertEqual(codex_text.count(codex_route), 1)
+                    codex_text = codex_text.replace(codex_route, claude_route, 1)
+                if name == "cli.py":
+                    for codex_route, claude_route in (
+                        ('current_program("engine", "converge")',
+                         'current_program("converge", "converge")'),
+                        ('gear_command("engine", "converge")',
+                         'gear_command("converge", "converge")'),
+                    ):
+                        self.assertEqual(codex_text.count(codex_route), 1)
+                        codex_text = codex_text.replace(codex_route, claude_route, 1)
+                codex_source = codex_text.encode()
+            self.assertEqual(codex_source, claude_source, f"{name} differs")
 
     def test_converge_fresh_eye_instructions_match_across_hosts(self):
         claude_skill = CLAUDE_CONVERGE / "skills" / "converge" / "SKILL.md"
@@ -211,15 +244,17 @@ class BundleDriftTest(unittest.TestCase):
         self.assertIn("fixed list is not a menu", claude_lines[0])
         self.assertIn("For example", claude_lines[0])
 
-    def test_clikit_copies_match_engine_source(self):
-        # Each plugin ships its own copy; none imports another plugin's.
-        source = REPO_ROOT / "plugins" / "engine" / "src" / "engine" / "clikit.py"
-        for copy in (
+    def test_clikit_has_one_shared_source(self):
+        source = REPO_ROOT / "plugins" / "cli" / "src" / "bootgear_cli" / "clikit.py"
+        copies = (
+            REPO_ROOT / "plugins" / "engine" / "src" / "engine" / "clikit.py",
             PLUGIN_DIR / "src" / "engine" / "clikit.py",
             CLAUDE_CONVERGE / "src" / "converge" / "clikit.py",
+            PLUGIN_DIR / "src" / "converge" / "clikit.py",
             REPO_ROOT / "plugins" / "memory-ledger" / "scripts" / "ledgerlib" / "clikit.py",
-        ):
-            self.assertSameBytes(source, copy)
+        )
+        self.assertTrue(source.is_file())
+        self.assertEqual([], [str(path) for path in copies if path.exists()])
 
     def test_seats_copies_match_engine_source(self):
         # Settlement validation and converge init check seats with one rule set.

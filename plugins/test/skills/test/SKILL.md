@@ -30,7 +30,7 @@ Before any other action:
 1. If running inside an active `engine` run, read the settlement:
 
    ```text
-   task session read <run-id> --section settlement
+   <gear> --host <host> engine task session read <run-id> --section settlement
    ```
 
    Read `test_override`, then scan the active run's full decisions for an `AMENDMENT test_override`; the latest valid value wins.
@@ -65,5 +65,9 @@ For a large or high-risk change, expand case coverage, run integration or end-to
 
 ## Host mechanics
 
-- Resolve the public session command to `<engine-root>/bin/task`, with
-  `<engine-root>` from `execute`'s handoff.
+Use `claude` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
+- Keep `<engine-root>` from `execute`'s handoff for the session data.

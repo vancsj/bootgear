@@ -46,15 +46,15 @@ Locate the ledger from the caller's `<session-dir>` → read the settlement, ope
 Call the public session interface. Do not hand-read its Markdown file with a general file tool.
 
 ```text
-task session read <run-id> --section settlement
-task session read <run-id> --open-only
-task session read <run-id> --last 3
+<gear> --host <host> engine task session read <run-id> --section settlement
+<gear> --host <host> engine task session read <run-id> --open-only
+<gear> --host <host> engine task session read <run-id> --last 3
 ```
 
 - Read `--section settlement` to obtain the task type, approach and principles, per-domain sources of truth, debate threshold and convergence policy, autonomy scope, `goal`, and run manifest.
 - Read `--open-only` to obtain unchecked todos.
 - Read `--last N` to obtain recent decisions and pitches.
-- Read the run's state machine with `task state show <run-id>`; it prints the machine in force and its version.
+- Read the run's state machine with `<gear> --host <host> engine task state show <run-id>`; it prints the machine in force and its version.
 - To resume an in-progress `debate`, read the full decisions section once.
 - Find the last `[qN]` tag and use it as the current question.
 - Do not use `--last N` to identify the current question.
@@ -62,13 +62,13 @@ task session read <run-id> --last 3
 - Then read the question:
 
   ```text
-  task session read <run-id> --section decisions
-  task session read <run-id> --question <qid>
+  <gear> --host <host> engine task session read <run-id> --section decisions
+  <gear> --host <host> engine task session read <run-id> --question <qid>
   ```
 
 - Take each party's latest `[debate]` entry for that question as its current position.
 
-- Read `task session read <run-id>` with no flags only when auditing the whole run.
+- Read `<gear> --host <host> engine task session read <run-id>` with no flags only when auditing the whole run.
 
 Before returning a settlement, run the host adapter's `session validate`
 command with the same run and session directory. Return its grouped refusal
@@ -77,7 +77,7 @@ unchanged; do not reconstruct or repair a failed validation in the skill.
 ## Current node
 
 ```text
-task state current <run-id>
+<gear> --host <host> engine task state current <run-id>
 ```
 
 - Treat its `do` as the current node's instruction, including which skill to call and how.
@@ -90,7 +90,7 @@ task state current <run-id>
 - Do not use `--last N` or `--open-only` to locate an amendment.
 
 ```text
-task session read <run-id> --section decisions
+<gear> --host <host> engine task session read <run-id> --section decisions
 ```
 
 - For each field with one or more `AMENDMENT <field>` entries, apply the most recent new value for the rest of the run.
@@ -170,7 +170,10 @@ Reject an amendment in any of these cases. Keep the last valid value:
 
 ## Host mechanics
 
-Resolve `task` to `<plugin-dir>/bin/task`; the wrapper derives its project
-directory from its own location. Invoke `session validate` as `task session
-validate <run-id>`. `<run-id>` is the value of
+Use `claude` for `<host>`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run `<gear> --host claude engine task session validate <run-id>`.
+If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
+`<run-id>` is the value of
 `$CLAUDE_CODE_SESSION_ID`.

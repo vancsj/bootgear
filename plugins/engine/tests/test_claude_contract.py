@@ -5,8 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import CONVERGE, TASK
+from gear_commands import command as gear_command
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK = PLUGIN_DIR / "bin" / "task"
 ROSTER = "[main-agent, independent-reviewer, adversarial-reviewer, critic]"
 ADVISOR_PARTY = ("debate_party_config:\n  parties:\n    adversarial-reviewer:\n"
                  "      mechanism: advisor\n")
@@ -30,11 +32,11 @@ class ClaudePackageContractTest(unittest.TestCase):
                 root = Path(tmp)
                 path = root / "settlement.yaml"
                 path.write_text(self._settlement(settings, task_folder=root / "task"))
-                init = subprocess.run([str(TASK), "session", "init", "startup-run", "--dir", tmp,
+                init = subprocess.run([*TASK, "session", "init", "startup-run", "--dir", tmp,
                                        "--settlement-file", str(path)],
                                       capture_output=True, text=True, check=False)
                 self.assertEqual(init.returncode, 0, init.stderr)
-                read = subprocess.run([str(TASK), "session", "read", "startup-run", "--dir", tmp,
+                read = subprocess.run([*TASK, "session", "read", "startup-run", "--dir", tmp,
                                        "--section", "settlement", "--json"],
                                       capture_output=True, text=True, check=True)
                 self.assertIn(f"startup: {startup}", read.stdout)
@@ -63,7 +65,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             for host in ("claude", "codex"):
                 for override in (False, True):
                     with self.subTest(host=host, override=override):
-                        args = [str(TASK), "config", "resolve", "--name", "profile",
+                        args = [*gear_command("engine", "task", host), "config", "resolve", "--name", "profile",
                                 "--project-root", str(root), "--json"]
                         if override:
                             args.extend(("--user-config", str(explicit)))
@@ -91,7 +93,7 @@ class ClaudePackageContractTest(unittest.TestCase):
                 "    enabled: true\n"
             )
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root), "--user-config", str(user),
                  "--project-config", str(project), "--task-config-file", str(task),
                  "--report", "models", "--json"],
@@ -129,7 +131,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             settlement = self._settlement(extra, roster, task_folder=Path(tmp) / "task")
             path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n")
             return subprocess.run(
-                [str(TASK), "session", "validate", "mech-run", "--dir", tmp,
+                [*TASK, "session", "validate", "mech-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -149,7 +151,7 @@ class ClaudePackageContractTest(unittest.TestCase):
                 "    enabled: true\n"
             )
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root), "--user-config", str(root / "none.yaml"),
                  "--project-config", str(root / "none.yaml"),
                  "--task-config-file", str(task), "--report", "models", "--json"],
@@ -170,7 +172,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             task = root / "task.yaml"
             task.write_text(parties_yaml)
             result = subprocess.run(
-                [str(TASK), "config", "resolve", "--name", "debate-parties",
+                [*TASK, "config", "resolve", "--name", "debate-parties",
                  "--project-root", str(root), "--user-config", str(root / "none.yaml"),
                  "--project-config", str(root / "none.yaml"),
                  "--task-config-file", str(task), "--json"],
@@ -206,7 +208,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             path.write_text(f"{settlement}session_dir: {Path(tmp).resolve()}\n"
                             f"task_folder: {(Path(tmp) / 'task').resolve()}\n")
             return subprocess.run(
-                [str(TASK), "session", "validate", "skill-run", "--dir", tmp,
+                [*TASK, "session", "validate", "skill-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -360,7 +362,7 @@ class ClaudePackageContractTest(unittest.TestCase):
                 _roles("refuter") + "converge_seats: {r2: native_subagent}\n"
                 "debate_party_config: {}\n", task_folder=Path(tmp) / "task"))
             result = subprocess.run(
-                [str(TASK), "session", "init", "seat-run", "--dir", tmp,
+                [*TASK, "session", "init", "seat-run", "--dir", tmp,
                  "--settlement-file", str(path), "--prose"],
                 capture_output=True, text=True, check=False,
             )
@@ -373,7 +375,7 @@ class ClaudePackageContractTest(unittest.TestCase):
                               task: str | None, *extra: str) -> str:
         with tempfile.TemporaryDirectory(prefix="engine-seat-config-") as tmp:
             root = Path(tmp)
-            args = [str(TASK), "config", "resolve", "--name", "converge-seats",
+            args = [*TASK, "config", "resolve", "--name", "converge-seats",
                     "--project-root", str(root)]
             for flag, text in (("--user-config", user), ("--project-config", project),
                                ("--task-config-file", task)):
@@ -427,7 +429,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             (PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text()
         )
         self.assertEqual(manifest["dependencies"],
-                         ["converge", "spec", "test", "review", "advisor", "memory-ledger", "deputy"])
+                         ["cli", "converge", "spec", "test", "review", "advisor", "memory-ledger", "deputy"])
 
     def test_session_recall_runs_on_startup_clear_and_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
@@ -435,7 +437,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             [(entry["matcher"], [h["command"] for h in entry["hooks"]])
              for entry in hooks["SessionStart"]],
             [("startup|clear|compact",
-              ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern 'startup|clear|compact'"])],
+              ['"${CLAUDE_PLUGIN_ROOT}/hooks/gear" --host claude adapter --handler session_recall --matcher-pattern \'startup|clear|compact\''])],
         )
         self.assertIn("PreCompact", hooks)
         self.assertIn("PostCompact", hooks)
@@ -447,7 +449,7 @@ class ClaudePackageContractTest(unittest.TestCase):
             )
         self.assertEqual(
             hooks["Stop"][0]["hooks"][0]["command"],
-            'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern ""',
+            '"${CLAUDE_PLUGIN_ROOT}/hooks/gear" --host claude adapter --handler stop_reminder --matcher-pattern ""',
         )
         post_tool_commands = [
             hook["command"]
@@ -456,7 +458,7 @@ class ClaudePackageContractTest(unittest.TestCase):
         ]
         self.assertEqual(
             post_tool_commands,
-            ["python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler state_nudge --matcher-pattern '.*'"],
+            ['"${CLAUDE_PLUGIN_ROOT}/hooks/gear" --host claude adapter --handler state_nudge --matcher-pattern \'.*\''],
         )
         self.assertEqual(
             [entry["matcher"] for entry in hooks["PostToolUse"]],
@@ -476,16 +478,15 @@ class ClaudePackageContractTest(unittest.TestCase):
     def test_spec_review_angles_resolve_as_find_angles(self):
         angle_file = (PLUGIN_DIR.parents[1] / "plugins" / "spec" / "skills" /
                       "spec-review" / "references" / "angles.yaml")
-        converge = PLUGIN_DIR.parents[1] / "plugins" / "converge" / "bin" / "converge"
         result = subprocess.run(
-            [str(converge), "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
+            [*CONVERGE, "angles", "--tag", "find", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(json.loads(result.stdout)["angles"]), 14)
 
         attack = subprocess.run(
-            [str(converge), "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
+            [*CONVERGE, "angles", "--tag", "attack", "--angles", str(angle_file), "--json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(attack.returncode, 0, attack.stderr)

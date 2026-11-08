@@ -17,23 +17,25 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 import yaml
-
-from . import angles as angles_mod
-from . import config as config_mod
-from . import ledger, model, protocol, render, seats
-from .clikit import (
+from bootgear_cli.clikit import (
     Catalog,
     Refusal,
     add_mode_flags,
     caller_cwd,
     caller_path,
+    current_program,
     dumps,
     emit,
+    gear_command,
     parser_class,
     refuse,
     render_refusal,
     run,
 )
+
+from . import angles as angles_mod
+from . import config as config_mod
+from . import ledger, model, protocol, render, seats
 from .model import Slate
 
 EXIT_OK, EXIT_NO, EXIT_REFUSED = 0, 1, 2
@@ -80,7 +82,7 @@ ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <
                  '--angle <angle> --reason "<why>"')
 GATE_TRIAGE = "gate <slate> --dir <abs-dir> --kind triage --report <abs-file>"
 FREQUENT = ("file", "attack", "reply", "verdict", "cut", "status", "converged")
-CATALOG = Catalog(prog="converge", examples=EXAMPLES, frequent=FREQUENT,
+CATALOG = Catalog(prog=current_program("engine", "converge"), examples=EXAMPLES, frequent=FREQUENT,
                   legacy_json=frozenset({"status"}))
 # A `--phase find` call's refusals show the find form of the angle-na example.
 FIND_CATALOG = dataclasses.replace(CATALOG, examples={**EXAMPLES, "angle-na": ANGLE_NA_FIND})
@@ -356,10 +358,9 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
     return fields, notes
 
 
-def _converge_path() -> Path:
-    """This host's converge wrapper, for a listener that does not share PATH."""
-    wrapper = "scripts" if os.environ.get("BOOTGEAR_HOST") == "codex" else "bin"
-    return Path(__file__).resolve().parents[2] / wrapper / "converge"
+def _converge_command() -> str:
+    """Return the public Gear command for Converge."""
+    return gear_command("engine", "converge")
 
 
 def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
@@ -375,8 +376,8 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
         else:
             named, brief = advisor["roles"], advisor["brief"]
         body = shlex.quote(str(abs_dir / f"{slate_id}.{seat}.request.txt"))
-        channel = '"$CHANNEL_SCRIPT"'
-        converge = shlex.quote(str(_converge_path()))
+        channel = gear_command("advisor", "channel")
+        converge = _converge_command()
         quoted_dir = shlex.quote(str(abs_dir))
         drivers.append({
             "seat": seat,
@@ -385,8 +386,8 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                      f"--kind request --body-file {body} && "
                      f'{channel} receive --channel "$CHANNEL" --for asker --timeout 300'),
             "placeholders": ("a fresh shell keeps no variables, so write the step with the "
-                             "literal bin/channel path and channel number the pairing printed in "
-                             'place of "$CHANNEL_SCRIPT" and "$CHANNEL"'),
+                             "Gear channel command and channel number the pairing printed in "
+                             'place of the command and "$CHANNEL"'),
             "then": ("do not run the while-loop next that send prints; a turn has 5 receives in "
                      "total, the one in the step included; on receive exit 1 run that receive "
                      "alone again; take the response whose parent_id is this send's message_id "
@@ -397,7 +398,7 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                                "the same receive again without counting it toward the 5; a "
                                "message of any other kind is a protocol error: stop the slate "
                                f"blocked naming {seat}"),
-            "check": (f"after each reply, run converge status {shlex.quote(slate_id)} "
+            "check": (f"after each reply, run {converge} status {shlex.quote(slate_id)} "
                       f"--dir {quoted_dir} --json; a reply starting "
                       f"WRITE-DENIED, or a turn whose {seat} events are absent from status, "
                       f"stops the slate blocked naming {seat}; never redo the turn with a "
@@ -438,7 +439,7 @@ def _reclaim_step(seat: str, advisor: dict[str, Any] | None = None) -> str:
     reclaim = (f"reclaim the advisor channel for {seat} (the {seat} channel in the run ledger's "
             f"advisor channels decision, when there is one) through the advisor skill's channel "
             f"pairing (--mode asking, communication channel: scan and claim, and start the "
-            f"heartbeat if none runs); it prints the channel.py path and the channel number to "
+            f"heartbeat if none runs); it prints the Gear command and channel number to "
             f"put in the driver step; keep the channel open after this slate; if it hands back "
             f"no listener, stop blocked naming {seat}")
 
@@ -546,7 +547,7 @@ def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
             cleanup = f"removed {_ref(args.slate)}"
         else:
             cleanup = (_git_error(f"remove {_ref(args.slate)}", removed)
-                       + f"; run: converge prune {args.slate} --project-root {root}")
+                       + f"; run: {CATALOG.display_prog()} prune {args.slate} --project-root {root}")
         if isinstance(exc, ledger.LedgerError):
             _refuse([*exc.problems, cleanup])
         raise
@@ -739,9 +740,10 @@ def cmd_fix_check(args: argparse.Namespace) -> None:
         if problems:
             fail = _step(args, "fix-check", f"--as {args.agent} --claim {args.claim} "
                          '--outcome fail --evidence "<the findings>"')
+            cutoff = f"{_converge_command()} cutoff <new-slate> --dir <dir>"
             step = (f"record --outcome fail and revert the patch: {fail}" if found
-                    else "re-review only the patch in a new slate, run its cutoff, then rerun "
-                         "fix-check")
+                    else "re-review only the patch in a new slate, then run "
+                         f"{cutoff}, then rerun fix-check")
             _refuse_next(args, "refused", problems, step)
     written = _write(args, _opt({"event": "fix-check", "claim": args.claim,
                                  "outcome": args.outcome, "evidence": args.evidence},
@@ -1112,7 +1114,7 @@ def cmd_gate(args: argparse.Namespace) -> None:
     for claim, phase in slate.open_claims():
         problems.append(f"{claim.id} is open in {phase}")
     if not slate.cutoff_valid:
-        problems.append("no current cutoff (run `converge cutoff` after the last state change)")
+        problems.append(f"no current cutoff (run `{CATALOG.display_prog()} cutoff` after the last state change)")
     step = _next_step(args, slate) if problems else None
     if report is not None:
         problems.extend(_triage_problems(slate, report, base))
@@ -1194,7 +1196,7 @@ def cmd_angles(args: argparse.Namespace) -> None:
             "no find angles found",
             ["no find angles were resolved from --angles or angles.files"],
             "add a find angle with --angles <file> or configure angles.files, then "
-            "rerun `converge angles --tag find`",
+            f"rerun `{CATALOG.display_prog()} angles --tag find`",
         )
     lines = []
     for row in rows:
@@ -1222,7 +1224,7 @@ def cmd_config(args: argparse.Namespace) -> None:
 
 
 def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
-    parser = parser_class(catalog)(prog="converge", description=__doc__)
+    parser = parser_class(catalog)(prog=catalog.display_prog(), description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     def command(name: str, func: Any, *, write: bool = False, slate: bool = True,
@@ -1303,7 +1305,8 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     for name in ("impact", "size", "reach"):
         p.add_argument(f"--{name}", required=True, metavar=f"{{{','.join(model.FIELD_ENUMS[name])}}}")
     p.add_argument("--rate", type=int,
-                   help="the count an evaluate angle with field rate asks for (converge angles "
+                   help=f"the count an evaluate angle with field rate asks for "
+                        f"({CATALOG.display_prog()} angles "
                         "--tag evaluate --angles <file>); required when the claim's lens policy "
                         "has a rate_at_least rule, else 0")
     p.add_argument("--difficulty", metavar=f"{{{','.join(model.DIFFICULTY)}}}",

@@ -1,6 +1,6 @@
 {
   "include": [
-    "../cli",
+    "../plugins/cli",
     "../plugins/engine",
     "../plugins/converge",
     "../plugins/review",
@@ -12,46 +12,52 @@
   "typeCheckingMode": "standard",
   "executionEnvironments": [
     {
-      "root": "../cli",
+      "root": "../plugins/cli",
       "extraPaths": [
-        ".."
+        "../plugins/cli/src"
       ]
     },
     {
       "root": "../plugins/engine",
       "extraPaths": [
-        "../plugins/engine/src"
+        "../plugins/engine/src",
+        "../plugins/cli/src"
       ]
     },
     {
       "root": "../plugins/converge",
       "extraPaths": [
-        "../plugins/converge/src"
+        "../plugins/converge/src",
+        "../plugins/cli/src"
       ]
     },
     {
       "root": "../plugins/review",
       "extraPaths": [
-        "../plugins/review/src"
+        "../plugins/review/src",
+        "../plugins/cli/src"
       ]
     },
     {
       "root": "../plugins/spec",
       "extraPaths": [
         "../plugins/spec/src",
-        "../plugins/converge/src"
+        "../plugins/converge/src",
+        "../plugins/cli/src"
       ]
     },
     {
       "root": "../codex-plugins/engine",
       "extraPaths": [
-        "../codex-plugins/engine/src"
+        "../codex-plugins/engine/src",
+        "../plugins/cli/src"
       ]
     },
     {
       "root": ".",
       "extraPaths": [
-        ".."
+        "..",
+        "../plugins/cli/src"
       ]
     }
   ]

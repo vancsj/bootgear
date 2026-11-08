@@ -62,6 +62,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from bootgear_cli.clikit import gear_argv
+
 _CLOSED_HEADING_RE = re.compile(r"(?m)^## closed\s*$")
 _TERMINAL_NODES = {"succeeded", "failed"}
 
@@ -186,10 +188,10 @@ def _try_lock(marker_path: Path) -> tuple[bool, int | None]:
 def _run_state_section(plugin_dir: Path, run_id: str, session_dir: str) -> dict | None:
     """`session read --section state --json`: `current`, `started` and the
     parsed `transitions`, or None when the read fails."""
-    task_bin = plugin_dir / "bin" / "task"
+    task = gear_argv("engine", "task")
     try:
         result = subprocess.run(
-            [str(task_bin), "session", "read", run_id,
+            [*task, "session", "read", run_id,
              "--dir", session_dir, "--section", "state", "--json"],
             capture_output=True, text=True, timeout=15, check=False,
         )

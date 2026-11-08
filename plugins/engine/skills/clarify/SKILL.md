@@ -12,7 +12,7 @@ Outcomes:
 - **Goal confirmed** — the settlement is written through `init` (required fields in `## Writing the settlement`), and the run is handed to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
 - **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
 - **Ledger already exists** — `init` refuses; follow `## Recovery`.
-- **`task state validate` fails after the fallback** — follow `## Recovery`.
+- **`<gear> --host <host> engine task state validate` fails after the fallback** — follow `## Recovery`.
 - **Settlement fails validation** — `init` refuses and writes no ledger; follow `## Recovery`.
 
 ## Checkpoint mode
@@ -83,7 +83,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    For `artefact-review`, record `artefact_review` with the raw request and nonempty local `inputs` paths.
    Use absolute or home paths. Save supplied messages or remote extracts locally with provenance when needed.
    Include an optional task `config` path when the workflow needs custom rubric criteria or finding angles.
-   Use `task artefact settings` to resolve defaults, host user configuration, project configuration and the task file.
+   Use `<gear> --host <host> engine task artefact settings` to resolve defaults, host user configuration, project configuration and the task file.
    Show the effective criteria, disabled items, evidence limits and configured source paths before goal confirmation.
    Establish audience, purpose, reader task and delivery mode from evidence; keep unknown or inferred context explicit.
    The default machine reviews supplied inputs without changing or publishing them.
@@ -91,10 +91,10 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 3. **State machine** — resolve the run's `state_machine` settlement field before drafting `goal`. Follow these override tiers exactly:
    1. Resolve the built-in machine for `<task_type>` and tier 2 (`.bootgear/config/state-machine-<task_type>.yaml`, if present — wholly replaces tier 1 for this task type).
    2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `change-review` of a change the user did not author, remove `fix`, `spec`, `spec-review` and `spec-debate`. The user authored the change when its git author matches the user's git identity. The git author is the author of the branch commits or the diff. For a PR, it is the PR author. A mismatch or a missing author means the user did not author the change. Remove every incident next edge, reminder branch and exit check. Keep this authoring subgraph when the user requests fixes. Preserve the clarified correction scope and permitted mutations.
-   3. Run `task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
-   4. Run `task state diagram <path>` on the same resolved machine.
+   3. Run `<gear> --host <host> engine task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
+   4. Run `<gear> --host <host> engine task state diagram <path>` on the same resolved machine.
    5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
-      For every node with `reminder.leave_check` or `reminder.exit_checks`, also list each argv verbatim (an `exit_checks` argv with the exit it gates), the tier it came from (built-in, project override, or per-run), and the output of `command -v <argv[0]>`. Flag it when `argv[0]` contains `/` or `command -v` finds no program provided by an installed plugin. These commands run at `transition`; the user's confirmation approves them.
+      For every node with `reminder.leave_check` or `reminder.exit_checks`, list each argv verbatim, its tier, and the exit it gates. Show its resolved command prefix. `transition` resolves registered Gear commands through `gear.toml`; it resolves other commands through `command -v`. Flag a command when Gear and `command -v` cannot resolve it. These commands run at `transition`; the user's confirmation approves them.
    6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement. Do not write settlement without a validated `state_machine`.
 
 4. **Approach and principles are distinct:**
@@ -114,7 +114,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    Also settle:
    - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
    - Use the default three-party roster (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) unless the run needs custom parties. Record a custom party as `{id, label, prompt, mechanism}`; require a distinct ID and a host-supported mechanism.
-   - Resolve `debate_party_config` with `task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` into settlement.
+   - Resolve `debate_party_config` with `<gear> --host <host> engine task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` into settlement.
    - Set `convergence_policy` to `unanimous` by default.
    - Set `consented_stop_allowed` to `true` by default. Use `unanimous_convergence`, `consented_stop`, and `round_cap` as the debate outcomes. Set `consented_stop_allowed` to `false` to remove `consented_stop`. End debate only in `unanimous_convergence` or `round_cap` when `consented_stop_allowed` is `false`.
 
@@ -162,7 +162,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 10. **Advisor roles, seats, and startup** — settle the advisor's roles and channel startup timing.
    - Check the required CLI and `advisor` skill availability without starting or pairing a listener.
      Use `## Host mechanics` to identify uses that need a listener. Report actual availability errors.
-   - Resolve `converge-seats` without a task file: `task config resolve --name converge-seats --project-root <project-root> --json`.
+   - Resolve `converge-seats` without a task file: `<gear> --host <host> engine task config resolve --name converge-seats --project-root <project-root> --json`.
      Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when `r2` is `native_subagent`.
      Ask which roles the advisor takes: `independent-reviewer`, `adversarial-reviewer`, `refuter`, or `gap-hunter`.
      "No" means none. Offer only roles whose required capabilities are available.
@@ -187,7 +187,7 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - Record `advisor_roles: {roles, brief, startup}` and `converge_seats` together.
      Limit `brief` to the chosen roles in one line. Deferred startup also records the single-line approved `launcher`.
      When no advisor role is selected, omit startup and launcher.
-   - After `init`, record channels that already exist with `task session record-decision` in `solo` mode.
+   - After `init`, record channels that already exist with `<gear> --host <host> engine task session record-decision` in `solo` mode.
      Use summary `advisor channels: r2=<n>, debate=<m>`, naming only existing channels.
      For deferred startup, record each new pairing when it happens. Preserve the other use's channel when updating the decision.
    - While a channel exists, run its heartbeat task's printed `next` at once when that task ends.
@@ -215,7 +215,7 @@ After confirmation:
 
 2. Call `init` with this run-id and the settlement body. Pass `--dir` only when this run needs a non-default ledger location. Omit `--dir` for the default:
    ```
-   task session init <run-id> --settlement-file <file>
+   <gear> --host <host> engine task session init <run-id> --settlement-file <file>
    ```
 
    When `init` refuses because a ledger already exists at this path, or because the settlement fails validation, follow `## Recovery`.
@@ -231,19 +231,23 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 ## Rules
 
 - Ask routine work questions only during initial clarify. Use checkpoint mode only for required model or source-selection confirmation. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
-- After `init`, record each deputy-answered item in the run ledger as a `solo` decision that names its cited slugs (`task session record-decision … --mode solo`). Do not write it to the deputy ledger. Only the user's own answers go to `deputy:record`.
+- After `init`, record each deputy-answered item in the run ledger as a `solo` decision that names its cited slugs (`<gear> --host <host> engine task session record-decision … --mode solo`). Do not write it to the deputy ledger. Only the user's own answers go to `deputy:record`.
 - Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
 
 ## Recovery
 
 - **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
 - **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
-- **`task state validate` fails on the resolved machine** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
+- **`<gear> --host <host> engine task state validate` fails on the resolved machine** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
 - **Settlement fails validation** — `init` prints the problems and writes no ledger. Fix every listed problem in the settlement file, then run `init` again with the same run-id. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
 
 ## Host mechanics
 
-- Resolve the public `task` command to `<plugin-dir>/bin/task`.
+Use `claude` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Supply `<plugin-dir>` as `<engine-root>` in the handoff to `execute`.
 - Supply the host's exact session identity as `<run-id>`: the value of
   `$CLAUDE_CODE_SESSION_ID`.

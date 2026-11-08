@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
+from conftest import BATCH_1, CUTTER, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 from converge import ledger, model, protocol
 
 
@@ -105,7 +105,7 @@ def test_events_need_init(cv: Converge) -> None:
     cv.path().write_text("")
     problems = cv.append("file", FINDER, id="F001", loc="a.py:1", claim="c", trigger="t",
                          origin="lens")
-    assert "file: the slate has no init event; run `converge init` first" in problems
+    assert f"file: the slate has no init event; run `{GEAR_COMMAND} init` first" in problems
 
 
 # -- file and escalate ------------------------------------------------------------

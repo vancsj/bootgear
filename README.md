@@ -102,24 +102,24 @@ bootgear/
 │                    # Claude Code counterpart
 ├── .agents/         # Codex marketplace
 ├── .bootgear/       # this repo's own bootgear config; the same place any project puts its config
-├── cli/             # gear.py: runs any plugin command as `gear.py <plugin> <command>`
+├── plugins/cli/     # shared Gear CLI, plugin discovery and runtime setup
 ├── docs/            # current design
 └── quality/         # repository validation and quality checks
 ```
 
 A plugin that serves both hosts ships from one source directory under `plugins/`,
 with a `.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by
-side (see `memory-ledger`, `advisor`, `deputy`). `codex-plugins/` holds plugins with no
+side (see `cli`, `memory-ledger`, `advisor`, `deputy`). `codex-plugins/` holds plugins with no
 Claude Code counterpart at all (e.g. `engine`'s Codex-CLI port). Both retain
-platform-native manifests, hooks, wrappers, and invocation contracts.
+platform-native manifests, hooks, and invocation contracts.
 `converge` is the exception to both: it ships as a Claude Code plugin from
 `plugins/converge` and is bundled into the Codex `engine` rather than carrying
 its own `.codex-plugin`, so there is no separate Codex install.
 
 ## Install
 
-Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/)
-(`engine` and `converge` run through it). An engine run's advisor roles (a debate
+Prerequisites: `git`, Python 3.12, and [`uv`](https://docs.astral.sh/uv/).
+Python plugins use the shared CLI runtime. An engine run's advisor roles (a debate
 reviewer, or the converge refuter and gap hunter) go to the other vendor's host through
 `advisor`: on Claude Code they need the Codex CLI installed and signed in; on Codex, a
 Claude Code session listening through `advisor`.
@@ -128,6 +128,9 @@ Each plugin installs on its own — you do not need the rest of bootgear. The ta
 "installs … with it" notes describe Claude Code's declared dependencies; Codex CLI packages
 differ (see [Codex CLI](#codex-cli)).
 
+After installation, call `cli:setup` once to prepare the shared runtime.
+Call `cli:gear` to get the literal Gear path.
+
 ```
 /plugin marketplace add vancsj/bootgear
 /plugin install memory-ledger@bootgear
@@ -135,6 +138,7 @@ differ (see [Codex CLI](#codex-cli)).
 
 | gear | what it does |
 |---|---|
+| [cli](plugins/cli) | owns Gear, the shared Python runtime, clikit, discovery, and the public Gear-path skill |
 | [memory-ledger](plugins/memory-ledger) | a ledger of settled questions, where confidence counts independent verifications instead of asserting itself |
 | [engine](plugins/engine) | an autonomous task-execution loop — start a run with `/engine:start` (Codex: `$engine:start`); installs `converge`, `spec`, `test`, `review`, `advisor` and `memory-ledger` with it |
 | [converge](plugins/converge) | settles the facts behind a findings slate: find, refute, and cut each claim with separate agents, then compute what is reported; installs `memory-ledger` and `advisor` with it, and is installed automatically with `engine` and `review` |
@@ -146,7 +150,7 @@ differ (see [Codex CLI](#codex-cli)).
 
 ### Codex CLI
 
-[advisor](plugins/advisor) and [deputy](plugins/deputy) each ship from one source
+[cli](plugins/cli), [advisor](plugins/advisor), and [deputy](plugins/deputy) each ship from one source
 directory serving both hosts (the same pattern as `memory-ledger`): a
 `.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by side, so
 each is registered in both `.claude-plugin/marketplace.json` and
@@ -156,6 +160,7 @@ Install:
 
 ```
 codex plugin marketplace add vancsj/bootgear
+codex plugin add cli@bootgear
 codex plugin add memory-ledger@bootgear
 codex plugin add advisor@bootgear
 codex plugin add deputy@bootgear
@@ -172,8 +177,9 @@ skill directory, so no runtime path resolution between hosts is needed.
 
 ## Status
 
-bootgear ships as native Claude Code and Codex CLI plugins. `cli/gear.py`
-routes each plugin's commands (`gear.py <plugin> <command>`).
+bootgear ships as native Claude Code and Codex CLI plugins. The shared CLI
+plugin routes registered commands through Gear: `<gear> --host <host> <plugin>
+<command> [arguments]`.
 
 ## License
 

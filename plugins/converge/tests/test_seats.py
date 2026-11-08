@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 from typing import Any
 
-from conftest import BIN, PLUGIN_DIR, Converge
+from conftest import GEAR, GEAR_COMMAND, PLUGIN_DIR, Converge
 from converge import ledger, model
 
 ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
@@ -94,14 +95,16 @@ def _scope_converge(scope: str) -> Path:
 
 def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None = None) -> None:
     step = _line(lines, "DRIVER r2 step (one background step per turn): ")
+    step = step.split(": ", 1)[1]
+    channel_command = shlex.join([str(GEAR), "--host", "claude", "advisor", "channel"])
+    assert step.startswith(f"{channel_command} send ")
     assert ' send --channel "$CHANNEL" --from asker --to listener --kind request --body-file ' in step
     assert f"--body-file {cv.dir}/s1.r2.request.txt && " in step
     assert step.endswith(' receive --channel "$CHANNEL" --for asker --timeout 300')
     assert 'python3 "$CHANNEL_SCRIPT"' not in step
     assert step.count(" receive ") == 1 and "while" not in step
     placeholders = _line(lines, "DRIVER r2 placeholders: ")
-    for fragment in ("literal bin/channel path and channel number", "pairing printed",
-                     '"$CHANNEL_SCRIPT"', '"$CHANNEL"'):
+    for fragment in ("Gear channel command and channel number", "pairing printed", '"$CHANNEL"'):
         assert fragment in placeholders, placeholders
     then = _line(lines, "DRIVER r2 then: ")
     for fragment in ("do not run the while-loop next that send prints",
@@ -119,7 +122,7 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
         assert fragment in other, other
     assert ".sent" not in other
     check = _line(lines, "DRIVER r2 check: ")
-    for fragment in ("converge status s1 --dir ", "--json; a reply starting", "WRITE-DENIED",
+    for fragment in (f"{GEAR_COMMAND} status s1 --dir ", "--json; a reply starting", "WRITE-DENIED",
                      "absent from status", "blocked naming r2",
                      "never redo the turn with a native subagent"):
         assert fragment in check, check
@@ -150,7 +153,7 @@ def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> N
     nxt = lines[-1]
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
     for fragment in ("advisor channels decision", "--mode asking",
-                     "prints the channel.py path and the channel number",
+                     "prints the Gear command and channel number",
                      "keep the channel open after this slate",
                      "if it hands back no listener, stop blocked naming r2"):
         assert fragment in nxt, nxt
@@ -172,11 +175,10 @@ def test_init_with_advisor_settlement_json(cv: Converge) -> None:
     assert data["next"].startswith("reclaim the advisor channel for r2")
 
 
-def test_init_driver_names_the_shipped_wrapper(cv: Converge) -> None:
-    cv.use_bin = True
+def test_init_driver_names_the_gear_command(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
     lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
-    _assert_driver(lines, cv, converge_path=BIN.resolve())
+    _assert_driver(lines, cv, converge_path=GEAR.resolve())
 
 
 def _refused_lines(cv: Converge, settlement: Path) -> list[str]:
@@ -193,13 +195,13 @@ def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
     settlement = _settlement(cv, "converge_seats: {r2: native_subagent}\n"
                                  "advisor_roles: {roles: [refuter], brief: Act only as r2., startup: early}\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0].startswith("example: converge init ")
+    assert lines[0].startswith(f"example: {GEAR_COMMAND} init ")
     message = lines.index("converge: settlement seats do not match its advisor roles:")
     assert lines[message + 1] == (
         "  - advisor_roles: names refuter but converge_seats.r2 is native_subagent; "
         "set converge_seats.r2: advisor, or remove refuter from advisor_roles.roles")
     assert message + 2 == len(lines) - 1
-    assert any(line.startswith("example: converge init ") and line.endswith("--settlement <file>")
+    assert any(line.startswith(f"example: {GEAR_COMMAND} init ") and line.endswith("--settlement <file>")
                for line in lines), lines
     assert any(line.startswith("commands: ") for line in lines), lines
     assert lines[-1] == NEXT_FIX.format(path=settlement)
@@ -220,7 +222,7 @@ def test_init_refuses_every_seat_shape_problem(cv: Converge) -> None:
                                  "finder: advisor, r2: advisor}\n"
                                  "advisor_roles: {roles: [bogus], brief: ''}\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0].startswith("example: converge init ")
+    assert lines[0].startswith(f"example: {GEAR_COMMAND} init ")
     assert "converge: invalid settlement seats:" in lines
     text = "\n".join(lines)
     for fragment in ("converge_seats: unknown seat 'r9'",
@@ -235,7 +237,7 @@ def test_init_refuses_every_seat_shape_problem(cv: Converge) -> None:
 def test_init_refuses_a_settlement_that_is_not_a_mapping(cv: Converge) -> None:
     settlement = _settlement(cv, "- r2\n- advisor\n")
     lines = _refused_lines(cv, settlement)
-    assert lines[0].startswith("example: converge init ")
+    assert lines[0].startswith(f"example: {GEAR_COMMAND} init ")
     assert lines[-3:-1] == ["converge: invalid settlement seats:",
                             "  - --settlement must be a YAML mapping (the engine settlement)"]
     assert "  - --settlement must be a YAML mapping (the engine settlement)" in lines
@@ -277,7 +279,7 @@ def test_init_refuters_out_of_range_is_a_usage_refusal(cv: Converge) -> None:
     err = cv(*_init_args(cv, "--refuters", "3"), code=2).stderr
     assert "argument --refuters: invalid choice:" in err, err
     assert "(choose from 1, 2)" in err.replace("'", ""), err
-    assert "example: converge init " in err
+    assert f"example: {GEAR_COMMAND} init " in err
     assert not cv.path().exists()
 
 
@@ -310,7 +312,7 @@ def test_status_of_a_native_slate_shows_no_advisor(cv: Converge) -> None:
 
 def test_manifest_declares_advisor_dependency() -> None:
     manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text())
-    assert manifest["dependencies"] == ["memory-ledger", "advisor", "deputy"]
+    assert manifest["dependencies"] == ["memory-ledger", "advisor", "deputy", "cli"]
 
 
 def test_deferred_advisor_waits_until_gap_hunt_and_preserves_startup(cv: Converge) -> None:

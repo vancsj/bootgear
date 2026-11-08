@@ -3,23 +3,23 @@
     "SessionStart": [
       {
         "matcher": "compact",
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+        "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": ".*",
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+        "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook" }]
       }
     ],
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+        "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook" }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/advisor_hook.py" }]
+        "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook" }]
       }
     ]
   }

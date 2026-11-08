@@ -2,7 +2,7 @@
 name = "deputy"
 
 [commands.deputy]
-exec = ["./bin/deputy"]
+exec = ["python3", "scripts/deputy.py"]
 
 [commands.hook]
-exec = ["uv", "run", "--quiet", "--script", "./hooks/deputy_hook.py"]
+exec = ["python3", "hooks/deputy_hook.py"]

@@ -41,6 +41,8 @@ from __future__ import annotations
 import json
 import re
 
+from bootgear_cli.clikit import current_program
+
 from .constants import LOCAL_ONLY_KINDS
 from .store import load_entries
 
@@ -86,6 +88,7 @@ def _answers(ledgers, filter_text):
 
 
 def cmd_audit(args, root=None):
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     ledgers = args.ledgers
     rows = list(_answers(ledgers, args.filter))
 
@@ -121,12 +124,12 @@ def cmd_audit(args, root=None):
     print(f"\n{flagged} unportable, of {len(rows)} answers with an Evidence line.")
     if flagged:
         print("Answer bodies are immutable, so this is fixed by adding an answer that "
-              "carries a portable check — `ledger.py rival <slug> --keep-evidence <aN> "
+              f"carries a portable check — `{prog} rival <slug> --keep-evidence <aN> "
               "--evidence \"…\"` using a repo-relative path, or --repo <name> to name the "
               "checkout instead of embedding its location. The new answer starts "
               "unconfirmed and earns its own votes.")
     print("\nWhich ledger each entry belongs in is not decided here and has no heuristic. "
-          "`ledger.py audit --json [--filter <text>]` dumps every answer with its question, "
+          f"`{prog} audit --json [--filter <text>]` dumps every answer with its question, "
           "claim and check; read them and ask whether someone else, on their own machine, "
           "would get the same answer.")
     return 0

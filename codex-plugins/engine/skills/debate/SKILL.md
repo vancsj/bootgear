@@ -86,7 +86,7 @@ Call `recall --section settlement` and read:
 - `consented_stop_allowed`
 - `debate_admission`
 - `debate_party_config` — the settlement mapping already resolved by
-  `task config resolve --name debate-parties`; do not re-read lower layers.
+  `<gear> --host <host> engine task config resolve --name debate-parties`; do not re-read lower layers.
 - `source_of_truth`
 - `debate_threshold`
 - `task_type`
@@ -430,8 +430,12 @@ assessment. Do not claim that a retry occurred.
 
 ## Host mechanics
 
-- Resolve the public session command to `<plugin-root>/scripts/task`.
-- Resolve the public `converge` command through the host adapter.
+Use `codex` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run session commands as `<gear> --host codex engine task <command> [arguments]`.
+- Run converge commands as `<gear> --host codex engine converge <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
 - Use the host-supported party dispatch mechanism; do not substitute another
   host's mechanism. Codex supports `native_subagent` and `advisor`.
 - A party whose mechanism is `native_subagent` runs as a native subagent.

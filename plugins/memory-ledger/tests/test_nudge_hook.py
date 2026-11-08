@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[1] / "hooks" / "nudge.py"
+CLI_SOURCE = Path(__file__).resolve().parents[2] / "cli" / "src"
 
 
 class NudgeHookTest(unittest.TestCase):
@@ -34,7 +35,8 @@ class NudgeHookTest(unittest.TestCase):
             ["python3", str(HOOK)],
             input=json.dumps(payload),
             capture_output=True, text=True,
-            env={"HOME": str(self.home), "PATH": "/usr/bin:/bin"}, check=False,
+            env={"HOME": str(self.home), "PATH": "/usr/bin:/bin",
+                 "PYTHONPATH": str(CLI_SOURCE)}, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         if not result.stdout.strip():
@@ -58,14 +60,20 @@ class NudgeHookTest(unittest.TestCase):
         self.assertEqual(out, {})
 
     def test_ledger_invocation_resets_without_nudging(self):
-        out = self._run("Bash", {"command": "python3 ledger.py resolve 'q'"})
+        out = self._run("Bash", {"command": "gear memory-ledger ledger resolve q"})
         self.assertEqual(out, {})
         self.assertEqual(self._marker()["event"], "ledger-used")
 
     def test_quoted_ledger_path_counts_as_invocation(self):
-        out = self._run("Bash", {"command": 'python3 "/x/scripts/ledger.py" resolve q'})
+        out = self._run("Bash", {
+            "command": 'python3 "/x/plugins/cli/bin/gear" --host codex memory-ledger ledger resolve q',
+        })
         self.assertEqual(out, {})
         self.assertEqual(self._marker()["event"], "ledger-used")
+
+    def test_direct_ledger_script_does_not_count_as_a_gear_invocation(self):
+        self._run("Bash", {"command": 'python3 "/x/scripts/ledger.py" resolve q'})
+        self.assertEqual(self._marker()["event"], "nudged")
 
     def test_ledger_word_inside_a_name_is_not_an_invocation(self):
         self._run("Bash", {"command": "cat ledgerlib/x.py my-ledger.pyc"})
@@ -105,7 +113,8 @@ class NudgeHookTest(unittest.TestCase):
             ["python3", str(HOOK)],
             input=json.dumps(payload),
             capture_output=True, text=True,
-            env={"HOME": str(bare_home), "PATH": "/usr/bin:/bin"}, check=False,
+            env={"HOME": str(bare_home), "PATH": "/usr/bin:/bin",
+                 "PYTHONPATH": str(CLI_SOURCE)}, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(

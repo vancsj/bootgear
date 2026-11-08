@@ -202,9 +202,8 @@ is a judgement the reader makes by running the checks.
 | `/memory-ledger:setup` (Codex: `$memory-ledger:setup`) | check dependencies, create the ledgers, wire the config file and the host instructions file (`~/.claude/CLAUDE.md` or `~/.codex/AGENTS.md`), audit what is already filed |
 | `/memory-ledger:ledger` | look something up, record a finding, verify or contest an entry |
 
-The Python CLI is `scripts/ledger.py`. The extensionless `bin/ledger` entrypoint
-routes the gear command to it. The skills invoke their host entrypoint by an
-absolute path substituted at load time, so nothing needs to be on `PATH`.
+The Python CLI is `scripts/ledger.py`. Gear runs it through the shared runtime.
+The skills get Gear's absolute path from `cli:gear`.
 
 ```
 resolve   find the entry, or mint a slug for a new one
@@ -224,7 +223,15 @@ doctor    python, git, config, both roots
 
 ## Setup
 
-Install the plugin, then run `/memory-ledger:setup` (Codex: `$memory-ledger:setup`). It reports
+Claude Code installs `cli` with memory-ledger. On Codex, install both plugins:
+
+```
+codex plugin marketplace add vancsj/bootgear
+codex plugin add cli@bootgear
+codex plugin add memory-ledger@bootgear
+```
+
+Then run `/memory-ledger:setup` (Codex: `$memory-ledger:setup`). It reports
 `doctor`'s dependency table before touching anything, and every write outside the ledger
 repositories — the config file, the host instructions file, a git remote, a push — needs your
 explicit yes.

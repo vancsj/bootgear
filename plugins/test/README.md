@@ -65,12 +65,14 @@ An override must report in the same per-sub-task format. See
 /plugin install test@bootgear
 ```
 
+Claude installs `cli` with `test`.
+
 On Codex CLI, `test` has no separate install: it is bundled into the Codex `engine` package
-(`codex plugin add engine@bootgear`).
+(`codex plugin add engine@bootgear`). The `cli` plugin is a separate peer.
 
 ## Standalone, or as bootgear gear
 
-`test` works on its own and needs nothing else from bootgear. Installed with `engine`, it
+`test` works on its own, with `cli` as its dependency. Installed with `engine`, it
 runs the `test-code` and `e2e-test` nodes of `ticket-to-pr` runs and reproduces the report in
 the `triage` node of `triage` runs. Its report feeds `execute`'s todo updates and goal
 check; `test` never decides whether the broader task is complete.

@@ -6,7 +6,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
+from importlib import import_module
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -17,6 +19,7 @@ from typing import Callable, Sequence
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 QUALITY_ROOT = REPOSITORY_ROOT / "quality"
+CLI_SOURCE = REPOSITORY_ROOT / "plugins" / "cli" / "src"
 BASELINE_PATH = QUALITY_ROOT / "baseline.json"
 IDENTITY_PATHS = (
     QUALITY_ROOT / "pyproject.toml",
@@ -55,7 +58,7 @@ CHECKS = (
             "check",
             "--config",
             "quality/ruff.toml",
-            "cli",
+            "plugins/cli",
             "plugins/engine",
             "plugins/converge",
             "plugins/review",
@@ -71,7 +74,7 @@ CHECKS = (
     ),
     Check(
         "pytest-cli",
-        ("python", "-m", "pytest", "cli/tests"),
+        ("python", "-m", "pytest", "plugins/cli/tests"),
     ),
     Check(
         "pytest-quality",
@@ -134,6 +137,18 @@ def _fingerprint(output: str) -> str:
     return hashlib.sha256(_normalise(output).encode()).hexdigest()
 
 
+def _check_environment(check: Check) -> dict[str, str] | None:
+    if not check.name.startswith("pytest-"):
+        return None
+    env = os.environ.copy()
+    paths = [str(CLI_SOURCE)]
+    existing = env.get("PYTHONPATH")
+    if existing:
+        paths.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(paths)
+    return env
+
+
 def _load_baseline(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
@@ -155,6 +170,7 @@ def _run_checks(
             completed = execute(
                 check.command,
                 cwd=REPOSITORY_ROOT,
+                env=_check_environment(check),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -169,6 +185,18 @@ def _run_checks(
     # Checks are independent subprocesses; run them together, report in CHECKS order.
     with ThreadPoolExecutor(max_workers=len(CHECKS)) as pool:
         return list(pool.map(run_one, CHECKS))
+
+
+def _setup_shared_runtime() -> bool:
+    if str(CLI_SOURCE) not in sys.path:
+        sys.path.insert(0, str(CLI_SOURCE))
+    runtime = import_module("bootgear_cli.runtime")
+    try:
+        runtime.setup()
+    except (OSError, runtime.RuntimeNotReady) as exc:
+        print(f"shared runtime setup failed: {exc}", file=sys.stderr)
+        return False
+    return True
 
 
 def _report(results: Sequence[Result], baseline: Sequence[dict[str, str]]) -> int:
@@ -201,6 +229,8 @@ def _report(results: Sequence[Result], baseline: Sequence[dict[str, str]]) -> in
 def main() -> int:
     if Path.cwd().resolve() != REPOSITORY_ROOT:
         print(f"quality check must run from {REPOSITORY_ROOT}", file=sys.stderr)
+        return 2
+    if not _setup_shared_runtime():
         return 2
     try:
         baseline = _load_baseline(BASELINE_PATH)

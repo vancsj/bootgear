@@ -429,8 +429,10 @@ assessment. Do not claim that a retry occurred.
 
 ## Host mechanics
 
-- Resolve the public session command to `<plugin-dir>/bin/task`.
-- Resolve the public `converge` command through the host adapter.
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run session commands as `<gear> --host claude engine task <command> [arguments]`.
+- Run converge commands as `<gear> --host claude converge converge <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Use the host-supported party dispatch mechanism; do not substitute another
   host's mechanism. Claude Code supports `native_subagent` and `advisor`.
 - A party is unavailable when its `advisor` call fails or times out, or its

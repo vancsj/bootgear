@@ -6,6 +6,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from bootgear_cli.clikit import current_program
+
 from .config import Ledger
 from .constants import (
     FOLDER_MAX_ENTRIES,
@@ -211,7 +213,8 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                 if not a.asserted_line:
                     print(f"ASSERT-UNRECORDED {e.slug} {a.aid} — pinned at 1.00 with no "
                           f"`Asserted:` line saying who ruled and what settles it. Run "
-                          f"`ledger.py assert {e.slug} {a.aid} --why \"…\"`, or `--clear` "
+                          f"`{current_program('memory-ledger', 'ledger')} assert {e.slug} "
+                          f"{a.aid} --why \"…\"`, or `--clear` "
                           f"to hand it back to the tally")
                     problems += 1
                 if no:

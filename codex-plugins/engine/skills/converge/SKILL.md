@@ -3,7 +3,8 @@ name: converge
 description: Settle the facts behind a set of claims — find, attack and cut each claim with separate agents over a validated append-only ledger, then compute which claims are findings. Use to review an artifact through lenses, or when review or debate needs its claims settled before acting.
 ---
 
-`converge` below is the CLI named in `## Host mechanics`.
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+`converge` below means `<gear> --host <host> <converge-plugin> converge`.
 
 ## Use, inputs and handback
 
@@ -26,7 +27,7 @@ The cutoff gives each claim one result:
 
 Nothing verified is dropped.
 
-Hand back to the caller the render, every finding carrying a `choice`, the `fix-now` claims with their patches (`converge render --json` `fix_now`), the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8):
+Hand back to the caller the render, every finding carrying a `choice`, the `fix-now` claims with their patches (`<gear> --host <host> <converge-plugin> converge render --json` `fix_now`), the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8):
 
 - `converged`: no finding is `disputed`; give the finding, fix-now, fixed, follow-up and killed counts.
 - `unconverged`: list the `disputed` findings.
@@ -61,11 +62,11 @@ Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as
 - Spawn each role once and reuse it across the slate by continuing that agent; never spawn a new agent for a role that already has one.
 - For an advisor seat, run its printed preparation when its first task is due. Honor the settled startup choice.
   Let a deferred listener stay unstarted while other roles work. Reuse its recorded channel for later tasks.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `<gear> --host <host> <converge-plugin> converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
 
 ## 3. Find
 
-Spawn F once with one brief that lists every lens and, per lens, all its find angles (`converge angles --tag find --angles <file>…`; an angle whose `lens=` names another lens belongs only to that lens). Finder brief:
+Spawn F once with one brief that lists every lens and, per lens, all its find angles (`<gear> --host <host> <converge-plugin> converge angles --tag find --angles <file>…`; an angle whose `lens=` names another lens belongs only to that lens). Finder brief:
 
 1. For each lens, for each angle whose tell matches the artifact: search, run
    a positive control, then file each claim and record the run through the
@@ -96,7 +97,7 @@ Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON statu
      count) when the CLI requires it for the claim's lens; after the attack
      also set `difficulty`. Back each with an applicable evaluate angle and
      decide each value by the `<value>: <test>` lines that
-     `converge angles --tag evaluate` prints.
+     `<gear> --host <host> <converge-plugin> converge angles --tag evaluate` prints.
    - Read public status `difficulty_basis` before rating remedy difficulty.
      Under `artifact`, `trivial` and `local` need a measured unified diff within the CLI's limits.
      Pass it with `--patch`, `--callers none`, and `--migration none`.
@@ -122,7 +123,7 @@ Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON statu
 
 Run the cutoff, render and gate actions the CLI prints, then `converge converged`: `CONVERGED` picks outcome `converged`, `OPEN` picks `unconverged` with the disputed findings it lists.
 
-For each `fix-now` claim, the caller that applies its patch runs the tests and checks, starts a one-round re-review slate whose brief asks only for problems the patch introduces, and records `converge fix-check <slate> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <re-review slate>`. `pass` needs passing checks and a re-review slate with a current cutoff and no finding; on `fail` the caller reverts the patch. Then rerun the cutoff: `pass` gives `fixed`, `fail` returns the claim to finding or follow-up.
+For each `fix-now` claim, the caller that applies its patch runs the tests and checks, starts a one-round re-review slate whose brief asks only for problems the patch introduces, and records `<gear> --host <host> <converge-plugin> converge fix-check <slate> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <re-review slate>`. `pass` needs passing checks and a re-review slate with a current cutoff and no finding; on `fail` the caller reverts the patch. Then rerun the cutoff: `pass` gives `fixed`, `fail` returns the claim to finding or follow-up.
 
 ## 7. Memory-ledger
 
@@ -149,8 +150,14 @@ Hand back the render, every finding carrying a `choice`, and exactly one outcome
 
 ## Host mechanics
 
+Use `codex` for `<host>`.
+Use `engine` for `<converge-plugin>`.
+
 - Spawn each role agent once as a separate fresh native subagent with `spawn_agent`; continue that same subagent for later rounds (for example with `send_input`). Never spawn a replacement for a role that already has one: the slate's agent budget (`caps.agents`, main included) counts every distinct agent.
-- Run the CLI as `<plugin-root>/scripts/converge`, where `<plugin-root>` is this engine plugin's root; every `converge` command above means that script. Give role agents the full script path.
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run commands as `<gear> --host codex engine converge <command> [arguments]`.
+- Give role agents the Gear path and command form `<gear> --host codex engine converge <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
 - Invoke skills by their public name through the host Skill interface; the ledger skill is `memory-ledger:ledger`.
 - Invoke `advisor:advisor` (a separate plugin: `codex plugin add advisor@bootgear`); run an advisor seat's background step in a terminal session left running, with the escalation the `advisor` skill states.
 - A role agent is unavailable when its native subagent cannot be created, times out, or, in a headless run, stops on a fresh approval request. Stop with outcome `blocked` (step 8).

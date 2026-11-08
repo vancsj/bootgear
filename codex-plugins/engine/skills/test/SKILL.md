@@ -30,7 +30,7 @@ Before any other action:
 1. If running inside an active `engine` run, read the settlement:
 
    ```text
-   task session read <run-id> --section settlement
+   <gear> --host <host> engine task session read <run-id> --section settlement
    ```
 
    Read `test_override`, then apply the engine `recall` contract for an `AMENDMENT test_override` decision; its latest value, if present, wins.
@@ -65,5 +65,9 @@ For a large or high-risk change, expand case coverage, run integration or end-to
 
 ## Host mechanics
 
-- Resolve the public session command to `<plugin-root>/scripts/task`.
+Use `codex` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
 - Pass `<plugin-root>` as `<engine-root>` in the handoff to this skill.

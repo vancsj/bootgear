@@ -1,6 +1,6 @@
 """C30a checks for the six engine task types, on the Codex host.
 
-Host paths: `codex-plugins/engine/` (`scripts/task`, `scripts/converge`) and
+Host paths use registered Gear commands for task and Converge, and
 the bootgear overrides in `.bootgear/config/`. The cross-host byte copies and the shared docs
 are read from the repo root. Subprocesses run in scratch dirs, never in the repo.
 """
@@ -16,12 +16,12 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import CONVERGE as CONVERGE_COMMAND
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
-CONVERGE_BIN = PLUGIN_DIR / "scripts" / "converge"
 HOST_ROOT_VAR = "PLUGIN_ROOT"
 ENGINE_SRC = PLUGIN_DIR / "src"
 MACHINES = PLUGIN_DIR / "state-machines"
@@ -171,11 +171,11 @@ class Scratch(unittest.TestCase):
         self.report = self.tmp / "report.md"
 
     def _task(self, *args):
-        return subprocess.run([str(TASK_BIN), *args], capture_output=True, text=True,
+        return subprocess.run([*TASK_COMMAND, *args], capture_output=True, text=True,
                               check=False, cwd=self.project, env=_env())
 
     def _converge(self, *args):
-        return subprocess.run([str(CONVERGE_BIN), *args], capture_output=True, text=True,
+        return subprocess.run([*CONVERGE_COMMAND, *args], capture_output=True, text=True,
                               check=False, cwd=self.project, env=_env(self.home))
 
     # -- settlements and ledgers -------------------------------------------------------
@@ -274,8 +274,7 @@ class Scratch(unittest.TestCase):
     def _move(self, run_id, dest, *extra):
         """`task state transition`, with this host's converge first on PATH for leave checks."""
         env = _env(self.home)
-        env["PATH"] = f"{CONVERGE_BIN.parent}{os.pathsep}{env.get('PATH', '')}"
-        return subprocess.run([str(TASK_BIN), "state", "transition", run_id, "--dir",
+        return subprocess.run([*TASK_COMMAND, "state", "transition", run_id, "--dir",
                                str(self.session_dir), "--to", dest, "--reason", f"to {dest}",
                                "--confirm-leave", *extra, "--prose"],
                               capture_output=True, text=True, check=False, cwd=self.project,

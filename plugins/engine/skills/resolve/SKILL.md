@@ -53,7 +53,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
 Write one line in the session ledger for every disagreement `resolve` decides:
 
 ```text
-task session record-decision <run-id> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
+<gear> --host <host> engine task session record-decision <run-id> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
 ```
 
 During a stuck round, record the decided entry without `--question`, and state in the summary that it broke a debate stall.
@@ -72,5 +72,9 @@ Escalate to `debate` when the settlement is ambiguous or silent on the domain. D
 
 ## Host mechanics
 
-- Resolve the public session command to `<plugin-dir>/bin/task`.
+Use `claude` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Pass `<plugin-dir>` as `<engine-root>` in the handoff to this skill.

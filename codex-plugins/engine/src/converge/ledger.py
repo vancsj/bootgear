@@ -15,10 +15,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli.clikit import current_program
+
 from . import model, protocol, seats
 from .model import Claim, Slate
 
 DEFAULT_DIR = Path("~/.bootgear/converge")
+
+
+def _program() -> str:
+    return current_program("engine", "converge")
 
 REQUIRED: dict[str, tuple[str, ...]] = {
     "init": ("lenses", "angles", "config", "refuters"),
@@ -182,7 +188,7 @@ def validate_event(slate: Slate, event: dict[str, Any]) -> list[str]:
         _validate_init(event, problems)
         return problems
     if not slate.initialised:
-        problems.append(f"{kind}: the slate has no init event; run `converge init` first")
+        problems.append(f"{kind}: the slate has no init event; run `{_program()} init` first")
         return problems
     if agent == model.CONVERGE_AGENT and kind != "cutoff":
         problems.append(f"agent id {model.CONVERGE_AGENT!r} is reserved for computed cutoff events")
@@ -268,7 +274,8 @@ def validate_cutoff(slate: Slate, event: dict[str, Any], problems: list[str]) ->
     """The computed cutoff, written in phase cutoff; its results must equal a recompute, on
     write and on every replay."""
     if event.get("as") != model.CONVERGE_AGENT:
-        problems.append("cutoff is computed by `converge cutoff` only; it is rejected from --as input")
+        problems.append(f"cutoff is computed by `{_program()} cutoff` only; "
+                        "it is rejected from --as input")
     phase = protocol.slate_phase(slate)
     if phase != "cutoff":
         problems.append(f"cutoff: the slate is in phase {phase}; cutoff needs phase cutoff")
@@ -380,7 +387,7 @@ def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = F
     else:
         if not path.is_file():
             raise LedgerError([(f"no slate {slate_id!r} in {path.parent} (expected {path}); "
-                                f"run `converge init` first")])
+                                f"run `{_program()} init` first")])
         fd = os.open(path, os.O_RDWR | os.O_APPEND)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)

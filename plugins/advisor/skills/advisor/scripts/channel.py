@@ -18,6 +18,8 @@ import uuid
 from pathlib import Path
 from typing import NoReturn
 
+from bootgear_cli.clikit import current_program
+
 DEFAULT_ROOT = Path.home() / ".bootgear" / "advisor"
 ROLES = {"listener", "asker"}
 KINDS = {"request", "response", "stop"}
@@ -128,7 +130,7 @@ def emit(args: argparse.Namespace, payload: dict[str, object], ensure_ascii: boo
 def invocation(root_value: str | None) -> str:
     """This script's invocation for a `--root` value, without creating the root: an absolute
     `--root` whenever one was given or `BOOTGEAR_ADVISOR_DIR` moves it off the default."""
-    command = f"python3 {shlex.quote(str(Path(__file__).resolve()))}"
+    command = current_program("advisor", "channel")
     configured = root_value or os.environ.get("BOOTGEAR_ADVISOR_DIR")
     if configured:
         root = caller_path(configured)
@@ -317,7 +319,7 @@ def brief_record(record: dict[str, object]) -> dict[str, object]:
 
 def script_command(args: argparse.Namespace, root: Path) -> str:
     """This script's invocation, with `--root` whenever it was given or is not the default."""
-    command = f"python3 {shlex.quote(str(Path(__file__).resolve()))}"
+    command = current_program("advisor", "channel")
     if args.root is not None or root != DEFAULT_ROOT:
         command += f" --root {shlex.quote(str(root))}"
     return command

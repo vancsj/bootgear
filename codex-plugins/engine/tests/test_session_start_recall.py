@@ -10,6 +10,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from bootgear_cli.clikit import gear_command
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 HOOK = PLUGIN_DIR / "hooks" / "session_start_recall.py"
@@ -39,6 +42,7 @@ session_dir: {session_dir}
 
 def run_hook(hook_input: dict, home: Path | None = None) -> dict:
     env = dict(os.environ)
+    env["BOOTGEAR_HOST"] = "codex"
     if home is not None:
         env["HOME"] = str(home)
     result = subprocess.run(
@@ -78,6 +82,7 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         import os
         env = dict(os.environ)
         env["HOME"] = str(self.home)
+        env["BOOTGEAR_HOST"] = "codex"
         result = subprocess.run(
             ["python3", str(HOOK)],
             input=json.dumps({
@@ -115,7 +120,9 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         msg = self._run()
         self.assertIn("This session just compacted", msg)
         self.assertIn(f"Codex session_id: `{self.run_id}`", msg)
-        self.assertIn("<plugin-root>/scripts/task session recall", msg)
+        with patch.dict(os.environ, {"BOOTGEAR_HOST": "codex"}):
+            task_command = gear_command("engine", "task")
+        self.assertIn(f"`{task_command} session recall", msg)
         self.assertIn("session recall", msg)
         self.assertIn("outside the sandbox", msg)
         self.assertIn("host-level access", msg)

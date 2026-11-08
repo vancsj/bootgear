@@ -3,7 +3,7 @@
     "PostToolUse": [
       {
         "matcher": ".*",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/nudge.py" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude hook" }]
       }
     ]
   }

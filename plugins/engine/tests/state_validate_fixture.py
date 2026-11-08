@@ -8,7 +8,8 @@ import subprocess
 from pathlib import Path
 
 
-def validate_reminder(tmp: Path, task_bin: Path, reminder_lines, nexts=("succeeded",)):
+def validate_reminder(tmp: Path, task_command: list[str], reminder_lines,
+                      nexts=("succeeded",)):
     path = tmp / "machine.yaml"
     extra = "".join(f"  {name}:\n    next: [succeeded]\n"
                     for name in nexts if name != "succeeded")
@@ -17,6 +18,6 @@ def validate_reminder(tmp: Path, task_bin: Path, reminder_lines, nexts=("succeed
         + "".join(f"      {line}\n" for line in reminder_lines)
         + f"    next: [{', '.join(nexts)}]\n" + extra
         + "  succeeded:\n    terminal: true\n  failed:\n    terminal: true\n")
-    return subprocess.run([str(task_bin), "state", "validate", str(path)],
+    return subprocess.run([*task_command, "state", "validate", str(path)],
                           capture_output=True, text=True, check=False,
                           env={**os.environ, "BOOTGEAR_OUTPUT": "prose"})

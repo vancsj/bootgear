@@ -3,36 +3,36 @@
     "PreToolUse": [
       {
         "matcher": "^Bash$",
-        "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_tool_use_task_identity.py\" --host claude" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude context-hook" }]
       }
     ],
     "SessionStart": [
       {
         "matcher": "startup|clear|compact",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern 'startup|clear|compact'" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler session_recall --matcher-pattern 'startup|clear|compact'" }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern \"\"" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler stop_reminder --matcher-pattern \"\"" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": ".*",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler state_nudge --matcher-pattern '.*'" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler state_nudge --matcher-pattern '.*'" }]
       }
     ],
     "PreCompact": [
       {
         "matcher": "manual|auto",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler compaction_observe --matcher-pattern 'manual|auto'" }]
       }
     ],
     "PostCompact": [
       {
         "matcher": "manual|auto",
-        "hooks": [{ "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'" }]
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler compaction_observe --matcher-pattern 'manual|auto'" }]
       }
     ]
   }

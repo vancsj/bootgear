@@ -50,7 +50,7 @@ Use its public intake, primary artifact binding, and gate handback.
 In an active run, read the settlement through the public session command:
 
 ```text
-task session read <run-id> --section settlement
+<gear> --host <host> engine task session read <run-id> --section settlement
 ```
 
 Use `spec_override`, including its latest valid amendment.
@@ -196,6 +196,13 @@ Do not treat unavailable history as empty history or request new mutation permis
 
 ## Host mechanics
 
+Use `spec` for `<spec-plugin>`.
+
+Use `claude` for `<host>`.
+
 - Invoke skills through the Skill tool.
-- Resolve the public session command to `<engine-root>/bin/task` from the caller handoff.
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
+- Run feedback commands as `<gear> --host claude spec spec-feedback <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Keep `session_dir` in context. Supply `--dir` only for a custom session directory.

@@ -62,9 +62,10 @@ Do not require an engine run for standalone authoring. The direct caller obtains
 
 ## Host mechanics
 
-Claude: use the registered `BOOTGEAR_HOST=claude gear.py review self-review` command.
-Codex: use the registered `BOOTGEAR_HOST=codex gear.py engine self-review` command.
-Set the host on each command when tool shells do not retain the host context.
-Both commands support `settings`, `status`, `open`, `configure` and `pass`.
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run Claude commands as `<gear> --host claude review self-review <command> [arguments]`.
+Run Codex commands as `<gear> --host codex engine self-review <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+The commands support `settings`, `status`, `open`, `configure` and `pass`.
 Use scalar routing flags and one JSON file or stdin for structured input. Add `--json` for structured handbacks.
 Resolve relative caller paths through `GEAR_CALLER_CWD` when supplied.

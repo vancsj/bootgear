@@ -5,10 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 
 MACHINE = """\
 name: recall
@@ -34,7 +34,7 @@ class SessionRecallTest(unittest.TestCase):
 
     def _task(self, *args):
         result = subprocess.run(
-            [str(TASK_BIN), *args, "--dir", str(self.session_dir)],
+            [*TASK_COMMAND, *args, "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

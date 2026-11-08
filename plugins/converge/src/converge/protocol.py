@@ -10,8 +10,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli.clikit import current_program
+
 from . import effort, ledger, model
 from .model import Claim, Slate
+
+
+def _program() -> str:
+    return current_program("converge", "converge")
 
 FRESH_EYE = "fresh-eye"
 FRESH_EYE_RULE = ("choose a new angle name not listed in `used`, including names outside the fixed list; "
@@ -958,7 +964,7 @@ def _validate_fix_check(slate: Slate, event: dict[str, Any], problems: list[str]
     if claim.fix_check is not None:
         problems.append(f"fix-check: {claim.id} already has a fix-check; a fix is checked once")
     if slate.cutoff is None:
-        problems.append("fix-check: the slate has no cutoff event; run `converge cutoff` first")
+        problems.append(f"fix-check: the slate has no cutoff event; run `{_program()} cutoff` first")
         return
     stored = {row["claim"]: row["result"] for row in slate.cutoff["results"]}
     if stored.get(claim.id) != "fix-now":

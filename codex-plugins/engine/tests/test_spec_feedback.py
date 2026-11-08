@@ -3,18 +3,42 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[1]
-WRAPPER = PLUGIN / ("scripts" if (PLUGIN / "scripts").is_dir() else "bin") / "spec-feedback"
+REPO = Path(__file__).resolve().parents[3]
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
+
+
+@dataclass
+class FeedbackRunner:
+    prefix: list[str]
+    env: dict[str, str]
+    root: Path
+    task: Path
+
+    def __call__(self, command: str, *args: object, **overrides: str) -> tuple[
+        subprocess.CompletedProcess[str], dict[str, Any]
+    ]:
+        result = subprocess.run(
+            [*self.prefix, command, "--task-folder", str(self.task), "--json", *map(str, args)],
+            env={**self.env, **overrides}, cwd=self.task.parent,
+            text=True, capture_output=True, check=False,
+        )
+        assert result.stdout, result.stderr
+        return result, json.loads(result.stdout)
 
 
 @pytest.fixture
-def feedback(tmp_path: Path):
+def feedback(tmp_path: Path) -> tuple[Path, Path, Path, FeedbackRunner, Path]:
     task = tmp_path / "task"
     task.mkdir()
     evidence = tmp_path / "raw.txt"
@@ -25,40 +49,51 @@ def feedback(tmp_path: Path):
     checks.write_text(json.dumps({"slate": "s1", "checks": [{"id": "O1", "state": "checked",
         "evidence_refs": ["independent trace:1"], "disposition": "The required output holds on the traced path.",
         "claim_ids": []}]}))
-    commands = tmp_path / "commands"
-    commands.mkdir()
-    helper = commands / "public-helper"
-    helper.write_text('''#!/usr/bin/env python3
-import json, os, sys
+    gear_root = tmp_path / "gear-root"
+    engine = gear_root / "codex-plugins" / "engine"
+    engine.mkdir(parents=True)
+    source_package = PLUGIN / "src" / "spec_feedback"
+    shutil.copytree(source_package, engine / "src" / "spec_feedback")
+    (engine / "gear.toml").write_text(
+        '[plugin]\nname = "engine"\n\n'
+        '[commands.spec-feedback]\nexec = ["python3", "-m", "spec_feedback.cli"]\n',
+        encoding="utf-8",
+    )
+    helper_source = '''import json, os, sys
 from pathlib import Path
-name = Path(sys.argv[0]).name
+name = os.environ["GEAR_PLUGIN"]
 with open(os.environ["CALL_LOG"], "a") as log:
     log.write(json.dumps([name, *sys.argv[1:]]) + "\\n")
 if name == "self-review":
-    print(json.dumps({"outcome": "ready", "record_exists": False, "checkpoints": json.loads(os.environ.get("HISTORY", "[]"))}))
+    print(json.dumps({"outcome": "ready", "record_exists": False,
+                      "checkpoints": json.loads(os.environ.get("HISTORY", "[]"))}))
 elif sys.argv[1] == "status":
     print(json.dumps({"slate": "s1", "claims": [{"id": "F001"}]}))
 else:
     ok = os.environ.get("GATE_OPEN") != "1"
-    print(json.dumps({"slate": "s1", "ok": ok, "problems": [] if ok else ["F001 is open in attack"]}))
+    print(json.dumps({"slate": "s1", "ok": ok,
+                      "problems": [] if ok else ["F001 is open in attack"]}))
     sys.exit(0 if ok else 1)
-''')
-    helper.chmod(0o755)
-    for name in ("self-review", "converge"):
-        (commands / name).symlink_to(helper)
+'''
+    for name, command in (("self-review", "self-review"), ("converge", "converge")):
+        plugin = gear_root / "plugins" / name
+        plugin.mkdir(parents=True)
+        (plugin / "gear.toml").write_text(
+            f'[plugin]\nname = "{name}"\n\n'
+            f'[commands.{command}]\nexec = ["python3", "provider.py"]\n',
+            encoding="utf-8",
+        )
+        (plugin / "provider.py").write_text(helper_source, encoding="utf-8")
+
     log = tmp_path / "calls.jsonl"
-    env = {**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
-           "CALL_LOG": str(log), "BOOTGEAR_HOST": "claude", "BOOTGEAR_OUTPUT": "prose",
+    safe_path = os.pathsep.join((str(Path(sys.executable).parent), "/bin:/usr/bin"))
+    env = {**os.environ, "PATH": safe_path, "CALL_LOG": str(log),
+           "BOOTGEAR_HOST": "codex", "BOOTGEAR_OUTPUT": "prose",
            "SPEC_FEEDBACK_TEST_UNUSED": "1"}
     env.pop("GEAR_CALLER_CWD", None)
+    prefix = [str(GEAR), "--host", "codex", "--root", str(gear_root), "engine", "spec-feedback"]
 
-    def run(command, *args, **overrides):
-        result = subprocess.run([sys.executable, str(WRAPPER), command, "--task-folder", str(task),
-            "--json", *map(str, args)], env={**env, **overrides}, cwd=tmp_path,
-            text=True, capture_output=True, check=False)
-        assert result.stdout, result.stderr
-        return result, json.loads(result.stdout)
-
+    run = FeedbackRunner(prefix=prefix, env=env, root=gear_root, task=task)
     return task, inventory, checks, run, log
 
 
@@ -139,13 +174,20 @@ def test_prior_slate_and_unknown_claim_refuse(feedback, tmp_path):
 
 def test_missing_helpers_return_actual_diagnostic(feedback, tmp_path):
     _, inventory, checks, run, _ = feedback
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    result, data = run("intake", "--observations", inventory, "--destination", "spec", PATH=str(empty))
+    self_review = run.root / "plugins" / "self-review" / "gear.toml"
+    self_review.unlink()
+    result, data = run("intake", "--observations", inventory, "--destination", "spec")
     assert result.returncode != 0 and data["outcome"] == "unavailable"
     assert "self-review" in data["diagnostic"] and "No such file" in data["diagnostic"]
+    self_review.write_text(
+        '[plugin]\nname = "self-review"\n\n'
+        '[commands.self-review]\nexec = ["python3", "provider.py"]\n',
+        encoding="utf-8",
+    )
+    converge = run.root / "plugins" / "converge" / "gear.toml"
+    converge.unlink()
     result, data = run("gate", "--slate", "s1", "--converge-dir", tmp_path,
-                       "--observations", inventory, "--checks", checks, PATH=str(empty))
+                       "--observations", inventory, "--checks", checks)
     assert result.returncode != 0 and data["outcome"] == "unavailable"
     assert "converge" in data["diagnostic"]
 
@@ -155,9 +197,10 @@ def test_usage_and_prose_default(feedback):
     result, data = run("intake", "--observations", inventory)
     assert result.returncode != 0 and data["outcome"] == "refused"
     assert "example:" in result.stderr and "settings, intake, gate" in result.stderr
-    env = dict(os.environ)
+    assert f"example: {shlex.join(run.prefix)} intake" in result.stderr
+    env = dict(run.env)
     env.pop("BOOTGEAR_OUTPUT", None)
-    result = subprocess.run([sys.executable, str(WRAPPER), "settings"], env=env,
+    result = subprocess.run([*run.prefix, "settings", "--task-folder", str(run.task)], env=env,
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert not result.stdout.lstrip().startswith("{")
@@ -170,11 +213,12 @@ def test_usage_and_prose_default(feedback):
     ("json", "--prose", False),
     ("prose", "--json", True),
 ])
-def test_wrapper_honors_output_environment_and_explicit_flags(tmp_path, mode, flag, wants_json):
-    args = [sys.executable, str(WRAPPER), "settings", "--task-folder", str(tmp_path)]
+def test_gear_route_honors_output_environment_and_explicit_flags(feedback, tmp_path, mode, flag, wants_json):
+    _, _, _, run, _ = feedback
+    args = [*run.prefix, "settings", "--task-folder", str(tmp_path)]
     if flag is not None:
         args.append(flag)
-    result = subprocess.run(args, env={**os.environ, "BOOTGEAR_OUTPUT": mode},
+    result = subprocess.run(args, env={**run.env, "BOOTGEAR_OUTPUT": mode},
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     if wants_json:
@@ -210,21 +254,8 @@ def test_option_like_values_refuse_before_public_calls(feedback, tmp_path):
     assert not log.exists()
 
 
-def test_codex_prefers_bundled_public_helper(feedback, tmp_path):
-    task, inventory, _, _, _ = feedback
-    root = tmp_path / "bundle"
-    (root / "src" / "spec_feedback").mkdir(parents=True)
-    (root / "scripts").mkdir()
-    for source in (PLUGIN / "src" / "spec_feedback").glob("*.py"):
-        (root / "src" / "spec_feedback" / source.name).write_bytes(source.read_bytes())
-    wrapper = root / "scripts" / "spec-feedback"
-    wrapper.write_bytes(WRAPPER.read_bytes())
-    helper = root / "scripts" / "self-review"
-    helper.write_text(f'#!{sys.executable}\nimport json\nprint(json.dumps({{"outcome":"ready", "record_exists":False,"checkpoints":[]}}))\n')
-    helper.chmod(0o755)
-    result = subprocess.run([sys.executable, str(wrapper), "intake", "--task-folder", str(task),
-                             "--observations", str(inventory), "--destination", "spec", "--json"],
-                            env={**os.environ, "BOOTGEAR_HOST": "codex", "PATH": str(tmp_path / "empty")},
-                            capture_output=True, text=True, check=False)
+def test_codex_routes_feedback_settings_through_gear(feedback):
+    _, _, _, run, _ = feedback
+    result, data = run("settings")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(result.stdout)["outcome"] == "ready"
+    assert data["outcome"] == "ready"

@@ -17,13 +17,17 @@ from pathlib import Path
 from unittest import mock
 
 PLUGIN = Path(__file__).resolve().parents[1]
+REPO = PLUGIN.parents[1]
 CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
 
 # The suite parses JSON; OutputModeTests clears this to see the prose default.
 os.environ["BOOTGEAR_OUTPUT"] = "json"
 
 sys.path.insert(0, str(CHANNEL.parent))
 import channel as channel_module  # pyright: ignore[reportMissingImports]
+
+GEAR_PREFIX = shlex.split(channel_module.current_program("advisor", "channel"))
 
 
 SESSION_ENV = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
@@ -58,7 +62,7 @@ class OutputModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], "channel: 0001")
-        self.assertTrue(lines[-1].startswith("next: python3 "))
+        self.assertTrue(lines[-1].startswith(f"next: {shlex.join(GEAR_PREFIX)} "))
         with self.assertRaises(json.JSONDecodeError):
             json.loads(result.stdout)
 
@@ -515,7 +519,7 @@ class HeartbeatTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(
             shlex.split(self.assert_stopped(stdout, "max_age")["next"]),
-            ["python3", str(CHANNEL.resolve()), "--root", str(self.root), "heartbeat", "--channel", "0001",
+            [*GEAR_PREFIX, "--root", str(self.root), "heartbeat", "--channel", "0001",
              "--role", "listener", "--session", "s1", "--interval", "0.1", "--max-age", "0.3"],
         )
 
@@ -525,7 +529,7 @@ class HeartbeatTests(unittest.TestCase):
                 args = argparse.Namespace(root=str(self.root), role="listener", session="s1",
                                           interval=interval, max_age=max_age)
                 printed = shlex.split(channel_module.heartbeat_command(args, self.root, "0001"))
-                parsed = channel_module.build_parser().parse_args(printed[2:])
+                parsed = channel_module.build_parser().parse_args(printed[len(GEAR_PREFIX):])
                 self.assertEqual((parsed.interval, parsed.max_age), (interval, max_age))
 
     def test_prints_nothing_while_running(self) -> None:
@@ -756,7 +760,7 @@ class ConditionalCloseTests(unittest.TestCase):
         payload = json.loads(result.stderr)
         self.assertEqual(payload["category"], category)
         self.assertEqual(shlex.split(quoted_command(payload["next"])),
-                         ["python3", str(CHANNEL.resolve()), "--root", str(self.root), "receive",
+                         [*GEAR_PREFIX, "--root", str(self.root), "receive",
                           "--channel", "0001", "--for", "listener", "--timeout", "300"])
         self.assertNotEqual(self.state(), "closed")
 
@@ -849,7 +853,7 @@ class RegisterNextTests(unittest.TestCase):
                 output = json.loads(result.stdout)
                 self.assertEqual(
                     shlex.split(output["next"]),
-                    ["python3", str(CHANNEL.resolve()),
+                    [*GEAR_PREFIX,
                      "--root", str(self.root), "heartbeat", "--channel", "0001", "--role", role,
                      "--session", session],
                 )
@@ -981,7 +985,7 @@ class LiveCandidateScanTests(unittest.TestCase):
 class ListTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
-        self.script = ["python3", str(CHANNEL.resolve()), "--root", str(self.root)]
+        self.script = [*GEAR_PREFIX, "--root", str(self.root)]
 
     def scan(self, *extra: str) -> subprocess.CompletedProcess:
         return run(self.root, "list", "--live-for", "asker", "--session", "c1", *extra)
@@ -1183,8 +1187,9 @@ class ArgumentRefusalTests(unittest.TestCase):
                 payload = json.loads(result.stderr)
                 self.assertEqual(payload["category"], category)
                 example = shlex.split(payload["example"])
-                self.assertEqual(example[:4], ["python3", str(CHANNEL.resolve()), "--root", str(self.root)])
-                self.assertEqual(parser.parse_args(example[2:]).command, command)
+                self.assertEqual(example[:len(GEAR_PREFIX) + 2],
+                                 [*GEAR_PREFIX, "--root", str(self.root)])
+                self.assertEqual(parser.parse_args(example[len(GEAR_PREFIX):]).command, command)
                 self.assertEqual(payload["commands"].split(", "),
                                  [c for c in channel_module.COMMANDS if c != command])
                 self.assertIn("example", payload["next"])
@@ -1233,7 +1238,9 @@ class ArgumentRefusalTests(unittest.TestCase):
                 self.assertEqual(refused.returncode, 2)
                 payload = json.loads(refused.stderr)
                 example = shlex.split(payload["example"])
-                self.assertEqual(example[2:], ["--root", str(self.root), "status", "--channel", "0001"])
+                self.assertEqual(example[:len(GEAR_PREFIX)], GEAR_PREFIX)
+                self.assertEqual(example[len(GEAR_PREFIX):],
+                                 ["--root", str(self.root), "status", "--channel", "0001"])
                 self.assertNotIn("status", payload["commands"].split(", "))
                 ran = subprocess.run(example, capture_output=True, text=True, check=False, timeout=10)
                 self.assertEqual(ran.returncode, 0, ran.stderr)
@@ -2019,15 +2026,25 @@ class ListenerLoopTests(unittest.TestCase):
         run(self.root, "register", "--role", "listener", "--session", "s1")
         skill = (CHANNEL.parent.parent / "SKILL.md").read_text()
         loop = skill[skill.index("while :; do"):skill.index("done\n") + len("done\n")]
-        self.loop = (loop.replace("<mine>", "listener").replace("<peer>", "asker")
-                     .replace("<message_id>", "none").replace("--timeout 300", "--timeout 0.1"))
+        self.loop_template = (loop.replace("<mine>", "listener").replace("<peer>", "asker")
+                              .replace("<message_id>", "none").replace("--timeout 300", "--timeout 0.1"))
 
-    def start_loop(self) -> subprocess.Popen[str]:
-        env = {**os.environ, "BOOTGEAR_ADVISOR_DIR": str(self.root), "CHANNEL_SCRIPT": str(CHANNEL),
-               "CHANNEL": "0001"}
-        process = subprocess.Popen(["bash", "-c", self.loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True, env=env)
-        self.addCleanup(lambda: (process.poll() is None and process.kill(), process.communicate()))
+    def start_loop(self, gear: Path = GEAR) -> subprocess.Popen[str]:
+        loop = self.loop_template.replace("<gear>", shlex.quote(str(gear))).replace("<host>", "claude")
+        env = {**os.environ, "BOOTGEAR_ADVISOR_DIR": str(self.root), "CHANNEL": "0001"}
+        process = subprocess.Popen(["bash", "-c", loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, env=env, start_new_session=True)
+
+        def stop_loop() -> None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            if process.poll() is None:
+                process.wait(timeout=5)
+            process.communicate()
+
+        self.addCleanup(stop_loop)
         return process
 
     def test_stops_when_the_asker_heartbeat_is_stale(self) -> None:
@@ -2074,19 +2091,16 @@ class ListenerLoopTests(unittest.TestCase):
         wrapper = self.root / "channel-wrapper.py"
         wrapper.write_text(
             "#!/usr/bin/env python3\nimport os, subprocess, sys\n"
-            f"real, marker = {str(CHANNEL)!r}, {str(marker)!r}\n"
+            f"real, marker = {str(GEAR)!r}, {str(marker)!r}\n"
             "if 'close' in sys.argv[1:] and not os.path.exists(marker):\n"
             "    open(marker, 'w').close()\n"
-            "    subprocess.run([sys.executable, real, 'register', '--channel', '0001', '--role', 'asker',\n"
+            "    subprocess.run([real, '--host', 'claude', 'advisor', 'channel', 'register',\n"
+            "                    '--channel', '0001', '--role', 'asker',\n"
             "                    '--session', 'c1'], check=True, capture_output=True)\n"
-            "os.execv(sys.executable, [sys.executable, real, *sys.argv[1:]])\n")
+            "os.execv(real, [real, *sys.argv[1:]])\n")
         wrapper.chmod(0o755)
-        env = {**os.environ, "BOOTGEAR_ADVISOR_DIR": str(self.root), "CHANNEL_SCRIPT": str(wrapper),
-               "CHANNEL": "0001"}
-        process = subprocess.Popen(["bash", "-c", self.loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True, env=env)
-        self.addCleanup(lambda: (process.poll() is None and process.kill(), process.communicate()))
-        time.sleep(1.5)
+        process = self.start_loop(wrapper)
+        self.assertTrue(wait_until(marker.exists, timeout=10))
         running = process.poll() is None
         process.kill()
         _, stderr = process.communicate()
@@ -2275,7 +2289,7 @@ class ChannelStatusTests(unittest.TestCase):
         self.assertEqual(status["unread"], 0)
         self.assertIsNone(status["last_read"])
         self.assertIsNone(status["owed"])
-        self.assertTrue(str(status["next"]).startswith("python3 "))
+        self.assertTrue(str(status["next"]).startswith(f"{shlex.join(GEAR_PREFIX)} "))
         self.assertIn("receive --channel 0001 --for listener --timeout 300", str(status["next"]))
 
     def test_unread_counts_messages_to_the_role_only(self) -> None:

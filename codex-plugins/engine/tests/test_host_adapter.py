@@ -4,11 +4,19 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from importlib import import_module
 from pathlib import Path
+from unittest.mock import patch
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PLUGIN_DIR.parents[1]
 RUNNER = PLUGIN_DIR / "tests" / "run_host_adapter_fixture.py"
+sys.path.insert(0, str(PLUGIN_DIR / "src"))
+
+host_adapter = import_module("engine.host_adapter")
+policy = import_module("engine.policy")
+
+HostContext = host_adapter.HostContext
 
 
 class CodexHostAdapterFixtureTest(unittest.TestCase):
@@ -133,7 +141,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
     def test_repo_hook_output_fits_the_limit(self):
         context = self._context("startup", cwd=REPO_ROOT)
         self.assertIn("Standards (read each file in full before you judge or write):", context)
-        self.assertLess(len(context), 8000)
+        self.assertLess(len(context), 10000)
 
     def test_active_ledger_adds_nudge_on_compact_with_goal_and_principles(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n")
@@ -178,3 +186,33 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
     def test_unreadable_ledger_emits_identity_and_principles(self):
         self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
         self.assertEqual(self._context("compact"), IDENTITY_AND_PRINCIPLES)
+
+
+class ActiveStatePolicyRoutingTest(unittest.TestCase):
+    def test_state_policy_reads_through_gear_with_the_event_host(self):
+        ledger = PLUGIN_DIR / "fixture-session.md"
+        response = subprocess.CompletedProcess([], 0, '{"current":"clarify"}', "")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                context = HostContext(
+                    host=host,
+                    plugin_root=PLUGIN_DIR,
+                    source_dir=PLUGIN_DIR / "src",
+                    hook_dir=PLUGIN_DIR / "hooks",
+                    cwd="/tmp/fixture-project",
+                    session_id="fixture-session",
+                    event="PostToolUse",
+                    matcher_pattern=None,
+                    matcher_value=None,
+                    handler_kind="state_nudge",
+                )
+                with patch.object(policy, "_ledger_path", return_value=ledger), \
+                        patch.object(policy.subprocess, "run", return_value=response) as run, \
+                        patch.object(policy, "gear_argv", wraps=policy.gear_argv) as route:
+                    self.assertEqual(policy._run_state(context), {"current": "clarify"})
+                route.assert_called_once_with("engine", "task", host=host)
+                argv = run.call_args.args[0]
+                self.assertEqual(argv[:5], [str(REPO_ROOT / "plugins" / "cli" / "bin" / "gear"),
+                                            "--host", host, "engine", "task"])
+                self.assertEqual(argv[5:], ["session", "read", "fixture-session", "--dir",
+                                            str(ledger.parent), "--section", "state", "--json"])

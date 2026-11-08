@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/hooks/pre_tool_use_task_identity.py\" --host codex",
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex context-hook",
             "statusMessage": "Checking Gear command"
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern \"\""
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler stop_reminder --matcher-pattern \"\""
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler session_recall --matcher-pattern '^(startup|resume|compact)$'",
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler session_recall --matcher-pattern '^(startup|resume|compact)$'",
             "statusMessage": "Restoring engine context"
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler state_nudge --matcher-pattern '.*'"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler state_nudge --matcher-pattern '.*'"
           }
         ]
       },
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler stop_reminder --matcher-pattern '.*'"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler stop_reminder --matcher-pattern '.*'"
           }
         ]
       }
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler compaction_observe --matcher-pattern 'manual|auto'"
           }
         ]
       }
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/adapter.py --handler compaction_observe --matcher-pattern 'manual|auto'"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler compaction_observe --matcher-pattern 'manual|auto'"
           }
         ]
       }

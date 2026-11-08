@@ -2,4 +2,7 @@
 name = "advisor"
 
 [commands.channel]
-exec = ["./bin/channel"]
+exec = ["python3", "skills/advisor/scripts/channel.py"]
+
+[commands.hook]
+exec = ["python3", "hooks/advisor_hook.py"]

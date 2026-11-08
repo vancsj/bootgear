@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 import unittest.mock
 from contextlib import redirect_stdout
@@ -135,7 +136,7 @@ class HookFileTests(unittest.TestCase):
         self.assertEqual(set(groups), events)
         prompt, = groups["UserPromptSubmit"]
         self.assertNotIn("matcher", prompt)
-        command = f'uv run --quiet --script "{variable}/hooks/deputy_hook.py" --host {host}'
+        command = f'"{variable}/hooks/gear" --host {host} hook --host {host}'
         for event in events:
             group, = groups[event]
             if event != "UserPromptSubmit":
@@ -149,14 +150,21 @@ class HookFileTests(unittest.TestCase):
         self.assert_registers("codex-hooks.json", "codex", "${PLUGIN_ROOT}")
 
     def test_both_hosts_run_the_same_script(self) -> None:
-        scripts = set()
-        for name in ("hooks.json", "codex-hooks.json"):
+        commands = {}
+        for name, host, variable in (
+            ("hooks.json", "claude", "${CLAUDE_PLUGIN_ROOT}"),
+            ("codex-hooks.json", "codex", "${PLUGIN_ROOT}"),
+        ):
             for groups in self.groups(name).values():
                 for group in groups:
                     for hook in group["hooks"]:
-                        args = shlex.split(hook["command"])
-                        scripts.add(args[args.index("--script") + 1].split("}/", 1)[1])
-        self.assertEqual(scripts, {"hooks/deputy_hook.py"})
+                        commands[name] = shlex.split(hook["command"])
+            self.assertEqual(commands[name], [f"{variable}/hooks/gear", "--host", host,
+                                              "hook", "--host", host])
+        registration = tomllib.loads((PLUGIN / "gear.toml").read_text())
+        self.assertEqual(registration["commands"]["hook"]["exec"],
+                         ["python3", "hooks/deputy_hook.py"])
+        self.assertTrue((PLUGIN / "hooks" / "gear").is_file())
         self.assertTrue(HOOK.is_file())
 
 

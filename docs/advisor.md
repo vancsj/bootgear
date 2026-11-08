@@ -10,12 +10,11 @@ review, or delegated investigation. One plugin directory ships to both hosts.
 |---|---|
 | `skills/advisor/SKILL.md` | The skill contract: mode selection, the listener loop, safety rules. |
 | `skills/advisor/references/` | One doc per communication (`direct`, `channel`) and per task (`rewrite`, `ask`, `review`, `delegate`). |
-| `bin/channel` | Extensionless `channel` CLI entrypoint; proxies to `channel.py`. |
 | `skills/advisor/scripts/channel.py` | The mailbox CLI. Both hosts use this one copy. |
 | `hooks/advisor_hook.py` | The seat hook both hosts run: hook stamp, heartbeat restart reminder, status after compaction. |
 | `hooks/hooks.json`, `hooks/codex-hooks.json` | Claude and Codex hook manifests; the Codex one is named by `.codex-plugin/plugin.json`. |
 | `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` | Host manifests for the same skill tree. |
-| `gear.toml` | Exposes `bin/channel` as the `channel` gear command. |
+| `gear.toml` | Exposes `channel.py` and the advisor hook through Gear. |
 
 ## Modes
 
@@ -201,8 +200,7 @@ record, message, and lock file to `0600`, on every call.
 - **Both, channel mode.** `SESSION_ID` must be the host's real session identifier. If it is not
   available, the skill fails instead of making one up. Claude Code passes
   `$CLAUDE_CODE_SESSION_ID`; Codex CLI passes the `session_id` the host gives
-  the agent in its context when it runs the direct Python script. The
-  registered `bin/channel` Gear command receives `BOOTGEAR_SESSION_ID` from
-  the Codex hook and uses it as the default; an explicit `--session` still wins.
+  the agent when it runs the Gear command. The registered `advisor channel`
+  command receives shared hook context; an explicit `--session` still wins.
 - **Heartbeat.** Claude Code starts `heartbeat` with the Bash tool's
   `run_in_background` and `timeout: 7200000`; Codex CLI leaves it running in a terminal session.

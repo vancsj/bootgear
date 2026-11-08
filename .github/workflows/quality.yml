@@ -27,4 +27,4 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Run the quality baseline
-        run: uv run --project quality --locked python quality/check.py
+        run: uv run --project quality --locked --python 3.12 python quality/check.py

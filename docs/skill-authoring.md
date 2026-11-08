@@ -29,9 +29,9 @@ shared skill names the public command it calls in its common sections, and
 puts the resolved path in `## Host mechanics`. CLI skills may include concise
 examples for common, stable commands. Use placeholders for caller-supplied
 values. Do not repeat state-dependent branches, gates, or next commands that
-the CLI prints. `engine` and `converge` use extensionless wrappers that resolve
-the plugin root from their own location. Other plugin CLIs use extensionless
-`bin/<command>` wrappers that proxy to their Python implementations.
+the CLI prints. Call `cli:gear` to get the absolute Gear executable path.
+Run each registered provider command through Gear. Skills do not locate
+provider scripts.
 
 ## Public skill contracts
 

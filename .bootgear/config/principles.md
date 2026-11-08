@@ -13,7 +13,17 @@
 
 ## CLI and enforcement
 
-- Every plugin script is a `gear` command. Register it under `[commands]` in the `gear.toml` of its plugin. It runs as `gear.py <plugin> <command>` and also on its own. When `GEAR_CALLER_CWD` is set, the script resolves the relative paths of the caller against it.
+- The shared CLI plugin owns Gear, the uv runtime, clikit and automatic plugin discovery. Both hosts use the same plugin source.
+- Provider plugins keep their command implementations and expose them through gear.toml. Gear discovers them without a fixed built-in plugin list.
+- Skills get the Gear executable path from the shared CLI plugin's thin public skill. They then call registered Gear commands.
+- Script calls and CLI-printed next commands use Gear. Caller skills do not encode another plugin's installation paths.
+- Gear prepares the shared interpreter and import paths. Provider scripts use the shared clikit implementation.
+- Reuse a uv environment when Python and locked dependencies match. Plugin version alone never creates an environment.
+- Only explicit setup installs or changes dependencies. Normal commands and hooks use the prepared runtime.
+- Hooks discover Gear and call their registered handler. If Gear is missing, they emit setup guidance.
+- Claude declares plugin dependencies. Codex setup installs missing sibling plugins explicitly.
+
+- Every plugin script is a Gear command. Register it under `[commands]` in its plugin's `gear.toml`. Call it as `gear <plugin> <command>`. When `GEAR_CALLER_CWD` is set, the script resolves the caller's relative paths against it.
 - Shared host context: host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID` to registered Gear commands. Host-aware CLIs read both values; explicit host and session arguments take precedence. Skills use registered Gear entrypoints. Standalone calls can supply the same context explicitly.
 - Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
 - Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.

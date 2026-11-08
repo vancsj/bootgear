@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from bootgear_cli.clikit import current_program
+
 from .config import DEPUTY, LOCAL, SHARED, Ledger, locate, pick, resolve_you
 from .constants import (
     FALLBACK_REF,
@@ -362,7 +364,7 @@ def cmd_new(args, root):
               f"to be promoted and re-verified against "
               f"{mainline_ref(context=context) or FALLBACK_REF}")
     warn_missing_about(root, path)
-    warn_missing_rules(root, lg.kind, getattr(args, "prog", "ledger.py"))
+    warn_missing_rules(root, lg.kind, getattr(args, "prog", None) or current_program("memory-ledger", "ledger"))
 
 
 def _get_answer(e: Entry, aid: str) -> Answer:
@@ -372,7 +374,7 @@ def _get_answer(e: Entry, aid: str) -> Answer:
     sys.exit(f"{e.slug} has no {aid} (has: {', '.join(x.aid for x in e.answers)})")
 
 
-def show_siblings(e: Entry) -> None:
+def show_siblings(e: Entry, prog: str | None = None) -> None:
     """Put the answers already on this question in front of whoever is adding one.
 
     `new` runs the resolver; `rival` shows the siblings so an answer is not
@@ -397,7 +399,7 @@ def show_siblings(e: Entry) -> None:
             print(f"      {ev}")
         if len(a0.evidences) > SIBLING_MAX_EVIDENCE:
             print(f"      … {len(a0.evidences) - SIBLING_MAX_EVIDENCE} more check(s) — "
-                  f"`ledger.py show {e.slug}`")
+                  f"`{prog or current_program('memory-ledger', 'ledger')} show {e.slug}`")
     print("   → keep the checks you still agree with: --keep-evidence <aN>")
     print("   → the claim stays one falsifiable sentence; the disagreement goes in Because:")
 
@@ -405,7 +407,7 @@ def show_siblings(e: Entry) -> None:
 def cmd_rival(args, root):
     you = resolve_you(args.as_, getattr(args, "context", None))
     e = find_entry(root, args.slug)
-    show_siblings(e)
+    show_siblings(e, getattr(args, "prog", None))
     kind = locate(args.ledgers, args.slug).kind
     problems = []
     if long_claim := check_claim(args.claim, args.force):

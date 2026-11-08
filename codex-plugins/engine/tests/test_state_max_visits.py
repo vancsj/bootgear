@@ -10,10 +10,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 
 # `loop` may be entered twice; `clarify` twice counting init's implicit entry.
 MACHINE = """\
@@ -35,7 +35,7 @@ nodes:
 
 
 def _task(*args, cwd=None):
-    return subprocess.run([str(TASK_BIN), *args], capture_output=True,
+    return subprocess.run([*TASK_COMMAND, *args], capture_output=True,
                           text=True, check=False, cwd=cwd)
 
 

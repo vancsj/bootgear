@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import argparse
 
+from bootgear_cli.clikit import Catalog, add_mode_flags, caller_path, parser_class, run
+
 from engine import artefact, config, session, state
-from engine.clikit import Catalog, add_mode_flags, caller_path, parser_class, run
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {

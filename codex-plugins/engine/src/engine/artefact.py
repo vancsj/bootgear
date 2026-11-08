@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any, TypeGuard
 
 import yaml
+from bootgear_cli.clikit import caller_cwd, caller_path, emit, refuse
+from bootgear_cli.gear import resolve_command
 
 from engine import config, session
-from engine.clikit import caller_cwd, caller_path, emit, refuse
 
 STAGES = ('inspect', 'criteria', 'assess', 'challenge', 'verify-facts', 'judge', 'coverage', 'report')
 STATES = ('Meets', 'Needs change', 'Cannot judge', 'Not applicable')
@@ -256,11 +257,14 @@ def state_rows(rows, criteria, applicability, inspection):
 
 
 def public_converge(stage, slate, directory):
-    wrapper = Path(__file__).resolve().parents[2] / 'scripts/converge'
-    program = str(wrapper) if wrapper.exists() else shutil.which('converge')
-    if program is None:
+    command = resolve_command("converge")
+    if command is None:
+        program = shutil.which("converge")
+        command = [program] if program else None
+    if command is None:
         refuse('public Converge command is unavailable')
-    completed = subprocess.run([program,stage,slate,'--dir',str(directory),'--json'],text=True,capture_output=True,check=False)
+    completed = subprocess.run([*command, stage, slate, '--dir', str(directory), '--json'],
+                               text=True, capture_output=True, check=False)
     fail([] if completed.returncode == 0 else [f'Converge {stage}: {completed.stderr or completed.stdout}'])
     try:
         result = json.loads(completed.stdout)

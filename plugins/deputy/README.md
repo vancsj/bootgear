@@ -72,16 +72,17 @@ Install the plugin on each host that will use it:
 
 ```
 codex plugin marketplace add vancsj/bootgear
+codex plugin add cli@bootgear
 codex plugin add memory-ledger@bootgear
 codex plugin add deputy@bootgear
 ```
 
 Requirements:
 
-- Python 3.11 or later and `uv` run the hook with its declared PyYAML dependency.
+- Python 3.12 and `uv` run the hook with its declared PyYAML dependency.
 
-- Claude Code installs `memory-ledger` with `deputy` as a declared dependency.
-- Codex has no dependency mechanism. Install `memory-ledger@bootgear` on Codex yourself.
+- Claude Code installs `cli` and `memory-ledger` with `deputy` as declared dependencies.
+- Codex has no dependency mechanism. Install `cli@bootgear` and `memory-ledger@bootgear` yourself.
   Without it, `deputy:ask` returns `escalate` and `deputy:record` is refused.
 
 Codex skips a new or changed hook until you trust it. After you install or update the
@@ -92,5 +93,5 @@ fires on Codex.
 
 ## Standalone, or as bootgear gear
 
-Nothing here needs the rest of bootgear. The `engine`, `converge` and `review` skills call
+Codex needs the separate CLI and memory-ledger peers. The `engine`, `converge` and `review` skills call
 `deputy:ask` at their judgement points when `deputy` is installed.

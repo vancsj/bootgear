@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "bin" / "task"
 MACHINE = """\
 name: identity-fixture
 nodes:
@@ -44,7 +44,7 @@ class SessionIdentityTest(unittest.TestCase):
         return env
 
     def _task(self, *args, **env):
-        return subprocess.run([str(TASK_BIN), *args], capture_output=True, text=True,
+        return subprocess.run([*TASK_COMMAND, *args], capture_output=True, text=True,
                               check=False, cwd=self.project, env=self._env(**env))
 
     def _init(self, run_id, *, default_dir=False):

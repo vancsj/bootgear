@@ -14,10 +14,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bootgear_cli.clikit import gear_command
+
 PLUGIN = Path(__file__).resolve().parents[1]
 SCRIPTS = PLUGIN / "scripts"
 LEDGER = SCRIPTS / "ledger.py"
-WRAPPER = SCRIPTS / "ledger"
+GEAR = PLUGIN.parents[1] / "plugins" / "cli" / "bin" / "gear"
+GEAR_COMMAND = shlex.join([str(GEAR), "--host", "codex", "memory-ledger", "ledger"])
+DIRECT_COMMAND = gear_command("memory-ledger", "ledger")
 RULES_DIR = PLUGIN / "rules"
 RULES_FILE = "WHAT-BELONGS.txt"
 CACHE_FILE = ".ledger-cache.json"
@@ -41,7 +45,7 @@ LOCAL_HEADINGS = (
 
 sys.path.insert(0, str(SCRIPTS))
 import ledger as ledger_cli
-from ledgerlib import clikit
+from bootgear_cli import clikit
 
 # `new` signs with this id when the host did not set one.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "rules-test-session")
@@ -119,13 +123,13 @@ class RulesCommandTests(TempLedgerCase):
         out = self.ok("rules")
         for kind in ("shared", "local"):
             self.assertIn(
-                f"{self.rules_file(kind)} missing — run: ledger.py rules --init --only {kind}", out)
+                f"{self.rules_file(kind)} missing — run: {DIRECT_COMMAND} rules --init --only {kind}", out)
         self.assertFalse(self.rules_file("shared").exists())
         self.assertFalse(self.rules_file("local").exists())
 
     def test_rules_ends_with_the_init_command_when_a_file_is_missing(self) -> None:
         out = self.ok("rules")
-        self.assertEqual(out.splitlines()[-1], "next: ledger.py rules --init")
+        self.assertEqual(out.splitlines()[-1], f"next: {DIRECT_COMMAND} rules --init")
         self.assertEqual(out.count("next:"), 1)
 
     def test_rules_has_no_next_line_when_every_file_exists(self) -> None:
@@ -144,7 +148,7 @@ class RulesCommandTests(TempLedgerCase):
         for kind in ("shared", "local"):
             self.assertEqual(self.rules_file(kind).read_text(encoding="utf-8"), _default_text(kind))
             self.assertRegex(out, rf"(?m)^RULES\s+{kind}\s+seeded {re.escape(str(self.rules_file(kind)))}\s*$")
-        self.assertEqual(out.splitlines()[-1], "next: ledger.py save")
+        self.assertEqual(out.splitlines()[-1], f"next: {DIRECT_COMMAND} save")
 
     def test_init_twice_keeps_the_file_and_changes_no_bytes(self) -> None:
         self.ok("rules", "--init")
@@ -229,7 +233,7 @@ class RulesCommandTests(TempLedgerCase):
             warnings = self.rules_warnings(kind)
             self.assertEqual(len(warnings), 1, data["warnings"])
             self.assertIn(f"{self.rules_file(kind)} missing", warnings[0])
-            self.assertIn(f"ledger.py rules --init --only {kind}", warnings[0])
+            self.assertIn(f"{DIRECT_COMMAND} rules --init --only {kind}", warnings[0])
         self.assertFalse(any(f.startswith(("shared rules", "local rules")) for f in data["failures"]))
 
     def test_doctor_drops_the_rules_warning_once_the_file_is_seeded(self) -> None:
@@ -251,12 +255,12 @@ class RulesCommandTests(TempLedgerCase):
     def test_resolve_mint_note_names_the_rules_command_with_two_ledgers(self) -> None:
         out = self.ok("resolve", "Which colour is the sky?")
         self.assertIn("MINT", out)
-        self.assertIn("Each ledger's rules: ledger.py rules.", out)
+        self.assertIn(f"Each ledger's rules: {DIRECT_COMMAND} rules.", out)
 
     def test_resolve_mint_note_is_silent_about_rules_with_one_ledger(self) -> None:
         out = self.ok("resolve", "Which colour is the sky?", "--only", "local")
         self.assertIn("MINT", out)
-        self.assertNotIn("ledger.py rules", out)
+        self.assertNotIn(f"{DIRECT_COMMAND} rules", out)
 
     # -- new -------------------------------------------------------------------
 
@@ -265,7 +269,7 @@ class RulesCommandTests(TempLedgerCase):
             result = self.new_entry(kind, f"tech/{kind}-entry", f"Is {kind} warned about rules?")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(
-                f"WARN     {kind} ledger has no WHAT-BELONGS.txt — run: ledger.py rules --init --only {kind}",
+                f"WARN     {kind} ledger has no WHAT-BELONGS.txt — run: {DIRECT_COMMAND} rules --init --only {kind}",
                 result.stdout)
 
     def test_new_does_not_warn_once_the_rule_file_exists(self) -> None:
@@ -315,34 +319,36 @@ class RulesCommandTests(TempLedgerCase):
 
 
 class WrapperAndJsonTests(TempLedgerCase):
-    """`rules` run through the Codex wrapper, which exports BOOTGEAR_PROG, and in JSON mode."""
+    """`rules` run through Gear and keep `next` runnable in prose and JSON."""
 
     def run_wrapper(self, *args: str, mode: str = "prose") -> subprocess.CompletedProcess[str]:
         env = {**self.env(), clikit.ENV_MODE: mode}
-        return subprocess.run([str(WRAPPER), *args], cwd=self.temp, env=env,
+        return subprocess.run([str(GEAR), "--host", "codex", "memory-ledger", "ledger", *args],
+                              cwd=self.temp, env=env,
                               capture_output=True, text=True, check=False)
 
     def test_wrapper_init_next_names_the_wrapper(self) -> None:
         result = self.run_wrapper("rules", "--init")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines()[-1], f"next: {WRAPPER} save")
+        self.assertEqual(result.stdout.splitlines()[-1], f"next: {GEAR_COMMAND} save")
 
     def test_wrapper_init_json_next_names_the_wrapper(self) -> None:
         result = self.run_wrapper("rules", "--init", mode="json")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)["next"], f"{WRAPPER} save")
+        self.assertEqual(json.loads(result.stdout)["next"], f"{GEAR_COMMAND} save")
 
     def test_wrapper_missing_file_next_names_the_wrapper(self) -> None:
         result = self.run_wrapper("rules")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines()[-1], f"next: {WRAPPER} rules --init")
+        self.assertEqual(result.stdout.splitlines()[-1], f"next: {GEAR_COMMAND} rules --init")
 
     def test_only_keeps_the_scope_on_the_next_lines(self) -> None:
         for kind in ("shared", "local"):
             for mode in ("prose", "json"):
                 with self.subTest(kind=kind, mode=mode):
                     self.setUp()
-                    for runner, prog in ((self.run_direct, "ledger.py"), (self.run_wrapper, str(WRAPPER))):
+                    for runner, prog in ((self.run_direct, DIRECT_COMMAND),
+                                         (self.run_wrapper, GEAR_COMMAND)):
                         self.setUp()
                         read = runner("rules", "--only", kind, mode=mode)
                         self.assertEqual(read.returncode, 0, read.stderr)
@@ -357,9 +363,9 @@ class WrapperAndJsonTests(TempLedgerCase):
             with self.subTest(mode=mode):
                 self.setUp()
                 read = self.run_wrapper("rules", mode=mode)
-                self.assertEqual(self.next_of(read, mode), f"{WRAPPER} rules --init")
+                self.assertEqual(self.next_of(read, mode), f"{GEAR_COMMAND} rules --init")
                 init = self.run_wrapper("rules", "--init", mode=mode)
-                self.assertEqual(self.next_of(init, mode), f"{WRAPPER} save")
+                self.assertEqual(self.next_of(init, mode), f"{GEAR_COMMAND} save")
 
     def run_direct(self, *args: str, mode: str = "prose") -> subprocess.CompletedProcess[str]:
         env = {**self.env(), clikit.ENV_MODE: mode}
@@ -378,7 +384,7 @@ class WrapperAndJsonTests(TempLedgerCase):
         result = self.run_wrapper("rules", mode="json")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data["next"], f"{WRAPPER} rules --init")
+        self.assertEqual(data["next"], f"{GEAR_COMMAND} rules --init")
         self.assertFalse(any(line.startswith("next:") for line in data["lines"]))
 
 

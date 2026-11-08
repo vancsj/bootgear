@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import TASK as TASK_COMMAND
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 REPO_ROOT = PLUGIN_DIR.parents[1]
 TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc", "artefact-review")
 # design-doc has no Bootgear override.
@@ -26,7 +26,7 @@ SKILL_TOKEN = re.compile(r"(?:/|\$)(spec|test|review)\b")
 class BuiltInStateMachineTest(unittest.TestCase):
     def _task(self, *args):
         return subprocess.run(
-            [str(TASK_BIN), *args],
+            [*TASK_COMMAND, *args],
             capture_output=True,
             text=True,
             check=False,

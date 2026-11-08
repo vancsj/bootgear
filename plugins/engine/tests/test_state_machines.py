@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import TASK as TASK_COMMAND
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PLUGIN_DIR.parents[1]
-TASK_BIN = PLUGIN_DIR / "bin" / "task"
 TASK_TYPES = ("ticket-writing", "ticket-to-pr", "triage", "change-review", "design-doc", "artefact-review")
 # design-doc has no Bootgear override.
 OVERRIDE_TYPES = ("change-review", "ticket-to-pr", "triage", "ticket-writing")
@@ -27,7 +27,7 @@ SKILL_TOKEN = re.compile(r"(?:/|\$)(spec|test|review)\b")
 class ClaudeStateMachineTest(unittest.TestCase):
     def _task(self, *args):
         return subprocess.run(
-            [str(TASK_BIN), *args],
+            [*TASK_COMMAND, *args],
             capture_output=True,
             text=True,
             check=False,

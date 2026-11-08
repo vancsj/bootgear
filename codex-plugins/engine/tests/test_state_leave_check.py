@@ -1,25 +1,29 @@
 """CLI-level tests for a node's `reminder.leave_check` program gate.
 
-Drives the host `task` wrapper as a subprocess against scratch ledgers. The
-check program is a scratch shell script found through PATH; the host lookup
-test runs a scratch copy of the plugin so a program can be placed in its
-`scripts/` directory without touching the real plugin tree.
+Drives the registered Gear command against scratch ledgers. The check
+program is a scratch shell script found through PATH.
 """
 import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from settlement_fixture import valid_settlement
 from state_validate_fixture import validate_reminder
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_REL = Path("scripts") / "task"
-TASK_BIN = PLUGIN_DIR / TASK_REL
+REPOSITORY_ROOT = PLUGIN_DIR.parents[1]
+sys.path.insert(0, str(PLUGIN_DIR / "src"))
+from engine import state as leave_state
+
+GEAR = REPOSITORY_ROOT / "plugins" / "cli" / "bin" / "gear"
+TASK_COMMAND = [str(GEAR), "--host", "codex", "engine", "task"]
 PROGRAM = "engine-test-leave-check"
 
 
@@ -73,7 +77,7 @@ class LeaveCheckSchemaTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def _validate(self, reminder_lines):
-        return validate_reminder(self.tmp, TASK_BIN, reminder_lines)
+        return validate_reminder(self.tmp, TASK_COMMAND, reminder_lines)
 
     def test_valid_leave_check(self):
         result = self._validate([
@@ -110,9 +114,23 @@ class LeaveCheckSchemaTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("3 problem(s) found", result.stdout)
 
+    def test_registered_command_prefix_is_spliced_before_leave_args(self):
+        prefix = [str(GEAR), "--host", "codex", "engine", "converge"]
+        process = Mock(returncode=0)
+        process.communicate.return_value = (b"passed\n", None)
+        with (patch.object(leave_state, "resolve_command", return_value=prefix, create=True),
+              patch.object(leave_state.shutil, "which", return_value=None),
+              patch.object(leave_state.subprocess, "Popen", return_value=process) as popen):
+            argv = leave_state._run_leave_check(
+                "gate", ["converge", "gate", "{slate}"], ["slate=s1"])
+
+        expected = [*prefix, "gate", "s1"]
+        self.assertEqual(argv, expected)
+        self.assertEqual(popen.call_args.args[0], expected)
+
 
 class _LeaveCheckLedger(unittest.TestCase):
-    task_bin = TASK_BIN
+    task_command = TASK_COMMAND
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="engine-leave-check-"))
@@ -144,7 +162,7 @@ class _LeaveCheckLedger(unittest.TestCase):
 
     def _task(self, *args, **env):
         return subprocess.run(
-            [str(self.task_bin), *args, "--dir", str(self.session_dir)],
+            [*self.task_command, *args, "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=False,
             env={**self.env, **env},
         )
@@ -295,62 +313,6 @@ class LeaveCheckTransitionTest(_LeaveCheckLedger):
         self.assertIn("has no --leave-arg slate=<value>", result.stderr)
 
 
-def _copy_plugin(dest: Path) -> Path:
-    root = dest / "plugin"
-    shutil.copytree(PLUGIN_DIR, root, ignore=shutil.ignore_patterns(
-        ".venv", "__pycache__", "*.pyc", ".pytest_cache", "tests"))
-    return root
-
-
-class HostLookupTest(_LeaveCheckLedger):
-    """Codex host: argv[0] resolves to `<plugin-root>/scripts/<argv0>` when
-    that exists and is executable, else by PATH."""
-
-    def setUp(self):
-        super().setUp()
-        self.plugin_root = _copy_plugin(self.tmp)
-        self.task_bin = self.plugin_root / TASK_REL
-        self.scripts_program = _write_program(
-            self.plugin_root / "scripts", PROGRAM,
-            "#!/bin/sh\necho from-scripts > \"$CHECK_ARGV_FILE\"\n")
-
-    def test_plugin_scripts_program_wins_over_path(self):
-        self._init()
-        result = self._leave("--leave-arg", "slate=s",
-                             "--leave-arg", "converge_dir=/d")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.argv_file.read_text(), "from-scripts\n")
-        self.assertTrue(self._log_lines()[-1].endswith(
-            f"[leave_check exit 0: {self.scripts_program.resolve()} s --dir /d]"),
-            self._log_lines()[-1])
-
-    def test_program_in_plugin_scripts_is_found_off_path(self):
-        (self.bin_dir / PROGRAM).unlink()
-        self._init()
-        result = self._leave("--leave-arg", "slate=s",
-                             "--leave-arg", "converge_dir=/d")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.argv_file.read_text(), "from-scripts\n")
-
-    def test_non_executable_scripts_file_falls_back_to_path(self):
-        self.scripts_program.chmod(0o644)
-        self._init()
-        result = self._leave("--leave-arg", "slate=s",
-                             "--leave-arg", "converge_dir=/d")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.argv_file.read_text().splitlines(),
-                         ["s", "--dir", "/d"])
-
-    def test_absent_scripts_file_falls_back_to_path(self):
-        self.scripts_program.unlink()
-        self._init()
-        result = self._leave("--leave-arg", "slate=s",
-                             "--leave-arg", "converge_dir=/d")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.argv_file.read_text().splitlines(),
-                         ["s", "--dir", "/d"])
-
-
 def _exit_machine(program=PROGRAM):
     return f"""\
 name: gated
@@ -457,7 +419,7 @@ class ExitChecksSchemaTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def _validate(self, reminder_lines, nexts=("succeeded",)):
-        return validate_reminder(self.tmp, TASK_BIN, reminder_lines, nexts)
+        return validate_reminder(self.tmp, TASK_COMMAND, reminder_lines, nexts)
 
     def test_valid_forms_pass(self):
         cases = {

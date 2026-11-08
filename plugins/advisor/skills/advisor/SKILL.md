@@ -59,7 +59,7 @@ Any task can use either communication doc — pick `channel` when the task needs
 Right after `register`, start the heartbeat in the background (see "Host mechanics") and keep it running until `close`:
 
 ```sh
-"$CHANNEL_SCRIPT" heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
+<gear> --host <host> advisor channel heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
 ```
 
 - It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
@@ -68,7 +68,7 @@ Right after `register`, start the heartbeat in the background (see "Host mechani
 
 ### After compaction (channel, both modes)
 
-Do what the `next` of the injected seat status says. With no status in context, run `"$CHANNEL_SCRIPT" whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
+Do what the `next` of the injected seat status says. With no status in context, run `<gear> --host <host> advisor channel whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
 
 ### mode=listening
 
@@ -87,7 +87,7 @@ Create the durable goal: *continuously poll the mailbox and process requests unt
 #### 3. Check for unfinished work
 
 ```sh
-"$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 5
+<gear> --host <host> advisor channel receive --channel "$CHANNEL" --for <mine> --timeout 5
 ```
 Read-only, safe anytime. Check the last 3 for a request from `<peer>` with `answered: false` — that's open; handle it in the loop below as if freshly arrived. `answered: true` means you already sent a response naming it as `parent_id`.
 
@@ -103,13 +103,13 @@ Never return to the human after one empty poll while claiming to still be listen
 
 ```sh
 while :; do
-  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
-  RECEIVE_JSON=$("$CHANNEL_SCRIPT" receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
+  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
+  RECEIVE_JSON=$(<gear> --host <host> advisor channel receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
   RECEIVE_STATUS=$?
   if [ "$RECEIVE_STATUS" -eq 1 ]; then
     PEER_LIVE=$(printf '%s' "$RECEIVE_JSON" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["peer_live"]))')
     if [ "$PEER_LIVE" = false ] &&
-      "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
+      <gear> --host <host> advisor channel close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
       break
     fi
     continue
@@ -117,13 +117,13 @@ while :; do
   if [ "$RECEIVE_STATUS" -ne 0 ]; then exit "$RECEIVE_STATUS"; fi
   # The message_id that RECEIVE_JSON's `next` fetches (the newest unread request):
   REQUEST_ID=<message_id>
-  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value busy >/dev/null
-  "$CHANNEL_SCRIPT" fetch --channel "$CHANNEL" --message-id "$REQUEST_ID"
+  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value busy >/dev/null
+  <gear> --host <host> advisor channel fetch --channel "$CHANNEL" --message-id "$REQUEST_ID"
   # Answer it, then:
-  printf '%s\n' "$RESPONSE" | "$CHANNEL_SCRIPT" send \
+  printf '%s\n' "$RESPONSE" | <gear> --host <host> advisor channel send \
     --channel "$CHANNEL" --from <mine> --to <peer> \
     --kind response --parent-id "$REQUEST_ID" --body-file -
-  "$CHANNEL_SCRIPT" state --channel "$CHANNEL" --role <mine> --value waiting
+  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value waiting
 done
 ```
 
@@ -156,13 +156,14 @@ Never echo the peer's banner, streamed reasoning, or raw request/response payloa
 - Out-of-scope request → return the boundary, ask the peer to get human direction.
 - Close on session end:
   ```sh
-  "$CHANNEL_SCRIPT" close --role <mine> --channel "$CHANNEL"
+  <gear> --host <host> advisor channel close --role <mine> --channel "$CHANNEL"
   ```
 
 ## Fallbacks
 
 - No `--mode` → ask the caller to re-invoke with one.
 - Channel: no real session id available → fail.
+- CLI plugin missing → Claude Code: run `/plugin install cli@bootgear`; Codex CLI: run `codex plugin add cli@bootgear`. Then call `cli:gear` again.
 - Channel peer `advisor` plugin missing → tell the user; never fall back to `direct`.
 - Direct peer CLI missing or refusing a flag → report the exact error and stop.
 - No eligible listener → tell the user to start one and stop.
@@ -171,10 +172,9 @@ Never echo the peer's banner, streamed reasoning, or raw request/response payloa
 
 ## Host mechanics
 
-For channel mode, set `CHANNEL_SCRIPT` to `bin/channel` in this plugin:
-
-- Claude Code: `CHANNEL_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/channel"`.
-- Codex CLI: `CHANNEL_SCRIPT="<directory holding this SKILL.md>/../../bin/channel"`, as an absolute path.
+For channel mode, call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Replace `<host>` with `claude` or `codex`, based on the current host.
+Run channel commands as `<gear> --host <host> advisor channel <command> [arguments]`.
 
 For channel mode, set `SESSION_ID` to the real host session ID. If none is available, fail.
 
@@ -183,12 +183,11 @@ The channel CLI resolves `--session` first, then `BOOTGEAR_SESSION_ID`, then `CL
 - Claude Code: `SESSION_ID="${BOOTGEAR_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"`.
 - Codex CLI: use `BOOTGEAR_SESSION_ID` when it is set. Otherwise, use the `session_id` the host gives you in your context and pass it with `--session`.
 
-Escalation (Codex CLI): every `channel.py` call needs `sandbox_permissions: require_escalated` — `~/.bootgear/advisor` is outside the normal writable roots. Escalate on every call, not just the first.
+Escalation (Codex CLI): every channel Gear call needs `sandbox_permissions: require_escalated` — `~/.bootgear/advisor` is outside the normal writable roots. Escalate on every call, not just the first.
 
 Background heartbeat:
 
 - Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000`.
 - Codex CLI: a terminal session left running, as for `receive`.
 
-Resolve `CHANNEL_SCRIPT` to its literal absolute path before each standalone tool call.
 Keep explicit session values for compound and background calls without hook context.

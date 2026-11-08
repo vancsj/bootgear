@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 
+from bootgear_cli.clikit import gear_argv, gear_command
+
 from .host_adapter import AdapterError, Event, HostContext, Intent
 
 _CLOSED_HEADING_RE: Final = re.compile(r"(?m)^## closed\s*$")
@@ -52,7 +54,7 @@ _SESSION_NUDGE: Final = (
 )
 _CODEX_SESSION_NUDGE: Final = (
     "This session just compacted. If an engine run is active, run "
-    "<plugin-root>/scripts/task session recall <run-id> --dir "
+    f"{gear_command('engine', 'task')} session recall <run-id> --dir "
     "<session-dir> outside the sandbox with host-level access before "
     "anything else — re-read the session ledger's settlement from disk "
     "rather than trusting whatever this compaction summarized."
@@ -64,8 +66,8 @@ _CODEX_SESSION_ID_MISSING: Final = (
 _ESCALATED_MESSAGE: Final = (
     "This engine run's state ({run_id}, node '{node}') was already flagged "
     "as stale and still hasn't recorded a transition ({minutes} minutes "
-    "now). If the work has genuinely moved past this node, call "
-    "session.py state transition now; if not, that's also worth "
+    "now). If the work has genuinely moved past this node, run "
+    "{transition_command} now; if not, that's also worth "
     "confirming rather than leaving open."
 )
 
@@ -462,7 +464,7 @@ def _run_state(context: HostContext) -> dict[str, Any] | None:
     try:
         result = subprocess.run(
             [
-                str(context.task_command),
+                *gear_argv("engine", "task", host=context.host),
                 "session",
                 "read",
                 context.session_id,
@@ -528,6 +530,7 @@ def _state_nudge(event: Event, context: HostContext) -> Intent:
     if elapsed < _STALE_SECONDS:
         return Intent.observe(update)
     identity = [node, last_activity, transition_index]
+    transition_command = f"`{gear_command('engine', 'task', host=context.host)} state transition`"
     if marker_value.get("last_nudged_identity") != identity:
         marker_value["last_nudged_identity"] = identity
         marker_value["identity_first_nudged_at"] = now
@@ -537,7 +540,7 @@ def _state_nudge(event: Event, context: HostContext) -> Intent:
             "transition in over {minutes} minutes. That doesn't necessarily mean "
             "the run is stuck — one node can legitimately span several tool calls "
             "— but check whether the current work has actually moved past this "
-            "node and, if so, call session.py state transition to record it."
+            f"node and, if so, run {transition_command} to record it."
         )
     else:
         if marker_value.get("escalated_for_identity"):
@@ -559,7 +562,8 @@ def _state_nudge(event: Event, context: HostContext) -> Intent:
         }
     )
     marker_value["nudges"] = history[-_MAX_NUDGE_HISTORY:]
-    text = message.format(run_id=event.session_id, node=node, minutes=int(elapsed // 60))
+    text = message.format(run_id=event.session_id, node=node, minutes=int(elapsed // 60),
+                          transition_command=transition_command)
     return Intent.add_context(text, update)
 
 

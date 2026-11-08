@@ -16,6 +16,8 @@ from collections import Counter
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from bootgear_cli.clikit import current_program
+
 from .audit import unportable_paths
 from .constants import CACHE_NAME
 from .lint import cmd_lint
@@ -25,11 +27,11 @@ from .store import load_entries
 _LINT_TAG = re.compile(r"^([A-Z][A-Z-]*)\s")
 
 
-def _summarize_lint(report: str) -> str:
+def _summarize_lint(report: str, prog: str) -> str:
     """One line: a tally by tag, instead of every finding.
 
     `save` runs `lint --fix` on every save, and printing all of it inline burns
-    tokens on findings nobody asked to see this run — `ledger.py lint` still
+    tokens on findings nobody asked to see this run — the lint command still
     prints every line for whoever wants the detail.
     """
     counts = Counter(m.group(1) for line in report.splitlines()
@@ -39,7 +41,7 @@ def _summarize_lint(report: str) -> str:
     total = sum(counts.values())
     breakdown = ", ".join(f"{tag} {n}" for tag, n in
                           sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
-    return f"lint: {total} problem(s) — {breakdown}\n  ledger.py lint for detail"
+    return f"lint: {total} problem(s) — {breakdown}\n  {prog} lint for detail"
 
 
 def _check_remote(lg) -> str | None:
@@ -57,12 +59,13 @@ def _check_remote(lg) -> str | None:
     return None
 
 
-def _check_unportable(lg) -> str | None:
-    """Same assertion as `ledger.py audit`, run on every save rather than only
+def _check_unportable(lg, prog: str | None = None) -> str | None:
+    """Same assertion as `audit`, run on every save rather than only
     when someone remembers to ask: a hardcoded /Users/<you>/ in a shared
     Evidence line is invisible until another machine runs it and gets a
     spurious ✗, so the save that introduces it is the cheapest place to catch it.
     """
+    prog = prog or current_program("memory-ledger", "ledger")
     if lg.kind != "shared":
         return None
     flagged = [(e.slug, a.aid) for e in load_entries(lg.root, lg.kind)
@@ -72,7 +75,7 @@ def _check_unportable(lg) -> str | None:
     shown = ", ".join(f"{slug} {aid}" for slug, aid in flagged[:5])
     more = f" (+{len(flagged) - 5} more)" if len(flagged) > 5 else ""
     return (f"  warn: {len(flagged)} answer(s) hardcode a home path — {shown}"
-            f"{more}\n  ledger.py audit for detail")
+            f"{more}\n  {prog} audit for detail")
 
 
 def _git(root: Path, *a, check=True) -> subprocess.CompletedProcess:
@@ -188,15 +191,16 @@ def cmd_save(args, root):
     the command exits with.
     """
     ledgers = args.ledgers
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     if getattr(args, "lint_detail", False):
         cmd_lint(argparse.Namespace(fix=True, ledgers=ledgers), None)
     else:
         buf = io.StringIO()
         with redirect_stdout(buf):
             cmd_lint(argparse.Namespace(fix=True, ledgers=ledgers), None)
-        print(_summarize_lint(buf.getvalue()))
+        print(_summarize_lint(buf.getvalue(), prog))
     for lg in ledgers:
-        for msg in (_check_remote(lg), _check_unportable(lg)):
+        for msg in (_check_remote(lg), _check_unportable(lg, prog)):
             if msg:
                 print(msg)
     print()

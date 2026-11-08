@@ -110,12 +110,13 @@ standalone it uses the current project's own review skill when one fits. See
 /plugin install review@bootgear
 ```
 
-This installs `converge` with it. On Codex CLI, `review` has no separate install: it is
-bundled into the Codex `engine` package (`codex plugin add engine@bootgear`).
+This installs `converge`, `deputy` and `cli` with it. On Codex CLI, `review` has no separate install:
+it is bundled into the Codex `engine` package (`codex plugin add engine@bootgear`). The
+`cli` plugin is a separate peer.
 
 ## Standalone, or as bootgear gear
 
-`review` works on its own, with converge as its one dependency; a standalone caller answers
+`review` works on its own, with `converge` and `cli` as its dependencies; a standalone caller answers
 the claims that carry a `choice` itself. Installed with `engine`, it runs the review step of
 a run: `engine` gates leaving that step on `converge gate`, applies the fix list in its `fix`
 node, and sends each `choice` to its `review-debate` node.

@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .clikit import refuse
+from bootgear_cli.clikit import current_program, refuse
 
 RULES_FILE = "WHAT-BELONGS.txt"
 _DEFAULTS = Path(__file__).resolve().parents[2] / "rules"
@@ -41,7 +41,7 @@ def default_text(kind: str) -> str:
     return (_DEFAULTS / f"{kind}.txt").read_text(encoding="utf-8")
 
 
-def seed_hint(kind: str, prog: str = "ledger.py") -> str:
+def seed_hint(kind: str, prog: str = current_program("memory-ledger", "ledger")) -> str:
     return f"run: {prog} rules --init --only {kind}"
 
 
@@ -54,7 +54,7 @@ def _seed(path: Path, text: str) -> None:
 
 
 def cmd_rules(args, root=None):
-    prog = getattr(args, "prog", None) or "ledger.py"
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     only = getattr(args, "only", None)
     scope = f" --only {only}" if only else ""
     problems = [(lg, rules_path(lg.root), rules_problem(rules_path(lg.root)))
@@ -98,7 +98,8 @@ def cmd_rules(args, root=None):
     return 0
 
 
-def warn_missing_rules(root: Path, kind: str, prog: str = "ledger.py") -> None:
+def warn_missing_rules(root: Path, kind: str,
+                       prog: str = current_program("memory-ledger", "ledger")) -> None:
     path = rules_path(root)
     why = rules_problem(path)
     if why:

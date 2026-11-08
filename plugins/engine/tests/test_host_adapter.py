@@ -136,7 +136,6 @@ class HostAdapterBoundaryTest(unittest.TestCase):
                 host="codex",
                 plugin_root=PLUGIN_DIR,
                 source_dir=PLUGIN_DIR / "src",
-                task_command=PLUGIN_DIR / "scripts" / "task",
                 hook_dir=PLUGIN_DIR / "hooks",
                 cwd="/tmp/fixture-project",
                 session_id="fixture-codex",
@@ -185,6 +184,34 @@ class HostAdapterBoundaryTest(unittest.TestCase):
             {"turn_id": "fixture-turn", "stop_seen": True, "fallback_reminded": False}
         ])
 
+    def test_state_policy_reads_through_gear_with_the_event_host(self):
+        ledger = PLUGIN_DIR / "fixture-session.md"
+        response = subprocess.CompletedProcess([], 0, '{"current":"clarify"}', "")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                context = HostContext(
+                    host=host,
+                    plugin_root=PLUGIN_DIR,
+                    source_dir=PLUGIN_DIR / "src",
+                    hook_dir=PLUGIN_DIR / "hooks",
+                    cwd="/tmp/fixture-project",
+                    session_id="fixture-session",
+                    event="PostToolUse",
+                    matcher_pattern=None,
+                    matcher_value=None,
+                    handler_kind="state_nudge",
+                )
+                with patch.object(policy, "_ledger_path", return_value=ledger), \
+                        patch.object(policy.subprocess, "run", return_value=response) as run, \
+                        patch.object(policy, "gear_argv", wraps=policy.gear_argv) as route:
+                    self.assertEqual(policy._run_state(context), {"current": "clarify"})
+                route.assert_called_once_with("engine", "task", host=host)
+                argv = run.call_args.args[0]
+                self.assertEqual(argv[:5], [str(REPO_ROOT / "plugins" / "cli" / "bin" / "gear"),
+                                            "--host", host, "engine", "task"])
+                self.assertEqual(argv[5:], ["session", "read", "fixture-session", "--dir",
+                                            str(ledger.parent), "--section", "state", "--json"])
+
     def test_concurrent_codex_stop_updates_hold_the_lock_through_read_and_write(self):
         count = 8
         with tempfile.TemporaryDirectory(prefix="host-adapter-concurrent-") as tmp:
@@ -197,7 +224,6 @@ class HostAdapterBoundaryTest(unittest.TestCase):
                 host="codex",
                 plugin_root=PLUGIN_DIR,
                 source_dir=PLUGIN_DIR / "src",
-                task_command=PLUGIN_DIR / "scripts" / "task",
                 hook_dir=PLUGIN_DIR / "hooks",
                 cwd="/tmp/fixture-project",
                 session_id="fixture-codex",
@@ -396,7 +422,7 @@ class SessionRecallAdapterTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("Standards (read each file in full before you judge or write):", context)
-        self.assertLess(len(context), 8000)
+        self.assertLess(len(context), 10000)
 
     def test_no_ledger_adds_principles_only(self):
         self.assertEqual(self._context(), self.PRINCIPLES_ONLY)

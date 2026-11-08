@@ -2,4 +2,4 @@
 name = "converge"
 
 [commands.converge]
-exec = ["./bin/converge"]
+exec = ["python3", "-m", "converge.cli"]

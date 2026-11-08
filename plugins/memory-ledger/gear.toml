@@ -2,4 +2,10 @@
 name = "memory-ledger"
 
 [commands.ledger]
-exec = ["./bin/ledger"]
+exec = ["python3", "scripts/ledger.py"]
+
+[commands.hook]
+exec = ["python3", "hooks/nudge.py"]
+
+[commands.codex-hook]
+exec = ["python3", "hooks/codex_nudge.py"]

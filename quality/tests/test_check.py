@@ -40,6 +40,16 @@ class QualityCheckTests(unittest.TestCase):
 
         self.assertEqual([], broken)
 
+    def test_pytest_checks_use_the_shared_cli_source(self) -> None:
+        pytest_check = next(item for item in check.CHECKS if item.name == "pytest-cli")
+        env = check._check_environment(pytest_check)
+
+        self.assertIsNotNone(env)
+        assert env is not None
+        self.assertIn(str(check.CLI_SOURCE), env["PYTHONPATH"].split(os.pathsep))
+        self.assertIsNone(check._check_environment(next(item for item in check.CHECKS
+                                                         if item.name == "ruff")))
+
     def test_run_checks_reports_missing_tool(self) -> None:
         def execute(*_: object, **__: object) -> subprocess.CompletedProcess[str]:
             raise FileNotFoundError("ruff")

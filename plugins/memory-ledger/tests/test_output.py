@@ -20,7 +20,9 @@ LEDGER = SCRIPTS / "ledger.py"
 
 sys.path.insert(0, str(SCRIPTS))
 import ledger as ledger_cli
-from ledgerlib import clikit
+from bootgear_cli import clikit
+
+PROGRAM = ledger_cli.CATALOG.prog
 
 
 def _git_repo(path: Path) -> None:
@@ -89,7 +91,7 @@ class LedgerOutputTests(unittest.TestCase):
         result = self.run_pipe("sign", "tech/seeded", "a1", "--as", "verifier-b", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data["next"], "ledger.py save")
+        self.assertEqual(data["next"], f"{PROGRAM} save")
         self.assertFalse(any(line.startswith("next:") for line in data["lines"]))
 
     def test_write_prose_ends_with_save_next(self) -> None:
@@ -98,14 +100,14 @@ class LedgerOutputTests(unittest.TestCase):
             "--claim", "It is.", "--because", "Printed by the CLI.", "--evidence", "true",
             "--as", "author-a")
         self.assertEqual(code, 0, err)
-        self.assertEqual(out.splitlines()[-1], "next: ledger.py save")
+        self.assertEqual(out.splitlines()[-1], f"next: {PROGRAM} save")
 
     def test_resolve_exact_names_show_next(self) -> None:
         self.seed()
         result = self.run_pipe("resolve", "tech/seeded", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data["next"], "ledger.py show tech/seeded")
+        self.assertEqual(data["next"], f"{PROGRAM} show tech/seeded")
         self.assertTrue(any(line.startswith("EXACT") for line in data["lines"]))
 
     def test_resolve_exact_follows_a_cached_redirect(self) -> None:
@@ -118,7 +120,7 @@ class LedgerOutputTests(unittest.TestCase):
         result = self.run_pipe("resolve", "tech/moved", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data["next"], "ledger.py show tech/seeded")
+        self.assertEqual(data["next"], f"{PROGRAM} show tech/seeded")
         self.assertIn("USE-redirect from tech/moved", " ".join(data["lines"]))
 
     def test_resolve_fuzzy_has_no_next(self) -> None:
@@ -176,23 +178,23 @@ class LedgerOutputTests(unittest.TestCase):
         self.assertEqual(piped.returncode, 1)
         error = json.loads(piped.stderr)["error"]
         self.assertIn("say which ledger", error["message"])
-        self.assertEqual(error["example"], "ledger.py " + ledger_cli.EXAMPLES["new"])
+        self.assertEqual(error["example"], f"{PROGRAM} {ledger_cli.EXAMPLES['new']}")
         self.assertIn("resolve", error["examples"])
 
         code, _, err = self.run_file(*args)
         self.assertEqual(code, 1)
         lines = err.splitlines()
-        self.assertEqual(lines[0], f"example: ledger.py {ledger_cli.EXAMPLES['new']}")
+        self.assertEqual(lines[0], f"example: {PROGRAM} {ledger_cli.EXAMPLES['new']}")
         self.assertTrue(lines[-1].startswith("say which ledger"), err)
         self.assertTrue(any(line.startswith("commands: ") for line in lines))
-        self.assertIn(f"  ledger.py {ledger_cli.EXAMPLES['show']}", lines)
+        self.assertIn(f"  {PROGRAM} {ledger_cli.EXAMPLES['show']}", lines)
 
     def test_argparse_error_prints_example_and_exits_2(self) -> None:
         result = self.run_pipe("show", "--prose")
         self.assertEqual(result.returncode, 2)
         lines = result.stderr.splitlines()
-        self.assertTrue(lines[-1].startswith("ledger.py show: error:"), result.stderr)
-        self.assertEqual(lines[0], f"example: ledger.py {ledger_cli.EXAMPLES['show']}")
+        self.assertTrue(lines[-1].startswith(f"{PROGRAM} show: error:"), result.stderr)
+        self.assertEqual(lines[0], f"example: {PROGRAM} {ledger_cli.EXAMPLES['show']}")
         self.assertNotIn("usage:", result.stderr)
 
     def test_new_collects_every_problem_before_running_evidence(self) -> None:

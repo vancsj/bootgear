@@ -1,4 +1,4 @@
-"""CLI output contract for `bin/task`: prose by default, explicit JSON with
+"""CLI output contract for the public Gear `engine task` route: prose by default, explicit JSON with
 `--prose`, runnable refusals (example, sibling commands, frequent examples),
 every ledger problem in one refusal, caller-relative paths, and `next` steps.
 
@@ -10,16 +10,19 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 
+from gear_commands import TASK as TASK_COMMAND
+from gear_commands import display
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "bin" / "task"
-PROG = "task"
+REPOSITORY_ROOT = PLUGIN_DIR.parents[1]
+PROG = display("engine", "task")
 FREQUENT = ("session read", "session record-decision", "state transition")
 
 SMOKE_MACHINE = """\
@@ -54,7 +57,7 @@ nodes:
 PROBE = """
 import json, shlex
 from engine import cli
-from engine.clikit import leaf_commands
+from bootgear_cli.clikit import leaf_commands
 parser = cli.build_parser()
 bad = {}
 for leaf, example in cli.EXAMPLES.items():
@@ -75,12 +78,16 @@ def _env(**extra):
     env = {k: v for k, v in os.environ.items()
            if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "GEAR_CALLER_CWD",
                         "VIRTUAL_ENV")}
+    paths = [str(PLUGIN_DIR / "src"), str(REPOSITORY_ROOT / "plugins" / "cli" / "src")]
+    if env.get("PYTHONPATH"):
+        paths.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(paths)
     env.update(extra)
     return env
 
 
 class CliOutputTest(unittest.TestCase):
-    task_bin = TASK_BIN
+    task_command = TASK_COMMAND
     prog = PROG
     frequent = FREQUENT
 
@@ -97,7 +104,7 @@ class CliOutputTest(unittest.TestCase):
         self.ledger = self.session_dir / f"{self.run_id}.md"
 
     def _task(self, *args, stdout: Any = subprocess.PIPE, cwd=None, **env):
-        return subprocess.run([str(self.task_bin), *args], stdout=stdout,
+        return subprocess.run([*self.task_command, *args], stdout=stdout,
                               stderr=subprocess.PIPE, text=True, check=False,
                               cwd=cwd, env=_env(**env))
 
@@ -391,7 +398,7 @@ class CliOutputTest(unittest.TestCase):
                                     GEAR_CALLER_CWD=str(caller))
         self.assertEqual(validated.returncode, 0, validated.stderr)
         self.assertEqual(json.loads(validated.stdout),
-                         {"path": str(caller / "machine.yaml"), "ok": True, "problems": []})
+                         {"path": str((caller / "machine.yaml").resolve()), "ok": True, "problems": []})
 
     # --- next steps -------------------------------------------------------
 
@@ -631,9 +638,13 @@ class CliOutputTest(unittest.TestCase):
         self.assertTrue(line.startswith(first_line), line)
         self.assertNotIn("## closed", self.ledger.read_text())
         argv = shlex.split(line.split(" — run: ", 1)[1])
+        prefix = shlex.split(self.prog)
+        self.assertEqual(argv[:len(prefix)], prefix)
+        argv = [self.prog, *argv[len(prefix):]]
         self.assertEqual(argv[0], self.prog)
-        argv = [str(self.task_bin), *(a if not a.startswith("<") else "r" for a in argv[1:])]
-        fixed = subprocess.run(argv, capture_output=True, text=True, check=False, env=_env())
+        args = (a if not a.startswith("<") else "r" for a in argv[1:])
+        fixed = subprocess.run([*self.task_command, *args], capture_output=True, text=True,
+                                check=False, env=_env())
         self.assertEqual(fixed.returncode, 0, fixed.stderr)
         return argv
 
@@ -674,8 +685,11 @@ class CliOutputTest(unittest.TestCase):
         refused = self._session("close", "succeeded", "--prose")
         self.assertIn("has no legal edge to 'succeeded'", refused.stderr.splitlines()[-1])
         argv = shlex.split(refused.stderr.splitlines()[-1].split(" — run: ", 1)[1])
-        argv = [str(self.task_bin), *(a if not a.startswith("<") else "r" for a in argv[1:])]
-        fixed = subprocess.run(argv, capture_output=True, text=True, check=False, env=_env())
+        prefix = shlex.split(self.prog)
+        self.assertEqual(argv[:len(prefix)], prefix)
+        args = (a if not a.startswith("<") else "r" for a in argv[len(prefix):])
+        fixed = subprocess.run([*self.task_command, *args], capture_output=True, text=True,
+                               check=False, env=_env())
         self.assertEqual(fixed.returncode, 1, fixed.stderr)
         self.assertIn("legal destinations", fixed.stderr)
         self.assertIn("'review'", fixed.stderr)
@@ -694,8 +708,11 @@ class CliOutputTest(unittest.TestCase):
         line = refused.stderr.splitlines()[-1]
         self.assertIn("--confirm-leave", line)
         argv = shlex.split(line.split(" — run: ", 1)[1])
-        argv = [str(self.task_bin), *(a if not a.startswith("<") else "r" for a in argv[1:])]
-        fixed = subprocess.run(argv, capture_output=True, text=True, check=False, env=_env())
+        prefix = shlex.split(self.prog)
+        self.assertEqual(argv[:len(prefix)], prefix)
+        args = (a if not a.startswith("<") else "r" for a in argv[len(prefix):])
+        fixed = subprocess.run([*self.task_command, *args], capture_output=True, text=True,
+                               check=False, env=_env())
         self.assertEqual(fixed.returncode, 1, fixed.stderr)
         self.assertIn("--confirm-leave", fixed.stderr)
 
@@ -760,18 +777,19 @@ class CliOutputTest(unittest.TestCase):
 
     def test_module_entry_point_renders_refusals(self):
         result = subprocess.run(
-            ["uv", "run", "--project", str(self.task_bin.parents[1]), "python", "-m",
-             "engine.session", "record-decision", self.run_id, "--dir", str(self.session_dir),
-             "--mode", "debate", "--summary", "round 1, party 'main-agent': x", "--prose"],
-            capture_output=True, text=True, check=False, env=_env())
+            [sys.executable, "-m", "engine.session", "record-decision", self.run_id,
+             "--dir", str(self.session_dir), "--mode", "debate",
+             "--summary", "round 1, party 'main-agent': x", "--prose"],
+            capture_output=True, text=True, check=False,
+            env=_env(BOOTGEAR_PROG=PROG, BOOTGEAR_HOST="claude"))
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("record-decision refused", result.stderr)
         self.assertLess(result.stderr.index("example: "), result.stderr.index("record-decision refused"))
 
     def test_examples_parse_and_cover_every_leaf(self):
         result = subprocess.run(
-            ["uv", "run", "--project", str(PLUGIN_DIR), "python", "-c", PROBE],
-            capture_output=True, text=True, check=False, env=_env())
+            [sys.executable, "-c", PROBE], capture_output=True, text=True,
+            check=False, env=_env())
         self.assertEqual(result.returncode, 0, result.stderr)
         probe = json.loads(result.stdout)
         self.assertEqual(probe["examples"], probe["leaves"])

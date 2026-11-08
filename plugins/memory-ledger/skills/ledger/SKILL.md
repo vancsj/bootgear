@@ -27,26 +27,27 @@ zoom-out check → `sign`, `sign --fail --output`, or `refute`; a claim narrower
 than its checks → `rival` → no hit or a different question: read both ledgers'
 `rules`, choose a ledger → `new` (with `--alt-terms`) → `save` → hand back.
 
-1. Use the common command forms below. Run `<command> --help` when a form is
+1. Call `cli:gear` and use its returned absolute path for each ledger command.
+2. Use the common command forms below. Run `<command> --help` when a form is
    not listed or when the CLI output does not settle the syntax. Read
    `references/mechanics.md` before a write command or when a flag, path, or
    output shape needs checking.
-2. Resolve the question before reading or writing an entry.
-3. Read the selected answer and run every listed evidence check before using it.
-4. Read each ledger's rules (`rules`), then choose shared, local or deputy storage from
+3. Resolve the question before reading or writing an entry.
+4. Read the selected answer and run every listed evidence check before using it.
+5. Read each ledger's rules (`rules`), then choose shared, local or deputy storage from
    the question's lasting scope; read every open ledger before writing to one.
-5. Add a rival instead of editing an answer, evidence line, or signature bytes.
-6. Sign the verified result with the current AI session.
-7. `save` in the same working stretch, then hand back.
+6. Add a rival instead of editing an answer, evidence line, or signature bytes.
+7. Sign the verified result with the current AI session.
+8. `save` in the same working stretch, then hand back.
 
 ### Common commands
 
 ```text
-ledger.py resolve "<question or claim>"
-ledger.py show <slug>
-ledger.py list --filter "<term>"
-ledger.py doctor --json
-ledger.py resolve-roots --json
+<gear> --host <host> memory-ledger ledger resolve "<question or claim>"
+<gear> --host <host> memory-ledger ledger show <slug>
+<gear> --host <host> memory-ledger ledger list --filter "<term>"
+<gear> --host <host> memory-ledger ledger doctor --json
+<gear> --host <host> memory-ledger ledger resolve-roots --json
 ```
 
 Read `references/judgement.md` when choosing a ledger, interpreting a match,
@@ -78,9 +79,10 @@ status message for `unconfigured` or `broken`, and no output for `cooldown` or
 
 ## Host mechanics
 
-Claude entrypoint: `${CLAUDE_PLUGIN_ROOT}/bin/ledger`.
-Codex entrypoint: `${PLUGIN_ROOT}/bin/ledger`.
-Use the resolved literal absolute entrypoint in each tool call.
+Use the absolute path returned by `cli:gear` as `<gear>`.
+Run `<gear> --host <host> memory-ledger ledger <command> [arguments]`.
+Use `claude` or `codex` as `<host>`, based on the current host.
+If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
 
 Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
 Explicit `--host` and `--session-id` values take precedence.

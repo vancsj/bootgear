@@ -1,6 +1,6 @@
 """CLI-level tests for the round-0 scoping phase in `session.py`.
 
-Drives `bin/task` as a subprocess against a scratch ledger, the same
+Drives the public Gear `engine task` route against a scratch ledger, the same
 contract `debate/SKILL.md` and `execute` actually use, rather than
 importing session.py's internals directly.
 """
@@ -11,10 +11,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "bin" / "task"
 
 MACHINE = """\
 name: smoke
@@ -43,7 +43,7 @@ class Round0Test(unittest.TestCase):
 
     def _task(self, *args, expect_success=True):
         result = subprocess.run(
-            [str(TASK_BIN), *args, "--dir", str(self.session_dir)],
+            [*TASK_COMMAND, *args, "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=False,
             env={**os.environ, "BOOTGEAR_OUTPUT": "prose"},
         )

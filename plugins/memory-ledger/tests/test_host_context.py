@@ -13,6 +13,8 @@ import pytest
 
 PLUGIN = Path(__file__).resolve().parents[1]
 REPO = PLUGIN.parents[1]
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
+CLI_SOURCE = REPO / "plugins" / "cli" / "src"
 
 
 @pytest.mark.parametrize("host", ("claude", "codex"))
@@ -24,10 +26,12 @@ def test_hook_context_reaches_the_registered_ledger(host: str, tmp_path: Path) -
     home.mkdir()
     env = {**os.environ, "HOME": str(home), "BOOTGEAR_HOST": "standalone",
            "BOOTGEAR_SESSION_ID": "inherited-session", "CLAUDE_CODE_SESSION_ID": "native-session",
-           "PLUGIN_ROOT": str(engine), "CLAUDE_PLUGIN_ROOT": str(engine)}
+           "PLUGIN_ROOT": str(engine), "CLAUDE_PLUGIN_ROOT": str(engine),
+           "PYTHONPATH": os.pathsep.join([str(CLI_SOURCE), os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}
     command = shlex.join([
-        str(PLUGIN / "bin" / "ledger"), "--root", str(tmp_path / "shared"),
-        "--local-root", str(tmp_path / "local"), "new", "tech/context", "--local",
+        str(GEAR), "--host", host, "--root", str(REPO), "memory-ledger", "ledger",
+        "--root", str(tmp_path / "shared"), "--local-root", str(tmp_path / "local"),
+        "new", "tech/context", "--local",
         "--q", "Which session signed the entry?", "--claim", "The active host session signs.",
         "--because", "The hook supplies shared context.", "--evidence", "true",
     ])
@@ -45,4 +49,5 @@ def test_hook_context_reaches_the_registered_ledger(host: str, tmp_path: Path) -
     entry = (tmp_path / "local" / "tech" / "context.md").read_text()
     signer = "codex:active-session-full" if host == "codex" else "active"
     assert re.findall(r"^\s+✓\s+(\S+)", entry, re.MULTILINE) == [signer]
-    assert result.stdout.splitlines()[-1] == f"next: {PLUGIN / 'bin' / 'ledger'} save"
+    expected = shlex.join([str(GEAR), "--host", host, "memory-ledger", "ledger", "save"])
+    assert result.stdout.splitlines()[-1] == f"next: {expected}"

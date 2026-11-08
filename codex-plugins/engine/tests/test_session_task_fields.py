@@ -15,10 +15,10 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 TASK_TYPES = ("artefact-review", "change-review", "design-doc", "ticket-to-pr", "ticket-writing", "triage")
 UNKNOWN_TASK_TYPES = ("retired-review", "retired-triage", "pr-review", "bug-triage")
 
@@ -51,7 +51,7 @@ def _env(**extra):
 
 
 class SettlementCase(unittest.TestCase):
-    task_bin = TASK_BIN
+    task_command = TASK_COMMAND
     machine = MACHINE
 
     def setUp(self):
@@ -62,7 +62,7 @@ class SettlementCase(unittest.TestCase):
         self.session_dir = self.tmp / "session"
 
     def _task(self, *args, cwd=None, **env):
-        return subprocess.run([str(self.task_bin), *args], capture_output=True, text=True,
+        return subprocess.run([*self.task_command, *args], capture_output=True, text=True,
                               check=False, cwd=cwd or self.project, env=_env(**env))
 
     def _settlement(self, task_type: str, extra: str = "") -> str:
@@ -466,8 +466,10 @@ class WriteTicketNextStepTest(LedgerCase):
         return last.removeprefix("next: ")
 
     def _run_printed(self, command: str):
-        argv = shlex.split(command)[1:]
-        return self._task(*("the body is written" if arg == "<why>" else arg for arg in argv))
+        argv = shlex.split(command)
+        self.assertEqual(argv[:len(self.task_command)], self.task_command)
+        args = argv[len(self.task_command):]
+        return self._task(*("the body is written" if arg == "<why>" else arg for arg in args))
 
     def test_next_step_runs_on_the_ticket_writing_machine(self):
         self.machine = TICKET_WRITING.read_text()

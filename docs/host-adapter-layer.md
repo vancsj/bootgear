@@ -21,11 +21,13 @@ The shared core is mirrored in both independently installable engine bundles:
   capabilities, and plugin-root paths.
 - `src/engine/policy.py` — static handler mapping and the current recall, stop,
   and state-nudge policies.
-- `hooks/adapter.py` — host-specific stdin entry point and import bootstrap.
+- `hooks/gear` and `hooks/gear.py` — native hook loader that finds Gear and
+  forwards the event to the plugin's registered handler.
+- `hooks/adapter.py` — handler entry point and import bootstrap.
 
-The Claude and Codex cores are byte-identical. Host wrappers supply their own
-root environment, paths, input contract, and output envelope. The engine layer
-does not import advisor, mailbox, or memory-ledger implementation modules.
+The Claude and Codex cores are byte-identical. Native hook loaders supply host
+paths, input contracts, and output envelopes. The engine layer does not import
+advisor, mailbox, or memory-ledger implementation modules.
 
 ## V1 events
 
@@ -72,14 +74,13 @@ and exit status; prompts, tool inputs, transcripts, and paths are excluded.
 
 ## Installation paths
 
-| Host | Root variable | Source | Hooks | Task command |
-|---|---|---|---|---|
-| Claude | `CLAUDE_PLUGIN_ROOT` | `src/` | `hooks/` | `bin/task` |
-| Codex | `PLUGIN_ROOT` | `src/` | `hooks/` | `scripts/task` |
+| Host | Hook root | Native hook command | Gear command |
+|---|---|---|---|
+| Claude | `${CLAUDE_PLUGIN_ROOT}` | `hooks/gear --host claude context-hook` | `<gear> --host claude engine context-hook` |
+| Codex | `${PLUGIN_ROOT}` | `hooks/gear --host codex context-hook` | `<gear> --host codex engine context-hook` |
 
-Legacy hook script paths remain direct compatibility entry points. Installed
-manifests invoke `hooks/adapter.py` so shared behavior flows through the new
-layer.
+Hook manifests invoke each plugin's `hooks/gear` loader. The loader derives the
+provider name from its own `gear.toml` and forwards the event through Gear.
 
 ## Verification
 

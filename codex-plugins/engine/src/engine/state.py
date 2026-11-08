@@ -25,8 +25,9 @@ import sys
 from pathlib import Path
 
 import yaml
+from bootgear_cli.clikit import ENV_MODE, caller_path, emit, refuse
+from bootgear_cli.gear import resolve_command
 
-from engine.clikit import ENV_MODE, caller_path, emit, refuse
 from engine.session import (
     MACHINES_SECTION,
     _append_to_section,
@@ -283,17 +284,13 @@ def _parse_leave_args(raw: list[str]) -> tuple[dict[str, str], list[str]]:
     return args, problems
 
 
-# <plugin-root>/src/engine/state.py -> <plugin-root>
-PLUGIN_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _resolve_program(program: str) -> str | None:
-    """Codex host: a leave_check program bundled in this plugin's
-    `scripts/` wins; otherwise fall back to PATH lookup."""
-    bundled = PLUGIN_ROOT / "scripts" / program
-    if bundled.is_file() and os.access(bundled, os.X_OK):
-        return str(bundled)
-    return shutil.which(program)
+def _resolve_program(program: str) -> list[str] | None:
+    """Resolve a registered Gear command, then fall back to PATH."""
+    command = resolve_command(program)
+    if command is not None:
+        return command
+    path_program = shutil.which(program)
+    return [path_program] if path_program else None
 
 
 def _leave_check_timeout() -> float:
@@ -358,7 +355,7 @@ def _run_leave_check(current: str, template: list[str],
     if resolved is None:
         sys.exit(f"leave_check program '{argv[0]}' not found — install the "
                  f"plugin that provides it")
-    argv = [resolved, *argv[1:]]
+    argv = [*resolved, *argv[1:]]
     timeout = _leave_check_timeout()
     shown = " ".join(argv)
     try:

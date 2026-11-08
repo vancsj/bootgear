@@ -2,10 +2,13 @@
 name = "engine"
 
 [commands.task]
-exec = ["./bin/task"]
+exec = ["python3", "-m", "engine.cli"]
 
 [commands.context-hook]
 exec = ["python3", "hooks/pre_tool_use_task_identity.py", "--host", "claude"]
+
+[commands.adapter]
+exec = ["python3", "hooks/adapter.py"]
 
 [reminders.after_compaction]
 exec = ["python3", "hooks/session_start_recall.py"]

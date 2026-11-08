@@ -1,4 +1,4 @@
-"""The bundled converge through the Codex `scripts/converge`: every slate command with its
+"""The bundled Converge command through Gear: every slate command with its
 printed lines and its `next:` step, role and budget refusals, and advisor seats."""
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from gear_commands import CONVERGE as CONVERGE_COMMAND
+from gear_commands import display
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK = PLUGIN_DIR / "scripts" / "converge"
+PROGRAM = display("engine", "converge")
 ANGLES = PLUGIN_DIR / "skills" / "review" / "references" / "find-angles.yaml"
 
 FIND_ANGLES = """\
@@ -43,7 +46,7 @@ def _run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env.pop("VIRTUAL_ENV", None)
     env.pop("BOOTGEAR_OUTPUT", None)
     return subprocess.run(
-        [str(TASK), *args],
+        [*CONVERGE_COMMAND, *args],
         cwd=root,
         env=env,
         capture_output=True,
@@ -60,7 +63,7 @@ def _ok(root: Path, *args: str, code: int = 0) -> subprocess.CompletedProcess[st
 
 
 class Slate:
-    """One slate `s1` in `root/ledgers`, driven through `scripts/converge`."""
+    """One slate `s1` in `root/ledgers`, driven through the registered Gear command."""
 
     def __init__(self, root: Path):
         self.root = root
@@ -76,7 +79,7 @@ class Slate:
         return (result.stdout if code in (0, 1) else result.stderr).splitlines()
 
     def cmd(self, rest: str) -> str:
-        return f"{TASK} {rest.format(dir=shlex.quote(str(self.dir)))}"
+        return f"{PROGRAM} {rest.format(dir=shlex.quote(str(self.dir)))}"
 
     def plan(self) -> str:
         return self.cmd("status s1 --dir {dir} --json")
@@ -380,12 +383,12 @@ def test_bundled_angle_na_refusal_shows_the_form_for_its_phase(tmp_path: Path) -
     attack_step = f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"
     err = slate.lines("angle-na", "--as", FINDER, "--phase", "find", "--angle", "failure-path",
                       "--reason", "no I/O", code=2)
-    assert _example(err).startswith(f"example: {TASK} angle-na ")
+    assert _example(err).startswith(f"example: {PROGRAM} angle-na ")
     assert "--phase find --lens" in _example(err)
     assert err[-1] == attack_step
     err = slate.lines("angle-na", "--as", R1, "--phase", "attack", "--angle", BATCH_1[0],
                       "--reason", "no boundary in a constant", code=2)
-    assert _example(err).startswith(f"example: {TASK} angle-na ")
+    assert _example(err).startswith(f"example: {PROGRAM} angle-na ")
     assert "--phase attack --claim" in _example(err)
     assert err[-1] == attack_step
 
@@ -429,7 +432,7 @@ def test_bundled_cutoff_gate_render_converged(tmp_path: Path) -> None:
                         f"next: cut-after: finder accept F001; plan: {slate.plan()}"]
     assert slate.lines("gate", code=1) == [
         "GATE fail s1", "F001 is open in cut-after",
-        "no current cutoff (run `converge cutoff` after the last state change)",
+        f"no current cutoff (run `{PROGRAM} cutoff` after the last state change)",
         f"next: cut-after: finder accept F001; plan: {slate.plan()}"]
     out = slate.accept("F001", "after")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=after round=1", cutoff_step]
@@ -570,8 +573,8 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     assert 'python3 "$CHANNEL_SCRIPT"' not in step
     assert step.count(" receive ") == 1 and "while" not in step
     placeholders = _one(lines, "DRIVER r2 placeholders: ")
-    assert "literal bin/channel path and channel number" in placeholders
-    assert '"$CHANNEL_SCRIPT"' in placeholders and '"$CHANNEL"' in placeholders
+    assert "Gear channel command and channel number" in placeholders
+    assert '"$CHANNEL"' in placeholders
     then = _one(lines, "DRIVER r2 then: ")
     assert "5 receives in total, the one in the step included" in then
     assert "after the 5th receive" in then and "at most 5 times" not in then
@@ -582,16 +585,16 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     assert "WRITE-DENIED" in check and "never redo the turn with a native subagent" in check
     scope = _one(lines, "SCOPE: ")
     assert scope.startswith('SCOPE: write events only with: UV_CACHE_DIR="${TMPDIR:-/tmp}/converge-uv-cache" ')
-    converge = Path(scope.split('converge-uv-cache" ', 1)[1].split(" ", 1)[0])
-    assert converge == TASK.resolve()
-    assert converge.is_file() and os.access(converge, os.X_OK)
+    assert f'{PROGRAM} <attack|reply|verdict|file|rebut|accept|escalate|angle-na>' in scope
+    gear = Path(shlex.split(PROGRAM)[0])
+    assert gear.is_file() and os.access(gear, os.X_OK)
     for fragment in (f"--dir {ledger} --as r2", "require_escalated",
                      'reply "WRITE-DENIED r2: <the error text>"',
                      "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>"):
         assert fragment in scope, scope
     nxt = lines[-1]
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
-    assert "prints the channel.py path and the channel number" in nxt
+    assert "prints the Gear command and channel number" in nxt
     assert "keep the channel open after this slate" in nxt
 
 
@@ -655,7 +658,7 @@ def test_bundled_init_refuters_out_of_range_is_a_usage_refusal(tmp_path: Path) -
     err = _seat_init(tmp_path, ledger, "--refuters", "3", code=2).stderr
     assert "argument --refuters: invalid choice:" in err, err
     assert "(choose from 1, 2)" in err.replace("'", ""), err
-    assert f"example: {TASK} init " in err
+    assert f"example: {PROGRAM} init " in err
     assert not (ledger / "s1.jsonl").exists()
 
 
@@ -800,8 +803,9 @@ def test_bundled_fix_check_compares_against_last_cutoff_before_the_first_fix_che
 def test_bundled_cut_rate_help_points_to_the_evaluate_angles(tmp_path: Path) -> None:
     out = " ".join(_ok(tmp_path, "cut", "--help").stdout.split())
     assert "call sites" not in out and "production queries" not in out
-    assert ("--rate RATE the count an evaluate angle with field rate asks for (converge angles "
-            "--tag evaluate --angles <file>)") in out
+    assert "--rate RATE the count an evaluate angle with field rate asks for" in out
+    assert "plugins/cli/bin/gear --host codex engine converge angles " \
+        "--tag evaluate --angles <file>)" in out
 
 
 def test_bundled_deferred_advisor_waits_for_gap_hunt(tmp_path: Path) -> None:

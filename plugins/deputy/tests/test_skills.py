@@ -58,16 +58,16 @@ class SkillTests(unittest.TestCase):
             with self.subTest(heading=heading):
                 self.assertIn(heading, text)
 
-    def test_host_mechanics_names_the_script_on_each_host(self) -> None:
+    def test_host_mechanics_uses_the_shared_gear_handback(self) -> None:
         for name in SKILLS:
             with self.subTest(skill=name):
                 mechanics = section(self.text(name), "## Host mechanics")
-                self.assertIn("${CLAUDE_PLUGIN_ROOT}/bin/deputy", mechanics)
-                self.assertIn("<directory holding this SKILL.md>/../../bin/deputy", mechanics)
+                self.assertIn("cli:gear", mechanics)
+                self.assertIn("<gear> --host <host> deputy deputy", self.text(name))
                 self.assertNotIn("${PLUGIN_ROOT}", self.text(name))
 
     def test_record_passes_the_codex_session_on_codex(self) -> None:
-        self.assertIn("--host codex --session-id", section(self.text("record"), "## Host mechanics"))
+        self.assertIn("--session-id <session_id>", section(self.text("record"), "## Host mechanics"))
 
 
 if __name__ == "__main__":

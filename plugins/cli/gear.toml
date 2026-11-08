@@ -1,0 +1,5 @@
+[plugin]
+name = "cli"
+
+[commands.setup]
+exec = ["python3", "-m", "bootgear_cli.runtime"]

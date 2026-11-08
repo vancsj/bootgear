@@ -37,7 +37,7 @@ Independent roles receive the full diff, request, standards and raw evidence; ex
 
 The cutter rates each claim's `impact`, `size` and `reach`, `rate` when its
 lens policy counts it, and `difficulty` after the attack, deciding each value
-by the tests `converge angles --tag evaluate` prints. Per lens:
+by the evaluate tests from the public Converge angles interface. Per lens:
 
 | Lens | Meaning |
 |---|---|

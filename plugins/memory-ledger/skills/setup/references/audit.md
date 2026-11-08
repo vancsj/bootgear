@@ -2,7 +2,7 @@
 
 ## UNPORTABLE
 
-`ledger.py audit` reports **UNPORTABLE** only: Evidence lines naming an
+`<gear> --host <host> memory-ledger ledger audit` reports **UNPORTABLE** only: Evidence lines naming an
 absolute or `~`-relative path, except a tool's cache directory (such as
 `~/.gradle/`, `~/.m2/`, `~/.npm/`) and a system directory (`/etc/`, `/usr/`,
 `/bin/`, `/sbin/`, `/opt/`, `/var/`, `/Applications/`, `/Library/`, `/System/`).

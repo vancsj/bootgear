@@ -164,8 +164,9 @@ follow-up by `report_if`.
 |---|---|
 | `/converge:converge` (Codex: `$engine:converge`) | run a slate through the role agents |
 
-The skill drives the `converge` CLI; on Claude Code the plugin's `bin/` is on `PATH`, on
-Codex the skill calls the engine plugin's `scripts/converge`.
+Call `cli:gear` and use its returned path for the registered `converge` command.
+Claude Code uses `--host claude converge converge`; Codex uses
+`--host codex engine converge`.
 
 ```
 init        start a slate: lenses, angle files, refuters; --snapshot pins the work tree
@@ -199,15 +200,15 @@ and `config` read no ledger. `--json` or `--prose` picks the output format.
 
 ## Setup
 
-Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/), which
-runs the CLI.
+Prerequisites: `git`, Python 3.12 and [`uv`](https://docs.astral.sh/uv/).
+Run `cli:setup` to prepare the shared runtime before the first Gear command.
 
 ```
 /plugin marketplace add vancsj/bootgear
 /plugin install converge@bootgear
 ```
 
-This installs its declared dependencies with it: `memory-ledger` and `advisor`.
+This installs `memory-ledger`, `advisor`, `deputy` and `cli` with it.
 
 On Codex CLI there is no separate install: converge ships inside the `engine` plugin
 (`codex plugin add engine@bootgear`).

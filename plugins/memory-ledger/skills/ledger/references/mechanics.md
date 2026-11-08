@@ -3,30 +3,30 @@
 ## Commands
 
 ```
-Claude: `ledger.py = ${CLAUDE_PLUGIN_ROOT}/bin/ledger`
-Codex: `ledger.py = ${PLUGIN_ROOT}/bin/ledger`
+Call `cli:gear` and set `<gear>` to its returned absolute path.
+Use `claude` or `codex` as `<host>`, based on the current host.
 
-ledger.py resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
-ledger.py show <slug> [--data | --all-sigs]    # answers, conf, evidence, sigs (every ✗, newest 5 ✓ by file position, newest first; --all-sigs for all), recorded output; --data as JSON, refuses --all-sigs
-ledger.py list [--filter <text>] [--all] [--only …]
-ledger.py new <slug> (--shared|--local) --q --claim --because --evidence [--evidence …] [--ref <branch>] [--alt-terms]
-ledger.py rival <slug> --claim --because --evidence [--evidence …] [--keep-evidence aN] [--ref <branch>]
-ledger.py add-evidence <slug> <aN> --evidence "…"   # append a check
-ledger.py vote --question "…" --claim "…" --evidence "…" [--only deputy]   # add checks to the answer with that claim on a similar question; exit 1 with NO-VOTE when none
-ledger.py promote <slug> <aN> [--to <ref>]     # branch claim → mainline, as a NEW answer
-ledger.py set-repo <slug> <aN> <repo>          # name the checkout its checks run in
-ledger.py sign <slug> <aN> [--fail --output "<failing output>"]
-ledger.py refute <slug> <aN> <signer-id> --output "<your contradicting run>"
-ledger.py assert <slug> <aN> --why "<what settles it>" [--by NAME] | --clear
-ledger.py hash <slug> <aN>                     # h= for an answer as it stands
-ledger.py lint [--fix] [--only …]              # drift, voided sigs, folder shape, collisions
-ledger.py save [-m "…"] [--no-push] [--only …] # lint --fix, then one commit per ledger
-ledger.py audit [--json] [--filter <text>]     # Evidence lines naming an absolute or ~ path, tool caches and system dirs excepted
-ledger.py doctor                               # python, git, config, both roots
-ledger.py rules [--init] [--only …]            # each ledger's WHAT-BELONGS.txt; --init seeds a missing one
-ledger.py resolve-roots [--json]               # where each ledger is, and whether it exists yet
-ledger.py doctor --json                         # structured configured/unconfigured/broken status
-ledger.py selftest                             # pin the conf/hash constants
+<gear> --host <host> memory-ledger ledger resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
+<gear> --host <host> memory-ledger ledger show <slug> [--data | --all-sigs]    # answers, conf, evidence, sigs (every ✗, newest 5 ✓ by file position, newest first; --all-sigs for all), recorded output; --data as JSON, refuses --all-sigs
+<gear> --host <host> memory-ledger ledger list [--filter <text>] [--all] [--only …]
+<gear> --host <host> memory-ledger ledger new <slug> (--shared|--local) --q --claim --because --evidence [--evidence …] [--ref <branch>] [--alt-terms]
+<gear> --host <host> memory-ledger ledger rival <slug> --claim --because --evidence [--evidence …] [--keep-evidence aN] [--ref <branch>]
+<gear> --host <host> memory-ledger ledger add-evidence <slug> <aN> --evidence "…"   # append a check
+<gear> --host <host> memory-ledger ledger vote --question "…" --claim "…" --evidence "…" [--only deputy]   # add checks to the answer with that claim on a similar question; exit 1 with NO-VOTE when none
+<gear> --host <host> memory-ledger ledger promote <slug> <aN> [--to <ref>]     # branch claim → mainline, as a NEW answer
+<gear> --host <host> memory-ledger ledger set-repo <slug> <aN> <repo>          # name the checkout its checks run in
+<gear> --host <host> memory-ledger ledger sign <slug> <aN> [--fail --output "<failing output>"]
+<gear> --host <host> memory-ledger ledger refute <slug> <aN> <signer-id> --output "<your contradicting run>"
+<gear> --host <host> memory-ledger ledger assert <slug> <aN> --why "<what settles it>" [--by NAME] | --clear
+<gear> --host <host> memory-ledger ledger hash <slug> <aN>                     # h= for an answer as it stands
+<gear> --host <host> memory-ledger ledger lint [--fix] [--only …]              # drift, voided sigs, folder shape, collisions
+<gear> --host <host> memory-ledger ledger save [-m "…"] [--no-push] [--only …] # lint --fix, then one commit per ledger
+<gear> --host <host> memory-ledger ledger audit [--json] [--filter <text>]     # Evidence lines naming an absolute or ~ path, tool caches and system dirs excepted
+<gear> --host <host> memory-ledger ledger doctor                               # python, git, config, both roots
+<gear> --host <host> memory-ledger ledger rules [--init] [--only …]            # each ledger's WHAT-BELONGS.txt; --init seeds a missing one
+<gear> --host <host> memory-ledger ledger resolve-roots [--json]               # where each ledger is, and whether it exists yet
+<gear> --host <host> memory-ledger ledger doctor --json                         # structured configured/unconfigured/broken status
+<gear> --host <host> memory-ledger ledger selftest                             # pin the conf/hash constants
 ```
 
 - Identity, hashes and confidence are computed, never eyeballed. `show` computes `conf` live and marks signatures voided by a later edit; never hand-edit `conf` or `checked`, `lint --fix` recomputes them.
@@ -39,7 +39,7 @@ ledger.py selftest                             # pin the conf/hash constants
 - `new` with no ledger flag, while more than one ledger is open, is refused. Pass exactly one of `--shared`, `--local` or `--deputy`. A kind whose root is not open is refused, never filed in another ledger.
 - `new` requires `--shared` or `--local`; there is no default.
 - `doctor` first when anything is off.
-- Output mode: prose is the default for every stdout sink; `--json` or `--prose` on any command overrides, followed by `BOOTGEAR_OUTPUT=json|prose` when no flag is present. The Codex `scripts/ledger` wrapper defaults to prose. `--json` on `doctor`, `audit` and `resolve-roots` keeps its own shape and exit codes. Refusals follow the selected mode and name the command's example and the other commands.
+- Output mode: prose is the default for every stdout sink; `--json` or `--prose` on any command overrides, followed by `BOOTGEAR_OUTPUT=json|prose` when no flag is present. `--json` on `doctor`, `audit` and `resolve-roots` keeps its own shape and exit codes. Refusals follow the selected mode and name the command's example and the other commands.
 
 ## Git
 
@@ -107,7 +107,7 @@ optional `Repo:` + optional `Ref:` + sig lines, each with its recorded output be
 Run it identically for read and write. It produces identity; you paste it verbatim.
 
 ```
-ledger.py resolve "which package manager do we install with"
+<gear> --host <host> memory-ledger ledger resolve "which package manager do we install with"
 ```
 
 Order: `EXACT` (slug hit, following any `USE:` redirect) → `UNKNOWN` (query terms in no entry) →

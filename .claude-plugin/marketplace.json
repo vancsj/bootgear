@@ -4,8 +4,13 @@
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
   },
-  "description": "bootgear: an autonomous task engine for Claude Code and Codex CLI, with review, spec, test, converge, advisor, and memory-ledger plugins.",
+  "description": "bootgear: autonomous task workflows for Claude Code and Codex CLI, with a shared Gear CLI and plugins for review, spec, test, converge, advisor, memory-ledger, and deputy.",
   "plugins": [
+    {
+      "name": "cli",
+      "source": "./plugins/cli",
+      "description": "Shared Gear CLI, plugin discovery, and runtime setup for Bootgear plugins."
+    },
     {
       "name": "memory-ledger",
       "source": "./plugins/memory-ledger",
@@ -14,7 +19,7 @@
     {
       "name": "engine",
       "source": "./plugins/engine",
-      "description": "General autonomous task-execution loop: clarify settles task type, approach, per-domain source-of-truth, debate threshold, and autonomy scope, then execute runs unattended to a succeeded/failed /goal. Depends on converge, spec, test, review, advisor, and memory-ledger (installed automatically)."
+      "description": "General autonomous task-execution loop: clarify settles task type, approach, per-domain source-of-truth, debate threshold, and autonomy scope, then execute runs unattended to a succeeded/failed /goal. Depends on cli, converge, spec, test, review, advisor, memory-ledger, and deputy (installed automatically)."
     },
     {
       "name": "spec",

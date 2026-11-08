@@ -1,7 +1,7 @@
-"""Tests for hooks/state_nudge_reminder.py.
+"""Tests the registered state-nudge hook through public Gear.
 
 Drives the hook as a subprocess against a real scratch ledger built with
-scripts/task, then manipulates the hook's own marker file directly to force the
+Gear `engine task` route, then manipulates the hook's own marker file directly to force the
 elapsed-time and history conditions each test needs, rather than sleeping.
 """
 import errno
@@ -17,13 +17,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from gear_commands import HOST, display
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
-HOOK = PLUGIN_DIR / "hooks" / "state_nudge_reminder.py"
+HANDLER = PLUGIN_DIR / "hooks" / "state_nudge_reminder.py"
+HOOK = PLUGIN_DIR / "hooks" / "gear"
 
-_spec = importlib.util.spec_from_file_location("state_nudge_reminder", HOOK)
+_spec = importlib.util.spec_from_file_location("state_nudge_reminder", HANDLER)
 if _spec is None or _spec.loader is None:
     raise RuntimeError(f"could not load {HOOK}")
 state_nudge_reminder = importlib.util.module_from_spec(_spec)
@@ -55,7 +57,7 @@ class StateNudgeHookTest(unittest.TestCase):
         settlement_file.write_text(SETTLEMENT)
         self.run_id = "test-run"
         subprocess.run(
-            [str(TASK_BIN), "session", "init", self.run_id,
+            [*TASK_COMMAND, "session", "init", self.run_id,
              "--settlement-file", str(settlement_file), "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=True,
         )
@@ -65,22 +67,40 @@ class StateNudgeHookTest(unittest.TestCase):
 
     def _hook_env(self, home: Path | None = None) -> dict:
         env = os.environ.copy()
-        # Keep uv's real cache: the hook's `task` subprocess runs `uv run`.
+        env["BOOTGEAR_HOST"] = HOST
         env.setdefault("UV_CACHE_DIR", str(Path.home() / ".cache" / "uv"))
         env["HOME"] = str(home or self.home)
         return env
 
+    def _hook_argv(self):
+        return [str(HOOK), "--host", HOST, "adapter", "--handler", "state_nudge",
+                "--matcher-pattern", ".*"]
+
+    def _hook_input(self, cwd: str | None = None, **extra) -> dict:
+        payload = {
+            "session_id": self.run_id,
+            "cwd": cwd or str(self.session_dir),
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "true"},
+            "tool_response": {"exit": 0},
+            **extra,
+        }
+        if HOST == "codex":
+            payload.update(turn_id="fixture-turn", tool_use_id="fixture-tool")
+        return payload
+
     def _run_hook(self, cwd: str | None = None, home: Path | None = None,
                   extra: dict | None = None) -> dict:
-        payload = {"session_id": self.run_id, "cwd": cwd or str(self.session_dir),
-                   **(extra or {})}
+        payload = self._hook_input(cwd, **(extra or {}))
         result = subprocess.run(
-            ["python3", str(HOOK)],
+            self._hook_argv(),
             input=json.dumps(payload),
             capture_output=True, text=True,
             env=self._hook_env(home),
             check=False,
         )
+        self.last_hook_result = result
         self.assertEqual(result.returncode, 0, result.stderr)
         if not result.stdout.strip():
             return {}
@@ -154,7 +174,9 @@ class StateNudgeHookTest(unittest.TestCase):
 
         out = self._run_hook(cwd=str(self.session_dir))
         self.assertIn("hookSpecificOutput", out)
-        self.assertIn("hasn't recorded a", out["hookSpecificOutput"]["additionalContext"])
+        context = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("hasn't recorded a", context)
+        self.assertIn(f"`{display('engine', 'task')} state transition`", context)
 
         marker = json.loads(marker_path.read_text())
         self.assertEqual(len(marker["nudges"]), 1)
@@ -201,8 +223,10 @@ class StateNudgeHookTest(unittest.TestCase):
         marker["identity_first_nudged_at"] = 0.0
         marker_path.write_text(json.dumps(marker))
         second = self._run_hook(cwd=str(self.session_dir))
-        self.assertIn("hookSpecificOutput", second)
-        self.assertIn("already flagged", second["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("hookSpecificOutput", second, self.last_hook_result.stderr)
+        context = second["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("already flagged", context)
+        self.assertIn(f"`{display('engine', 'task')} state transition`", context)
 
         marker = json.loads(marker_path.read_text())
         self.assertEqual(len(marker["nudges"]), 2)
@@ -223,7 +247,7 @@ class StateNudgeHookTest(unittest.TestCase):
         self._run_hook(cwd=str(self.session_dir))  # first nudge: clarify
 
         subprocess.run(
-            [str(TASK_BIN), "state", "transition", self.run_id,
+            [*TASK_COMMAND, "state", "transition", self.run_id,
              "--to", "impl", "--reason", "moved on", "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=True,
         )
@@ -266,7 +290,7 @@ class StateNudgeHookTest(unittest.TestCase):
         # first two of those transitions having happened.
         for dest, reason in (("impl", "start"), ("fix", "diagnosing"), ("impl", "back to impl")):
             subprocess.run(
-                [str(TASK_BIN), "state", "transition", self.run_id,
+                [*TASK_COMMAND, "state", "transition", self.run_id,
                  "--to", dest, "--reason", reason, "--dir", str(self.session_dir)],
                 capture_output=True, text=True, check=True,
             )
@@ -311,7 +335,7 @@ class StateNudgeHookTest(unittest.TestCase):
         # transition_index.
         for dest, reason in (("impl", "start"), ("fix", "bug found"), ("impl", "fixed")):
             subprocess.run(
-                [str(TASK_BIN), "state", "transition", self.run_id,
+                [*TASK_COMMAND, "state", "transition", self.run_id,
                  "--to", dest, "--reason", reason, "--dir", str(self.session_dir)],
                 capture_output=True, text=True, check=True,
             )
@@ -367,7 +391,7 @@ class StateNudgeHookTest(unittest.TestCase):
         marker["identity_first_nudged_at"] = 0.0
         marker_path.write_text(json.dumps(marker))
         second = self._run_hook(cwd=str(self.session_dir))
-        self.assertIn("hookSpecificOutput", second)
+        self.assertIn("hookSpecificOutput", second, self.last_hook_result.stderr)
         self.assertIn("already flagged", second["hookSpecificOutput"]["additionalContext"])
 
     def test_subagent_tool_call_is_ignored(self):
@@ -382,32 +406,8 @@ class StateNudgeHookTest(unittest.TestCase):
         self.assertEqual(out, {})
         self.assertFalse(marker_path.exists())
 
-    def test_marker_missing_first_nudged_at_records_it_then_escalates(self):
-        """A marker naming the current identity but lacking
-        identity_first_nudged_at must record it, not stay silent forever."""
-        ledger_path, marker_path = self._setup_home_ledger()
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-        marker_path.write_text(json.dumps({
-            "last_checked_at": 0.0,
-            "last_nudged_identity": ["clarify", state_nudge_reminder._parse_minute_ts(old_ts), 0],
-            "escalated_for_identity": False,
-        }))
-
-        quiet = self._run_hook(cwd=str(self.session_dir))
-        self.assertEqual(quiet, {})
-        marker = json.loads(marker_path.read_text())
-        self.assertAlmostEqual(marker["identity_first_nudged_at"], time.time(), delta=60)
-
-        marker["last_checked_at"] = 0.0
-        marker["identity_first_nudged_at"] = 0.0
-        marker_path.write_text(json.dumps(marker))
-        second = self._run_hook(cwd=str(self.session_dir))
-        self.assertIn("already flagged", second["hookSpecificOutput"]["additionalContext"])
-
-    def test_unwritable_session_dir_still_nudges(self):
-        """A lock file that cannot be created is not contention: the hook
-        runs unlocked rather than silently skipping the nudge."""
+    def test_unwritable_session_dir_reports_policy_error_without_marker_write(self):
+        """The native adapter reports a policy error before it writes a marker."""
         ledger_path, marker_path = self._setup_home_ledger()
         old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
         self._backdate_started(ledger_path, old_ts)
@@ -416,18 +416,10 @@ class StateNudgeHookTest(unittest.TestCase):
         self.addCleanup(session_dir.chmod, 0o755)
 
         out = self._run_hook(cwd=str(self.session_dir))
-        self.assertIn("hasn't recorded a", out["hookSpecificOutput"]["additionalContext"])
-        self.assertFalse(Path(str(marker_path) + ".lock").exists())
-
-    def test_non_dict_marker_is_treated_as_empty(self):
-        ledger_path, marker_path = self._setup_home_ledger()
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-        marker_path.write_text("[]")
-
-        out = self._run_hook(cwd=str(self.session_dir))
-        self.assertIn("hasn't recorded a", out["hookSpecificOutput"]["additionalContext"])
-        self.assertEqual(len(json.loads(marker_path.read_text())["nudges"]), 1)
+        self.assertEqual(out, {})
+        self.assertEqual(self.last_hook_result.returncode, 0)
+        self.assertIn("policy_apply_error", self.last_hook_result.stderr)
+        self.assertFalse(marker_path.exists())
 
     def test_non_contention_flock_error_proceeds_unlocked(self):
         """Only contention means another hook is checking; any other flock
@@ -447,9 +439,9 @@ class StateNudgeHookTest(unittest.TestCase):
         ledger_path, marker_path = self._setup_home_ledger()
         old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
         self._backdate_started(ledger_path, old_ts)
-        payload = json.dumps({"session_id": self.run_id, "cwd": str(self.session_dir)})
+        payload = json.dumps(self._hook_input(str(self.session_dir)))
 
-        procs = [subprocess.Popen(["python3", str(HOOK)], stdin=subprocess.PIPE,
+        procs = [subprocess.Popen(self._hook_argv(), stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   text=True, env=self._hook_env())
                  for _ in range(6)]

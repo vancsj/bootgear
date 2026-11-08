@@ -83,7 +83,7 @@ Do not use `--snapshot` or `--since`.
 For active runs, export the public settlement and pass that file through `--settlement`:
 
 ```text
-task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
+<gear> --host <host> engine task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
 ```
 
 Read [references/lenses.md](references/lenses.md) when briefing each lens.
@@ -126,7 +126,7 @@ For changed trust boundaries, permissions, external inputs, or sensitive data, t
 Render through the public command:
 
 ```text
-converge render <slate> --dir <converge-dir> > <converge-dir>/<slate>.md
+<gear> --host <host> <converge-plugin> converge render <slate> --dir <converge-dir> > <converge-dir>/<slate>.md
 ```
 
 Read public status and map results in this order:
@@ -169,6 +169,15 @@ Include the actual diagnostic, named mechanism, pending work, and next caller ac
 Do not replace missing request evidence with the author's interpretation.
 
 ## Host mechanics
+
+Use `claude` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
+Run converge commands through `converge:converge`.
+Run feedback commands as `<gear> --host claude spec spec-feedback <command> [arguments]`.
+If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 
 Invoke skills through the Skill tool.
 The spec plugin declares its converge dependency.

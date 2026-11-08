@@ -22,7 +22,7 @@ hosts, and either host can sit on either side of the pair.
 | State | none | persistent; survives across turns and compaction |
 | Task context | supplied in the prompt | the files and commands its own session can reach |
 | Typical time | 30–60 seconds | minutes, over one or more rounds |
-| Platform | macOS or Linux, with the target CLI installed and signed in | macOS or Linux, with Python 3.11+ and the Codex CLI |
+| Platform | macOS or Linux, with the target CLI installed and signed in | macOS or Linux, with Python 3.12, `uv`, and the Codex CLI |
 
 `direct` suits a question whose facts fit in the prompt. `channel` suits a task where the
 advisor needs to look things up itself, or the exchange will take several rounds.
@@ -123,8 +123,8 @@ Design detail, including the on-disk layout, lives in [docs/advisor.md](../../do
 | `/advisor:advisor --mode asking` (Codex: `$advisor:advisor --mode asking`) | ask the other model, one-shot or through the mailbox |
 | `/advisor:advisor --mode listening` (Codex: `$advisor:advisor --mode listening`) | open a channel and advise the paired session until stopped |
 
-The extensionless `bin/channel` command proxies to
-`skills/advisor/scripts/channel.py`, one copy shared by both hosts:
+The `channel` Gear command runs `skills/advisor/scripts/channel.py` on both hosts.
+The `cli:gear` skill returns the Gear path for each host:
 
 ```
 register  take a seat: a listener gets a new channel, an asker claims an existing one
@@ -153,13 +153,14 @@ Install the plugin on each host that will use it:
 
 ```
 codex plugin marketplace add vancsj/bootgear
+codex plugin add cli@bootgear
 codex plugin add advisor@bootgear
 ```
 
 Requirements:
 
 - macOS or Linux (POSIX); Windows is not supported.
-- Python 3.11 or later.
+- The shared CLI plugin, with its runtime prepared through `cli:setup`.
 - For channel mode: the same advisor version on both hosts.
 - For direct mode: the target CLI, installed and signed in. Claude Code calls Codex; Codex calls Claude Code.
 
@@ -184,5 +185,5 @@ Both run from an empty scratch directory. Model and effort flags are omitted unl
 
 ## Standalone, or as bootgear gear
 
-Nothing here depends on the rest of bootgear — install it on its own if a second opinion is
-all you want. `engine` installs it as a dependency and uses it on Claude Code to bring Codex into its debates.
+Install `cli@bootgear` on Codex before using Advisor. Claude installs the CLI dependency
+with Advisor. `engine` uses Advisor on Claude Code to bring Codex into its debates.

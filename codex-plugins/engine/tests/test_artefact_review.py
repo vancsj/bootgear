@@ -6,13 +6,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import CONVERGE as CONVERGE_COMMAND
+from gear_commands import TASK as TASK_COMMAND
+
 PLUGIN = Path(__file__).resolve().parents[1]
-TASK = PLUGIN / ('bin/task' if (PLUGIN / 'bin/task').exists() else 'scripts/task')
 
 class ArtefactReviewTest(unittest.TestCase):
     def command(self, *args, cwd=None):
         env = {k:v for k,v in os.environ.items() if k not in {'BOOTGEAR_SESSION_ID', 'GEAR_CALLER_CWD', 'VIRTUAL_ENV'}}
-        return subprocess.run([str(TASK), 'artefact', *args, '--json'], text=True, capture_output=True, cwd=cwd, env=env, check=False)
+        return subprocess.run([*TASK_COMMAND, 'artefact', *args, '--json'], text=True, capture_output=True, cwd=cwd, env=env, check=False)
 
     def test_settings_has_complete_public_schemas(self):
         result = self.command('settings')
@@ -69,7 +71,7 @@ class ArtefactProgressionTest(unittest.TestCase):
         self.challenge = {'challenger':'fresh-challenger','fresh_context':True,'criteria':{k:{'result':'agreed','reason':'Checked state, applicability and missed defects.','ranges':[{'input':str(self.input),'range':'line 1'}],'searches':['Read all guide text; found no additional defect.']} for k in self.criteria},'findings':{},'positive_control':{'input':str(self.input),'item':'Present control','result':'Present control. The reader can follow the guide.'},'missed_candidates':[],'limits':[]}
 
     def task(self,*args):
-        return subprocess.run([str(TASK),*args,'--json'],text=True,capture_output=True,cwd=self.root,env=self.env,check=False)
+        return subprocess.run([*TASK_COMMAND,*args,'--json'],text=True,capture_output=True,cwd=self.root,env=self.env,check=False)
 
     def record(self,stage,value):
         source = self.root/'record.json'
@@ -194,13 +196,10 @@ class ArtefactProgressionTest(unittest.TestCase):
         self.assertTrue(any(x['id']=='custom-angle' and x['lens']=='artefact' and x['tag']=='find' for x in value['angles']))
 
     def converge(self,*args,with_directory=True):
-        wrapper=PLUGIN/('scripts/converge' if (PLUGIN/'scripts/converge').exists() else '../converge/bin/converge')
         env=dict(self.env)
-        env['PATH']=str(wrapper.resolve().parent)+os.pathsep+env['PATH']
         directory=['--dir',str(self.root/'facts')] if with_directory else []
-        result=subprocess.run([str(wrapper),*args,*directory,'--json'],text=True,capture_output=True,cwd=self.root,env=env,check=False)
+        result=subprocess.run([*CONVERGE_COMMAND,*args,*directory,'--json'],text=True,capture_output=True,cwd=self.root,env=env,check=False)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.env['PATH']=env['PATH']
         return json.loads(result.stdout)
 
     def closed_fact_slate(self):
@@ -386,7 +385,7 @@ class ArtefactProgressionTest(unittest.TestCase):
         self.accepted('assess',self.assessment)
 
     def test_default_settings_displays_resolved_review_data(self):
-        result=subprocess.run([str(TASK),'artefact','settings','--project-root',str(self.root),'--prose'],text=True,capture_output=True,env=self.env,check=False)
+        result=subprocess.run([*TASK_COMMAND,'artefact','settings','--project-root',str(self.root),'--prose'],text=True,capture_output=True,env=self.env,check=False)
         self.assertEqual(result.returncode,0,result.stderr)
         for key,row in self.criteria.items():
             self.assertIn(key,result.stdout)

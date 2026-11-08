@@ -23,6 +23,15 @@ DESIGN_PATTERN_IDS = {
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
+def shared_text(text: str) -> str:
+    shared = text.split("\n## Host mechanics\n", 1)[0]
+    shared = shared.replace("--host claude", "--host <host>").replace("--host codex", "--host <host>")
+    shared = shared.replace("Gear's", "Gear").replace("Gear command", "Gear")
+    shared = re.sub(r"`(?: command)? for complete schemas", "` for complete schemas", shared)
+    shared = re.sub(r"(?<![\w-])(?:spec|engine) spec-feedback", "<feedback-provider> spec-feedback", shared)
+    return re.sub(r"(?<![\w-])(?:converge|engine) converge", "<converge-provider> converge", shared)
+
+
 def _rows(base: Path, name: str) -> list[dict]:
     return yaml.safe_load((base / "spec-review/references" / name).read_text())
 
@@ -110,14 +119,33 @@ class SpecReviewContractTest(unittest.TestCase):
     def test_shared_skill_and_reference_parity(self):
         for name in ("spec", "spec-review"):
             claude, codex = (base / name for base in (CLAUDE_SKILLS, CODEX_SKILLS))
-            shared = [(directory / "SKILL.md").read_text().split("\n## Host mechanics\n")[0]
+            shared = [shared_text((directory / "SKILL.md").read_text())
                       for directory in (claude, codex)]
             self.assertEqual(shared[0], shared[1], name)
             names = sorted(path.name for path in (claude / "references").iterdir())
             self.assertEqual(sorted(path.name for path in (codex / "references").iterdir()), names)
             for reference in names:
-                self.assertEqual((claude / "references" / reference).read_bytes(),
-                                 (codex / "references" / reference).read_bytes(), reference)
+                claude_text = (claude / "references" / reference).read_text()
+                codex_text = (codex / "references" / reference).read_text()
+                self.assertEqual(shared_text(claude_text), shared_text(codex_text), reference)
+
+    def test_host_mechanics_routes_feedback_through_gear(self):
+        cases = (
+            (CLAUDE_SKILLS, "claude", "spec spec-feedback"),
+            (CODEX_SKILLS, "codex", None),
+        )
+        for base, host, command in cases:
+            for name in ("spec", "spec-review"):
+                text = (base / name / "SKILL.md").read_text()
+                mechanics = text.split("\n## Host mechanics\n", 1)[1]
+                self.assertIn("cli:gear", mechanics)
+                self.assertIn(f"--host {host}", mechanics)
+                if command is not None:
+                    self.assertIn(command, mechanics)
+                elif name == "spec-review":
+                    self.assertIn("engine spec-feedback", mechanics)
+                else:
+                    self.assertIn("engine task", mechanics)
 
 
 if __name__ == "__main__":

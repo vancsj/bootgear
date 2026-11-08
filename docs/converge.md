@@ -12,9 +12,9 @@ factual dispute never goes to debate.
 |---|---|
 | `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and common validation), `protocol` (event rules, claim state, batches, phases, cut, result), `model` (replayed slate and claims, rank), `effort` (patch size), `config`, `angles`, `render`, `cli` |
 | `plugins/converge/src/converge/angles/builtin.yaml` | Built-in `attack`, `evaluate` and `decide` angles |
-| `plugins/converge/bin/converge` | Wrapper: `uv run --project <plugin-root> -m converge.cli` |
+| `plugins/converge/gear.toml` | Registers the Python command through Gear. |
 | `plugins/converge/skills/converge/` | Orchestration skill (roles, steps, outcomes) |
-| `codex-plugins/engine/` | Codex copy: `src/converge/`, `scripts/converge`, `skills/converge/` |
+| `codex-plugins/engine/` | Codex bundle: `src/converge/`, Gear registration, and `skills/converge/` |
 
 Callers: `review` runs every finding through a slate; the engine `change-review` and
 `ticket-to-pr` machines gate their `review` node on `converge gate`; the engine `triage`
@@ -239,12 +239,10 @@ Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 
 ## Codex bundling
 
-On Claude, converge is its own plugin, and `review` and `engine` declare it as a
+On Claude, converge is its own plugin, and `review`, `spec` and `engine` declare it as a
 dependency. It has no Codex plugin of its own; on Codex it ships inside
-`codex-plugins/engine`. `src/converge/` is a byte-identical copy of the package;
-`scripts/converge` sets `BOOTGEAR_HOST=codex` and defaults output to prose;
-`skills/converge/SKILL.md` carries the Claude body above `## Host mechanics`, and its host
-section spawns native subagents, drives advisor seats through the separately installed
-`advisor` plugin, and names the script path. Advisor drivers print the absolute
-`scripts/converge` path.
+`codex-plugins/engine`. The package is byte-identical in both plugin roots.
+Claude runs `converge converge` through Gear. Codex runs `engine converge` through
+Gear. The skill gets the Gear path from `cli:gear`; advisor drivers receive the
+registered command form.
 `codex-plugins/engine/tests/test_bundle_drift.py` fails on any drift in the package.

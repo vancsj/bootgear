@@ -24,7 +24,6 @@ class HostRoot:
     environment: str
     source: Path
     hooks: Path
-    task: Path
 
 
 HOST_ROOTS: Final[dict[str, HostRoot]] = {
@@ -32,13 +31,11 @@ HOST_ROOTS: Final[dict[str, HostRoot]] = {
         environment="CLAUDE_PLUGIN_ROOT",
         source=Path("src"),
         hooks=Path("hooks"),
-        task=Path("bin") / "task",
     ),
     HOST_CODEX: HostRoot(
         environment="PLUGIN_ROOT",
         source=Path("src"),
         hooks=Path("hooks"),
-        task=Path("scripts") / "task",
     ),
 }
 
@@ -255,13 +252,6 @@ def expected_handler(host: str, event: str, handler: str) -> bool:
 def host_root_environment(host: str) -> str:
     try:
         return HOST_ROOTS[host].environment
-    except KeyError as error:
-        raise ValueError(f"unsupported host: {host}") from error
-
-
-def host_task_relative_path(host: str) -> Path:
-    try:
-        return HOST_ROOTS[host].task
     except KeyError as error:
         raise ValueError(f"unsupported host: {host}") from error
 

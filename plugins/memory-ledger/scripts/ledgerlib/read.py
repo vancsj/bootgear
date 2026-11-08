@@ -6,6 +6,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from bootgear_cli.clikit import current_program
+
 from .config import pick, resolve_roots
 from .constants import (
     FUZZY_FLOOR,
@@ -98,6 +100,7 @@ def print_resolve_json(args, ledgers) -> None:
 
 
 def cmd_resolve(args, root):
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     ledgers = args.ledgers
     if getattr(args, "data", False):
         return print_resolve_json(args, ledgers)
@@ -131,7 +134,7 @@ def cmd_resolve(args, root):
             target = redirect or e.slug
             print(f"EXACT    {target}{tag_of(e, ledgers)}"
                   + (f"  (USE-redirect from {e.slug})" if redirect else ""))
-            print(f"next: {getattr(args, 'prog', 'ledger.py')} show {target}")
+            print(f"next: {getattr(args, 'prog', current_program('memory-ledger', 'ledger'))} show {target}")
             return
 
     known, asked = query_coverage(query_set, entries)
@@ -177,7 +180,7 @@ def cmd_resolve(args, root):
                 print(f"               Q: {q}")
             if len(rows) > per_folder_cap:
                 print(f"   … {len(rows) - per_folder_cap} more in {f}/ "
-                      f"— `ledger.py list --filter {f}`")
+                      f"— `{prog} list --filter {f}`")
         if len(order) > folder_cap:
             rest = sum(len(by_folder[k]) for k in order[folder_cap:])
             print(f"         … {rest} weaker candidate(s) in "
@@ -204,7 +207,7 @@ def cmd_resolve(args, root):
     if len(ledgers) > 1:
         print("         `new` needs --shared or --local. Ask before writing to shared: "
               "history is append-only, so a machine-local fact filed there cannot be "
-              "unpublished later. Each ledger's rules: ledger.py rules.")
+              f"unpublished later. Each ledger's rules: {prog} rules.")
 
 
 def print_entry_json(e: Entry) -> None:
@@ -247,6 +250,7 @@ def visible_sigs(sigs: list[dict], show_all: bool,
 
 
 def cmd_show(args, root):
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     """Read one entry.
 
     A slug arrives from a parent agent or a resolve; without a read verb a
@@ -303,7 +307,7 @@ def cmd_show(args, root):
         labels = ", ".join(f"{aid} {n}" for aid, n in left_out_by if n)
         names = f" ({labels})" if len(e.answers) > 1 else ""
         print(f"    … {left_out_total} older ✓ not shown{names} — "
-              f"`{getattr(args, 'prog', 'ledger.py')} show {e.slug} --all-sigs`")
+              f"`{prog} show {e.slug} --all-sigs`")
 
 
 def cmd_list(args, root):

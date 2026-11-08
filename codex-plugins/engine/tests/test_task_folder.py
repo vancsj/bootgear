@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN = Path(__file__).resolve().parents[1]
-TASK = PLUGIN / ("bin/task" if (PLUGIN / "bin/task").exists() else "scripts/task")
 MACHINE = """name: binding
 nodes:
   clarify:
@@ -40,7 +40,7 @@ class TaskFolderTest(unittest.TestCase):
                                  "CLAUDE_CODE_SESSION_ID", "VIRTUAL_ENV"}}
 
     def command(self, *args):
-        return subprocess.run([str(TASK), *args, "--dir", str(self.sessions), "--prose"],
+        return subprocess.run([*TASK_COMMAND, *args, "--dir", str(self.sessions), "--prose"],
                               cwd=self.root, env=self.env, text=True,
                               capture_output=True, check=False)
 

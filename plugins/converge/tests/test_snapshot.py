@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 
-from conftest import Converge
+from conftest import GEAR_COMMAND, Converge
 from converge import config as config_mod
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -122,7 +122,7 @@ def test_append_failure_reports_a_ref_it_could_not_remove(cv: Converge, tmp_path
     err = cv(*args, code=2).stderr
     assert "removed refs/converge/s1" not in err
     assert "remove refs/converge/s1 failed (exit 1)" in err
-    assert f"converge prune s1 --project-root {cv.project}" in err
+    assert f"{GEAR_COMMAND} prune s1 --project-root {cv.project}" in err
     assert ref(cv, "s1") is not None
 
 
@@ -214,7 +214,6 @@ def test_since_refusals_name_the_failed_check(cv: Converge) -> None:
 
 def test_prune_removes_exactly_the_named_refs(cv: Converge) -> None:
     # Through the shipped wrapper: the only subcommand the every-command JSON test skips.
-    cv.use_bin = True
     repo(cv)
     head = git(cv, "rev-parse", "HEAD")
     for slate in ("slate-1", "slate-2", "slate-10", "other"):

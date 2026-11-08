@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -11,10 +12,10 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 LEDGER = PLUGIN / "scripts" / "ledger.py"
-WRAPPER = PLUGIN / "scripts" / "ledger"
 CODEX_HOOK = PLUGIN / "hooks" / "codex_nudge.py"
-GEAR = PLUGIN.parents[1] / "cli" / "gear.py"
 REPOSITORY = PLUGIN.parents[1]
+GEAR = REPOSITORY / "plugins" / "cli" / "bin" / "gear"
+GEAR_COMMAND = shlex.join([str(GEAR), "--host", "codex", "memory-ledger", "ledger"])
 sys.path.insert(0, str(PLUGIN / "scripts"))
 from ledgerlib.constants import SHOW_MAX_YES_SIGS
 
@@ -48,7 +49,7 @@ class CodexCompatibilityTests(unittest.TestCase):
         env = {k: v for k, v in self.env().items()
                if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG")}
         return subprocess.run(
-            [str(WRAPPER), *args], cwd=self.caller,
+            [str(GEAR), "--host", "codex", "memory-ledger", "ledger", *args], cwd=self.caller,
             env=env, capture_output=True, text=True, check=False,
         )
 
@@ -60,8 +61,7 @@ class CodexCompatibilityTests(unittest.TestCase):
 
     def run_gear(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(GEAR), "--root", str(REPOSITORY),
-             "memory-ledger", "ledger", *args], cwd=self.caller,
+            [str(GEAR), "--host", "codex", "memory-ledger", "ledger", *args], cwd=self.caller,
             env=self.env(), capture_output=True, text=True, check=False,
         )
 
@@ -310,7 +310,7 @@ class CodexCompatibilityTests(unittest.TestCase):
         self.assertEqual(second.stdout, "")
 
         used = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Bash",
-                                          "tool_input": {"command": "ledger.py show x"}})
+                                          "tool_input": {"command": GEAR_COMMAND + " show x"}})
         self.assertEqual(used.stdout, "")
         marker = (self.home / ".memory-ledger" / ".nudge-state"
                   / "hook-session-full-1234.last")
@@ -330,26 +330,26 @@ class CodexCompatibilityTests(unittest.TestCase):
         self.assertIn("additionalContext",
                       json.loads(self.run_hook(CODEX_HOOK, payload).stdout)["hookSpecificOutput"])
         used = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Bash",
-                                          "tool_input": {"command": f"{PLUGIN}/scripts/ledger show x"}})
+                                          "tool_input": {"command": GEAR_COMMAND + " show x"}})
         self.assertEqual(used.stdout, "")
         marker = (self.home / ".memory-ledger" / ".nudge-state"
                   / "hook-session-wrapper-1234.last")
         self.assertEqual(json.loads(marker.read_text())["event"], "ledger-used")
 
-    def test_wrapper_is_executable_and_prints_prose_on_a_pipe(self) -> None:
-        self.assertTrue(os.access(WRAPPER, os.X_OK))
+    def test_gear_is_executable_and_prints_prose_on_a_pipe(self) -> None:
+        self.assertTrue(os.access(GEAR, os.X_OK))
         doctor = self.run_wrapper("doctor")
         self.assertEqual(doctor.returncode, 0, doctor.stderr)
         self.assertIn("failure(s)", doctor.stdout)
         with self.assertRaises(json.JSONDecodeError):
             json.loads(doctor.stdout)
 
-    def test_wrapper_json_flag_prints_legacy_doctor_object(self) -> None:
+    def test_gear_json_flag_prints_legacy_doctor_object(self) -> None:
         doctor = self.run_wrapper("doctor", "--json")
         self.assertEqual(doctor.returncode, 0, doctor.stderr)
         self.assertEqual(json.loads(doctor.stdout)["status"], "configured")
 
-    def test_wrapper_next_names_the_wrapper(self) -> None:
+    def test_gear_next_names_the_registered_command(self) -> None:
         session = "session-wrapper-1234"
         created = self.run_wrapper(
             "--host", "codex", "--session-id", session,
@@ -359,7 +359,7 @@ class CodexCompatibilityTests(unittest.TestCase):
             "--evidence", "pwd", "--as", f"codex:{session}",
         )
         self.assertEqual(created.returncode, 0, created.stderr)
-        self.assertEqual(created.stdout.splitlines()[-1], f"next: {WRAPPER} save")
+        self.assertEqual(created.stdout.splitlines()[-1], f"next: {GEAR_COMMAND} save")
 
     def test_codex_hook_reports_unconfigured_without_nudging(self) -> None:
         bare_home = self.temp / "bare-home"

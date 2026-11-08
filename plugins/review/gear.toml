@@ -2,4 +2,4 @@
 name = "review"
 
 [commands.self-review]
-exec = ["./bin/self-review"]
+exec = ["python3", "-m", "self_review.cli"]

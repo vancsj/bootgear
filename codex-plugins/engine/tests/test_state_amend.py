@@ -14,10 +14,10 @@ import unittest
 from pathlib import Path
 
 import yaml
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "scripts" / "task"
 
 V1 = """\
 name: amendable
@@ -127,7 +127,7 @@ nodes:
 
 
 def _task(*args):
-    return subprocess.run([str(TASK_BIN), *args], capture_output=True,
+    return subprocess.run([*TASK_COMMAND, *args], capture_output=True,
                           text=True, check=False,
                           env={**os.environ, "BOOTGEAR_OUTPUT": "prose"})
 

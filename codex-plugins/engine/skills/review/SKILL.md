@@ -17,7 +17,7 @@ Authoring callers also supply authoring context, the fixed task folder and any c
 Hand back to the caller (`execute` in an active run, the user standalone)
 each iteration's slate id, converge dir and `converge render` output:
 findings in rank order with their status, `fix-now` claims with their patches
-(`converge render --json` `fix_now`) and any `fix-check` recorded on them,
+(`<gear> --host <host> <converge-plugin> converge render --json` `fix_now`) and any `fix-check` recorded on them,
 `choice` claims, follow-up claims with their status, and killed claims with
 their evidence. When the default implementation selects packs, also hand back
 the angle packs enabled for the slate, each with the reason, or, when none is
@@ -201,12 +201,12 @@ iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
 that file is missing, select anew. Write the enabled pack file names, one per
 line, to `<converge-dir>/<slate>.packs` (an empty file when none). In an
 active run, record
-`task session record-decision <run-id> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
+`<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
 If `init` refuses with a duplicate angle id that names a pack, remove that
 pack from `--angles` and from the `.packs` file, and run `init` again.
 
 In an active run, write the settlement with
-`task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
+`<gear> --host <host> engine task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
 and add `--settlement <that file>` to `init`. At `quick`, add `--refuters 1`.
 
 In an active run, add `--snapshot --pass <n>` to `init`; for `<n>` ≥ 2, also
@@ -216,7 +216,7 @@ change under review. Right after `init` succeeds, record the slate so
 `execute` prunes its snapshot however the review ends:
 
 ```text
-task session record-decision <run-id> --mode solo --summary "review slate <slate> snapshot=<sha>"
+<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review slate <slate> snapshot=<sha>"
 ```
 
 If `init` refuses a `--since` check, keep `--pass <n>` and stop: have
@@ -290,7 +290,7 @@ When the previous pass's `fix` node applied `fix-now` patches, record a
 slate's cutoff:
 
 ```text
-converge fix-check <previous slate> --dir <converge-dir> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <slate>
+<gear> --host <host> <converge-plugin> converge fix-check <previous slate> --dir <converge-dir> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <slate>
 ```
 
 Record `pass` only when the `fix` node's tests and checks passed and this
@@ -302,7 +302,7 @@ that `init` printed. Keep the slate and converge directory in the handback.
 Use the selected exit's public check for leave arguments:
 
 ```text
-task session record-decision <run-id> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
+<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
 ```
 
 ### 6. Apply accepted feedback
@@ -391,7 +391,10 @@ unavailable), stop and report `blocked`, naming the missing role. Claims start
 
 ## Host mechanics
 
-- Use the host's engine task adapter for session and state commands.
-- Use the host's `converge` adapter and its bundled review reference files.
-- Codex's adapters are `<plugin-root>/scripts/task` and
-  `<plugin-root>/scripts/converge`.
+Use `codex` for `<host>`.
+Use `engine` for `<converge-plugin>`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+Run converge commands as `<gear> --host codex engine converge <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.

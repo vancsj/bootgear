@@ -1,16 +1,23 @@
 """Public feedback validation and read-only helper boundaries."""
 from __future__ import annotations
 
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[1]
-WRAPPER = PLUGIN / ("scripts" if (PLUGIN / "scripts").is_dir() else "bin") / "spec-feedback"
+REPO = PLUGIN.parents[1]
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
+sys.path.insert(0, str(REPO / "plugins" / "cli" / "src"))
+sys.path.insert(0, str(PLUGIN / "src"))
+from spec_feedback import cli as spec_cli
 
 
 @pytest.fixture
@@ -34,7 +41,7 @@ from pathlib import Path
 name = Path(sys.argv[0]).name
 with open(os.environ["CALL_LOG"], "a") as log:
     log.write(json.dumps([name, *sys.argv[1:]]) + "\\n")
-if name == "self-review":
+if name in {"self-review", "engine-self-review"}:
     print(json.dumps({"outcome": "ready", "record_exists": False, "checkpoints": json.loads(os.environ.get("HISTORY", "[]"))}))
 elif sys.argv[1] == "status":
     print(json.dumps({"slate": "s1", "claims": [{"id": "F001"}]}))
@@ -44,8 +51,36 @@ else:
     sys.exit(0 if ok else 1)
 ''')
     helper.chmod(0o755)
-    for name in ("self-review", "converge"):
+    for name in ("self-review", "converge", "engine-self-review", "engine-converge"):
         (commands / name).symlink_to(helper)
+    registry = tmp_path / "registry"
+    spec_plugin = registry / "plugins" / "spec"
+    spec_plugin.mkdir(parents=True)
+    shutil.copyfile(PLUGIN / "gear.toml", spec_plugin / "gear.toml")
+    (spec_plugin / "src").symlink_to(PLUGIN / "src", target_is_directory=True)
+
+    def register(base: Path, name: str, entries: dict[str, list[str]]) -> Path:
+        plugin_root = base / name
+        plugin_root.mkdir(parents=True)
+        lines = ["[plugin]", f'name = "{name}"', ""]
+        for command, executable in entries.items():
+            lines.extend((f"[commands.{command}]", "exec = [" + ", ".join(
+                json.dumps(item) for item in executable) + "]", ""))
+        (plugin_root / "gear.toml").write_text("\n".join(lines))
+        return plugin_root
+
+    register(registry / "plugins", "review", {
+        "self-review": ["python3", str(commands / "self-review")],
+    })
+    register(registry / "plugins", "converge", {
+        "converge": ["python3", str(commands / "converge")],
+    })
+    engine = register(registry / "codex-plugins", "engine", {
+        "self-review": ["python3", str(commands / "engine-self-review")],
+        "converge": ["python3", str(commands / "engine-converge")],
+        "spec-feedback": ["python3", "-m", "spec_feedback.cli"],
+    })
+    (engine / "src").symlink_to(PLUGIN / "src", target_is_directory=True)
     log = tmp_path / "calls.jsonl"
     env = {**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
            "CALL_LOG": str(log), "BOOTGEAR_HOST": "claude", "BOOTGEAR_OUTPUT": "prose",
@@ -53,7 +88,10 @@ else:
     env.pop("GEAR_CALLER_CWD", None)
 
     def run(command, *args, **overrides):
-        result = subprocess.run([sys.executable, str(WRAPPER), command, "--task-folder", str(task),
+        host = overrides.get("BOOTGEAR_HOST", "claude")
+        plugin = "engine" if host == "codex" else "spec"
+        result = subprocess.run([str(GEAR), "--host", host, "--root", str(registry),
+            plugin, "spec-feedback", command, "--task-folder", str(task),
             "--json", *map(str, args)], env={**env, **overrides}, cwd=tmp_path,
             text=True, capture_output=True, check=False)
         assert result.stdout, result.stderr
@@ -68,8 +106,8 @@ def test_intake_package_routes_and_no_writes(feedback):
     result, data = run("intake", "--observations", inventory, "--destination", "spec")
     assert result.returncode == 0 and data["destination"] == "spec"
     assert data["design_path"] is None
-    assert sorted(p.name for p in task.iterdir()) == before
     assert json.loads(log.read_text().splitlines()[0]) == ["self-review", "status", "--task-folder", str(task.resolve()), "--stage", "spec", "--json"]
+    assert sorted(p.name for p in task.iterdir()) == before
     (task / "requirements.md").write_text("required contract")
     result, data = run("intake", "--observations", inventory, "--destination", "spec-review")
     assert result.returncode == 0 and data["design_path"] is None
@@ -137,17 +175,29 @@ def test_prior_slate_and_unknown_claim_refuse(feedback, tmp_path):
     assert result.returncode != 0 and any("slate" in p for p in data["problems"])
 
 
-def test_missing_helpers_return_actual_diagnostic(feedback, tmp_path):
-    _, inventory, checks, run, _ = feedback
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    result, data = run("intake", "--observations", inventory, "--destination", "spec", PATH=str(empty))
-    assert result.returncode != 0 and data["outcome"] == "unavailable"
-    assert "self-review" in data["diagnostic"] and "No such file" in data["diagnostic"]
-    result, data = run("gate", "--slate", "s1", "--converge-dir", tmp_path,
-                       "--observations", inventory, "--checks", checks, PATH=str(empty))
-    assert result.returncode != 0 and data["outcome"] == "unavailable"
-    assert "converge" in data["diagnostic"]
+def test_missing_helpers_return_actual_diagnostic(feedback, tmp_path, monkeypatch):
+    task, inventory, checks, _, _ = feedback
+
+    def without_helpers(*args):
+        output = io.StringIO()
+        errors = io.StringIO()
+        with monkeypatch.context() as patch:
+            patch.setattr(spec_cli, "resolve_command", lambda _name: None)
+            patch.setattr(spec_cli.shutil, "which", lambda _name: None)
+            with redirect_stdout(output), redirect_stderr(errors):
+                code = spec_cli.main([*args, "--json"])
+        return code, json.loads(output.getvalue()), errors.getvalue()
+
+    code, data, _ = without_helpers("intake", "--task-folder", str(task),
+                                    "--observations", str(inventory), "--destination", "spec")
+    assert code != 0 and data["outcome"] == "unavailable"
+    assert "self-review public command" in data["diagnostic"]
+    assert "No such file" in data["diagnostic"]
+    code, data, _ = without_helpers("gate", "--task-folder", str(task),
+                                    "--slate", "s1", "--converge-dir", str(tmp_path),
+                                    "--observations", str(inventory), "--checks", str(checks))
+    assert code != 0 and data["outcome"] == "unavailable"
+    assert "converge public command" in data["diagnostic"]
 
 
 def test_usage_and_prose_default(feedback):
@@ -157,7 +207,8 @@ def test_usage_and_prose_default(feedback):
     assert "example:" in result.stderr and "settings, intake, gate" in result.stderr
     env = dict(os.environ)
     env.pop("BOOTGEAR_OUTPUT", None)
-    result = subprocess.run([sys.executable, str(WRAPPER), "settings"], env=env,
+    result = subprocess.run([str(GEAR), "--host", "claude", "--root", str(REPO),
+                            "spec", "spec-feedback", "settings"], env=env,
                             capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert not result.stdout.lstrip().startswith("{")
@@ -170,8 +221,9 @@ def test_usage_and_prose_default(feedback):
     ("json", "--prose", False),
     ("prose", "--json", True),
 ])
-def test_wrapper_honors_output_environment_and_explicit_flags(tmp_path, mode, flag, wants_json):
-    args = [sys.executable, str(WRAPPER), "settings", "--task-folder", str(tmp_path)]
+def test_gear_honors_output_environment_and_explicit_flags(tmp_path, mode, flag, wants_json):
+    args = [str(GEAR), "--host", "claude", "--root", str(REPO), "spec", "spec-feedback",
+            "settings", "--task-folder", str(tmp_path)]
     if flag is not None:
         args.append(flag)
     result = subprocess.run(args, env={**os.environ, "BOOTGEAR_OUTPUT": mode},
@@ -210,21 +262,10 @@ def test_option_like_values_refuse_before_public_calls(feedback, tmp_path):
     assert not log.exists()
 
 
-def test_codex_prefers_bundled_public_helper(feedback, tmp_path):
-    task, inventory, _, _, _ = feedback
-    root = tmp_path / "bundle"
-    (root / "src" / "spec_feedback").mkdir(parents=True)
-    (root / "scripts").mkdir()
-    for source in (PLUGIN / "src" / "spec_feedback").glob("*.py"):
-        (root / "src" / "spec_feedback" / source.name).write_bytes(source.read_bytes())
-    wrapper = root / "scripts" / "spec-feedback"
-    wrapper.write_bytes(WRAPPER.read_bytes())
-    helper = root / "scripts" / "self-review"
-    helper.write_text(f'#!{sys.executable}\nimport json\nprint(json.dumps({{"outcome":"ready", "record_exists":False,"checkpoints":[]}}))\n')
-    helper.chmod(0o755)
-    result = subprocess.run([sys.executable, str(wrapper), "intake", "--task-folder", str(task),
-                             "--observations", str(inventory), "--destination", "spec", "--json"],
-                            env={**os.environ, "BOOTGEAR_HOST": "codex", "PATH": str(tmp_path / "empty")},
-                            capture_output=True, text=True, check=False)
+def test_codex_prefers_bundled_public_helper(feedback):
+    _, inventory, _, run, log = feedback
+    result, data = run("intake", "--observations", inventory, "--destination", "spec",
+                       BOOTGEAR_HOST="codex")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(result.stdout)["outcome"] == "ready"
+    assert data["outcome"] == "ready"
+    assert [json.loads(line)[0] for line in log.read_text().splitlines()] == ["engine-self-review"]

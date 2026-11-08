@@ -40,7 +40,7 @@ the one before.
 ### 1. Dependencies
 
 ```
-ledger.py doctor
+<gear> --host <host> memory-ledger ledger doctor
 ```
 
 Report its table verbatim.
@@ -51,13 +51,13 @@ Report its table verbatim.
 Then confirm the arithmetic still holds:
 
 ```
-ledger.py selftest
+<gear> --host <host> memory-ledger ledger selftest
 ```
 
 ### 2. Decide the two roots
 
 ```
-ledger.py resolve-roots
+<gear> --host <host> memory-ledger ledger resolve-roots
 ```
 
 Read `references/ledger-split.md` before deciding which root is shared and which
@@ -67,7 +67,7 @@ Defaults are `~/.memory-ledger/shared` and `~/.memory-ledger/local`. Ask
 before choosing anything else, and take the user's answer.
 
 On a first install both roots are created fresh; once each repo exists, seed its
-rule file with `ledger.py rules --init --only <shared|local>`.
+rule file with `<gear> --host <host> memory-ledger ledger rules --init --only <shared|local>`.
 
 ### 3. Create the local ledger
 
@@ -81,15 +81,15 @@ printf '.ledger-cache.json\n' > .gitignore
 Seed its rule file, then read it:
 
 ```
-ledger.py rules --init --only local
-ledger.py rules --only local
+<gear> --host <host> memory-ledger ledger rules --init --only local
+<gear> --host <host> memory-ledger ledger rules --only local
 ```
 
 Then seed its charter — a folder with no `_about.md` is an orphan and `lint`
 reports it:
 
 ```
-ledger.py new <folder>/_about --local --q "What belongs here?" \
+<gear> --host <host> memory-ledger ledger new <folder>/_about --local --q "What belongs here?" \
   --claim "…" --because "…" --evidence "…"
 ```
 
@@ -101,9 +101,9 @@ path first (default `~/.memory-ledger/deputy`), then:
 ```
 mkdir -p <deputy-root> && cd <deputy-root> && git init -q .
 printf '.ledger-cache.json\n' > .gitignore
-ledger.py rules --init --only deputy
-ledger.py rules --only deputy
-ledger.py new decisions/_about --deputy --q "What belongs here?" \
+<gear> --host <host> memory-ledger ledger rules --init --only deputy
+<gear> --host <host> memory-ledger ledger rules --only deputy
+<gear> --host <host> memory-ledger ledger new decisions/_about --deputy --q "What belongs here?" \
   --claim "…" --because "…" --evidence "…"
 ```
 
@@ -117,7 +117,7 @@ machine, not re-checkable by a teammate — not merely list topics.
 Commit it:
 
 ```
-ledger.py save --only local -m "Seed the local ledger"
+<gear> --host <host> memory-ledger ledger save --only local -m "Seed the local ledger"
 ```
 
 ### 4. Wire the config file
@@ -126,7 +126,7 @@ Show the user the exact block before writing. `memory.root` names the shared
 ledger; never re-point it at the local one. Read `references/config.md` when
 writing or diffing the config file.
 
-Verify with `ledger.py doctor` — the config row should now name both keys.
+Verify with `<gear> --host <host> memory-ledger ledger doctor` — the config row should now name both keys.
 
 ### 5. Shared remote (optional, and the user's call)
 
@@ -139,7 +139,7 @@ git -C <shared-root> remote add origin <url>
 ```
 
 **Do not push.** Show the user what the first push would publish
-(`git -C <shared-root> log --oneline | wc -l` commits, `ledger.py list --prose | tail -1`
+(`git -C <shared-root> log --oneline | wc -l` commits, `<gear> --host <host> memory-ledger ledger list --prose | tail -1`
 entries) and let them run it or ask you to; the first push gets its own yes.
 
 Before offering to push, work step 7.
@@ -157,8 +157,8 @@ section.
 ### 7. Audit what is already filed
 
 ```
-ledger.py audit
-ledger.py audit --json [--filter <text>]
+<gear> --host <host> memory-ledger ledger audit
+<gear> --host <host> memory-ledger ledger audit --json [--filter <text>]
 ```
 
 **Which ledger an entry belongs in has no heuristic, and you make the call, not
@@ -171,7 +171,7 @@ anything moves.
 ### 8. Folder shape
 
 ```
-ledger.py lint
+<gear> --host <host> memory-ledger ledger lint
 ```
 
 Read `references/folder-shape.md` when `lint` reports `OVERSIZE` or `REGROUP`.
@@ -184,9 +184,9 @@ the user opts in.
 ### 10. Verify
 
 ```
-ledger.py doctor
-ledger.py lint
-ledger.py resolve "<something the user has asked before>"
+<gear> --host <host> memory-ledger ledger doctor
+<gear> --host <host> memory-ledger ledger lint
+<gear> --host <host> memory-ledger ledger resolve "<something the user has asked before>"
 ```
 
 Setup is done when `doctor` shows no failures and a `rules` row per ledger,
@@ -217,14 +217,13 @@ yes, because it is a new empty directory and reversible with `rm -rf`.
 ## Host mechanics
 
 ```
-Claude: ledger.py = ${CLAUDE_PLUGIN_ROOT}/bin/ledger
-Codex: ledger.py = ${PLUGIN_ROOT}/bin/ledger
+Call `cli:gear` and use its absolute path for ledger commands.
+Run `<gear> --host <host> memory-ledger ledger <command> [arguments]`.
 Claude: instructions file = ~/.claude/CLAUDE.md
 Codex: instructions file = ~/.codex/AGENTS.md
 ```
 
-`ledger.py` is not on `PATH`; type the full form.
-
-Use the resolved literal absolute entrypoint in each tool call.
+Use the absolute path returned by `cli:gear` as `<gear>`.
+If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
 Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
 Without hook context, pass `--host <claude|codex> --session-id <full-session-id>` before the subcommand.

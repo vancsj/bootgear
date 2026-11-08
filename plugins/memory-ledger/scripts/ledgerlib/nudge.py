@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import fcntl
 import json
-import re
+import shlex
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,9 +12,6 @@ from .context import InvocationContext
 from .doctor import capability_status
 
 COOLDOWN_SECONDS = 300
-# `ledger.py` (Claude, gear) or the Codex `scripts/ledger` wrapper as a whole
-# path segment, bare or quoted.
-_LEDGER_COMMAND_RE = re.compile(r"""(^|[\s/"'])ledger(\.py)?($|[\s"';|&)])""")
 NUDGE_MESSAGE = (
     "Before continuing: has this been settled in memory-ledger already? "
     "Invoke the `memory-ledger:ledger` skill to check, and to record "
@@ -54,7 +51,19 @@ class NudgeResult:
 
 def _is_ledger_invocation(tool_name: str, tool_input: dict) -> bool:
     if tool_name == "Bash":
-        return _LEDGER_COMMAND_RE.search(str(tool_input.get("command", ""))) is not None
+        try:
+            words = shlex.split(str(tool_input.get("command", "")))
+        except ValueError:
+            return False
+        for index, word in enumerate(words):
+            if Path(word).name != "gear":
+                continue
+            args = words[index + 1:]
+            while args and args[0] in {"--host", "--root"}:
+                args = args[2:]
+            if args[:2] == ["memory-ledger", "ledger"]:
+                return True
+        return False
     if tool_name == "Skill":
         return str(tool_input.get("skill", "")) in ("ledger", "memory-ledger:ledger")
     return False

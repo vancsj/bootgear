@@ -1,10 +1,8 @@
 """The deputy's ledger commands: list candidates, record a decision, pin an assertion.
 
 This script judges nothing. `candidates` prints the matching entries in full for the
-ask skill to read; `record` and `assert` write to the deputy root through memory-ledger: its
-gear command in a repo checkout, else the highest installed memory-ledger version beside this
-plugin in the host's plugin cache. Every write runs `save --only deputy`, and the deputy root
-must have no remote.
+ask skill to read; `record` and `assert` write through the registered memory-ledger command.
+Every write runs `save --only deputy`, and the deputy root must have no remote.
 """
 from __future__ import annotations
 
@@ -17,33 +15,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-ABOVE = Path(__file__).resolve().parents[3]
-GEAR = Path(os.environ.get("GEAR_PY") or ABOVE / "cli" / "gear.py")
+from bootgear_cli.clikit import caller_path, current_program
+from bootgear_cli.gear import resolve_command
+
 DEFAULT_LIMIT = 8
 MISSING = "memory-ledger not found; install the memory-ledger plugin"
 
 
 class LedgerMissing(Exception):
-    """Neither cli/gear.py nor an installed memory-ledger copy exists."""
-
-
-def version_key(script: Path) -> tuple[int, ...] | None:
-    try:
-        return tuple(int(part) for part in script.parents[1].name.split("."))
-    except ValueError:
-        return None
+    """The memory-ledger command is not registered."""
 
 
 def ledger_command() -> list[str]:
-    """The gear command in a repo checkout, else the highest installed memory-ledger version
-    in the plugin cache: <cache>/memory-ledger/<version>/scripts/ledger.py."""
-    if GEAR.is_file():
-        return [sys.executable, str(GEAR), "memory-ledger", "ledger"]
-    installed = [(key, script) for script in ABOVE.glob("memory-ledger/*/scripts/ledger.py")
-                 if (key := version_key(script)) is not None]
-    if not installed:
+    """Return Gear's registered memory-ledger command."""
+    command = resolve_command("ledger")
+    if command is None:
         raise LedgerMissing(MISSING)
-    return [sys.executable, str(max(installed)[1])]
+    return command
 
 
 def ledger(deputy_root: Path, *args: str, signer: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
@@ -232,7 +220,7 @@ def assert_(deputy_root: Path, slug: str, answer: str, why: str, confirmed: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="deputy.py", description=__doc__)
+    p = argparse.ArgumentParser(prog=current_program("deputy", "deputy"), description=__doc__)
     p.add_argument("--deputy-root", dest="deputy_root", metavar="PATH",
                    default=os.environ.get("LEDGER_DEPUTY_ROOT", "~/.memory-ledger/deputy"))
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -259,13 +247,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    root = Path(args.deputy_root).expanduser()
+    root = caller_path(args.deputy_root)
     try:
         if args.cmd == "candidates":
             return candidates(root, args.question, args.limit)
         if args.cmd == "record":
             return record(root, args.question, args.claim, args.because, args.options,
-                          args.stakes, Path(args.session_ledger).expanduser(), args.host,
+                          args.stakes, caller_path(args.session_ledger), args.host,
                           args.session_id)
         return assert_(root, args.slug, args.answer, args.why, args.confirmed)
     except LedgerMissing:

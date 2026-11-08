@@ -110,9 +110,21 @@ class SpecReviewContractTest(unittest.TestCase):
     def test_shared_skill_and_reference_parity(self):
         for name in ("spec", "spec-review"):
             claude, codex = (base / name for base in (CLAUDE_SKILLS, CODEX_SKILLS))
-            shared = [(directory / "SKILL.md").read_text().split("\n## Host mechanics\n")[0]
-                      for directory in (claude, codex)]
+            documents = [(directory / "SKILL.md").read_text() for directory in (claude, codex)]
+            shared = [document.split("\n## Host mechanics\n")[0] for document in documents]
             self.assertEqual(shared[0], shared[1], name)
+            host_mechanics = [document.split("\n## Host mechanics\n", 1)[1]
+                              for document in documents]
+            mappings = {
+                "spec": (("Use `claude` for `<host>`.", "Use `codex` for `<host>`."),
+                         ("Use `spec` for `<spec-plugin>`.", "Use `engine` for `<spec-plugin>`.")),
+                "spec-review": (("Use `claude` for `<host>`.", "Use `codex` for `<host>`."),
+                                ("Use `converge` for `<converge-plugin>`.",
+                                 "Use `engine` for `<converge-plugin>`.")),
+            }
+            for claude_mapping, codex_mapping in mappings[name]:
+                self.assertIn(claude_mapping, host_mechanics[0])
+                self.assertIn(codex_mapping, host_mechanics[1])
             names = sorted(path.name for path in (claude / "references").iterdir())
             self.assertEqual(sorted(path.name for path in (codex / "references").iterdir()), names)
             for reference in names:

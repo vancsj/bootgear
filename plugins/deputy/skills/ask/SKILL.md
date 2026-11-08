@@ -22,7 +22,7 @@ Outcomes, handed back to the caller:
 
 ## Procedure
 
-1. Run `"$DEPUTY_SCRIPT" candidates "<question>"`. Pass the question as one quoted argument. `## Host mechanics` gives `DEPUTY_SCRIPT`.
+1. Call `cli:gear`, then run `<gear> --host <host> deputy deputy candidates "<question>"`. Pass the question as one quoted argument.
 2. If the output is `ESCALATE deputy-root-absent`, return `escalate` with that reason. If the output is `ESCALATE memory-ledger-not-found`, return `escalate` with reason `memory-ledger-not-found`.
 3. If the output is `NO-CANDIDATES`, return `escalate` with reason `no-matching-entries`.
 4. Read each `CANDIDATE` block in full. Each has a slug, its question, its answer, its `Because:` context and reason, and whether it is an assertion (`asserted`) or a decision.
@@ -48,12 +48,9 @@ Outcomes, handed back to the caller:
 
 ## Host mechanics
 
-Set `DEPUTY_SCRIPT` to `bin/deputy` in this plugin:
-
-- Claude Code: `DEPUTY_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/deputy"`.
-- Codex CLI: `DEPUTY_SCRIPT="<directory holding this SKILL.md>/../../bin/deputy"`, as an absolute path. The standards file is `<directory holding this SKILL.md>/../../references/qa-standards.md`.
-- Claude Code: the standards file is `${CLAUDE_PLUGIN_ROOT}/references/qa-standards.md`.
-
-Resolve `DEPUTY_SCRIPT` to its literal absolute path before each tool call.
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Replace `<host>` with `claude` or `codex`, based on the current host.
+The standards file is `references/qa-standards.md` in this plugin.
+If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
 Host hooks supply shared host and session context.
 Without hook context, pass explicit host and session options to `record`.

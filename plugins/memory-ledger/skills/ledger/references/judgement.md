@@ -14,7 +14,7 @@
 
 ## Which ledger
 
-Each ledger's `WHAT-BELONGS.txt` (`ledger.py rules`) is the authority on what it holds; the points below are the defaults it starts from and lose to it.
+Each ledger's `WHAT-BELONGS.txt` (`<gear> --host <host> memory-ledger ledger rules`) is the authority on what it holds; the points below are the defaults it starts from and lose to it.
 
 1. **Shared holds what stays true; local holds what drifts.** Shared: anything a teammate could re-check about the codebase, the product, the business, a third-party contract. Local: true of this machine only — shell profile, tool config, scratch paths, locally-bound services — or true but perishable — a count, a cohort size, a snapshot of moving state. Never an open-ended count in shared.
 2. **The test is whether the claim pins to a ref**: mainline code, a locked dependency version, an applied migration, a *closed* date window. Production counts, PR and branch status, a runtime flag, an issue tracker pin to nothing.
@@ -50,9 +50,9 @@ Each ledger's `WHAT-BELONGS.txt` (`ledger.py rules`) is the authority on what it
 10. **This is not general note-taking.** A ledger entry is a settled question whose answers each carry a check another session can re-run.
 
 ```
-ledger.py new tech/stack/package-manager --shared --q "…" --claim "…" --because "…" --evidence "…"
-ledger.py rival <slug> --claim "…" --because "…" --evidence "…"        # appends the next aN
-ledger.py new <folder>/_about --local --q "What belongs here?" …       # new folder, same commit
+<gear> --host <host> memory-ledger ledger new tech/stack/package-manager --shared --q "…" --claim "…" --because "…" --evidence "…"
+<gear> --host <host> memory-ledger ledger rival <slug> --claim "…" --because "…" --evidence "…"        # appends the next aN
+<gear> --host <host> memory-ledger ledger new <folder>/_about --local --q "What belongs here?" …       # new folder, same commit
 ```
 
 ## Writing a check
@@ -72,9 +72,9 @@ ledger.py new <folder>/_about --local --q "What belongs here?" …       # new f
 2. Run **every** one of its `Evidence:` lines with your tools — a signature covers all of them. A connector check runs with the tool it names, not a shell.
 3. **Zoom out — cover broader than the checks.** Name the observation that would be false if the claim were wrong, and run that.
 4. Record the verdict:
-   - pass → `ledger.py sign <slug> a1`
-   - fail → `ledger.py sign <slug> a1 --fail --output "<what it actually printed>"`
-   - contradicting a standing signature → `ledger.py refute <slug> a1 <their-id> --output "<yours>"`
+   - pass → `<gear> --host <host> memory-ledger ledger sign <slug> a1`
+   - fail → `<gear> --host <host> memory-ledger ledger sign <slug> a1 --fail --output "<what it actually printed>"`
+   - contradicting a standing signature → `<gear> --host <host> memory-ledger ledger refute <slug> a1 <their-id> --output "<yours>"`
 5. **Leave the zoom-out behind.** If the broader check is worth re-running, `add-evidence` it — that voids no signature. A claim that turned out narrower than its checks suggested still needs a rival.
 6. Commit in the ledger in the same working stretch. No batching.
 

@@ -4,17 +4,24 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, NoReturn, TypeGuard
 
+from bootgear_cli.clikit import current_program
+from bootgear_cli.gear import resolve_command
+
+PROGRAM = current_program("engine", "spec-feedback")
 COMMANDS = "settings, intake, gate"
 EXAMPLES = {
-    "settings": "spec-feedback settings --task-folder <folder> --json",
-    "intake": "spec-feedback intake --task-folder <folder> --observations <file> --destination spec-review",
-    "gate": "spec-feedback gate --task-folder <folder> --slate <slate> --converge-dir <dir> --observations <file> --checks <file>",
+    "settings": f"{PROGRAM} settings --task-folder <folder> --json",
+    "intake": (f"{PROGRAM} intake --task-folder <folder> --observations <file> "
+               "--destination spec-review"),
+    "gate": (f"{PROGRAM} gate --task-folder <folder> --slate <slate> --converge-dir <dir> "
+            "--observations <file> --checks <file>"),
 }
 OBSERVATION_FIELDS = {"id", "evidence_paths"}
 CHECK_FIELDS = {"id", "state", "evidence_refs", "disposition", "claim_ids"}
@@ -162,18 +169,13 @@ def _checks(path: Path | None, slate: str, observations: list[dict[str, Any]],
     return rows
 
 
-def _command(name: str) -> str:
-    root = Path(__file__).resolve().parents[2]
-    host = os.environ.get("BOOTGEAR_HOST", "codex" if (root / "scripts").is_dir() else "claude")
-    bundled = root / "scripts" / name
-    if host == "codex" and bundled.is_file() and os.access(bundled, os.X_OK):
-        return str(bundled)
-    return shutil.which(name) or name
+def _command(name: str) -> list[str]:
+    return resolve_command(name) or [shutil.which(name) or name]
 
 
 def _public(name: str, argv: list[str], *, gate: bool = False) -> dict[str, Any]:
     try:
-        result = subprocess.run([_command(name), *argv], capture_output=True, text=True, check=False)
+        result = subprocess.run([*_command(name), *argv], capture_output=True, text=True, check=False)
     except OSError as exc:
         raise Unavailable(f"{name} public command: {exc}") from exc
     try:
@@ -206,11 +208,16 @@ def cmd_settings(args: argparse.Namespace) -> dict[str, Any]:
                         "checks": {"slate": "<current-slate>", "checks": [{"id": "<id>", "state": "checked|unassessed",
                             "evidence_refs": ["<independent evidence>"], "disposition": "<required behaviour>", "claim_ids": []}]}},
             "commands": EXAMPLES, "outcomes": ["ready", "passed", "refused", "unavailable"],
-            "capabilities": {name: {"command": _command(name), "available": shutil.which(_command(name)) is not None,
-                                    "diagnostic": None if shutil.which(_command(name)) else
-                                    f"Executable lookup found no {name} public command"}
+            "capabilities": {name: _command_status(name)
                              for name in ("self-review", "converge")},
-            "next": "Caller: supply the raw observations to spec-feedback intake, or supply independent checks to gate."}
+            "next": f"Caller: supply the raw observations to {PROGRAM} intake, or supply independent checks to gate."}
+
+
+def _command_status(name: str) -> dict[str, Any]:
+    command = _command(name)
+    available = shutil.which(command[0]) is not None
+    return {"command": shlex.join(command), "available": available,
+            "diagnostic": None if available else f"Executable lookup found no {name} public command"}
 
 
 def cmd_intake(args: argparse.Namespace) -> dict[str, Any]:
@@ -285,7 +292,7 @@ def cmd_gate(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _parser() -> Parser:
-    parser = Parser(prog="spec-feedback", allow_abbrev=False)
+    parser = Parser(prog=PROGRAM, allow_abbrev=False)
     subs = parser.add_subparsers(dest="command", required=True)
     for name, function in (("settings", cmd_settings), ("intake", cmd_intake), ("gate", cmd_gate)):
         sub = subs.add_parser(name, allow_abbrev=False)

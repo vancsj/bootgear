@@ -17,15 +17,20 @@ confidence — and this file is only the front door onto them.
     read        resolve, show, list, resolve-roots
     write       new, rival, sign, refute, promote, assert
     selftest    pins the constants the skill body states in prose
-    clikit      output mode, runnable refusals (shared byte-for-byte with engine)
 """
 from __future__ import annotations
 
 import argparse
 import sys
 
+from bootgear_cli.clikit import (
+    Catalog,
+    add_mode_flags,
+    current_program,
+    parser_class,
+    run,
+)
 from ledgerlib.audit import cmd_audit
-from ledgerlib.clikit import Catalog, add_mode_flags, parser_class, run
 from ledgerlib.config import locate, open_ledgers
 from ledgerlib.constants import (
     CLAIM_MAX_WORDS,
@@ -55,7 +60,7 @@ from ledgerlib.write import (
     cmd_vote,
 )
 
-# The argv after `ledger.py` that a refusal prints as the runnable shape of a
+# The argv after Gear that a refusal prints as the runnable shape of a
 # command; a test parses every one with the real parser.
 EXAMPLES = {
     "resolve": 'resolve "<question>"',
@@ -84,7 +89,7 @@ FREQUENT = ("resolve", "show", "sign")
 # resolve-roots, audit and doctor already own a `--json` that changes content or
 # exit code, so it is never the mode flag; every command's prose is captured
 # into `{"lines"}` in JSON mode.
-CATALOG = Catalog(prog="ledger.py", examples=EXAMPLES, frequent=FREQUENT,
+CATALOG = Catalog(prog=current_program("memory-ledger", "ledger"), examples=EXAMPLES, frequent=FREQUENT,
                   own_json=frozenset({"resolve-roots", "audit", "doctor"}),
                   capture=frozenset(EXAMPLES))
 # Writes whose next step is committing them.
@@ -93,7 +98,7 @@ SAVE_NEXT = {"new", "rival", "sign", "refute", "promote", "add-evidence", "vote"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = parser_class(CATALOG)(prog="ledger.py", description=__doc__)
+    p = parser_class(CATALOG)(prog=CATALOG.display_prog(), description=__doc__)
     p.add_argument("--root", metavar="PATH",
                    help=f"shared ledger root (default: memory.root / $LEDGER_ROOT / "
                         f"{DEFAULT_SHARED_ROOT})")
@@ -290,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--no-push", action="store_true", help="commit only, even if a remote exists")
     sv.add_argument("--lint-detail", dest="lint_detail", action="store_true",
                     help="print every lint finding inline instead of the tally; "
-                         "default is a one-line count by tag, `ledger.py lint` for the rest")
+                         f"default is a one-line count by tag, `{CATALOG.command('lint')}` for the rest")
     only_arg(sv)
 
     ru = sub.add_parser("rules", help="print each ledger's WHAT-BELONGS.txt, the rules for "

@@ -26,7 +26,6 @@ from .host_contracts import (
     host_hook_relative_path,
     host_root_environment,
     host_source_relative_path,
-    host_task_relative_path,
 )
 
 MAX_STDIN_BYTES: Final = 1024 * 1024
@@ -100,7 +99,6 @@ class HostContext:
     host: str
     plugin_root: Path
     source_dir: Path
-    task_command: Path
     hook_dir: Path
     cwd: str
     session_id: str
@@ -118,7 +116,6 @@ class HostContext:
             "host": self.host,
             "plugin_root": str(self.plugin_root),
             "source_dir": str(self.source_dir),
-            "task_command": str(self.task_command),
             "hook_dir": str(self.hook_dir),
             "cwd": self.cwd,
             "session_id": self.session_id,
@@ -425,14 +422,12 @@ def host_context(
     root = Path(root_value).expanduser().resolve(strict=False)
     source = (root / host_source_relative_path(event.host)).resolve(strict=False)
     hooks = (root / host_hook_relative_path()).resolve(strict=False)
-    task = (root / host_task_relative_path(event.host)).resolve(strict=False)
-    if not all(_inside(root, path) for path in (source, hooks, task)):
+    if not all(_inside(root, path) for path in (source, hooks)):
         raise AdapterError("invalid_root", "host paths must remain inside plugin root")
     return HostContext(
         host=event.host,
         plugin_root=root,
         source_dir=source,
-        task_command=task,
         hook_dir=hooks,
         cwd=event.cwd,
         session_id=event.session_id,

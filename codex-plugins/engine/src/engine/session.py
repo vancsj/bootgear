@@ -43,11 +43,11 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from bootgear_cli.clikit import caller_cwd, caller_path, current_program, emit, refuse
 
 from engine import seats
-from engine.clikit import ENV_PROG, caller_cwd, caller_path, emit, refuse
 
-PROG = "task"
+PROG = current_program("engine", "task")
 BOOTGEAR_SESSION_ID = "BOOTGEAR_SESSION_ID"
 CLAUDE_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
 SECTIONS = ["settlement", "decisions", "todos", "pitches", "state"]
@@ -175,7 +175,7 @@ ROUND_ENTRY_RE = re.compile(r"\Around (?P<round>[0-9][0-9]*), party '.+?':\s*\S"
 
 def _command(rest: str) -> str:
     """A runnable `task` command line for a `next:` step."""
-    return f"{os.environ.get(ENV_PROG) or PROG} {rest}"
+    return f"{PROG} {rest}"
 
 
 def _effective_run_id(run_id: str | None) -> str:

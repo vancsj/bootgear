@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --script \"${PLUGIN_ROOT}/hooks/deputy_hook.py\" --host codex"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook --host codex"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --script \"${PLUGIN_ROOT}/hooks/deputy_hook.py\" --host codex"
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex hook --host codex"
           }
         ]
       }

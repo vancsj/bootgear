@@ -14,6 +14,7 @@ from conftest import (
     FILE_ARGS,
     FILE_EVIDENCE,
     FINDER,
+    GEAR_COMMAND,
     MAIN,
     R1,
     R2,
@@ -25,7 +26,7 @@ TASK = {"steps": {"cut": "both", "gap_hunt": False, "escalate": True},
 
 
 def _cmd(cv: Converge, rest: str) -> str:
-    return f"converge {rest.format(dir=shlex.quote(str(cv.dir)))}"
+    return f"{GEAR_COMMAND} {rest.format(dir=shlex.quote(str(cv.dir)))}"
 
 
 def _plan(cv: Converge) -> str:
@@ -155,7 +156,7 @@ def test_attack_reply_verdict_walk_the_dispute(cv: Converge) -> None:
 def test_attack_reply_verdict_refusals_print_the_next_step(cv: Converge) -> None:
     _to_attack(cv)
     err = _attack(cv, BATCH_1[0], agent=FINDER, code=2).stderr.splitlines()
-    assert err[0] == f"example: converge {_example('attack')}"
+    assert err[0] == f"example: {GEAR_COMMAND} {_example('attack')}"
     assert err[-3:] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it",
                         f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
     err = _attack(cv, BATCH_1[0], batch=2, code=2).stderr
@@ -336,17 +337,17 @@ def test_cutoff_gate_render_converged(cv: Converge) -> None:
     _to_cutoff(cv)
     cutoff_step = "next: " + _cmd(cv, "cutoff s1 --dir {dir}")
     err = cv.ok("cutoff", "s1", code=2).stderr.splitlines()
-    assert err[0] == f"example: converge {_example('cutoff')}"
+    assert err[0] == f"example: {GEAR_COMMAND} {_example('cutoff')}"
     assert err[-3:] == ["converge: refused:", "  - F001 is open in cut-after",
                         f"next: cut-after: finder accept F001; plan: {_plan(cv)}"]
     out = _lines(cv, "gate", "s1", code=1)
     assert out == ["GATE fail s1", "F001 is open in cut-after",
-                   "no current cutoff (run `converge cutoff` after the last state change)",
+                   f"no current cutoff (run `{GEAR_COMMAND} cutoff` after the last state change)",
                    f"next: cut-after: finder accept F001; plan: {_plan(cv)}"]
     _accept(cv, "F001", "after")
     assert _lines(cv, "converged", "s1", code=1) == ["OPEN phase=cutoff claims=0", cutoff_step]
     assert _lines(cv, "gate", "s1", code=1) == [
-        "GATE fail s1", "no current cutoff (run `converge cutoff` after the last state change)",
+        "GATE fail s1", f"no current cutoff (run `{GEAR_COMMAND} cutoff` after the last state change)",
         cutoff_step]
     out = _lines(cv, "cutoff", "s1")
     seq = out[0].split()[1].removeprefix("seq=")

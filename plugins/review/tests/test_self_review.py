@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
-COMMAND = PLUGIN / ("scripts" if (PLUGIN / "scripts").is_dir() else "bin") / "self-review"
+REPO = PLUGIN.parents[1]
+COMMAND = [str(REPO / "plugins" / "cli" / "bin" / "gear"), "--host", "claude",
+           "--root", str(REPO), "review", "self-review"]
 
 
 class SelfReviewTest(unittest.TestCase):
@@ -21,7 +23,7 @@ class SelfReviewTest(unittest.TestCase):
         self.project.mkdir()
 
     def call(self, command, data=None, stage="spec", expected=0):
-        argv = [str(COMMAND), command, "--task-folder", str(self.task),
+        argv = [*COMMAND, command, "--task-folder", str(self.task),
                 "--project-root", str(self.project), "--stage", stage, "--json"]
         if data is not None:
             argv += ["--input", "-"]
@@ -68,7 +70,7 @@ class SelfReviewTest(unittest.TestCase):
         self.open()
         with concurrent.futures.ThreadPoolExecutor(2) as executor:
             futures = [executor.submit(subprocess.run,
-                        [str(COMMAND), "pass", "--task-folder", str(self.task), "--stage", "spec",
+                        [*COMMAND, "pass", "--task-folder", str(self.task), "--stage", "spec",
                          "--json", "--input", "-"],
                         input=json.dumps({"expected_pass": 1, "result": "found", "unresolved_refs": []}),
                         text=True, capture_output=True, check=False) for _ in range(2)]
@@ -116,7 +118,7 @@ class SelfReviewTest(unittest.TestCase):
         source = self.root / "request.json"
         source.write_text(json.dumps({"candidates": [], "selections": []}))
         env = dict(os.environ, GEAR_CALLER_CWD=str(self.root))
-        result = subprocess.run([str(COMMAND), "open", "--task-folder", "task", "--project-root", "project",
+        result = subprocess.run([*COMMAND, "open", "--task-folder", "task", "--project-root", "project",
                                  "--stage", "spec", "--input", "request.json", "--json"],
                                 text=True, capture_output=True, check=False, env=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -200,14 +202,14 @@ class SelfReviewTest(unittest.TestCase):
         self.assertEqual((self.task / "self-review.json").read_bytes(), before)
         env = dict(os.environ)
         env.pop("BOOTGEAR_OUTPUT", None)
-        result = subprocess.run([str(COMMAND), "status", "--task-folder", str(self.task)],
+        result = subprocess.run([*COMMAND, "status", "--task-folder", str(self.task)],
                                 text=True, capture_output=True, check=False, env=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Outcome: ready", result.stdout)
         self.assertTrue(result.stdout.splitlines()[-1].startswith("Next:"))
 
     def test_usage_error_names_commands_example_and_next(self):
-        result = subprocess.run([str(COMMAND), "open"], text=True, capture_output=True, check=False)
+        result = subprocess.run([*COMMAND, "open"], text=True, capture_output=True, check=False)
         self.assertEqual(result.returncode, 2)
         for fragment in ("Example:", "Commands:", "Next:"):
             self.assertIn(fragment, result.stdout + result.stderr)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -12,8 +13,12 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
+REPO = PLUGIN.parents[1]
 HOOK = PLUGIN / "hooks" / "advisor_hook.py"
 CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
+sys.path.insert(0, str(REPO / "plugins" / "cli" / "src"))
+from bootgear_cli.clikit import current_program
+
 EVENTS = ("SessionStart", "PostToolUse", "UserPromptSubmit", "Stop")
 
 
@@ -115,8 +120,9 @@ class AdvisorHookTests(unittest.TestCase):
         self.pair()
         self.stop_heartbeat()
         text = self.context(self.event("PostToolUse", tool_name="Bash"), "PostToolUse")
+        prefix = shlex.split(current_program("advisor", "channel"))
         self.assertTrue(text.startswith("advisor: your heartbeat for channel 0001 (listener) is not running; "
-                                        "start it in a new background session: python3 "))
+                                        "start it in a new background session: " + shlex.join(prefix) + " "))
         self.assertIn("heartbeat --channel 0001 --role listener --session s1", text)
         self.assertEqual(self.event("PostToolUse", tool_name="Bash").stdout, "")
 
@@ -290,7 +296,8 @@ class HookManifestTests(unittest.TestCase):
         for event in EVENTS:
             with self.subTest(manifest=path.name, event=event):
                 commands = [hook["command"] for group in hooks[event] for hook in group["hooks"]]
-                self.assertEqual(commands, [f"python3 {variable}/hooks/advisor_hook.py"])
+                host = "claude" if "CLAUDE" in variable else "codex"
+                self.assertEqual(commands, [f'"{variable}/hooks/gear" --host {host} hook'])
         self.assertEqual([group.get("matcher") for group in hooks["SessionStart"]], ["compact"])
         self.assertEqual([group.get("matcher") for group in hooks["PostToolUse"]], [".*"])
 

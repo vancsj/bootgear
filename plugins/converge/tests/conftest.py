@@ -1,18 +1,10 @@
-"""Drive the converge CLI against a scratch ledger dir.
-
-`Converge.run` calls `converge.cli.main` in-process by default. In-process runs
-see the test interpreter's packages, not only the plugin's declared ones, so
-tests that must exercise the shipped wrapper set `use_bin` or run `BIN`
-directly. HOME is pointed at a scratch dir so the user config layer is empty;
-uv's cache and managed-python dirs stay on the real ones so no download happens.
-"""
+"""Drive the registered converge command against a scratch ledger directory."""
 from __future__ import annotations
 
-import contextlib
 import copy
-import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -22,10 +14,19 @@ import pytest
 import yaml
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-BIN = PLUGIN_DIR / "bin" / "converge"
+REPO_ROOT = PLUGIN_DIR.parents[1]
+GEAR = REPO_ROOT / "plugins" / "cli" / "bin" / "gear"
+def gear_args(host: str = "claude") -> list[str]:
+    return [str(GEAR), "--host", host, "--root", str(REPO_ROOT), "converge", "converge"]
+
+
+GEAR_ARGS = gear_args()
+GEAR_COMMAND = shlex.join([str(GEAR), "--host", "claude", "converge", "converge"])
+os.environ.setdefault("BOOTGEAR_HOST", "claude")
+sys.path.insert(0, str(REPO_ROOT / "plugins" / "cli" / "src"))
 sys.path.insert(0, os.environ.get("CONVERGE_SRC", str(PLUGIN_DIR / "src")))
 
-from converge import cli, ledger
+from converge import ledger
 
 FIND_ANGLES = """\
 - id: changed-contract
@@ -67,21 +68,6 @@ DISABLED = ["downstream-consumer", "inverse-reading", "carve-out", "boundary", "
             "real-referent"]
 
 
-def _uv_dirs() -> dict[str, str]:
-    env: dict[str, str] = {}
-    for var, cmd in (("UV_CACHE_DIR", ("uv", "cache", "dir")),
-                     ("UV_PYTHON_INSTALL_DIR", ("uv", "python", "dir"))):
-        if var in os.environ:
-            env[var] = os.environ[var]
-            continue
-        out = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if out.returncode == 0 and out.stdout.strip():
-            env[var] = out.stdout.strip()
-    return env
-
-
-UV_DIRS = _uv_dirs()
-
 # The full-depth allocation: five agent ids per slate, main included.
 MAIN, FINDER, R1, R2, CUTTER = "orch", "finder", "r1", "r2", "cutter"
 
@@ -96,43 +82,17 @@ class Converge:
             path.mkdir(parents=True, exist_ok=True)
         self.angles = root / "find-angles.yaml"
         self.angles.write_text(FIND_ANGLES)
-        # Prose is the CLI default; JSON tests pass --json explicitly.
-        self.env = {**os.environ, **UV_DIRS, "HOME": str(self.home), "BOOTGEAR_OUTPUT": "prose"}
-        # VIRTUAL_ENV makes uv print a mismatch warning on stderr.
+        self.env = {**os.environ, "HOME": str(self.home), "BOOTGEAR_OUTPUT": "prose"}
         for var in ("BOOTGEAR_HOST", "BOOTGEAR_PROG", "GEAR_CALLER_CWD", "VIRTUAL_ENV"):
             self.env.pop(var, None)
-        # False: call `cli.main` in-process. True: run the real `bin/converge`,
-        # which resolves the plugin's own declared dependencies through uv.
-        self.use_bin = False
 
     def run(self, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        if self.use_bin:
-            return subprocess.run([str(BIN), *args], capture_output=True, text=True,
-                                  env={**self.env, **(env or {})}, cwd=self.project, check=False)
-        return self._run_in_process(*args, env=env)
-
-    def _run_in_process(self, *args: str, env: dict[str, str] | None = None
-                        ) -> subprocess.CompletedProcess[str]:
-        """Call `converge.cli.main` with `bin/converge`'s env and cwd, but on the
-        test interpreter: packages the plugin does not declare are importable here."""
-        saved_env, saved_cwd = dict(os.environ), os.getcwd()
-        out, err = io.StringIO(), io.StringIO()
-        code = 0
-        try:
-            os.environ.clear()
-            os.environ.update({**self.env, **(env or {})})
-            os.chdir(self.project)
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                try:
-                    cli.main(list(args))
-                except SystemExit as exc:
-                    # `clikit.run` turns every `sys.exit(str)` into an int exit.
-                    code = int(exc.code or 0)
-        finally:
-            os.chdir(saved_cwd)
-            os.environ.clear()
-            os.environ.update(saved_env)
-        return subprocess.CompletedProcess([str(BIN), *args], code, out.getvalue(), err.getvalue())
+        host = (env or {}).get("BOOTGEAR_HOST", "claude")
+        return subprocess.run(
+            [*gear_args(host), *args],
+            capture_output=True, text=True, env={**self.env, **(env or {})},
+            cwd=self.project, check=False,
+        )
 
     def __call__(self, *args: str, code: int = 0, env: dict[str, str] | None = None
                  ) -> subprocess.CompletedProcess[str]:

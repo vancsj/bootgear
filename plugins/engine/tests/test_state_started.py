@@ -1,6 +1,6 @@
 """CLI-level tests for the `started:` field in `## state`.
 
-Drives `bin/task` as a subprocess against a scratch ledger, the same
+Drives the public Gear `engine task` route against a scratch ledger, the same
 contract other tests in this suite use. Covers `cmd_transition` preserving
 the `started:` header line in `## state`: rebuilding the section
 positionally would fold it into the transition log and reorder it on the
@@ -14,10 +14,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-TASK_BIN = PLUGIN_DIR / "bin" / "task"
 
 MACHINE = """\
 name: smoke
@@ -49,7 +49,7 @@ class StateStartedTest(unittest.TestCase):
 
     def _task(self, *args, expect_success=True):
         result = subprocess.run(
-            [str(TASK_BIN), *args, "--dir", str(self.session_dir)],
+            [*TASK_COMMAND, *args, "--dir", str(self.session_dir)],
             capture_output=True, text=True, check=False,
             env={**os.environ, "BOOTGEAR_OUTPUT": "prose"},
         )

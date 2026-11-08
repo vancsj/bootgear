@@ -11,7 +11,7 @@ import shlex
 from pathlib import Path
 
 import pytest
-from conftest import BATCH_1, DISABLED, FIND_ANGLES, FINDER, R1, Converge
+from conftest import BATCH_1, DISABLED, FIND_ANGLES, FINDER, GEAR_COMMAND, R1, Converge
 from converge import cli
 
 RERUN = "reproduction-rerun"
@@ -102,7 +102,7 @@ def test_triage_gate_passes_a_reproduced_report(cv: Converge) -> None:
     _cutoff(cv)
     lines = _triage(cv, _report(cv, [_row(cid)]))
     assert lines[0].startswith("GATE ok s1 cutoff_seq=")
-    assert lines[-1] == f"next: converge converged s1 --dir {shlex.quote(str(cv.dir))}"
+    assert lines[-1] == f"next: {GEAR_COMMAND} converged s1 --dir {shlex.quote(str(cv.dir))}"
 
 
 @pytest.mark.parametrize("tier", ["reproduced", "inferred"])
@@ -351,7 +351,7 @@ def test_open_slate_lists_its_open_items_and_the_triage_problems(cv: Converge) -
     lines = _triage(cv, _report(cv, [_row(cid)]), code=1)
     assert _fail(lines) == [
         f"{cid} is open in attack",
-        "no current cutoff (run `converge cutoff` after the last state change)",
+        f"no current cutoff (run `{GEAR_COMMAND} cutoff` after the last state change)",
         f"{cid} survived with no {RERUN} attack"]
     assert lines[-1].startswith(f"next: attack: r1 attack {cid} batch 1")
 
@@ -375,14 +375,14 @@ def _ready(cv: Converge) -> str:
 def test_kind_without_report(cv: Converge) -> None:
     _ready(cv)
     err = _refused(cv, "--kind", "triage")
-    assert err[0] == f"example: converge {TRIAGE_EXAMPLE}"
+    assert err[0] == f"example: {GEAR_COMMAND} {TRIAGE_EXAMPLE}"
     assert err[-2:] == ["converge: refused:", "  - --kind triage needs --report <absolute file>"]
 
 
 def test_report_without_kind(cv: Converge) -> None:
     cid = _ready(cv)
     err = _refused(cv, "--report", str(_report(cv, [_row(cid)])))
-    assert err[0] == f"example: converge {TRIAGE_EXAMPLE}"
+    assert err[0] == f"example: {GEAR_COMMAND} {TRIAGE_EXAMPLE}"
     assert err[-1] == "  - --report needs --kind triage"
 
 
@@ -405,7 +405,7 @@ def test_report_is_relative(cv: Converge) -> None:
 def test_kind_outside_its_set(cv: Converge) -> None:
     cid = _ready(cv)
     err = _refused(cv, "--kind", "review", "--report", str(_report(cv, [_row(cid)])), code=2)
-    assert err[0] == f"example: converge {TRIAGE_EXAMPLE}"
+    assert err[0] == f"example: {GEAR_COMMAND} {TRIAGE_EXAMPLE}"
     assert "argument --kind: invalid choice: 'review'" in err[-1] and "triage" in err[-1]
 
 

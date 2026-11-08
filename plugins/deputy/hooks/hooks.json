@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude hook --host claude"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude hook --host claude"
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/deputy_hook.py\" --host claude"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude hook --host claude"
           }
         ]
       }

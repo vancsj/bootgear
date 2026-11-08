@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from bootgear_cli.clikit import current_program
+
 from .config import config_candidates, load_config, resolve_roots
 from .constants import DEFAULT_KINDS, DEFAULT_LOCAL_ROOT, DEFAULT_SHARED_ROOT, DEPUTY
 from .context import InvocationContext
@@ -68,7 +70,7 @@ def cmd_doctor(args, root=None):
     context = getattr(args, "context", None) or InvocationContext.from_environment()
     rows = []
     machine_rows = rows if args.json else None
-    prog = getattr(args, "prog", None) or "ledger.py"
+    prog = getattr(args, "prog", None) or current_program("memory-ledger", "ledger")
     states = []
 
     v = sys.version_info

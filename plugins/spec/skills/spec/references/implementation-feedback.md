@@ -18,7 +18,7 @@ Call public `spec-feedback settings` for supported inputs and schemas.
 Run public intake with the fixed task folder, observations file, and intended destination:
 
 ```text
-spec-feedback intake --task-folder <folder> --observations <file> --destination spec-review --json
+<gear> --host <host> <spec-plugin> spec-feedback intake --task-folder <folder> --observations <file> --destination spec-review --json
 ```
 
 Existing requirements route to spec-review. Design remains optional.
@@ -39,7 +39,7 @@ Closed checkpoint renewal needs related independent review or confirmed intent e
 Run public `spec-feedback gate` before each affected ready exit:
 
 ```text
-spec-feedback gate --task-folder <folder> --slate <slate> --converge-dir <absolute-dir> --observations <file> --checks <file> --json
+<gear> --host <host> <spec-plugin> spec-feedback gate --task-folder <folder> --slate <slate> --converge-dir <absolute-dir> --observations <file> --checks <file> --json
 ```
 
 Use the same slate after a ready-inline correction. Complete independent checks and normal converge work.
@@ -52,7 +52,7 @@ At a cap, retain pending gaps and use the existing blocked or follow-up outcome.
 ## Public handback
 
 All commands support prose defaults, `--json`, and `--prose`.
-Without an explicit output flag, `BOOTGEAR_OUTPUT` applies. Codex wrappers default to prose.
+Without `--json` or `BOOTGEAR_OUTPUT=json`, the command returns prose.
 Paths resolve against `GEAR_CALLER_CWD` when set. Intake and gate never write task artifacts.
 
 Return these fields to the caller:
@@ -73,6 +73,9 @@ The CLI checks structure and coverage. The caller checks meaning, independence, 
 
 ## Host mechanics
 
-Claude resolves public helpers through PATH. Use the registered Gear spec-feedback command.
-Codex checks bundled helpers first, then PATH. Use its registered engine spec-feedback command.
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+For Claude Code, use `claude` for `<host>` and `spec` for `<spec-plugin>`.
+For Codex CLI, use `codex` for `<host>` and `engine` for `<spec-plugin>`.
+If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`.
+On Codex CLI, run `codex plugin add cli@bootgear` first.
 If self-review, converge, or spec-feedback is missing, return blocked with the actual diagnostic.

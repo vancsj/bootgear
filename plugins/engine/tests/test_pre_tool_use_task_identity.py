@@ -13,7 +13,9 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 HOOK = PLUGIN_DIR / "hooks" / "pre_tool_use_task_identity.py"
 HOOKS = PLUGIN_DIR / "hooks" / "hooks.json"
 HOST = "claude"
-TASK = PLUGIN_DIR / "bin" / "task"
+REPO = Path(__file__).resolve().parents[3]
+GEAR = REPO / "plugins" / "cli" / "bin" / "gear"
+CLI_SOURCE = REPO / "plugins" / "cli" / "src"
 
 
 class PreToolUseTaskIdentityTest(unittest.TestCase):
@@ -29,6 +31,8 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             hook_input.update(extra)
         env = dict(os.environ)
         env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN_DIR)
+        env["BOOTGEAR_HOST"] = HOST
+        env["PYTHONPATH"] = os.pathsep.join((str(CLI_SOURCE), env.get("PYTHONPATH", "")))
         if env_extra:
             env.update(env_extra)
         result = subprocess.run(
@@ -42,21 +46,22 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout) if result.stdout.strip() else {}
 
-    def _task(self, *args: str) -> str:
-        return " ".join((shlex.quote(str(TASK)), *args))
+    def _gear(self, *args: str) -> str:
+        return shlex.join((str(GEAR), "--host", HOST, "--root", str(REPO), *args))
 
     def test_pre_tool_use_hook_is_registered_for_bash(self):
         hooks = json.loads(HOOKS.read_text())["hooks"]
         groups = hooks["PreToolUse"]
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["matcher"], "^Bash$")
-        self.assertIn("pre_tool_use_task_identity.py", groups[0]["hooks"][0]["command"])
+        self.assertIn('"${CLAUDE_PLUGIN_ROOT}/hooks/gear"', groups[0]["hooks"][0]["command"])
+        self.assertIn("--host claude context-hook", groups[0]["hooks"][0]["command"])
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", groups[0]["hooks"][0]["command"])
 
     def test_registered_task_command_is_allowed_with_hook_session_identity(self):
-        original = self._task(
-            "session", "record-pitch", "run-id", "--dir", "'/tmp/session dir'",
-            "'a quoted pitch with spaces'",
+        original = self._gear(
+            "engine", "task", "session", "record-pitch", "run-id", "--dir",
+            "/tmp/session dir", "a quoted pitch with spaces",
         )
         output = self._run(original, env_extra={"BOOTGEAR_SESSION_ID": "inherited-id"})
 
@@ -73,12 +78,12 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", rewritten)
 
     def test_unrelated_argument_containing_registered_command_is_untouched(self):
-        embedded = self._task("session", "recall", "some-run")
+        embedded = self._gear("engine", "task", "session", "recall", "some-run")
         output = self._run(f"printf '%s' {shlex.quote(embedded)}")
         self.assertEqual(output, {})
 
     def test_compound_calls_and_shell_operators_are_not_approved(self):
-        task = self._task("session", "recall", "some-run")
+        task = self._gear("engine", "task", "session", "recall", "some-run")
         cases = (
             f"{task}; echo done",
             f"echo before && {task}",
@@ -96,13 +101,18 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self._run(command), {})
 
-    def test_unknown_commands_and_unbundled_router_are_not_approved(self):
+    def test_unknown_gear_pairs_and_task_examples_are_not_approved(self):
         self.assertEqual(self._run("gear.py absent task session recall run"), {})
-        self.assertEqual(self._run(self._task("session", "unregistered", "run")), {})
-        self.assertFalse((PLUGIN_DIR / "cli" / "gear.py").exists())
-        router = Path(__file__).resolve().parents[3] / "cli" / "gear.py"
         self.assertEqual(
-            self._run(f"{shlex.quote(str(router))} engine task session recall run"), {}
+            self._run(self._gear("absent", "task", "session", "recall", "run")), {}
+        )
+        self.assertEqual(
+            self._run(self._gear("engine", "task", "session", "unregistered", "run")), {}
+        )
+        old_router = REPO / "cli" / "gear.py"
+        self.assertFalse(old_router.exists())
+        self.assertEqual(
+            self._run(f"{shlex.quote(str(old_router))} engine task session recall run"), {}
         )
 
     def test_registered_standalone_executable_is_allowed(self):
@@ -123,9 +133,12 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
                 f"export BOOTGEAR_HOST='{HOST}' BOOTGEAR_SESSION_ID='thr_123' && {original}",
             )
 
-    def test_bundled_task_executable_is_recognized_through_path(self):
-        original = "task session read run-id"
-        path = os.pathsep.join((str(PLUGIN_DIR / "bin"), os.environ.get("PATH", "")))
+    def test_shared_gear_executable_is_recognized_through_path(self):
+        original = (
+            "gear --host claude --root " + shlex.quote(str(REPO))
+            + " engine task session read run-id --dir /tmp/session"
+        )
+        path = os.pathsep.join((str(GEAR.parent), os.environ.get("PATH", "")))
         output = self._run(original, env_extra={"PATH": path})
         self.assertEqual(
             output["hookSpecificOutput"]["updatedInput"]["command"],
@@ -214,18 +227,17 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
             self.assertEqual(self._run(f"{executable} show report"), {})
 
     def test_missing_or_malformed_hook_session_id_is_not_approved(self):
-        command = self._task("session", "recall", "some-run")
+        command = self._gear("engine", "task", "session", "recall", "some-run")
         for session_id in (None, "", 42, "bad id", "bad\nvalue", "bad' && echo unsafe"):
             with self.subTest(session_id=session_id):
                 self.assertEqual(self._run(command, session_id=session_id), {})
 
     def test_non_bash_or_non_pre_tool_use_input_is_not_approved(self):
-        command = self._task("session", "recall", "some-run")
+        command = self._gear("engine", "task", "session", "recall", "some-run")
         self.assertEqual(self._run(command, extra={"tool_name": "apply_patch"}), {})
         self.assertEqual(
             self._run(command, extra={"hook_event_name": "PostToolUse"}), {}
         )
-
 
 if __name__ == "__main__":
     unittest.main()

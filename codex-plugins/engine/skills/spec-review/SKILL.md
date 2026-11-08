@@ -83,7 +83,7 @@ Do not use `--snapshot` or `--since`.
 For active runs, export the public settlement and pass that file through `--settlement`:
 
 ```text
-task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
+<gear> --host <host> engine task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
 ```
 
 Read [references/lenses.md](references/lenses.md) when briefing each lens.
@@ -126,7 +126,7 @@ For changed trust boundaries, permissions, external inputs, or sensitive data, t
 Render through the public command:
 
 ```text
-converge render <slate> --dir <converge-dir> > <converge-dir>/<slate>.md
+<gear> --host <host> <converge-plugin> converge render <slate> --dir <converge-dir> > <converge-dir>/<slate>.md
 ```
 
 Read public status and map results in this order:
@@ -169,6 +169,14 @@ Include the actual diagnostic, named mechanism, pending work, and next caller ac
 Do not replace missing request evidence with the author's interpretation.
 
 ## Host mechanics
+
+Use `codex` for `<host>`.
+Use `engine` for `<converge-plugin>`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+Run bundled feedback commands as `<gear> --host codex engine spec-feedback <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
 
 Invoke skills by public name.
 If required converge or spec-feedback capability is missing, return `blocked` with its actual diagnostic and named mechanism.

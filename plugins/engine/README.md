@@ -138,7 +138,7 @@ convergence when parties are unavailable.
 All run state lives in one Markdown file per run, `~/.bootgear/session/<run-id>.md` by default,
 keyed by the host session id and outside every repository. It holds the settlement, an
 append-only decision trail, open todos, progress reports, and the state-machine position.
-Only the `task` CLI writes it; skills read it through `task session` and `task state`, never from
+Only the registered `engine task` command writes it; skills read it through Gear, never from
 memory. A settled item changes only through an explicit `AMENDMENT` decision.
 
 Three hooks keep a long run on track, each reading the ledger by session id:
@@ -169,22 +169,22 @@ A run started with a custom `--dir` gets no hook reminders. Detail:
 `start` is the only one you invoke. The other five are internal: the loop calls them itself,
 so they are listed by skill name rather than as a command to type.
 
-The CLI underneath is `bin/task` (`scripts/task` in the Codex build), run through `uv`:
+Call `cli:gear` and use its returned absolute path to run `engine task` commands:
 
 ```
-task session   init · validate · read · record-decision · next-question-id · update-todo · record-pitch · write-ticket · close
-               (Codex build also: recall)
-task session write-ticket <run-id> --dir <session-dir> --body-file <file>
+<gear> --host <host> engine task session init|validate|read|record-decision|next-question-id|update-todo|record-pitch|write-ticket|close
+               (Codex also: recall)
+<gear> --host <host> engine task session write-ticket <run-id> --dir <session-dir> --body-file <file>
                writes the run's ticket body; the only writer of ticket_path
-task state     transition · current · amend · show · validate · diagram
-task config    resolve layered config, such as the debate-party roster
+<gear> --host <host> engine task state transition|current|amend|show|validate|diagram
+<gear> --host <host> engine task config resolve
 ```
 
 ---
 
 ## Setup
 
-Prerequisites: `git`, Python 3.11 or later, and [`uv`](https://docs.astral.sh/uv/). Advisor
+Prerequisites: `git`, Python 3.12, and [`uv`](https://docs.astral.sh/uv/). Advisor
 roles need the other vendor's host: on Claude Code, the Codex CLI installed and signed in; on
 Codex, the `advisor` plugin and a Claude Code session listening through it.
 
@@ -195,19 +195,23 @@ Claude Code:
 /plugin install engine@bootgear
 ```
 
-This installs `engine`'s declared dependencies with it: `converge`, `spec`, `test`, `review`,
-`advisor` and `memory-ledger`.
+This installs `engine`'s declared dependencies with it: `cli`, `converge`, `spec`, `test`,
+`review`, `advisor`, `memory-ledger` and `deputy`.
 
 Codex CLI:
 
 ```
 codex plugin marketplace add vancsj/bootgear
+codex plugin add cli@bootgear
 codex plugin add engine@bootgear
+codex plugin add advisor@bootgear
+codex plugin add memory-ledger@bootgear
+codex plugin add deputy@bootgear
 ```
 
-The Codex build bundles `spec`, `test`, `review` and `converge`. Add `memory-ledger@bootgear`
-too if you want runs to look up and record durable facts; its absence never blocks a run.
-Add `advisor@bootgear` for advisor roles; without it, `clarify` records none.
+The Codex Engine bundles `spec`, `test`, `review` and `converge`. Install the
+CLI, Advisor, Memory Ledger and Deputy plugins as separate peers.
+Run `cli:setup` to prepare the shared runtime.
 
 Project customisation lives in `.bootgear/config/`: `principles.md`, the
 standards `review-standard.md` and `test-standard.md` (named in every role

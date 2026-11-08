@@ -9,10 +9,9 @@ a cache for facts that are expensive to derive, not a note store.
 
 | Part | Role |
 |---|---|
-| `plugins/memory-ledger/bin/ledger` | Extensionless `ledger` gear entrypoint; proxies to `scripts/ledger`. |
 | `plugins/memory-ledger/scripts/ledger.py` | CLI: `resolve`, `show`, `list`, `new`, `rival`, `add-evidence`, `sign`, `refute`, `assert`, `promote`, `set-repo`, `hash`, `lint`, `save`, `audit`, `doctor`, `resolve-roots`, `selftest` |
+| `plugins/memory-ledger/gear.toml` | Registers the ledger command and both host hook handlers. |
 | `scripts/ledgerlib/` | `config` (roots), `context`/`identity` (host, signer), `model` (hash, confidence, refs), `store` (parsing, identity cache), `scoring` (resolver), `read`, `write`, `gates` (write-time checks), `lint`, `gitops` (save), `audit`, `doctor`, `nudge` |
-| `scripts/ledger` | Codex wrapper; defaults output to prose |
 | `skills/ledger/` | Usage skill; `references/mechanics.md` (commands, formats), `references/judgement.md` (choosing, verifying, contesting) |
 | `skills/setup/` | Checks dependencies, creates both ledgers, wires the config; asks before any write outside the ledgers |
 | `hooks/` | `nudge.py` (Claude) and `codex_nudge.py` (Codex), thin adapters over `ledgerlib.nudge` |
@@ -139,8 +138,8 @@ ledger has no remote or carries unportable evidence paths.
 ## Nudge hook
 
 A `PostToolUse` hook fires on every tool call and `ledgerlib.nudge.evaluate` decides. If
-capability status is not `configured`, it emits `memory-ledger: <status>`. A Bash command
-invoking `ledger`/`ledger.py`, or the `ledger` skill, records `ledger-used` silently. Any
+capability status is not `configured`, it emits `memory-ledger: <status>`. A Gear command
+for `memory-ledger ledger`, or the `ledger` skill, records `ledger-used` silently. Any
 other call emits one fixed, never-escalating reminder to check and record in the ledger,
 unless a nudge fired in the last 300 s; a ledger use clears that cooldown. State is per
 session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
@@ -149,8 +148,8 @@ session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
 
 | | Claude | Codex |
 |---|---|---|
-| Entry point | `${CLAUDE_PLUGIN_ROOT}/bin/ledger` | `${PLUGIN_ROOT}/bin/ledger` (prose output by default) |
-| Gear command | `${CLAUDE_PLUGIN_ROOT}/bin/ledger` | `${PLUGIN_ROOT}/bin/ledger` |
+| Entry point | `cli:gear`, then `--host claude memory-ledger ledger` | `cli:gear`, then `--host codex memory-ledger ledger` |
+| CLI setup | `cli` dependency installs with the plugin | Install `cli@bootgear` before using the plugin |
 | Signer | first segment of `CLAUDE_CODE_SESSION_ID`, or `--as` | `codex:<id>` from `--host codex` and `--session-id` or the default session sources; `--as`, if given, must equal it |
 | Manifest | `.claude-plugin`, `hooks/hooks.json` | `.codex-plugin`, `hooks/codex-hooks.json` |
 | Hook status output | `additionalContext` | `systemMessage`; the hook first validates the session id and stays silent if it is invalid |

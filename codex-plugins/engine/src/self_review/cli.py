@@ -10,6 +10,9 @@ import tempfile
 from pathlib import Path
 from typing import Any, NoReturn, TextIO, TypeGuard
 
+from bootgear_cli.clikit import current_program
+
+PROGRAM = current_program("engine", "self-review")
 STAGES = ("spec", "code")
 MODES = ("invoke", "absorb", "neither")
 ORIGINS = ("project-config", "user-request", "host-registration", "caller-judgement")
@@ -29,7 +32,7 @@ class Refusal(Exception):
 class Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         command = next((item for item in sys.argv[1:] if item in COMMANDS), "status")
-        self.exit(2, f"Error: {message}\nExample: self-review {command} --task-folder TASK --stage spec --json\n"
+        self.exit(2, f"Error: {message}\nExample: {PROGRAM} {command} --task-folder TASK --stage spec --json\n"
                      f"Commands: {', '.join(COMMANDS)}\nNext: Caller corrects the arguments and retries.\n")
 
 
@@ -384,7 +387,7 @@ def run(args: argparse.Namespace, task: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = Parser(description="Record bounded author self-review checkpoints.")
+    parser = Parser(prog=PROGRAM, description="Record bounded author self-review checkpoints.")
     commands = parser.add_subparsers(dest="command", required=True)
     for command in COMMANDS:
         sub = commands.add_parser(command)

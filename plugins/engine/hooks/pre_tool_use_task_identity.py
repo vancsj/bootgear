@@ -15,15 +15,6 @@ _SESSION_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
 _SHELL_PUNCTUATION = frozenset(";&|<>()!")
 
 
-def _plugin_root(host: str) -> Path | None:
-    root = os.environ.get("PLUGIN_ROOT" if host == "codex" else "CLAUDE_PLUGIN_ROOT")
-    path = Path(root).expanduser() if root else Path(__file__).resolve().parent.parent
-    try:
-        return path.resolve(strict=True)
-    except OSError:
-        return None
-
-
 def _task_commands(plugin_root: Path) -> set[tuple[str, str]] | None:
     """Read the literal command catalog without importing or running engine code."""
     source_path = plugin_root / "src" / "engine" / "cli.py"
@@ -171,14 +162,43 @@ def _registered_executable(executable: Path) -> bool:
     return False
 
 
-def _task_executable(executable: Path, plugin_root: Path, host: str) -> bool:
-    expected = plugin_root / ("scripts" if host == "codex" else "bin") / "task"
-    try:
-        return (expected.is_file() and os.access(expected, os.X_OK)
-                and not expected.is_symlink()
-                and expected.resolve(strict=True) == executable)
-    except (OSError, RuntimeError, ValueError):
+def _gear_command(tokens: list[str], executable: Path, host: str, cwd: str | None) -> bool | None:
+    """Validate a Gear route before granting its session context."""
+    from bootgear_cli import gear
+
+    if executable != (gear.CLI_ROOT / "bin" / "gear").resolve():
+        return None
+    position = 1
+    root = gear.DEFAULT_ROOT
+    while position < len(tokens) and tokens[position].startswith("--"):
+        option = tokens[position]
+        if option not in {"--host", "--root"} or position + 1 >= len(tokens):
+            return False
+        value = tokens[position + 1]
+        if option == "--host" and value != host:
+            return False
+        if option == "--root":
+            root = Path(value).expanduser()
+            if not root.is_absolute():
+                root = Path(cwd or os.getcwd()) / root
+        position += 2
+    if len(tokens) < position + 2:
         return False
+    name, command = tokens[position:position + 2]
+    try:
+        plugins = gear.discover(root)
+        if name not in plugins:
+            plugins = gear.reconcile(root).plugins
+    except gear.GearError:
+        return False
+    provider = plugins.get(name)
+    if provider is None or command not in provider.commands:
+        return False
+    if name == "engine" and command == "task":
+        known_commands = _task_commands(provider.root)
+        rest = tokens[position + 2:]
+        return known_commands is not None and len(rest) >= 2 and tuple(rest[:2]) in known_commands
+    return True
 
 
 def _shell_quote(value: str) -> str:
@@ -208,13 +228,8 @@ def _updated_command(hook_input: object, host: str) -> str | None:
     if executable is None:
         return None
 
-    plugin_root = _plugin_root(host)
-    if plugin_root is not None and _task_executable(executable, plugin_root, host):
-        known_commands = _task_commands(plugin_root)
-        if (len(tokens) < 3 or known_commands is None
-                or (tokens[1], tokens[2]) not in known_commands):
-            return None
-    elif not _registered_executable(executable):
+    registered = _gear_command(tokens, executable, host, hook_input.get("cwd"))
+    if registered is False or (registered is None and not _registered_executable(executable)):
         return None
 
     return (f"export BOOTGEAR_HOST={_shell_quote(host)} "

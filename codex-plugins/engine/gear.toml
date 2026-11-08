@@ -2,16 +2,19 @@
 name = "engine"
 
 [commands.task]
-exec = ["./scripts/task"]
+exec = ["python3", "-m", "engine.cli"]
 
 [commands.converge]
-exec = ["./scripts/converge"]
+exec = ["python3", "-m", "converge.cli"]
 
 [commands.context-hook]
 exec = ["python3", "hooks/pre_tool_use_task_identity.py", "--host", "codex"]
 
+[commands.adapter]
+exec = ["python3", "hooks/adapter.py"]
+
 [commands.self-review]
-exec = ["./scripts/self-review"]
+exec = ["python3", "-m", "self_review.cli"]
 
 [commands.spec-feedback]
-exec = ["./scripts/spec-feedback"]
+exec = ["python3", "-m", "spec_feedback.cli"]

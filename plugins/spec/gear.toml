@@ -2,4 +2,4 @@
 name = "spec"
 
 [commands.spec-feedback]
-exec = ["./bin/spec-feedback"]
+exec = ["python3", "-m", "spec_feedback.cli"]

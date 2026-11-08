@@ -5,10 +5,12 @@ import fcntl
 import json
 import multiprocessing
 import os
+import shutil
 import subprocess
+import sys
 import time
 
-from conftest import BIN, FILE_ARGS, Converge
+from conftest import FILE_ARGS, GEAR_ARGS, Converge
 
 
 def test_seq_gapless_and_envelope(cv: Converge) -> None:
@@ -70,7 +72,7 @@ def test_bad_slate_id_refused(cv: Converge) -> None:
 def _writer(dir_: str, home: str, env_extra: dict[str, str], agent: str, count: int) -> None:
     env = {**os.environ, **env_extra, "HOME": home}
     for i in range(count):
-        subprocess.run([str(BIN), "file", "s1", "--dir", dir_, "--as", agent,
+        subprocess.run([*GEAR_ARGS, "file", "s1", "--dir", dir_, "--as", agent,
                         "--lens", "correctness", "--angle", "changed-contract",
                         "--loc", f"src/{agent}.py:{i + 1}", "--claim", f"{agent} claim {i}",
                         "--trigger", "t", "--origin", "lens", *FILE_ARGS],
@@ -103,7 +105,7 @@ def test_writer_waits_for_the_lock(cv: Converge) -> None:
     fd = os.open(cv.path(), os.O_RDWR)
     fcntl.flock(fd, fcntl.LOCK_EX)
     try:
-        proc = subprocess.Popen([str(BIN), *cv.with_dir("file", "s1"), "--as", "f1",
+        proc = subprocess.Popen([*GEAR_ARGS, *cv.with_dir("file", "s1"), "--as", "f1",
                                  "--lens", "correctness", "--angle", "changed-contract",
                                  "--loc", "a.py:1", "--claim", "c", "--trigger", "t",
                                  "--origin", "lens", *FILE_ARGS],
@@ -151,8 +153,15 @@ def test_out_of_order_and_truncated_lines_refused(cv: Converge) -> None:
     assert "not valid JSON" in cv.refused("status", "s1")
 
 
-def test_wrapper_needs_uv_on_path(cv: Converge) -> None:
-    result = subprocess.run(["/bin/sh", str(BIN), "angles"], capture_output=True, text=True,
-                            env={"PATH": "/usr/bin:/bin", "HOME": str(cv.home)}, check=False)
-    assert result.returncode == 127
-    assert "uv is required" in result.stderr
+def test_gear_route_uses_the_prepared_runtime_without_uv_on_path(cv: Converge) -> None:
+    tool_path = cv.root / "path"
+    tool_path.mkdir()
+    (tool_path / "python3").symlink_to(sys.executable)
+    bash = shutil.which("bash")
+    assert bash is not None
+    (tool_path / "bash").symlink_to(bash)
+    result = subprocess.run([*GEAR_ARGS, "angles"], capture_output=True, text=True,
+                            env={**cv.env, "PATH": str(tool_path)}, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout
+    assert shutil.which("uv", path=str(tool_path)) is None

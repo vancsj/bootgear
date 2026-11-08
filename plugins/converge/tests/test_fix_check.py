@@ -2,9 +2,10 @@
 whether the patch passed its checks and a patch-only re-review slate."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from conftest import BATCH_1, DISABLED, FINDER, MAIN, R2, Converge
+from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R2, Converge
 from converge import ledger, model, protocol
 from test_effort import cheap, patch
 
@@ -53,6 +54,13 @@ def _check(cv: Converge, outcome: str, *extra: str, claim: str = "F001", agent: 
                  "--evidence", CHECKS, *extra, code=code)
 
 
+def _set_event_timestamp(cv: Converge, slate: str, event_name: str, timestamp: str) -> None:
+    events = cv.events(slate)
+    match = next(event for event in reversed(events) if event["event"] == event_name)
+    match["ts"] = timestamp
+    cv.path(slate).write_text("".join(json.dumps(event) + "\n" for event in events))
+
+
 def test_fix_check_pass_needs_clean_review_slate(cv: Converge) -> None:
     _fix_now(cv, cheap(patch(lines=4)))
     err = _check(cv, "pass", code=2).stderr
@@ -71,7 +79,7 @@ def test_fix_check_pass_needs_clean_review_slate(cv: Converge) -> None:
     _review(cv, "clean")
     out = _check(cv, "pass", "--review-slate", "clean").stdout.splitlines()
     assert out[0].startswith("FIX-CHECK seq=") and out[0].endswith(" F001 outcome=pass")
-    assert out[-1] == f"next: converge cutoff s1 --dir {cv.dir}"
+    assert out[-1] == f"next: {GEAR_COMMAND} cutoff s1 --dir {cv.dir}"
     assert _results(cv) == {"F001": ("fixed", "fix-check passed")}
 
 
@@ -102,7 +110,7 @@ def test_fix_check_needs_a_cutoff(cv: Converge) -> None:
     ids = cv.ready(cut="after")
     cv.clean(ids[0])
     cv.rate(ids[0], **cheap(patch(lines=4)))
-    assert ("fix-check: the slate has no cutoff event; run `converge cutoff` first"
+    assert (f"fix-check: the slate has no cutoff event; run `{GEAR_COMMAND} cutoff` first"
             in _check(cv, "fail", code=2).stderr)
 
 
@@ -141,11 +149,11 @@ def test_status_json_carries_result_and_fix_check(cv: Converge) -> None:
     assert cv.status()["by_id"]["F001"]["result"] == "fixed"
 
 
-def test_fix_check_pass_refuses_review_older_than_cutoff(cv: Converge, monkeypatch: Any) -> None:
-    monkeypatch.setattr(ledger, "now", lambda: "2026-01-01T00:00:00Z")
+def test_fix_check_pass_refuses_review_older_than_cutoff(cv: Converge) -> None:
     _review(cv, "early")
-    monkeypatch.setattr(ledger, "now", lambda: "2026-01-01T00:00:01Z")
+    _set_event_timestamp(cv, "early", "cutoff", "2026-01-01T00:00:00Z")
     _fix_now(cv, cheap(patch(lines=4)))
+    _set_event_timestamp(cv, "s1", "cutoff", "2026-01-01T00:00:01Z")
     err = _check(cv, "pass", "--review-slate", "early", code=2).stderr
     seq = [e["seq"] for e in cv.events() if e["event"] == "cutoff"][-1]
     assert ("--review-slate: slate 'early''s cutoff (2026-01-01T00:00:00Z) is older than "
@@ -154,26 +162,23 @@ def test_fix_check_pass_refuses_review_older_than_cutoff(cv: Converge, monkeypat
 
 
 def test_fix_check_pass_compares_against_last_cutoff_before_the_first_fix_check(
-        cv: Converge, monkeypatch: Any) -> None:
+        cv: Converge) -> None:
     """Cutoffs at t0 and t2 precede the first fix-check and one at t4 follows it; review
     slates cut at t1 and t3 tell the t2 cutoff apart from the first and the latest."""
-    def at(second: int) -> None:
-        monkeypatch.setattr(ledger, "now", lambda: f"2026-01-01T00:00:0{second}Z")
-
-    at(0)
     _fix_now(cv, cheap(patch(lines=4)), cheap(patch(lines=4), impact="cosmetic"))
-    at(1)
+    _set_event_timestamp(cv, "s1", "cutoff", "2026-01-01T00:00:00Z")
     _review(cv, "early")
-    at(2)
+    _set_event_timestamp(cv, "early", "cutoff", "2026-01-01T00:00:01Z")
     cv.ok("angle-na", "s1", "--as", FINDER, "--phase", "find", "--angle", "failure-path",
           "--lens", "correctness", "--reason", "the fix adds no I/O")
     cv.ok("cutoff", "s1")
+    _set_event_timestamp(cv, "s1", "cutoff", "2026-01-01T00:00:02Z")
     baseline = [e["seq"] for e in cv.events() if e["event"] == "cutoff"][-1]
-    at(3)
     _review(cv, "late")
+    _set_event_timestamp(cv, "late", "cutoff", "2026-01-01T00:00:03Z")
     _check(cv, "pass", "--review-slate", "late")
-    at(4)
     cv.ok("cutoff", "s1")
+    _set_event_timestamp(cv, "s1", "cutoff", "2026-01-01T00:00:04Z")
     err = _check(cv, "pass", "--review-slate", "early", claim="F002", code=2).stderr
     assert (f"s1's cutoff seq={baseline} (2026-01-01T00:00:02Z), its last before the first "
             "fix-check" in err)
@@ -186,4 +191,5 @@ def test_fix_check_pass_compares_against_last_cutoff_before_the_first_fix_check(
 def test_rate_help_points_to_the_evaluate_angles(cv: Converge) -> None:
     out = cv("cut", "--help").stdout
     assert "call sites" not in out and "production queries" not in out
-    assert "converge angles --tag evaluate --angles <file>" in " ".join(out.split())
+    expected = f"{GEAR_COMMAND} angles --tag evaluate --angles <file>"
+    assert "".join(expected.split()) in "".join(out.split())

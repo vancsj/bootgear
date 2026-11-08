@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from conftest import BATCH_1, DISABLED, FINDER, MAIN, R1, R2, Converge
+from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 from converge import ledger, model, protocol
 
 
@@ -205,7 +205,7 @@ def test_cutoff_refused_from_an_agent(cv: Converge) -> None:
     _build(cv, {"impact": "security"})
     results = protocol.cutoff_results(protocol.compute_cutoff(_slate(cv)))
     problems = cv.append("cutoff", MAIN, results=results)
-    assert "cutoff is computed by `converge cutoff` only; it is rejected from --as input" in problems
+    assert f"cutoff is computed by `{GEAR_COMMAND} cutoff` only; it is rejected from --as input" in problems
 
 
 def test_cutoff_results_must_match_the_recompute(cv: Converge) -> None:

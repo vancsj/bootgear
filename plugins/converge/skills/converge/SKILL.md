@@ -3,7 +3,8 @@ name: converge
 description: Settle the facts behind a set of claims — find, attack and cut each claim with separate agents over a validated append-only ledger, then compute which claims are findings. Use to review an artifact through lenses, or when review or debate needs its claims settled before acting.
 ---
 
-`converge` below is the CLI named in `## Host mechanics`.
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+`converge` below means `<gear> --host <host> <converge-plugin> converge`.
 
 ## Use, inputs and handback
 
@@ -149,6 +150,10 @@ Hand back the render, every finding carrying a `choice`, and exactly one outcome
 
 ## Host mechanics
 
+Use `claude` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+
 - Spawn each role agent once with the Agent tool; continue it with SendMessage for later rounds.
-- Run the CLI as bare `converge` in Bash; the plugin's `bin/` is on PATH.
+- Run commands with `<gear> --host claude converge converge <command> [arguments]`.
+- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Invoke `advisor:advisor`; run an advisor seat's background step with the Bash tool's `run_in_background`.
