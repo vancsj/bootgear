@@ -205,7 +205,7 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
-def _updated_command(hook_input: object, host: str) -> str | None:
+def _updated_input(hook_input: object, host: str) -> dict | None:
     if not isinstance(hook_input, dict):
         return None
     if hook_input.get("hook_event_name") != "PreToolUse":
@@ -232,8 +232,10 @@ def _updated_command(hook_input: object, host: str) -> str | None:
     if registered is False or (registered is None and not _registered_executable(executable)):
         return None
 
-    return (f"export BOOTGEAR_HOST={_shell_quote(host)} "
-            f"BOOTGEAR_SESSION_ID={_shell_quote(session_id)} && {command}")
+    new_command = (f"export BOOTGEAR_HOST={_shell_quote(host)} "
+                   f"BOOTGEAR_SESSION_ID={_shell_quote(session_id)} && {command}")
+    # updatedInput replaces the whole input, so keep the other fields.
+    return {**tool_input, "command": new_command}
 
 
 def main() -> None:
@@ -244,14 +246,14 @@ def main() -> None:
         hook_input = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return
-    updated = _updated_command(hook_input, args.host)
+    updated = _updated_input(hook_input, args.host)
     if updated is None:
         return
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
-            "updatedInput": {"command": updated},
+            "updatedInput": updated,
         }
     }))
 

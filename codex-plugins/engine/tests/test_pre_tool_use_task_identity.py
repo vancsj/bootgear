@@ -77,6 +77,20 @@ class PreToolUseTaskIdentityTest(unittest.TestCase):
         self.assertIn("'a quoted pitch with spaces'", rewritten)
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", rewritten)
 
+    def test_rewrite_keeps_other_tool_input_fields(self):
+        original = self._gear("engine", "task", "session", "record-pitch", "run-id",
+                              "--dir", "/tmp/d", "pitch")
+        tool_input = {"command": original, "run_in_background": True,
+                      "timeout": 5000, "description": "record pitch"}
+        output = self._run(original, extra={"tool_input": tool_input})
+
+        updated = output["hookSpecificOutput"]["updatedInput"]
+        self.assertEqual(
+            {key: value for key, value in updated.items() if key != "command"},
+            {"run_in_background": True, "timeout": 5000, "description": "record pitch"},
+        )
+        self.assertTrue(updated["command"].endswith(f"&& {original}"))
+
     def test_unrelated_argument_containing_registered_command_is_untouched(self):
         embedded = self._gear("engine", "task", "session", "recall", "some-run")
         output = self._run(f"printf '%s' {shlex.quote(embedded)}")
