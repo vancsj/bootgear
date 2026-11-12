@@ -584,14 +584,16 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     check = _one(lines, "DRIVER r2 check: ")
     assert "WRITE-DENIED" in check and "never redo the turn with a native subagent" in check
     scope = _one(lines, "SCOPE: ")
-    assert scope.startswith('SCOPE: write events only with: UV_CACHE_DIR="${TMPDIR:-/tmp}/converge-uv-cache" ')
+    assert scope.startswith("SCOPE: write events only with: ")
+    assert "UV_CACHE_DIR" not in scope
     assert f'{PROGRAM} <attack|reply|verdict|file|rebut|accept|escalate|angle-na>' in scope
     gear = Path(shlex.split(PROGRAM)[0])
     assert gear.is_file() and os.access(gear, os.X_OK)
-    for fragment in (f"--dir {ledger} --as r2", "require_escalated",
+    for fragment in (f"--dir {ledger} --as r2", "; if a write is denied, run nothing else",
                      'reply "WRITE-DENIED r2: <the error text>"',
                      "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>"):
         assert fragment in scope, scope
+    assert "permission" not in scope, scope
     nxt = lines[-1]
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
     assert "prints the Gear command and channel number" in nxt

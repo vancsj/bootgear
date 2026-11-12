@@ -408,14 +408,11 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                 (f"USER_REQUEST: You are seat {seat} ({', '.join(named)}) on converge slate "
                  f"{slate_id}. {brief.rstrip('.')}. <role brief for this turn>"),
                 "CONTEXT: <claims under test: id, text, loc, trigger; this turn's angles>",
-                (f'SCOPE: write events only with: UV_CACHE_DIR="${{TMPDIR:-/tmp}}/converge-uv-cache" '
-                 f"{converge} <attack|reply|verdict|file|rebut|accept|escalate|angle-na> "
+                (f"SCOPE: write events only with: {converge} <attack|reply|verdict|file|rebut|accept|escalate|angle-na> "
                  f"{shlex.quote(slate_id)} "
                  f"--dir {quoted_dir} --as {seat} ...; these commands append to "
-                 f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}, which may be outside your "
-                 f"writable roots: request write permission for each such command as your host "
-                 f"requires (Codex: sandbox_permissions require_escalated); if permission is "
-                 f'denied or cannot be granted, run nothing else and reply "WRITE-DENIED {seat}: '
+                 f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}; if a write is denied, "
+                 f'run nothing else and reply "WRITE-DENIED {seat}: '
                  f'<the error text>"; read any file; change nothing else; reply with every line '
                  f"those commands print"),
             )),

@@ -159,5 +159,5 @@ Use `engine` for `<converge-plugin>`.
 - Give role agents the Gear path and command form `<gear> --host codex engine converge <command> [arguments]`.
 - If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
 - Invoke skills by their public name through the host Skill interface; the ledger skill is `memory-ledger:ledger`.
-- Invoke `advisor:advisor` (a separate plugin: `codex plugin add advisor@bootgear`); run an advisor seat's background step in a terminal session left running, with the escalation the `advisor` skill states.
+- Invoke `advisor:advisor` (a separate plugin: `codex plugin add advisor@bootgear`); run an advisor seat's background step in a terminal session left running.
 - A role agent is unavailable when its native subagent cannot be created, times out, or, in a headless run, stops on a fresh approval request. Stop with outcome `blocked` (step 8).

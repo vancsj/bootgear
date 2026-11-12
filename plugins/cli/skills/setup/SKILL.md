@@ -38,6 +38,5 @@ For Claude Code, use `claude` as `<host>`.
 If the CLI plugin is missing, run `/plugin install cli@bootgear` first.
 
 For Codex CLI, use `codex` as `<host>`.
-Run setup with host-level file and network access.
 If the CLI plugin is missing, run `codex plugin add cli@bootgear` first.
 Ask the user to trust the cli plugin hooks in `/hooks`. Codex skips an untrusted hook, and the session then keeps its stored plugin list.

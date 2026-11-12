@@ -88,8 +88,8 @@ def _line(lines: list[str], prefix: str) -> str:
 
 
 def _scope_converge(scope: str) -> Path:
-    # SCOPE: write events only with: UV_CACHE_DIR="..." <abs-converge> <attack|...> ...
-    tail = scope.split('converge-uv-cache" ', 1)[1]
+    # SCOPE: write events only with: <abs-converge> <attack|...> ...
+    tail = scope.split("write events only with: ", 1)[1]
     return Path(tail.split(" ", 1)[0])
 
 
@@ -132,11 +132,13 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
         "USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1. Act only as r2.")
     assert lines[head + 3].startswith("CONTEXT: <claims under test")
     scope = lines[head + 4]
-    assert scope.startswith('SCOPE: write events only with: UV_CACHE_DIR="${TMPDIR:-/tmp}/converge-uv-cache" ')
+    assert scope.startswith("SCOPE: write events only with: ")
+    assert "UV_CACHE_DIR" not in scope
     for fragment in (f"--dir {cv.dir} --as r2", f"append to {cv.dir}/s1.jsonl",
-                     "request write permission", "require_escalated",
+                     "; if a write is denied, run nothing else",
                      'reply "WRITE-DENIED r2: <the error text>"', "|escalate|angle-na>"):
         assert fragment in scope, scope
+    assert "permission" not in scope, scope
     path = _scope_converge(scope)
     assert path.is_absolute() and path.is_file() and os.access(path, os.X_OK), path
     if converge_path is not None:

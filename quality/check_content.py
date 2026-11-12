@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reject repository files that hardcode a local path, point into the docs
-folder from code or skills, narrate development history, or contain a term
-from the local denylist."""
+folder from code or skills, narrate development history, ask for sandbox
+escalation, or contain a term from the local denylist."""
 
 from __future__ import annotations
 
@@ -40,6 +40,18 @@ DIARY_PHRASES = (
     "tried and " + "rejected",
     "an earlier " + "version",
     "previous version of this " + "test",
+)
+# Phrases that tell a model to escape or escalate out of the host sandbox.
+# Bootgear runs only without the host sandbox, so no text asks for this.
+SANDBOX_PHRASES = (
+    "require_" + "escalated",
+    "dangerouslydisable" + "sandbox",
+    "outside the " + "sandbox",
+    "outside the bash " + "sandbox",
+    "escalated sandbox " + "permissions",
+    "host-level " + "access",
+    "host-level file and network " + "access",
+    "request write " + "permission",
 )
 # Terms kept outside the repo (personal skills, employer names, private
 # folders) so the list itself is never committed. One term per line.
@@ -94,6 +106,11 @@ def diary_phrases(text: str) -> list[str]:
     return [phrase for phrase in DIARY_PHRASES if phrase in lowered]
 
 
+def sandbox_phrases(text: str) -> list[str]:
+    lowered = text.lower()
+    return [phrase for phrase in SANDBOX_PHRASES if phrase in lowered]
+
+
 def _may_point_to_docs(relative: Path) -> bool:
     """README and CONTRIBUTING files describe the repo layout; the docs
     folder and test trees are the pointer targets and fixtures themselves."""
@@ -123,6 +140,8 @@ def find_violations(
                     violations.append(Violation(relative, number, match.group(0), "points to docs"))
             for phrase in diary_phrases(line):
                 violations.append(Violation(relative, number, phrase, "development diary"))
+            for phrase in sandbox_phrases(line):
+                violations.append(Violation(relative, number, phrase, "sandbox escalation"))
             lowered = line.lower()
             for term in terms:
                 if term in lowered:
@@ -136,7 +155,7 @@ def main() -> int:
         for violation in violations:
             print(violation.render())
         return 1
-    print("OK no local paths, docs pointers, diary phrases, or denylisted terms")
+    print("OK no local paths, docs pointers, diary phrases, sandbox escalation, or denylisted terms")
     return 0
 
 

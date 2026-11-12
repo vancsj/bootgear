@@ -100,6 +100,25 @@ class ContentTests(unittest.TestCase):
             self.assertEqual(check_content.diary_phrases(f"# {phrase.title()}: x"), [phrase], phrase)
         self.assertEqual(check_content.diary_phrases("# used to compute the hash"), [])
 
+    def test_flags_sandbox_escalation_phrases(self) -> None:
+        for phrase in ("require_" + "escalated", "dangerouslyDisable" + "Sandbox",
+                       "outside the " + "sandbox", "outside the Bash " + "sandbox",
+                       "escalated sandbox " + "permissions", "host-level " + "access",
+                       "host-level file and network " + "access", "request write " + "permission"):
+            self.assertIn(phrase.lower(), check_content.sandbox_phrases(f"Run it {phrase} now."), phrase)
+        for kept in ("Bootgear supports Claude Code and Codex only without the host sandbox.",
+                     "Bootgear code has no fallback for an operation that a sandbox denies.",
+                     "stop and tell the user to restart the host without its sandbox.",
+                     "Direct Codex calls use a read-only sandbox and ignore user config and rules.",
+                     "an interruption, a host-level stop."):
+            self.assertEqual(check_content.sandbox_phrases(kept), [], kept)
+
+    def test_reports_sandbox_escalation_rule(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="content-test-"))
+        (root / "a.md").write_text("fine\nset require_" + "escalated\n")
+        violations = check_content.find_violations(root, [Path("a.md")], denylist=[])
+        self.assertEqual([(v.line, v.rule) for v in violations], [(2, "sandbox escalation")])
+
     def test_flags_denylisted_terms_case_insensitively(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="content-test-"))
         (root / "a.md").write_text("fine\nAcme Widgets rule\n")

@@ -185,13 +185,11 @@ record, message, and lock file to `0600`, on every call.
 
 ## Host differences
 
-- **Codex CLI.** The mailbox root is outside the sandbox's writable roots, so
-  every channel Gear call runs with escalated sandbox permissions. The Codex
-  manifest and `agents/openai.yaml` describe the listening role and allow
-  implicit invocation.
+- **Codex CLI.** The Codex manifest and `agents/openai.yaml` describe the
+  listening role and allow implicit invocation.
 - **Claude Code.** `direct` runs `codex exec` read-only from an empty scratch
-  directory, with user config and rules ignored. It runs outside the Bash
-  sandbox, reads stdin from `/dev/null`, and discards stdout. Only the `-o`
+  directory, with user config and rules ignored. It reads stdin from
+  `/dev/null` and discards stdout. Only the `-o`
   final-message file is read. Because user config is ignored,
   `BOOTGEAR_ADVISOR_CODEX_MODEL` and `BOOTGEAR_ADVISOR_CODEX_EFFORT` set the
   model (`-m`) and reasoning effort (`-c model_reasoning_effort=...`); each

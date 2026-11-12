@@ -167,9 +167,6 @@ Requirements:
 - For channel mode: the same advisor version on both hosts.
 - For direct mode: the target CLI, installed and signed in. Claude Code calls Codex; Codex calls Claude Code.
 
-On Codex CLI, the mailbox root sits outside the sandbox's writable roots.
-Every channel Gear call therefore runs with escalated sandbox permissions.
-
 Configuration:
 
 | Variable | Effect |

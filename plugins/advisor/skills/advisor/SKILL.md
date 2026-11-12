@@ -74,8 +74,6 @@ Do what the `next` of the injected seat status says. With no status in context, 
 
 Read-only advisor for the paired session. Don't contact the peer except in response to a mailbox request. Never answer the human directly for a mailbox request.
 
-Run every channel Gear call with the host's escalation, if any (see "Host mechanics").
-
 #### 1. Register first, report immediately
 
 Register the listener seat with `references/channel.md` § mode=listening, report the channel number to the user, then start the heartbeat (see "Heartbeat").
@@ -179,8 +177,6 @@ Run channel commands as `<gear> --host <host> advisor channel <command> [argumen
 
 Channel commands read this session's id from the environment. If no session id is in the environment, stop and tell the user.
 Only `register`, `heartbeat`, `list` and `whoami` accept `--session`; the environment normally supplies it.
-
-Escalation (Codex CLI): every channel Gear call needs `sandbox_permissions: require_escalated` — `~/.bootgear/advisor` is outside the normal writable roots. Escalate on every call, not just the first.
 
 Background heartbeat:
 

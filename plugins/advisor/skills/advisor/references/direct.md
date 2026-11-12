@@ -6,7 +6,7 @@ Give the peer its role scope. For a review, forbid engine loops, other advisors,
 
 ## Claude Code calls Codex
 
-Set `dangerouslyDisableSandbox: true` on the Bash call. Run this example from the calling host:
+Run this example from the calling host:
 
 ```bash
 D=$(mktemp -d)
