@@ -1,9 +1,10 @@
 """Host-aware signer identity validation."""
 from __future__ import annotations
 
-import os
 import re
 import sys
+
+from bootgear_cli import clikit
 
 from .context import InvocationContext
 
@@ -16,7 +17,7 @@ def _fail(message: str) -> None:
 
 def validate_codex_session_id(value: str | None) -> str:
     if not isinstance(value, str) or not value:
-        _fail("Codex session_id is required")
+        _fail(clikit.missing_session("--session-id"))
     if value != value.strip():
         _fail("Codex session_id must not have surrounding whitespace")
     if any(ord(char) < 32 or ord(char) == 127 or char.isspace() for char in value):
@@ -41,17 +42,12 @@ def resolve_identity(context: InvocationContext | None = None,
         return explicit
     if context.host == "claude":
         session_id = context.session_id
-        if session_id is None:
-            session_id = (os.environ.get("BOOTGEAR_SESSION_ID")
-                          or os.environ.get("CLAUDE_CODE_SESSION_ID")
-                          or None)
         if not session_id:
-            sys.exit("no signer: CLAUDE_CODE_SESSION_ID unset — pass --as <id> to say "
-                     "which session ran the evidence")
+            sys.exit("no signer: " + clikit.missing_session("--session-id or --as <id>"))
         return session_id.split("-")[0]
     if context.session_id:
         return context.session_id
-    sys.exit("no signer: session identity unset — pass --as <id> or a host session id")
+    sys.exit("no signer: " + clikit.missing_session("--session-id or --as <id>"))
 
 
 def live_identity(context: InvocationContext | None = None) -> str | None:

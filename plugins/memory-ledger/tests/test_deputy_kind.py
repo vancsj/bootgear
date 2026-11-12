@@ -14,8 +14,9 @@ import unittest
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
-# `new` signs with this id when the host did not set one.
+# `new` signs with this Claude id when the host did not set one, also in a Codex shell.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-kind-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
 sys.path.insert(0, str(PLUGIN / "scripts"))
 
 from ledgerlib import constants

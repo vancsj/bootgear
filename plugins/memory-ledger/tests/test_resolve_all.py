@@ -13,8 +13,9 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 LEDGER = PLUGIN / "scripts" / "ledger.py"
-# `new` signs with this id when the host did not set one.
+# `new` signs with this Claude id when the host did not set one, also in a Codex shell.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "resolve-all-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
 QUESTION = "Should new scripts run with uv?"
 # Six entries that all share some terms with QUESTION, so all six clear the fuzzy floor.
 ENTRIES = [

@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bootgear_cli import clikit
+from gear_commands import HOST
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
@@ -38,7 +40,8 @@ class SessionIdentityTest(unittest.TestCase):
     def _env(self, **extra):
         env = {key: value for key, value in os.environ.items()
                if key not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "BOOTGEAR_SESSION_ID",
-                              "CLAUDE_CODE_SESSION_ID", "GEAR_CALLER_CWD", "VIRTUAL_ENV")}
+                              "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "GEAR_CALLER_CWD",
+                              "VIRTUAL_ENV")}
         env.update({"BOOTGEAR_OUTPUT": "prose", "HOME": str(self.home)})
         env.update(extra)
         return env
@@ -62,42 +65,61 @@ class SessionIdentityTest(unittest.TestCase):
     def test_explicit_positional_id_wins_over_both_environment_ids(self):
         self._init("explicit-id")
         self._init("shared-id")
-        self._init("legacy-id")
+        self._init("claude-id")
 
         result = self._read("explicit-id", "--dir", str(self.custom_dir),
                             BOOTGEAR_SESSION_ID="shared-id",
-                            CLAUDE_CODE_SESSION_ID="legacy-id")
+                            CLAUDE_CODE_SESSION_ID="claude-id")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("# session: explicit-id", result.stdout)
 
     def test_shared_environment_id_is_used_when_positional_id_is_omitted(self):
         self._init("shared-id")
-        self._init("legacy-id")
+        self._init("claude-id")
 
         result = self._read("--dir", str(self.custom_dir),
                             BOOTGEAR_SESSION_ID="shared-id",
-                            CLAUDE_CODE_SESSION_ID="legacy-id")
+                            CLAUDE_CODE_SESSION_ID="claude-id")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("# session: shared-id", result.stdout)
 
-    def test_claude_environment_id_is_used_when_shared_id_is_absent(self):
-        self._init("legacy-id")
+    def test_claude_session_variable_alone_gives_the_run_id(self):
+        self._init("claude-id")
 
         result = self._task("state", "current", "--dir", str(self.custom_dir), "--prose",
-                            CLAUDE_CODE_SESSION_ID="legacy-id")
+                            CLAUDE_CODE_SESSION_ID="claude-id")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("STATE    current: clarify", result.stdout)
 
-    def test_session_and_state_report_a_missing_run_id_without_either_environment_id(self):
+    def test_session_and_state_report_a_missing_run_id_without_any_environment_id(self):
         for args in (("session", "read", "--dir", str(self.custom_dir)),
                      ("state", "current", "--dir", str(self.custom_dir))):
             with self.subTest(args=args):
                 result = self._task(*args)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("missing run-id", result.stderr)
+                self.assertIn(clikit.missing_session("<run-id>"), result.stderr)
+
+    def test_codex_session_variable_alone_gives_the_run_id(self):
+        self._init("codex-id")
+
+        result = self._task("state", "current", "--dir", str(self.custom_dir), "--prose",
+                            CODEX_SESSION_ID="codex-id")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("STATE    current: clarify", result.stdout)
+
+    def test_declared_host_picks_its_session_variable(self):
+        self._init("claude-id")
+        self._init("codex-id")
+
+        result = self._read("--dir", str(self.custom_dir),
+                            CLAUDE_CODE_SESSION_ID="claude-id", CODEX_SESSION_ID="codex-id")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"# session: {HOST}-id", result.stdout)
 
     def test_explicit_positional_form_with_later_operands_still_works(self):
         self._init("positional-id")
@@ -167,6 +189,79 @@ class SessionIdentityTest(unittest.TestCase):
                         self.assertNotIn("--dir", command)
                     else:
                         self.assertIn(f"--dir {directory}", command)
+
+    def test_missing_operands_name_their_options(self):
+        self._init("operand-id")
+        for args, message in ((("session", "update-todo"), "missing text — pass --text <text>"),
+                              (("session", "record-pitch"), "missing text — pass --text <text>"),
+                              (("session", "close"), "missing outcome — pass --outcome succeeded|failed")):
+            with self.subTest(args=args):
+                result = self._task(*args, "--dir", str(self.custom_dir), "--prose",
+                                    CODEX_SESSION_ID="operand-id")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stderr.strip().splitlines()[-1], message)
+
+    def test_text_in_the_run_id_slot_names_the_text_option(self):
+        self._init("text-id")
+        for command in ("update-todo", "record-pitch"):
+            with self.subTest(command=command):
+                result = self._task("session", command, "my todo", "--dir", str(self.custom_dir),
+                                    "--prose", CODEX_SESSION_ID="text-id")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("invalid run-id 'my todo'", result.stderr)
+                self.assertIn("pass text with --text <text>", result.stderr)
+
+    def test_empty_positional_id_reads_the_environment_id(self):
+        self._init("environment-id")
+
+        result = self._read("", "--dir", str(self.custom_dir), CODEX_SESSION_ID="environment-id")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("# session: environment-id", result.stdout)
+
+    def test_word_in_the_run_id_slot_beside_the_environment_ledger_names_the_text_option(self):
+        self._init("word-id")
+        for command in ("update-todo", "record-pitch"):
+            with self.subTest(command=command):
+                result = self._task("session", command, "lint", "--dir", str(self.custom_dir),
+                                    "--prose", CODEX_SESSION_ID="word-id")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr.strip().splitlines()[-1].endswith(
+                    "lint.md — run `init` first; pass text with --text <text>"), result.stderr)
+
+    def test_unknown_run_id_without_an_environment_ledger_gives_no_text_hint(self):
+        result = self._task("session", "update-todo", "lint", "--dir", str(self.custom_dir),
+                            "--prose", CODEX_SESSION_ID="absent-id")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(result.stderr.strip().splitlines()[-1].endswith(
+            "lint.md — run `init` first"), result.stderr)
+
+    def test_positional_text_help_says_it_needs_an_explicit_run_id(self):
+        for command in ("update-todo", "record-pitch"):
+            with self.subTest(command=command):
+                result = self._task("session", command, "--help")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                usage = " ".join(result.stdout.split())
+                self.assertEqual(usage.count("only after an explicit run_id; otherwise use --text"), 1,
+                                 usage)
+
+    def test_next_commands_omit_the_environment_run_id(self):
+        for default_dir in (True, False):
+            with self.subTest(default_dir=default_dir):
+                run_id = f"env-{default_dir}"
+                directory = self._init(run_id, default_dir=default_dir)
+                dir_args = [] if default_dir else ["--dir", str(directory)]
+                moved = self._task("state", "transition", *dir_args, "--to", "succeeded",
+                                   "--reason", "done", "--prose", CODEX_SESSION_ID=run_id)
+                self.assertEqual(moved.returncode, 0, moved.stderr)
+                state_next = moved.stdout.strip().splitlines()[-1]
+                dir_part = "" if default_dir else f" --dir {directory}"
+                self.assertTrue(state_next.endswith(f" session close{dir_part} --outcome succeeded"),
+                                state_next)
+
+                closed = self._task("session", "close", *state_next.split(" session close", 1)[1].split(),
+                                    "--prose", CODEX_SESSION_ID=run_id)
+                self.assertEqual(closed.returncode, 0, closed.stderr)
 
 
 if __name__ == "__main__":

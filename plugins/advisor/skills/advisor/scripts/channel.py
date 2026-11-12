@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 from typing import NoReturn
 
+from bootgear_cli import clikit
 from bootgear_cli.clikit import current_program
 
 DEFAULT_ROOT = Path.home() / ".bootgear" / "advisor"
@@ -40,17 +41,17 @@ HOOK_NUDGE_INTERVAL_SECONDS = 60
 COMMANDS = ("register", "init", "send", "receive", "fetch", "state", "close", "heartbeat", "list", "status",
             "whoami")
 EXAMPLES = {
-    "register": 'register --role asker --channel 0001 --session "$SESSION_ID"',
+    "register": "register --role asker --channel 0001",
     "init": "init --channel 0001",
     "send": "send --channel 0001 --from asker --to listener --kind request --body-file -",
     "receive": "receive --channel 0001 --for asker --timeout 300",
     "fetch": "fetch --channel 0001 --message-id MESSAGE_ID",
     "state": "state --channel 0001 --role listener --value waiting",
     "close": "close --channel 0001 --role listener",
-    "heartbeat": 'heartbeat --channel 0001 --role listener --session "$SESSION_ID"',
-    "list": 'list --live-for asker --session "$SESSION_ID"',
+    "heartbeat": "heartbeat --channel 0001 --role listener",
+    "list": "list --live-for asker",
     "status": "status --channel 0001",
-    "whoami": 'whoami --session "$SESSION_ID"',
+    "whoami": "whoami",
 }
 
 
@@ -139,18 +140,27 @@ def invocation(root_value: str | None) -> str:
     return command
 
 
+CORRECTED_ARGUMENTS = "run the command again with corrected arguments, as in example"
+MISSING_SESSION_NEXT = "stop and tell the user that this session has no session id in the environment"
+
+
 def refuse_command(command: str | None, root_value: str | None, message: str,
-                   category: str = "invalid_args") -> NoReturn:
+                   category: str = "invalid_args", next_step: str = CORRECTED_ARGUMENTS) -> NoReturn:
     """An argument refusal of `command`, with one correct invocation and the other subcommands."""
-    fail(message, category=category, next_step="run the command again with corrected arguments, as in example",
+    fail(message, category=category, next_step=next_step,
          extra={
              "example": f"{invocation(root_value)} {EXAMPLES[command or 'list']}",
              "commands": ", ".join(c for c in COMMANDS if c != command),
          })
 
 
-def refuse(args: argparse.Namespace, message: str, category: str = "invalid_args") -> NoReturn:
-    refuse_command(args.command, args.root, message, category)
+def refuse(args: argparse.Namespace, message: str, category: str = "invalid_args",
+           next_step: str = CORRECTED_ARGUMENTS) -> NoReturn:
+    refuse_command(args.command, args.root, message, category, next_step)
+
+
+def refuse_missing_session(args: argparse.Namespace) -> NoReturn:
+    refuse(args, clikit.missing_session("--session"), next_step=MISSING_SESSION_NEXT)
 
 
 def argv_command(argv: list[str]) -> tuple[str | None, str | None]:
@@ -195,21 +205,20 @@ def check_session(args: argparse.Namespace) -> None:
         refuse(args, f"invalid --session {args.session!r}: must be non-empty and not start with '-'")
 
 
-def default_session_id() -> str | None:
-    """The host session ID used when a command does not pass `--session`."""
-    return (os.environ.get("BOOTGEAR_SESSION_ID")
-            or os.environ.get("CLAUDE_CODE_SESSION_ID")
-            or None)
-
-
 def add_session(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
-    default = default_session_id()
-    parser.add_argument(
-        "--session",
-        default=default,
-        required=required and default is None,
-        help="this session's id (default: BOOTGEAR_SESSION_ID, then CLAUDE_CODE_SESSION_ID)",
-    )
+    """`--session`; with `required`, a call with no flag and no environment session refuses."""
+    parser.add_argument("--session", default=None,
+                        help="this session's id; the environment normally supplies it")
+    parser.set_defaults(session_required=required)
+
+
+def resolve_session(args: argparse.Namespace) -> None:
+    """Fill `args.session` from the environment; refuse when a command needs it and none is set."""
+    if not hasattr(args, "session"):
+        return
+    args.session = clikit.session_id(args.session)
+    if args.session is None and args.session_required:
+        refuse_missing_session(args)
 
 
 def check_role(args: argparse.Namespace, value: str, flag: str) -> None:
@@ -345,10 +354,16 @@ def heartbeat_reminder(args: argparse.Namespace, root: Path, record: dict[str, o
             f"{heartbeat_command(seat, root, args.channel)}")
 
 
+def session_flag(session: str) -> str:
+    """` --session <id>` when `session` differs from the environment session, else empty."""
+    return "" if session == clikit.session_id() else f" --session {shlex.quote(session)}"
+
+
 def heartbeat_command(args: argparse.Namespace, root: Path, channel: str) -> str:
-    """The `heartbeat` invocation for this seat, with `--interval`/`--max-age` when not the default."""
+    """The `heartbeat` invocation for this seat, with `--session`, `--interval` and `--max-age` only
+    when they differ from the environment session or the default."""
     command = (f"{script_command(args, root)} heartbeat --channel {channel} "
-               f"--role {args.role} --session {shlex.quote(args.session)}")
+               f"--role {args.role}{session_flag(args.session)}")
     interval = getattr(args, "interval", HEARTBEAT_INTERVAL_SECONDS)
     max_age = getattr(args, "max_age", HEARTBEAT_MAX_AGE_SECONDS)
     if interval != HEARTBEAT_INTERVAL_SECONDS:
@@ -1033,7 +1048,7 @@ def list_channels(args: argparse.Namespace) -> None:
     if args.live_for and args.live_for not in ROLES:
         refuse(args, "--live-for must be listener or asker", category="invalid_role")
     if args.live_for and not args.session:
-        refuse(args, "--live-for requires --session")
+        refuse_missing_session(args)
     if args.wait is not None and not (math.isfinite(args.wait) and args.wait >= 0):
         refuse(args, "--wait must be a finite number of seconds, 0 or more")
     root = root_from(args)
@@ -1046,7 +1061,7 @@ def list_channels(args: argparse.Namespace) -> None:
     peer = other_role(role)
     script = script_command(args, root)
     session_id = str(args.session)
-    session = shlex.quote(session_id)
+    session_arg = session_flag(session_id)
 
     deadline = time.monotonic() + (args.wait or 0)
     while not (candidates := live_candidates(root, role, session_id)) and args.wait is not None:
@@ -1062,14 +1077,14 @@ def list_channels(args: argparse.Namespace) -> None:
     if candidates:
         emit(args, {
             "channels": candidates,
-            "next": f"{script} register --role {role} --channel {candidates[0]['channel']} --session {session}",
+            "next": f"{script} register --role {role} --channel {candidates[0]['channel']}{session_arg}",
         })
         return
     emit(args, {
         "channels": [],
         "note": f"no live {peer} found",
         "next": (f"only if you started the {peer} yourself or the user said one is starting, run "
-                 f"`{script} list --live-for {role} --session {session} --wait 120`; "
+                 f"`{script} list --live-for {role}{session_arg} --wait 120`; "
                  f"otherwise tell the user to start a {peer} and stop"),
     })
 
@@ -1176,6 +1191,7 @@ def build_parser() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     arguments = build_parser().parse_args()
     check_channel(arguments)
+    resolve_session(arguments)
     try:
         arguments.handler(arguments)
     except SystemExit:

@@ -30,13 +30,14 @@ import channel as channel_module  # pyright: ignore[reportMissingImports]
 GEAR_PREFIX = shlex.split(channel_module.current_program("advisor", "channel"))
 
 
-SESSION_ENV = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+SESSION_ENV = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID")
 
 
-def run(root: Path, *args: str, timeout: float | None = None, output: str = "--json"
-        ) -> subprocess.CompletedProcess:
-    """Run `channel.py` with no session variables from the caller's shell; tests pass `--session` when they need one."""
-    env = {k: v for k, v in os.environ.items() if k not in SESSION_ENV}
+def run(root: Path, *args: str, timeout: float | None = None, output: str = "--json",
+        env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run `channel.py` with no session variables from the caller's shell, then `env`; tests pass
+    `--session` or a session variable in `env` when they need one."""
+    env = {**{k: v for k, v in os.environ.items() if k not in SESSION_ENV}, **(env or {})}
     return subprocess.run(
         [sys.executable, str(CHANNEL), "--root", str(root), *args, *([output] if output else [])],
         capture_output=True,
@@ -1192,7 +1193,10 @@ class ArgumentRefusalTests(unittest.TestCase):
                 self.assertEqual(parser.parse_args(example[len(GEAR_PREFIX):]).command, command)
                 self.assertEqual(payload["commands"].split(", "),
                                  [c for c in channel_module.COMMANDS if c != command])
-                self.assertIn("example", payload["next"])
+                if payload["error"] == channel_module.clikit.missing_session("--session"):
+                    self.assertEqual(payload["next"], channel_module.MISSING_SESSION_NEXT)
+                else:
+                    self.assertIn("example", payload["next"])
 
     def test_malformed_channel_writes_nothing(self) -> None:
         run(self.root, "register", "--role", "listener", "--session", "s1")
@@ -1224,8 +1228,9 @@ class ArgumentRefusalTests(unittest.TestCase):
                 refused = channel("list", "--wait", "3")
                 self.assertEqual(refused.returncode, 2)
                 example = json.loads(refused.stderr)["example"]
+                caller_env = {k: v for k, v in base.items() if k not in SESSION_ENV}
                 ran = subprocess.run(["bash", "-c", example], capture_output=True, text=True, check=False,
-                                     env={**base, "SESSION_ID": "c1"}, cwd=elsewhere, timeout=10)
+                                     env={**caller_env, "CODEX_SESSION_ID": "c1"}, cwd=elsewhere, timeout=10)
                 self.assertEqual(ran.returncode, 0, ran.stderr)
                 self.assertEqual([c["channel"] for c in json.loads(ran.stdout)["channels"]], ["0001"])
 
@@ -2025,13 +2030,15 @@ class ListenerLoopTests(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
         run(self.root, "register", "--role", "listener", "--session", "s1")
         skill = (CHANNEL.parent.parent / "SKILL.md").read_text()
-        loop = skill[skill.index("while :; do"):skill.index("done\n") + len("done\n")]
+        loop = skill[skill.index("CHANNEL=<channel>\n"):skill.index("done\n") + len("done\n")]
         self.loop_template = (loop.replace("<mine>", "listener").replace("<peer>", "asker")
                               .replace("<message_id>", "none").replace("--timeout 300", "--timeout 0.1"))
 
     def start_loop(self, gear: Path = GEAR) -> subprocess.Popen[str]:
-        loop = self.loop_template.replace("<gear>", shlex.quote(str(gear))).replace("<host>", "claude")
-        env = {**os.environ, "BOOTGEAR_ADVISOR_DIR": str(self.root), "CHANNEL": "0001"}
+        loop = (self.loop_template.replace("<gear>", shlex.quote(str(gear))).replace("<host>", "claude")
+                .replace("<channel>", "0001"))
+        env = {name: value for name, value in os.environ.items() if name != "CHANNEL"}
+        env["BOOTGEAR_ADVISOR_DIR"] = str(self.root)
         process = subprocess.Popen(["bash", "-c", loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, env=env, start_new_session=True)
 
@@ -2395,9 +2402,16 @@ class WhoamiTests(unittest.TestCase):
         })
 
     def test_example_runs(self) -> None:
-        example = shlex.split(channel_module.EXAMPLES["whoami"].replace('"$SESSION_ID"', "s1"))
-        result = run(self.root, *example, timeout=5)
+        example = shlex.split(channel_module.EXAMPLES["whoami"])
+        result = run(self.root, *example, timeout=5, env={"CODEX_SESSION_ID": "s1"})
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c["channel"] for c in json.loads(result.stdout)["channels"]], ["0001"])
+
+    def test_session_examples_print_no_session_flag(self) -> None:
+        for command in ("register", "heartbeat", "list", "whoami"):
+            with self.subTest(command=command):
+                self.assertNotIn("--session", channel_module.EXAMPLES[command])
+                self.assertNotIn("$", channel_module.EXAMPLES[command])
 
 
 class HookTouchTests(unittest.TestCase):

@@ -14,6 +14,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# `new` signs with this Claude id when the host did not set one, also in a Codex shell.
+# Set before any printed command is built: the host adds `--host claude` to it.
+os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "rules-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
+
 from bootgear_cli.clikit import gear_command
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -46,9 +51,6 @@ LOCAL_HEADINGS = (
 sys.path.insert(0, str(SCRIPTS))
 import ledger as ledger_cli
 from bootgear_cli import clikit
-
-# `new` signs with this id when the host did not set one.
-os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "rules-test-session")
 
 
 def _git_repo(path: Path) -> None:

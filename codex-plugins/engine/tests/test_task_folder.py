@@ -37,7 +37,7 @@ class TaskFolderTest(unittest.TestCase):
         self.ledger = self.sessions / "bound.md"
         self.env = {k: v for k, v in os.environ.items()
                     if k not in {"GEAR_CALLER_CWD", "PLUGIN_ROOT", "BOOTGEAR_SESSION_ID",
-                                 "CLAUDE_CODE_SESSION_ID", "VIRTUAL_ENV"}}
+                                 "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "VIRTUAL_ENV"}}
 
     def command(self, *args):
         return subprocess.run([*TASK_COMMAND, *args, "--dir", str(self.sessions), "--prose"],

@@ -76,11 +76,15 @@ and exit status; prompts, tool inputs, transcripts, and paths are excluded.
 
 | Host | Hook root | Native hook command | Gear command |
 |---|---|---|---|
-| Claude | `${CLAUDE_PLUGIN_ROOT}` | `hooks/gear --host claude context-hook` | `<gear> --host claude engine context-hook` |
-| Codex | `${PLUGIN_ROOT}` | `hooks/gear --host codex context-hook` | `<gear> --host codex engine context-hook` |
+| Claude | `${CLAUDE_PLUGIN_ROOT}` | `hooks/gear --host claude <command>` | `<gear> --host claude <plugin> <command>` |
+| Codex | `${PLUGIN_ROOT}` | `hooks/gear --host codex <command>` | `<gear> --host codex <plugin> <command>` |
 
 Hook manifests invoke each plugin's `hooks/gear` loader. The loader derives the
 provider name from its own `gear.toml` and forwards the event through Gear.
+
+No hook injects the session identity into a Bash command. Gear CLIs read it from
+`BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` for
+the declared host, then the other one. An explicit argument wins.
 
 ## Verification
 

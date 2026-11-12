@@ -11,7 +11,6 @@ with when the thing it checked is wrong.
 """
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
@@ -85,10 +84,10 @@ def cmd_doctor(args, root=None):
     else:
         states.append(_row(FAIL, "git", "not on PATH — `save` cannot commit anything", machine_rows))
 
-    sid = context.session_id or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    sid = context.session_id or ""
     states.append(_row(OK if sid else WARN, "session id",
                        f"{context.host} session_id={sid}" if sid else
-                       "session identity unset — `sign` will refuse without --as", machine_rows))
+                       "session identity unset — `sign` will refuse; pass --session-id or --as <id>", machine_rows))
 
     cfg_path = next((c for c in config_candidates(context) if c.is_file()), None)
     mem = load_config(context).get("memory") or {}

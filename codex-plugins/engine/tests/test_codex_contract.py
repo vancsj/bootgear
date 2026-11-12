@@ -93,10 +93,7 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertNotIn("hooks", manifest)
 
         hooks = json.loads(HOOKS.read_text())["hooks"]
-        self.assertIn(
-            '"${PLUGIN_ROOT}/hooks/gear" --host codex context-hook',
-            hooks["PreToolUse"][0]["hooks"][0]["command"],
-        )
+        self.assertNotIn("PreToolUse", hooks)
         session_start = hooks["SessionStart"][0]
         self.assertEqual(session_start["matcher"], "^(startup|resume|compact)$")
         self.assertIn('"${PLUGIN_ROOT}/hooks/gear" --host codex adapter',
@@ -222,7 +219,7 @@ class CodexPackageContractTest(unittest.TestCase):
             refused.stderr)
         self.assertIn("error:", refused.stderr.splitlines()[-1])
         self.assertIn(
-            f"\n  {TASK_DISPLAY} session recall <run-id> --dir <session-dir>\n",
+            f"\n  {TASK_DISPLAY} session recall --dir <session-dir>\n",
             refused.stderr,
         )
 

@@ -2,8 +2,8 @@
 """Expose the Codex session identity and nudge toward `recall` after compaction.
 
 Codex supplies the current session identity to every command hook on stdin.
-This hook always prints that identity so `clarify` can use it as the ledger
-run-id instead of inventing one.
+This hook always prints that identity. It is the engine run id, and engine
+commands read it from the session environment.
 
 The recall nudge and the goal are added only when the session has an active
 engine ledger: `~/.bootgear/session/<session_id>.md` exists, is readable and
@@ -32,7 +32,7 @@ from bootgear_cli.clikit import gear_command
 
 NUDGE_MESSAGE = (
     "This session just compacted. If an engine run is active, run "
-    f"`{gear_command('engine', 'task')} session recall <run-id> --dir "
+    f"`{gear_command('engine', 'task')} session recall --dir "
     "<session-dir>` outside the sandbox with host-level access before "
     "anything else — re-read the session ledger's settlement from disk "
     "rather than trusting whatever this compaction summarized."
@@ -125,8 +125,8 @@ def main() -> None:
     run_id = hook_input.get("session_id")
     if isinstance(run_id, str) and run_id:
         identity = (
-            f"Codex session_id: `{run_id}`. Use this exact value as the engine "
-            "run-id; do not generate a UUID or other replacement."
+            f"Codex session_id: `{run_id}`. It is the engine run id. Engine commands "
+            "read it from the session environment; omit <run-id> and never generate a replacement."
         )
     else:
         identity = SESSION_ID_MISSING_MESSAGE

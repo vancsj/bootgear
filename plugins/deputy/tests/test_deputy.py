@@ -19,11 +19,14 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1]
 REPO = PLUGIN.parents[1]
 sys.path.insert(0, str(PLUGIN / "scripts"))
-# Subprocess ledger calls sign with this id when the host did not set one.
+# Subprocess ledger calls sign with this Claude id when the host did not set one, also in a Codex shell.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
 
 import deputy
+from bootgear_cli import clikit
 
+SESSION_VARIABLES = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID")
 QUESTION = "Should new scripts run with uv?"
 CLAIM = "Scripts run with uv run --script"
 WHY = "uv pins dependencies per script"
@@ -266,6 +269,66 @@ class DeputyTest(unittest.TestCase):
             self.assertEqual(self.record_as(session_id)[0], 0)
         _, listing, _ = self.run_deputy("candidates", QUESTION)
         self.assertIn("[well-confirmed]", listing)
+
+    def record_in_environment(self, env: dict[str, str], *extra: str) -> tuple[int, str, str, list]:
+        """Record with only `env` as the session context; return the ledger calls too."""
+        session = self.base / "session.md"
+        session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
+        with unittest.mock.patch.dict(os.environ), \
+                unittest.mock.patch.object(deputy, "ledger", side_effect=deputy.ledger) as spy:
+            for name in ("BOOTGEAR_HOST", *SESSION_VARIABLES):
+                os.environ.pop(name, None)
+            os.environ.update(env)
+            code, out, err = self.run_deputy(
+                "record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
+                "--options", "uv or pip", "--stakes", "low", "--session-ledger", str(session),
+                *extra)
+        return code, out, err, spy.call_args_list
+
+    def test_codex_record_reads_codex_session_id(self) -> None:
+        code, _, err, calls = self.record_in_environment({"CODEX_SESSION_ID": "codex-env"},
+                                                         "--host", "codex")
+        self.assertEqual(code, 0, err)
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertEqual(call.kwargs["signer"], ("--host", "codex", "--session-id", "codex-env"))
+
+    def test_codex_record_without_session_names_the_override(self) -> None:
+        code, _, err, calls = self.record_in_environment({}, "--host", "codex")
+        self.assertEqual(code, 2)
+        self.assertEqual(err.strip(), "REFUSED " + clikit.missing_session("--session-id"))
+        self.assertEqual(calls, [])
+
+    def test_declared_host_picks_its_session_variable(self) -> None:
+        for host in ("codex", "claude"):
+            with self.subTest(host=host):
+                code, _, err, calls = self.record_in_environment(
+                    {"BOOTGEAR_HOST": host, "CLAUDE_CODE_SESSION_ID": "claude-env",
+                     "CODEX_SESSION_ID": "codex-env"})
+                self.assertEqual(code, 0, err)
+                self.assertTrue(calls)
+                for call in calls:
+                    self.assertEqual(call.kwargs["signer"],
+                                     ("--host", host, "--session-id", f"{host}-env"))
+
+    def test_explicit_host_picks_its_session_variable(self) -> None:
+        both = {"CLAUDE_CODE_SESSION_ID": "claude-env", "CODEX_SESSION_ID": "codex-env"}
+        for host, ancestor in (("codex", "claude"), ("claude", "codex")):
+            with self.subTest(host=host), unittest.mock.patch.object(
+                    clikit, "_ancestor_host", return_value=ancestor):
+                code, _, err, calls = self.record_in_environment(both, "--host", host)
+                self.assertEqual(code, 0, err)
+                self.assertTrue(calls)
+                for call in calls:
+                    self.assertEqual(call.kwargs["signer"],
+                                     ("--host", host, "--session-id", f"{host}-env"))
+
+    def test_record_infers_codex_from_the_environment(self) -> None:
+        code, _, err, calls = self.record_in_environment({"CODEX_SESSION_ID": "codex-env"})
+        self.assertEqual(code, 0, err)
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertEqual(call.kwargs["signer"], ("--host", "codex", "--session-id", "codex-env"))
 
 
 class StandardsTest(unittest.TestCase):

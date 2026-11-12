@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", choices=("standalone", "claude", "codex", "gear"),
                    help="host adapter supplying context and signer identity")
     p.add_argument("--session-id", dest="session_id", metavar="ID",
-                   help="exact host session identity used for signing")
+                   help="the host session id; the environment normally supplies it")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def only_arg(p_):
@@ -142,8 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def signer_arg(p_):
         p_.add_argument("--as", dest="as_", metavar="ID",
-                        help="signer id (default: this session, from BOOTGEAR_SESSION_ID, "
-                             "then CLAUDE_CODE_SESSION_ID)")
+                        help="signer id (default: this session, from the environment)")
 
     def authoring_args(p_):
         p_.add_argument("--ref", help="code ref this claim is about; omit for claims that are "
@@ -226,8 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--output", help="the failing output to record in the debate file")
     only_arg(s)
     s.add_argument("--as", dest="as_", metavar="ID",
-                   help="signer id (default: this session, from BOOTGEAR_SESSION_ID, "
-                        "then CLAUDE_CODE_SESSION_ID)")
+                   help="signer id (default: this session, from the environment)")
 
     li = sub.add_parser("lint", help="recompute conf, report drift/voids/orphans")
     li.add_argument("--fix", action="store_true")

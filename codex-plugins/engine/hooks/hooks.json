@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex context-hook",
-            "statusMessage": "Checking Gear command"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

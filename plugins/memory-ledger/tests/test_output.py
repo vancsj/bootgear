@@ -18,6 +18,11 @@ PLUGIN = Path(__file__).resolve().parents[1]
 SCRIPTS = PLUGIN / "scripts"
 LEDGER = SCRIPTS / "ledger.py"
 
+# `new` signs with this Claude id when the host did not set one, also in a Codex shell.
+# Set before `PROGRAM` is built: the host adds `--host claude` to it.
+os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "output-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
+
 sys.path.insert(0, str(SCRIPTS))
 import ledger as ledger_cli
 from bootgear_cli import clikit

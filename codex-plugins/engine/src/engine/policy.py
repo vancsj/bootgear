@@ -54,7 +54,7 @@ _SESSION_NUDGE: Final = (
 )
 _CODEX_SESSION_NUDGE: Final = (
     "This session just compacted. If an engine run is active, run "
-    f"{gear_command('engine', 'task')} session recall <run-id> --dir "
+    f"{gear_command('engine', 'task')} session recall --dir "
     "<session-dir> outside the sandbox with host-level access before "
     "anything else — re-read the session ledger's settlement from disk "
     "rather than trusting whatever this compaction summarized."
@@ -294,8 +294,8 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
     active = _active_ledger(context)
     if context.host == "codex":
         identity = (
-            f"Codex session_id: {event.session_id}. Use this exact value as the engine "
-            "run-id; do not generate a UUID or other replacement."
+            f"Codex session_id: {event.session_id}. It is the engine run id. Engine commands "
+            "read it from the session environment; omit <run-id> and never generate a replacement."
             if isinstance(event.session_id, str) and event.session_id
             else _CODEX_SESSION_ID_MISSING
         )

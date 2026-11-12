@@ -30,11 +30,11 @@ from bootgear_cli.gear import resolve_command
 
 from engine.session import (
     MACHINES_SECTION,
+    RUN_ID_HELP,
     _append_to_section,
     _check_open,
-    _command,
     _heading_re,
-    _ledger_args,
+    _ledger_command,
     _ledger_path,
     _machines_heading,
     _now,
@@ -422,10 +422,10 @@ def try_current_node_view(text: str, path: Path) -> tuple[dict | None, str | Non
 
 
 def _close_command(run_id: str, path: Path, dest: str) -> str:
-    close = f"session close {_ledger_args(run_id, path)} {dest}"
+    close = _ledger_command("session close", run_id, path, f"--outcome {dest}")
     if dest == "failed":
         close += ' --reason "<why the goal is undoable>"'
-    return _command(close)
+    return close
 
 
 def current_node_report(view: dict, run_id: str, path: Path) -> tuple[list[str], dict, str | None]:
@@ -989,7 +989,7 @@ def cmd_amend(args: argparse.Namespace) -> None:
     if problems:
         refuse(f"amend refused for {path}: {len(problems)} problem(s) — fix each and "
                f"rerun; the machine in force to edit is printed by "
-               + _command(f"state show {_ledger_args(args.run_id, path)}"), problems)
+               + _ledger_command("state show", args.run_id, path), problems)
     assert new_machine is not None
 
     new_nodes = new_machine["nodes"]
@@ -1045,7 +1045,7 @@ def cmd_diagram(args: argparse.Namespace) -> None:
 def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.ArgumentParser) -> None:
     s = sub.add_parser("transition", parents=[dir_parent],
                         help="move the run to a new state machine node")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--to", required=True, metavar="NODE",
                    help="the destination node — must be in the current "
                         "node's `next:` list, or 'failed'")
@@ -1063,13 +1063,13 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("current", parents=[dir_parent],
                         help="print the run's current node and its full reminder")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.set_defaults(func=_run_id_command(cmd_current))
 
     s = sub.add_parser("amend", parents=[dir_parent],
                         help="replace the run's machine mid-run with a valid one "
                              "that keeps the current node")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--machine-file", required=True, type=caller_path,
                    help="the full new machine YAML — start from `state show`")
     s.add_argument("--reason", required=True,
@@ -1078,7 +1078,7 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("show", parents=[dir_parent],
                         help="print the run's machine in force and its version")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.set_defaults(func=_run_id_command(cmd_show))
 
     s = sub.add_parser("validate", help="check a state machine YAML file's structure")

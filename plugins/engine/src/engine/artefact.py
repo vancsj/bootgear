@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any, TypeGuard
 
 import yaml
+from bootgear_cli import clikit
 from bootgear_cli.clikit import caller_cwd, caller_path, emit, refuse
 from bootgear_cli.gear import resolve_command
 
@@ -476,9 +476,9 @@ def cmd_settings(args):
 
 
 def cmd_prepare(args):
-    run_id = args.run_id or os.environ.get('BOOTGEAR_SESSION_ID')
+    run_id = clikit.session_id(args.run_id or None)
     if not text(run_id):
-        refuse('prepare requires run ID or BOOTGEAR_SESSION_ID')
+        refuse(clikit.missing_session('<run-id>'))
     ledger = session._ledger_path(run_id,args.dir)
     raw = ledger.read_text()
     session._check_open(raw,ledger)
@@ -622,7 +622,7 @@ def add_subparsers(sub, dir_parent):
     parser.add_argument('--task-folder',type=caller_path,help='read the prepared configuration snapshot')
     parser.set_defaults(func=cmd_settings)
     parser = sub.add_parser('prepare',parents=[dir_parent],help='bind a review to its run and input revision')
-    parser.add_argument('run_id',nargs='?')
+    parser.add_argument('run_id',nargs='?',help=session.RUN_ID_HELP)
     parser.add_argument('--task-folder',type=caller_path)
     parser.add_argument('--refresh',action='store_true')
     parser.add_argument('--reason')

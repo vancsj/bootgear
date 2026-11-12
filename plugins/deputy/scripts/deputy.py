@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from bootgear_cli import clikit
 from bootgear_cli.clikit import caller_path, current_program
 from bootgear_cli.gear import resolve_command
 
@@ -115,13 +116,9 @@ def refuse_remote(deputy_root: Path) -> str | None:
     return None
 
 
-def session_id_from_environment(explicit: str | None) -> str | None:
-    """Resolve a signer session from the CLI option and shared host variables."""
-    if explicit is not None:
-        return explicit
-    return (os.environ.get("BOOTGEAR_SESSION_ID")
-            or os.environ.get("CLAUDE_CODE_SESSION_ID")
-            or None)
+def session_id_from_environment(explicit: str | None, host: str | None = None) -> str | None:
+    """The CLI option, else the `clikit.session_id` environment order."""
+    return clikit.session_id(explicit, host=host)
 
 
 def record(deputy_root: Path, question: str, claim: str, because: str, options: str,
@@ -129,9 +126,9 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     if problems := entry_problems(question, claim, because):
         print("REFUSED " + "; ".join(problems), file=sys.stderr)
         return 2
-    session_id = session_id_from_environment(session_id)
+    session_id = session_id_from_environment(session_id, host)
     if host == "codex" and not session_id:
-        print("REFUSED codex needs --session-id", file=sys.stderr)
+        print("REFUSED " + clikit.missing_session("--session-id"), file=sys.stderr)
         return 2
     # On Codex the global options set the signer of every ledger call; `new` also takes `--as`.
     signer = ("--host", host)
@@ -233,10 +230,9 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--session-ledger", dest="session_ledger", required=True, metavar="PATH",
                     help="the session ledger file that must contain the answer text")
     rc.add_argument("--host", choices=("claude", "codex"),
-                    default=os.environ.get("BOOTGEAR_HOST", "claude"),
                     help="the host that signs the ledger calls")
     rc.add_argument("--session-id", dest="session_id", metavar="ID",
-                    help="the host session id; required with --host codex")
+                    help="the host session id; the environment normally supplies it")
     a = sub.add_parser("assert", help="pin an answer at 1.00 on a user's ruling")
     a.add_argument("slug")
     a.add_argument("answer")
@@ -253,8 +249,8 @@ def main(argv: list[str] | None = None) -> int:
             return candidates(root, args.question, args.limit)
         if args.cmd == "record":
             return record(root, args.question, args.claim, args.because, args.options,
-                          args.stakes, caller_path(args.session_ledger), args.host,
-                          args.session_id)
+                          args.stakes, caller_path(args.session_ledger),
+                          clikit.host(args.host) or "claude", args.session_id)
         return assert_(root, args.slug, args.answer, args.why, args.confirmed)
     except LedgerMissing:
         if args.cmd == "candidates":

@@ -440,7 +440,7 @@ class WriteTicketTest(LedgerCase):
                             "--prose")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertTrue(result.stderr.splitlines()[0].endswith(
-            "session write-ticket <run-id> --dir <session-dir> --body-file <file>"),
+            "session write-ticket --dir <session-dir> --body-file <file>"),
             result.stderr)
         self.assertIn("--body-file", self._last_line(result.stderr))
 

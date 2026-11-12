@@ -21,29 +21,29 @@ from engine import artefact, config, session, state
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
     "artefact settings": "artefact settings --project-root <dir>",
-    "artefact prepare": "artefact prepare <run-id> --dir <session-dir>",
+    "artefact prepare": "artefact prepare --dir <session-dir>",
     "artefact record": "artefact record --task-folder <folder> --stage inspect --record-file <file>",
     "artefact gate": "artefact gate --task-folder <folder> --stage inspect",
     "artefact report": "artefact report --task-folder <folder>",
-    "session init": "session init <run-id> --settlement-file <file>",
-    "session validate": "session validate <run-id> --dir <session-dir>",
-    "session read": "session read <run-id> --dir <session-dir> --section state",
-    "session record-decision": ('session record-decision <run-id> --dir <session-dir> '
+    "session init": "session init --settlement-file <file>",
+    "session validate": "session validate --dir <session-dir>",
+    "session read": "session read --dir <session-dir> --section state",
+    "session record-decision": ('session record-decision --dir <session-dir> '
                                 '--mode solo --summary "<decision>"'),
-    "session update-todo": ('session update-todo <run-id> --dir <session-dir> '
-                            '"<todo text>" --done'),
-    "session next-question-id": "session next-question-id <run-id> --dir <session-dir>",
-    "session record-pitch": ('session record-pitch <run-id> --dir <session-dir> '
-                             '"<what changed>"'),
-    "session close": "session close <run-id> --dir <session-dir> succeeded",
-    "session write-ticket": ("session write-ticket <run-id> --dir <session-dir> "
+    "session update-todo": ('session update-todo --dir <session-dir> '
+                            '--text "<todo text>" --done'),
+    "session next-question-id": "session next-question-id --dir <session-dir>",
+    "session record-pitch": ('session record-pitch --dir <session-dir> '
+                             '--text "<what changed>"'),
+    "session close": "session close --dir <session-dir> --outcome succeeded",
+    "session write-ticket": ("session write-ticket --dir <session-dir> "
                              "--body-file <file>"),
-    "state transition": ('state transition <run-id> --dir <session-dir> --to <node> '
+    "state transition": ('state transition --dir <session-dir> --to <node> '
                          '--reason "<why>"'),
-    "state amend": ('state amend <run-id> --dir <session-dir> --machine-file '
+    "state amend": ('state amend --dir <session-dir> --machine-file '
                     '<machine.yaml> --reason "<why>"'),
-    "state current": "state current <run-id> --dir <session-dir>",
-    "state show": "state show <run-id> --dir <session-dir>",
+    "state current": "state current --dir <session-dir>",
+    "state show": "state show --dir <session-dir>",
     "state validate": "state validate <machine.yaml>",
     "state diagram": "state diagram <machine.yaml>",
     "config resolve": "config resolve --name <name> --project-root <dir>",

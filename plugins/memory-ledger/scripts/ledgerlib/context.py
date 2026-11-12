@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from bootgear_cli import clikit
+
 
 @dataclass(frozen=True)
 class InvocationContext:
@@ -24,16 +26,9 @@ class InvocationContext:
         caller = (os.environ.get("MEMORY_LEDGER_CWD")
                   or os.environ.get("GEAR_CALLER_CWD")
                   or str(Path.cwd()))
-        resolved_host = host or os.environ.get("BOOTGEAR_HOST")
-        if resolved_host is None:
-            resolved_host = "claude" if os.environ.get("CLAUDE_CODE_SESSION_ID") else "standalone"
-        if session_id is not None:
-            resolved_session = session_id
-        else:
-            resolved_session = (os.environ.get("BOOTGEAR_SESSION_ID")
-                                or os.environ.get("CLAUDE_CODE_SESSION_ID")
-                                or None)
-        return cls(Path(caller).expanduser().resolve(), resolved_host, resolved_session)
+        resolved_host = clikit.host(host)
+        return cls(Path(caller).expanduser().resolve(), resolved_host or "standalone",
+                   clikit.session_id(session_id, host=resolved_host))
 
     def with_scope(self, *, repo: str | None = None, ref: str | None = None) -> InvocationContext:
         return replace(self, repo=repo, ref=ref)

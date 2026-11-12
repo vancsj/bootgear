@@ -42,13 +42,12 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from bootgear_cli import clikit
 from bootgear_cli.clikit import caller_cwd, caller_path, current_program, emit, refuse
 
 from engine import seats
 
 PROG = current_program("engine", "task")
-BOOTGEAR_SESSION_ID = "BOOTGEAR_SESSION_ID"
-CLAUDE_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
 SECTIONS = ["settlement", "decisions", "todos", "pitches", "state"]
 # Optional, after `## state` only: a column-0 `## machines` line inside an
 # older ledger's settlement is settlement text, not this section.
@@ -178,12 +177,10 @@ def _command(rest: str) -> str:
 
 
 def _effective_run_id(run_id: str | None) -> str:
-    """Use an explicit run ID, then the shared and Claude host identities."""
-    effective = (run_id or os.environ.get(BOOTGEAR_SESSION_ID)
-                 or os.environ.get(CLAUDE_SESSION_ID))
+    """Use an explicit run ID, else the session id from the host environment."""
+    effective = clikit.session_id(run_id or None)
     if not effective:
-        sys.exit("missing run-id — pass a positional <run-id>, or set "
-                 f"{BOOTGEAR_SESSION_ID} (or {CLAUDE_SESSION_ID})")
+        sys.exit(clikit.missing_session("<run-id>"))
     return effective
 
 
@@ -197,31 +194,36 @@ def _run_id_command(func):
 
 
 def _text_operand(args: argparse.Namespace) -> str:
-    """Accept legacy positional text or `--text` when the run ID is implicit."""
+    """The positional text or `--text`; refuse both or neither."""
     if args.text is not None and args.text_option is not None:
         sys.exit("text was given twice — use positional text or --text, not both")
     text = args.text if args.text is not None else args.text_option
     if text is None:
-        sys.exit("missing text — use <run-id> <text> or --text <text> with "
-                 "the session run ID environment variable")
+        sys.exit("missing text — pass --text <text>")
     return text
 
 
 def _outcome_operand(args: argparse.Namespace) -> str:
-    """Accept legacy positional outcome or `--outcome` with an implicit ID."""
+    """The positional outcome or `--outcome`; refuse both or neither."""
     if args.outcome is not None and args.outcome_option is not None:
         sys.exit("outcome was given twice — use positional outcome or --outcome, not both")
     outcome = args.outcome if args.outcome is not None else args.outcome_option
     if outcome is None:
-        sys.exit("missing outcome — use <run-id> succeeded|failed or "
-                 "--outcome succeeded|failed with the session run ID environment variable")
+        sys.exit("missing outcome — pass --outcome succeeded|failed")
     return outcome
 
 
 def _ledger_args(run_id: str, path: Path) -> str:
-    if path.parent.resolve() == DEFAULT_DIR.resolve():
-        return run_id
-    return f"{run_id} --dir {shlex.quote(str(path.parent))}"
+    """The run id when it differs from the session environment, and `--dir` off the default folder."""
+    parts = [] if run_id == clikit.session_id() else [run_id]
+    if path.parent.resolve() != DEFAULT_DIR.resolve():
+        parts.append(f"--dir {shlex.quote(str(path.parent))}")
+    return " ".join(parts)
+
+
+def _ledger_command(verb: str, run_id: str, path: Path, rest: str = "") -> str:
+    """A runnable `task <verb>` line for this ledger, its parts joined by single spaces."""
+    return _command(" ".join(part for part in (verb, _ledger_args(run_id, path), rest) if part))
 
 
 def _malformed(path: Path, problems: list[tuple[str, str]]) -> None:
@@ -233,14 +235,17 @@ def _now() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
 
 
-def _check_run_id(run_id: str) -> None:
+def _check_run_id(run_id: str, *, text_operand: bool = False) -> None:
+    """Refuse an unsafe run id; with `text_operand`, a run id with whitespace names --text."""
     if not RUN_ID_RE.match(run_id) or ".." in run_id:
+        hint = ("; pass text with --text <text>"
+                if text_operand and any(char.isspace() for char in run_id) else "")
         sys.exit(f"invalid run-id '{run_id}' — letters, digits, '.', '_', '-' only, "
-                  f"no path separators, no trailing newline")
+                 f"no path separators, no trailing newline{hint}")
 
 
-def _ledger_path(run_id: str, base: Path | None = None) -> Path:
-    _check_run_id(run_id)
+def _ledger_path(run_id: str, base: Path | None = None, *, text_operand: bool = False) -> Path:
+    _check_run_id(run_id, text_operand=text_operand)
     return (base or DEFAULT_DIR).resolve() / f"{run_id}.md"
 
 
@@ -253,6 +258,14 @@ def _read_text(path: Path) -> str:
     _malformed(path, _check_structure(text))
     _malformed(path, _check_decisions_shape(text) + _check_todos_shape(text))
     return text
+
+
+def _read_text_ledger(path: Path, run_id: str) -> str:
+    """`_read_text` for a text command; a missing run id beside the session's ledger names --text."""
+    session = clikit.session_id()
+    if not path.exists() and session and session != run_id and (path.parent / f"{session}.md").is_file():
+        sys.exit(f"no ledger at {path} — run `init` first; pass text with --text <text>")
+    return _read_text(path)
 
 
 def _check_open(text: str, path: Path) -> None:
@@ -1146,9 +1159,9 @@ def cmd_next_question_id(args: argparse.Namespace) -> None:
                  f"rule ambiguous and strands the first")
     question = _next_question_id(text)
     emit(args.output_mode, {"question": question}, question,
-         _command(f"session record-decision {_ledger_args(args.run_id, path)} --mode debate "
-                  f"--question {question} --summary \"round 0, party '<role>': "
-                  f"<topic, scope, principles, cutoff>\""))
+         _ledger_command("session record-decision", args.run_id, path,
+                         f"--mode debate --question {question} --summary \"round 0, party '<role>': "
+                         f"<topic, scope, principles, cutoff>\""))
 
 
 def _validate_decision_shape(mode: str, question: str | None, summary: str) -> list[str]:
@@ -1561,8 +1574,8 @@ def cmd_record_decision(args: argparse.Namespace) -> None:
             problems.append(f"'{field}' cannot be amended with record-decision — "
                             f"`{ENGINE_OWNED_AMENDMENTS[field]}` validates the new "
                             f"value and records the amendment itself; run "
-                            + _command(f"state amend {_ledger_args(args.run_id, path)} "
-                                       f"--machine-file <file> --reason \"<why>\""))
+                            + _ledger_command("state amend", args.run_id, path,
+                                              "--machine-file <file> --reason \"<why>\""))
         if field == "task_folder":
             problems.append("task_folder cannot be recorded as an AMENDMENT; "
                             "the authoring folder is immutable for this run")
@@ -1593,15 +1606,15 @@ def cmd_record_decision(args: argparse.Namespace) -> None:
     _write_atomic(path, _append_to_section(text, "decisions", line))
     next_step = None
     if args.mode == "scope-settled":
-        next_step = _command(
-            f"session record-decision {_ledger_args(args.run_id, path)} --mode debate "
-            f"--question {args.question} --summary \"round 1, party '<role>': <position>\"")
+        next_step = _ledger_command(
+            "session record-decision", args.run_id, path,
+            f"--mode debate --question {args.question} --summary \"round 1, party '<role>': <position>\"")
     emit(args.output_mode, {"line": line}, "DECISION recorded", next_step)
 
 
 def cmd_update_todo(args: argparse.Namespace) -> None:
-    path = _ledger_path(args.run_id, args.dir)
-    text = _read_text(path)
+    path = _ledger_path(args.run_id, args.dir, text_operand=True)
+    text = _read_text_ledger(path, args.run_id)
     _check_open(text, path)
     todo_text = _single_line(_text_operand(args), "todo text")
     start, end = _section_span(text, "todos")
@@ -1647,8 +1660,8 @@ def cmd_update_todo(args: argparse.Namespace) -> None:
 
 
 def cmd_record_pitch(args: argparse.Namespace) -> None:
-    path = _ledger_path(args.run_id, args.dir)
-    text = _read_text(path)
+    path = _ledger_path(args.run_id, args.dir, text_operand=True)
+    text = _read_text_ledger(path, args.run_id)
     _check_open(text, path)
     pitch_text = _single_line(_text_operand(args), "pitch text")
     line = f"- {_now()} — {pitch_text}"
@@ -1677,15 +1690,15 @@ def cmd_close(args: argparse.Namespace) -> None:
                  f"<node>' line — not written by `init`, or hand-edited into a "
                  f"bad state")
     if current in ("succeeded", "failed") and current != outcome:
-        close = f"session close {_ledger_args(args.run_id, path)} {current}"
+        close = _ledger_command("session close", args.run_id, path, f"--outcome {current}")
         if current == "failed":
             close += ' --reason "<why the goal is undoable>"'
         sys.exit(f"close {outcome} refused: the run already ended at '{current}', "
                  f"a terminal node with no outgoing transition — run: "
-                 f"{_command(close)}")
+                 f"{close}")
     if current != outcome:
-        fix = _command(f"state transition {_ledger_args(args.run_id, path)} "
-                       f"--to {outcome} --reason \"<why>\"")
+        fix = _ledger_command("state transition", args.run_id, path,
+                              f"--to {outcome} --reason \"<why>\"")
         sys.exit(f"close {outcome} requires current state '{outcome}', but it is "
                  f"'{current}'; transition first — if '{current}' has no legal "
                  f"edge to '{outcome}', or needs --confirm-leave or --leave-arg, "
@@ -1723,9 +1736,9 @@ def _ticket_next_step(text: str, path: Path, run_id: str) -> str:
     if len(successors) == 1:
         reminder = node.get("reminder")
         confirm = " --confirm-leave" if isinstance(reminder, dict) and reminder.get("leave") else ""
-        return _command(f"state transition {_ledger_args(run_id, path)} "
-                        f"--to {successors[0]} --reason \"<why>\"{confirm}")
-    return _command(f"state current {_ledger_args(run_id, path)}")
+        return _ledger_command("state transition", run_id, path,
+                               f"--to {successors[0]} --reason \"<why>\"{confirm}")
+    return _ledger_command("state current", run_id, path)
 
 
 def cmd_write_ticket(args: argparse.Namespace) -> None:
@@ -1803,10 +1816,14 @@ def cmd_write_ticket(args: argparse.Namespace) -> None:
          f"TICKET   {action} {ticket}", next_step)
 
 
+RUN_ID_HELP = "the run id; the environment normally supplies it"
+TEXT_POSITIONAL_HELP = "only after an explicit run_id; otherwise use --text"
+
+
 def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.ArgumentParser) -> None:
     s = sub.add_parser("init", parents=[dir_parent],
                         help="create a new ledger and write its settlement")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--settlement-file", type=caller_path,
                    help="read settlement body from this file instead of stdin")
     s.add_argument("--force", action="store_true",
@@ -1815,14 +1832,14 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("validate", parents=[dir_parent],
                         help="validate an execution settlement without writing")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--settlement-file", type=caller_path,
                    help="validate this settlement body instead of an existing ledger")
     s.set_defaults(func=_run_id_command(cmd_validate))
 
     s = sub.add_parser("read", parents=[dir_parent],
                         help="print a section, or the whole ledger")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--section", choices=[*SECTIONS, MACHINES_SECTION],
                    help="print just this section, full history")
     s.add_argument("--open-only", action="store_true",
@@ -1839,7 +1856,7 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("record-decision", parents=[dir_parent],
                         help="append a decisions entry")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--mode", required=True,
                    choices=["solo", "resolve", "debate", "debate-capped",
                             "debate-degraded", "scope-settled"],
@@ -1861,11 +1878,10 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("update-todo", parents=[dir_parent],
                         help="add a todo, or toggle one done")
-    s.add_argument("run_id", nargs="?")
-    s.add_argument("text", nargs="?", help="the todo text (or a substring to match an "
-                                              "existing one)")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
+    s.add_argument("text", nargs="?", help=TEXT_POSITIONAL_HELP)
     s.add_argument("--text", dest="text_option", metavar="TEXT",
-                    help="todo text when the run ID comes from the environment")
+                    help="the todo text (or a substring to match an existing one)")
     done_group = s.add_mutually_exclusive_group()
     done_group.add_argument("--done", action="store_true",
                    help="mark the matching todo done, instead of adding a new one")
@@ -1879,29 +1895,29 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("next-question-id", parents=[dir_parent],
                         help="print the next unused debate question id (q1, q2, ...)")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.set_defaults(func=_run_id_command(cmd_next_question_id))
 
     s = sub.add_parser("record-pitch", parents=[dir_parent],
                         help="append a pitches entry")
-    s.add_argument("run_id", nargs="?")
-    s.add_argument("text", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
+    s.add_argument("text", nargs="?", help=TEXT_POSITIONAL_HELP)
     s.add_argument("--text", dest="text_option", metavar="TEXT",
-                    help="pitch text when the run ID comes from the environment")
+                    help="the pitch text")
     s.set_defaults(func=_run_id_command(cmd_record_pitch))
 
     s = sub.add_parser("close", parents=[dir_parent], help="mark the ledger closed")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("outcome", nargs="?", choices=["succeeded", "failed"])
     s.add_argument("--outcome", dest="outcome_option", choices=["succeeded", "failed"],
-                    help="the outcome when the run ID comes from the environment")
+                    help="the run outcome")
     s.add_argument("--reason", help="required in practice for a failed outcome, "
                                      "naming what made the goal undoable")
     s.set_defaults(func=_run_id_command(cmd_close))
 
     s = sub.add_parser("write-ticket", parents=[dir_parent],
                         help="write the run's ticket body and record that the run owns it")
-    s.add_argument("run_id", nargs="?")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--body-file", type=caller_path, required=True,
                    help="the ticket body: Markdown with the five part headings")
     s.set_defaults(func=_run_id_command(cmd_write_ticket))

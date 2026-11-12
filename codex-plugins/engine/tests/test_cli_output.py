@@ -69,6 +69,8 @@ for leaf, example in cli.EXAMPLES.items():
         continue
     if f"{args.group} {args.cmd}" != leaf:
         bad[leaf] = f"parsed as {args.group} {args.cmd}"
+    elif any(getattr(args, name, None) is not None for name in ("run_id", "text", "outcome")):
+        bad[leaf] = "passes the run id or a positional operand"
 print(json.dumps({"leaves": sorted(leaf_commands(parser)),
                   "examples": sorted(cli.EXAMPLES), "bad": bad,
                   "frequent": list(cli.CATALOG.frequent)}))
@@ -349,7 +351,7 @@ class CliOutputTest(unittest.TestCase):
                       "required: --reason", result.stderr)
         self.assertNotIn("usage:", result.stderr)
         self._assert_refusal_lines(
-            result.stderr, "state transition", 'state transition <run-id> --dir <session-dir> --to <node> '
+            result.stderr, "state transition", 'state transition --dir <session-dir> --to <node> '
                            '--reason "<why>"')
 
     def test_domain_refusal_is_runnable(self):
@@ -357,7 +359,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stderr.splitlines()[-1], "--last must be a positive integer")
         self._assert_refusal_lines(
-            result.stderr, "session read", "session read <run-id> --dir <session-dir> --section state")
+            result.stderr, "session read", "session read --dir <session-dir> --section state")
 
     def test_json_mode_refusal_is_one_json_error_object(self):
         result = self._session("read", "--last", "0")
@@ -366,7 +368,7 @@ class CliOutputTest(unittest.TestCase):
         error = json.loads(result.stderr)["error"]
         self.assertEqual(error["command"], "session read")
         self.assertEqual(error["message"], "--last must be a positive integer")
-        self.assertEqual(error["example"], f"{self.prog} session read <run-id> --dir "
+        self.assertEqual(error["example"], f"{self.prog} session read --dir "
                                            f"<session-dir> --section state")
         self.assertIn("state transition", error["commands"])
         self.assertNotIn("session read", error["commands"])
@@ -483,7 +485,7 @@ class CliOutputTest(unittest.TestCase):
                          ("clarify", "succeeded", None))
         self.assertIn("condition genuinely holds now", data["confirm"])
         self.assertEqual(data["next"], f"{self.prog} session close {self.run_id} --dir "
-                                       f"{self.session_dir.resolve()} succeeded")
+                                       f"{self.session_dir.resolve()} --outcome succeeded")
 
     def test_transition_prose_ends_with_next_on_terminal_only(self):
         result = self._task("state", "transition", self.run_id, "--dir",
@@ -493,7 +495,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(lines[0], "STATE    clarify -> failed")
         self.assertTrue(lines[1].startswith("CONFIRM  before entering 'failed'"))
         self.assertEqual(lines[2], f"next: {self.prog} session close {self.run_id} --dir "
-                                   f"{self.session_dir.resolve()} failed --reason "
+                                   f"{self.session_dir.resolve()} --outcome failed --reason "
                                    f"\"<why the goal is undoable>\"")
 
     # --- state current ----------------------------------------------------
@@ -558,7 +560,7 @@ class CliOutputTest(unittest.TestCase):
     def test_state_current_terminal_on_open_ledger_names_close(self):
         self._transition("succeeded")
         close = (f"{self.prog} session close {self.run_id} --dir "
-                 f"{self.session_dir.resolve()} succeeded")
+                 f"{self.session_dir.resolve()} --outcome succeeded")
         prose = self._current(None, "--prose")
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
@@ -631,7 +633,7 @@ class CliOutputTest(unittest.TestCase):
                            "--to", "succeeded", "--reason", "r", "--prose")
         self.assertEqual(moved.returncode, 0, moved.stderr)
         close = (f"{self.prog} session close pitch-run --dir "
-                 f"{self.session_dir.resolve()} succeeded")
+                 f"{self.session_dir.resolve()} --outcome succeeded")
         self.assertEqual(self._current_json("pitch-run")["next"], close)
         closed = self._json_task("session", "close", "pitch-run", "--dir",
                                  str(self.session_dir), "succeeded")
@@ -659,7 +661,7 @@ class CliOutputTest(unittest.TestCase):
     def test_recall_current_node_matches_state_current_on_terminal_node(self):
         self._transition("succeeded")
         close = (f"{self.prog} session close {self.run_id} --dir "
-                 f"{self.session_dir.resolve()} succeeded")
+                 f"{self.session_dir.resolve()} --outcome succeeded")
         prose = self._task("session", "recall", self.run_id, "--dir",
                            str(self.session_dir), "--prose").stdout
         self.assertIn(f"-- current node --\nsucceeded\nterminal: close the ledger\n"
@@ -736,6 +738,8 @@ class CliOutputTest(unittest.TestCase):
                     outcome, f"close {outcome} refused: the run already ended at "
                              f"'{ended}'")
                 self.assertEqual(argv[1:3], ["session", "close"])
+                self.assertEqual(argv[-2:] if ended == "succeeded" else argv[-4:-2],
+                                 ["--outcome", ended])
                 self.assertIn("## closed\n", self.ledger.read_text())
                 self.assertIn(f" — {ended}", self.ledger.read_text())
 

@@ -17,8 +17,9 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN / "scripts"))
-# Subprocess ledger calls sign with this id when the host did not set one.
+# Subprocess ledger calls sign with this Claude id when the host did not set one, also in a Codex shell.
 os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
+os.environ["BOOTGEAR_HOST"] = "claude"
 
 import deputy
 

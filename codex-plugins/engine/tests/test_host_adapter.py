@@ -34,8 +34,8 @@ class CodexHostAdapterFixtureTest(unittest.TestCase):
 
 
 IDENTITY = (
-    "Codex session_id: fixture-codex. Use this exact value as the engine "
-    "run-id; do not generate a UUID or other replacement."
+    "Codex session_id: fixture-codex. It is the engine run id. Engine commands read it "
+    "from the session environment; omit <run-id> and never generate a replacement."
 )
 IDENTITY_AND_PRINCIPLES = (
     f"{IDENTITY}\n\nMerged principles (user/project/task):\n[project]\n- project rule"
@@ -147,6 +147,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         self.ledger.write_text("## settlement\ngoal: the goal text\n")
         context = self._context("compact")
         self.assertIn("This session just compacted", context)
+        self.assertIn(" session recall --dir <session-dir> ", context)
         self.assertIn(IDENTITY, context)
         self.assertIn("the goal text", context)
         self.assertIn("[project]\n- project rule", context)

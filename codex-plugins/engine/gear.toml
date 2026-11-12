@@ -7,9 +7,6 @@ exec = ["python3", "-m", "engine.cli"]
 [commands.converge]
 exec = ["python3", "-m", "converge.cli"]
 
-[commands.context-hook]
-exec = ["python3", "hooks/pre_tool_use_task_identity.py", "--host", "codex"]
-
 [commands.adapter]
 exec = ["python3", "hooks/adapter.py"]
 

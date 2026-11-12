@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bootgear_cli import clikit
 from gear_commands import CONVERGE as CONVERGE_COMMAND
 from gear_commands import TASK as TASK_COMMAND
 
@@ -13,7 +14,7 @@ PLUGIN = Path(__file__).resolve().parents[1]
 
 class ArtefactReviewTest(unittest.TestCase):
     def command(self, *args, cwd=None):
-        env = {k:v for k,v in os.environ.items() if k not in {'BOOTGEAR_SESSION_ID', 'GEAR_CALLER_CWD', 'VIRTUAL_ENV'}}
+        env = {k:v for k,v in os.environ.items() if k not in {'BOOTGEAR_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_SESSION_ID', 'GEAR_CALLER_CWD', 'VIRTUAL_ENV'}}
         return subprocess.run([*TASK_COMMAND, 'artefact', *args, '--json'], text=True, capture_output=True, cwd=cwd, env=env, check=False)
 
     def test_settings_has_complete_public_schemas(self):
@@ -48,7 +49,7 @@ class ArtefactProgressionTest(unittest.TestCase):
         self.sessions = self.root/'sessions'
         self.input = self.root/'input.txt'
         self.input.write_text('Present control. The reader can follow the guide.\n')
-        self.env = {k:v for k,v in os.environ.items() if k not in {'BOOTGEAR_SESSION_ID','GEAR_CALLER_CWD','VIRTUAL_ENV','PLUGIN_ROOT'}}
+        self.env = {k:v for k,v in os.environ.items() if k not in {'BOOTGEAR_SESSION_ID','CLAUDE_CODE_SESSION_ID','CODEX_SESSION_ID','GEAR_CALLER_CWD','VIRTUAL_ENV','PLUGIN_ROOT'}}
         machine = 'name: fixture\nnodes:\n  clarify:\n    next: [succeeded]\n  succeeded:\n    terminal: true\n  failed:\n    terminal: true\n'
         settlement = valid_settlement(machine).replace('task_type: ticket-to-pr','task_type: artefact-review')
         settlement = '\n'.join(x for x in settlement.splitlines() if not x.startswith('task_folder:'))+'\n'
@@ -171,6 +172,25 @@ class ArtefactProgressionTest(unittest.TestCase):
         result=self.task('artefact','prepare','review','--dir',str(self.sessions))
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(json.loads(result.stdout)['revision'],'revision-0001')
+
+    def test_prepare_reads_the_run_id_from_the_environment_chain(self):
+        for name in ('CLAUDE_CODE_SESSION_ID','CODEX_SESSION_ID'):
+            with self.subTest(variable=name):
+                env = {**self.env, name:'review'}
+                result=subprocess.run([*TASK_COMMAND,'artefact','prepare','--dir',str(self.sessions),'--json'],text=True,capture_output=True,cwd=self.root,env=env,check=False)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(json.loads(result.stdout)['revision'],'revision-0001')
+
+    def test_prepare_with_an_empty_run_id_reads_the_environment_id(self):
+        env = {**self.env, 'CODEX_SESSION_ID':'review'}
+        result=subprocess.run([*TASK_COMMAND,'artefact','prepare','','--dir',str(self.sessions),'--json'],text=True,capture_output=True,cwd=self.root,env=env,check=False)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads(result.stdout)['revision'],'revision-0001')
+
+    def test_prepare_without_a_session_names_the_environment_and_the_override(self):
+        result=subprocess.run([*TASK_COMMAND,'artefact','prepare','--dir',str(self.sessions),'--json'],text=True,capture_output=True,cwd=self.root,env=self.env,check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn(clikit.missing_session('<run-id>'),result.stderr)
 
     def test_known_present_control_checks_actual_input(self):
         self.prepare_assessment()

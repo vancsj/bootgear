@@ -63,7 +63,7 @@ class ShowSigLimitTest(unittest.TestCase):
     @classmethod
     def ledger(cls, *args: str, session: str = AUTHOR) -> subprocess.CompletedProcess:
         shared, local, deputy = cls.roots
-        env = {**os.environ, "CLAUDE_CODE_SESSION_ID": session}
+        env = {**os.environ, "CLAUDE_CODE_SESSION_ID": session, "BOOTGEAR_HOST": "claude"}
         return subprocess.run([sys.executable, str(LEDGER), "--root", shared,
                                "--local-root", local, "--deputy-root", deputy, *args],
                               capture_output=True, text=True, check=False, env=env)

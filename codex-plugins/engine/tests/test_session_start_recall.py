@@ -122,8 +122,7 @@ class SessionStartPrinciplesTest(unittest.TestCase):
         self.assertIn(f"Codex session_id: `{self.run_id}`", msg)
         with patch.dict(os.environ, {"BOOTGEAR_HOST": "codex"}):
             task_command = gear_command("engine", "task")
-        self.assertIn(f"`{task_command} session recall", msg)
-        self.assertIn("session recall", msg)
+        self.assertIn(f"`{task_command} session recall --dir <session-dir>`", msg)
         self.assertIn("outside the sandbox", msg)
         self.assertIn("host-level access", msg)
         self.assertIn("[task]", msg)
@@ -192,8 +191,9 @@ class SessionStartPrinciplesTest(unittest.TestCase):
                 msg = self._run(source=source, run_id="no-such-run")
                 self.assertEqual(
                     msg,
-                    "Codex session_id: `no-such-run`. Use this exact value as the "
-                    "engine run-id; do not generate a UUID or other replacement."
+                    "Codex session_id: `no-such-run`. It is the engine run id. Engine "
+                    "commands read it from the session environment; omit <run-id> and "
+                    "never generate a replacement."
                     f"\n\n{self.PRINCIPLES}",
                 )
 
@@ -203,8 +203,9 @@ class SessionStartPrinciplesTest(unittest.TestCase):
                 msg = self._run(source=source, run_id="no-such-run")
                 self.assertEqual(
                     msg,
-                    "Codex session_id: `no-such-run`. Use this exact value as the "
-                    "engine run-id; do not generate a UUID or other replacement.",
+                    "Codex session_id: `no-such-run`. It is the engine run id. Engine "
+                    "commands read it from the session environment; omit <run-id> and "
+                    "never generate a replacement.",
                 )
 
     def test_closed_ledger_prints_identity_and_principles(self):
@@ -218,8 +219,9 @@ class SessionStartPrinciplesTest(unittest.TestCase):
 
     def _identity(self):
         return (
-            f"Codex session_id: `{self.run_id}`. Use this exact value as the "
-            "engine run-id; do not generate a UUID or other replacement."
+            f"Codex session_id: `{self.run_id}`. It is the engine run id. Engine "
+            "commands read it from the session environment; omit <run-id> and never "
+            "generate a replacement."
         )
 
     def test_closed_heading_with_trailing_space_prints_identity_only(self):

@@ -24,7 +24,8 @@
 - Claude declares plugin dependencies. Codex setup installs missing sibling plugins explicitly.
 
 - Every plugin script is a Gear command. Register it under `[commands]` in its plugin's `gear.toml`. Call it as `gear <plugin> <command>`. When `GEAR_CALLER_CWD` is set, the script resolves the caller's relative paths against it.
-- Shared host context: host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID` to registered Gear commands. Host-aware CLIs read both values; explicit host and session arguments take precedence. Skills use registered Gear entrypoints. Standalone calls can supply the same context explicitly.
+- Shared host context: Gear takes the host from `--host`, else `BOOTGEAR_HOST`, else the host whose session variable is set. With both variables set, it takes the nearest `claude` or `codex` ancestor process, else `claude`. Gear sets `BOOTGEAR_HOST` to that host. Gear commands read the session id from `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` for the declared host, then the other one. Explicit host and session arguments take precedence. Standalone calls can supply the same context explicitly.
+- Bootgear supports Claude Code and Codex only without the host sandbox. Bootgear code has no fallback for an operation that a sandbox denies. A denied operation is an environment fault.
 - Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
 - Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.

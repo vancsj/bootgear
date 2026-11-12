@@ -37,7 +37,7 @@ ENGINE_ADAPTATIONS: dict[str, list[tuple[str, str]]] = {
                 '    s = sub.add_parser("recall", parents=[dir_parent],\n'
                 '                        help="print settlement, full decisions, open todos, state, "\n'
                 '                             "and recent pitches")\n'
-                '    s.add_argument("run_id", nargs="?")\n'
+                '    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)\n'
                 '    s.set_defaults(func=_run_id_command(cmd_recall))'
             ),
         ),
@@ -139,12 +139,6 @@ class BundleDriftTest(unittest.TestCase):
                     with self.assertRaises(self.failureException):
                         self.assertEngineSourcesMatch("session.py", claude, changed)
 
-
-    def test_host_context_hook_matches_claude_source(self):
-        self.assertSameBytes(
-            CLAUDE_ENGINE / "hooks" / "pre_tool_use_task_identity.py",
-            PLUGIN_DIR / "hooks" / "pre_tool_use_task_identity.py",
-        )
 
     def assertSameTree(self, source: Path, copy: Path):
         expected, actual = _files(source), _files(copy)
