@@ -15,12 +15,11 @@ session.py's `DEFAULT_DIR`; the debounce marker sits beside it.
 
 Uses the tested `session.py` CLI reader (`session read --section state --json`)
 rather than hand-parsing the ledger, per the same principle
-`session_start_recall.py` and `stop_recall_reminder.py` already follow for
-their own sections. A debounce marker's own `last_checked_at` field gates
-the subprocess call itself, not just the nudge: `uv run` costs tens to
-hundreds of milliseconds, and this hook runs on every tool call, so paying
-that cost unconditionally would add real, serialized latency to ordinary
-tool use.
+`stop_recall_reminder.py` already follows for its own section. A debounce
+marker's own `last_checked_at` field gates the subprocess call itself, not
+just the nudge: `uv run` costs tens to hundreds of milliseconds, and this hook
+runs on every tool call, so paying that cost unconditionally would add real,
+serialized latency to ordinary tool use.
 
 Ages a run by the ledger's own recorded time, not a filesystem timestamp:
 `cmd_init` writes `started: <time>` into `## state` alongside `current:`,

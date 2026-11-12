@@ -599,37 +599,6 @@ class CodexPackageContractTest(unittest.TestCase):
             })
             self.assertEqual(effective["items"], ["project"])
 
-    def test_session_start_uses_hook_session_id(self):
-        with tempfile.TemporaryDirectory(prefix="engine-session-id-") as tmp:
-            root = Path(tmp)
-            home = root / "home"
-            cwd = root / "cwd"
-            ledger_dir = home / ".bootgear" / "session"
-            ledger_dir.mkdir(parents=True)
-            cwd.mkdir()
-            run_id = "codex-thread-123"
-            (ledger_dir / f"{run_id}.md").write_text(
-                "## settlement\n"
-                "goal: succeeded when the test passes. failed when it cannot.\n"
-            )
-            result = subprocess.run(
-                ["python3", str(PLUGIN_DIR / "hooks" / "session_start_recall.py")],
-                input=json.dumps({
-                    "session_id": run_id,
-                    "cwd": str(cwd),
-                    "source": "compact",
-                }),
-                capture_output=True,
-                text=True,
-                env={**os.environ, "HOME": str(home)},
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            output = json.loads(result.stdout)
-            self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "SessionStart")
-            self.assertIn(f"Codex session_id: `{run_id}`", output["hookSpecificOutput"]["additionalContext"])
-            self.assertIn("the test passes", output["hookSpecificOutput"]["additionalContext"])
-
     def test_spec_review_settlement_fields_are_optional_and_shaped(self):
         with tempfile.TemporaryDirectory(prefix="engine-spec-review-fields-") as tmp:
             root = Path(tmp)
