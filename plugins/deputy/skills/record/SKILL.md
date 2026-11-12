@@ -21,7 +21,7 @@ Outcomes, reported to the caller:
 - `UNCHANGED <slug>`: this same session ledger's check is already on that answer. Nothing was written.
 - `RIVAL <slug>`: a different answer to a recorded question was added to that entry as a rival. Its votes start at zero.
 - `NEW <slug>`: no entry exists for this question. A new entry was written.
-- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, the entry breaks the Q&A standards in `references/qa-standards.md` (the message names each problem), or the write failed. Report the message and stop.
+- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), the Codex session id is missing (the environment supplies it; `--session-id` overrides it), the entry breaks the Q&A standards in `references/qa-standards.md` (the message names each problem), or the write failed. Report the message and stop.
 
 ## Procedure
 
