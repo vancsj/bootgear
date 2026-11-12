@@ -24,6 +24,8 @@ Run setup only when the caller requests it or Gear reports a missing runtime.
 
 Do not install or change dependencies during normal Gear commands or hooks.
 
+If a host sandbox denies a Gear call, stop and tell the user to restart the host without its sandbox.
+
 ## Fallbacks
 
 If the CLI plugin is missing, install it through the host, then invoke this skill again.
@@ -38,3 +40,4 @@ If the CLI plugin is missing, run `/plugin install cli@bootgear` first.
 For Codex CLI, use `codex` as `<host>`.
 Run setup with host-level file and network access.
 If the CLI plugin is missing, run `codex plugin add cli@bootgear` first.
+Ask the user to trust the cli plugin hooks in `/hooks`. Codex skips an untrusted hook, and the session then keeps its stored plugin list.

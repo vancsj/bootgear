@@ -3,3 +3,6 @@ name = "cli"
 
 [commands.setup]
 exec = ["python3", "-m", "bootgear_cli.runtime"]
+
+[commands.session-start]
+exec = ["python3", "-m", "bootgear_cli.session_start"]

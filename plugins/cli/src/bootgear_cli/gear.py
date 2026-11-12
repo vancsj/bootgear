@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
+from bootgear_cli import hook_loader
+
 CLI_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -30,7 +32,6 @@ def _checkout_root() -> Path:
 
 DEFAULT_ROOT = _checkout_root()
 BUILT_IN_COMMANDS = {"doctor", "event", "list", "reconcile"}
-HOST_COMMAND_TIMEOUT = 5
 
 
 class GearError(Exception):
@@ -65,6 +66,7 @@ class Plugin:
 class Reconciliation:
     plugins: dict[str, Plugin]
     warnings: tuple[str, ...]
+    stored: bool = False  # a host list came from the session store, not a query
 
 
 def _strings(value: object, *, field: str, source: Path) -> tuple[str, ...]:
@@ -173,35 +175,40 @@ def discover(root: Path, plugin_roots: Sequence[Path] = ()) -> dict[str, Plugin]
     return _load_plugins(root, _registration_paths(root, plugin_roots))
 
 
-def _host_json(command: Sequence[str], source: str) -> tuple[object | None, str | None]:
-    if shutil.which(command[0]) is None:
-        return None, None
+def _session_key() -> str | None:
+    """The store key of the current session: the environment session id when it is safe."""
+    from bootgear_cli import clikit
+
+    return hook_loader.safe_session(clikit.session_id())
+
+
+def _host_inventory(host: str, source: str, session: str | None, *,
+                    refresh: bool) -> tuple[object | None, bool, str | None]:
+    if shutil.which(host) is None:
+        return None, False, None
+    command = f"{host} plugin list --json"
     try:
-        result = subprocess.run(
-            command,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=HOST_COMMAND_TIMEOUT,
-            check=False,
-        )
+        inventory, stored = hook_loader.host_inventory(host, session, refresh=refresh)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return None, f"{source}: could not query {' '.join(command)}: {exc}"
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"exit code {result.returncode}"
-        return None, f"{source}: {' '.join(command)} failed: {detail}"
-    try:
-        return json.loads(result.stdout), None
-    except json.JSONDecodeError as exc:
-        return None, f"{source}: {' '.join(command)} returned invalid JSON: {exc}"
+        return None, False, f"{source}: could not query {command}: {exc}"
+    except (RuntimeError, ValueError) as exc:
+        return None, False, f"{source}: {exc}"
+    return inventory, stored, None
 
 
-def _host_plugin_roots(root: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+def _host_plugin_roots(root: Path, *,
+                       refresh: bool = False) -> tuple[tuple[Path, ...], tuple[str, ...], bool]:
+    """Enabled host plugin roots, the warnings, and whether a host list came from the store.
+
+    The session store is used unless `refresh` asks for a query. A stored record whose
+    folder is gone is skipped silently; warnings come from fresh queries."""
     roots: list[Path] = []
     warnings: list[str] = []
 
     host = os.environ.get("BOOTGEAR_HOST")
-    claude_data, warning = (None, None) if host == "codex" else _host_json(("claude", "plugin", "list", "--json"), "Claude")
+    session = _session_key()
+    claude_data, claude_stored, warning = ((None, False, None) if host == "codex"
+                                           else _host_inventory("claude", "Claude", session, refresh=refresh))
     if warning:
         warnings.append(warning)
     if isinstance(claude_data, list):
@@ -218,24 +225,23 @@ def _host_plugin_roots(root: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
             if isinstance(install_path, str):
                 roots.append(Path(install_path))
 
-    codex_data, warning = (None, None) if host == "claude" else _host_json(("codex", "plugin", "list", "--json"), "Codex")
+    codex_data, codex_stored, warning = ((None, False, None) if host == "claude"
+                                         else _host_inventory("codex", "Codex", session, refresh=refresh))
     if warning:
         warnings.append(warning)
     if isinstance(codex_data, dict):
         for record in codex_data.get("installed", []):
             if not isinstance(record, dict) or not record.get("enabled") or not record.get("installed", True):
                 continue
-            fields = [record.get(key) for key in ("marketplaceName", "name", "version")]
-            if not all(isinstance(value, str) and value and value not in {".", ".."}
-                       and "/" not in value and "\\" not in value for value in fields):
-                warnings.append("Codex: installed plugin has incomplete cache identity; run cli:setup.")
+            installed = hook_loader.codex_cache_root(record)
+            if installed is None:
+                if not codex_stored:
+                    warnings.append("Codex: installed plugin has incomplete cache identity; run cli:setup.")
                 continue
-            codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
-            installed = codex_home.joinpath("plugins", "cache", *(str(value) for value in fields))
             if installed.is_dir():
                 roots.append(installed)
-            else:
-                warnings.append(f"Codex: installed plugin {fields[1]} is missing; run its setup skill.")
+            elif not codex_stored:
+                warnings.append(f"Codex: installed plugin {record['name']} is missing; run its setup skill.")
 
     seen: set[Path] = set()
     unique: list[Path] = []
@@ -245,12 +251,12 @@ def _host_plugin_roots(root: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
             continue
         seen.add(resolved)
         unique.append(resolved)
-    return tuple(unique), tuple(warnings)
+    return tuple(unique), tuple(warnings), claude_stored or codex_stored
 
 
-def reconcile(root: Path) -> Reconciliation:
+def reconcile(root: Path, *, refresh: bool = False) -> Reconciliation:
     plugins = discover(root)
-    host_roots, warnings = _host_plugin_roots(root)
+    host_roots, warnings, stored = _host_plugin_roots(root, refresh=refresh)
     installed_plugins: dict[str, Plugin] = {}
     for plugin_root in host_roots:
         registration = plugin_root / "gear.toml"
@@ -263,7 +269,7 @@ def reconcile(root: Path) -> Reconciliation:
             other = installed_plugins[plugin.name].root / "gear.toml"
             raise GearError(f"plugin {plugin.name!r} is registered by both {other} and {registration}")
         installed_plugins[plugin.name] = plugin
-    return Reconciliation({**plugins, **installed_plugins}, warnings)
+    return Reconciliation({**plugins, **installed_plugins}, warnings, stored)
 
 
 def _executable(plugin: Plugin, command: Sequence[str]) -> tuple[str, ...]:
@@ -432,8 +438,8 @@ def _print_warnings(warnings: Sequence[str]) -> None:
         print(f"gear: {warning}", file=sys.stderr)
 
 
-def _reconcile_for_route(root: Path) -> Reconciliation:
-    report = reconcile(root)
+def _reconcile_for_route(root: Path, *, refresh: bool = False) -> Reconciliation:
+    report = reconcile(root, refresh=refresh)
     _print_warnings(report.warnings)
     return report
 
@@ -441,22 +447,27 @@ def _reconcile_for_route(root: Path) -> Reconciliation:
 def main(argv: Sequence[str] | None = None) -> int:
     os.environ.pop("BOOTGEAR_PROG", None)
     parser = GearParser(prog="gear", description=__doc__)
-    parser.add_argument("--host", choices=("claude", "codex"), default=os.environ.get("BOOTGEAR_HOST"))
+    parser.add_argument("--host", choices=("claude", "codex"),
+                        help="the calling host; default: $BOOTGEAR_HOST, else the host of the session environment")
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="bootgear repository root")
     output_flags = parser.add_mutually_exclusive_group()
     output_flags.add_argument("--json", action="store_true")
     output_flags.add_argument("--prose", action="store_true")
     parser.add_argument("route", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
-    if args.host:
-        os.environ["BOOTGEAR_HOST"] = args.host
+    from bootgear_cli import clikit
+
+    if host := clikit.host(args.host):
+        os.environ["BOOTGEAR_HOST"] = host
     plugins: dict[str, Plugin] = {}
     route = args.route
     root = args.root
     try:
         root = args.root.resolve()
         caller_cwd = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
-        plugins = _reconcile_for_route(root).plugins if root == CLI_ROOT else discover(root)
+        # An installed Gear needs host plugins, except for a `cli` route, which loads from CLI_ROOT.
+        installed = root == CLI_ROOT and args.route[:1] != ["cli"]
+        plugins = _reconcile_for_route(root).plugins if installed else discover(root)
         if "cli" not in plugins and (CLI_ROOT / "gear.toml").is_file():
             plugins["cli"] = _load_plugin(CLI_ROOT / "gear.toml", repository_root=root)
         route = args.route
@@ -483,21 +494,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"plugins: {', '.join(sorted(plugins)) or 'none'}")
             return 0
         if route[0] == "reconcile":
-            report = reconcile(root)
+            report = reconcile(root, refresh=True)
             _print_warnings(report.warnings)
             _print_list(report.plugins, mode)
             return 1 if report.warnings else 0
         if route[0] == "event":
             if len(route) != 2:
                 raise GearError("usage: gear event <event>")
-            return route_event(plugins, route[1], refresh=lambda: _reconcile_for_route(root),
+            return route_event(plugins, route[1], refresh=lambda: _reconcile_for_route(root, refresh=True),
                                caller_cwd=caller_cwd)
         if route[0] in BUILT_IN_COMMANDS:
             raise GearError(f"built-in command {route[0]!r} has invalid arguments")
         if len(route) < 2:
             raise GearError("usage: gear <plugin> <command> [arguments...]")
         return route_command(plugins, route[0], route[1], route[2:],
-                             refresh=lambda: _reconcile_for_route(root),
+                             refresh=lambda: _reconcile_for_route(root, refresh=True),
                              caller_cwd=caller_cwd)
     except GearError as exc:
         print(f"gear: {exc}", file=sys.stderr)
@@ -519,23 +530,22 @@ def resolve_command(command: str) -> list[str] | None:
     from bootgear_cli.clikit import gear_argv
 
     root = Path(os.environ.get("GEAR_ROOT") or DEFAULT_ROOT).resolve()
-    plugins = discover(root)
     current = os.environ.get("GEAR_PLUGIN")
-    if current in plugins and command in plugins[current].commands:
-        return gear_argv(current, command)
-    if command in plugins and command in plugins[command].commands:
-        return gear_argv(command, command)
-    matches = [plugin.name for plugin in plugins.values() if command in plugin.commands]
-    if not matches:
-        plugins = reconcile(root).plugins
-        if current in plugins and command in plugins[current].commands:
-            return gear_argv(current, command)
+
+    def owners(plugins: dict[str, Plugin]) -> list[str]:
+        if current is not None and current in plugins and command in plugins[current].commands:
+            return [current]
         if command in plugins and command in plugins[command].commands:
-            return gear_argv(command, command)
-        matches = [plugin.name for plugin in plugins.values() if command in plugin.commands]
-    if len(matches) == 1:
-        return gear_argv(matches[0], command)
-    return None
+            return [command]
+        return [plugin.name for plugin in plugins.values() if command in plugin.commands]
+
+    matches = owners(discover(root))
+    if not matches:
+        report = reconcile(root)
+        matches = owners(report.plugins)
+        if not matches and report.stored:
+            matches = owners(reconcile(root, refresh=True).plugins)
+    return gear_argv(matches[0], command) if len(matches) == 1 else None
 
 
 def entrypoint() -> NoReturn:

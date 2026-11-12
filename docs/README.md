@@ -22,7 +22,7 @@ project-specific knowledge; each project customizes them through
 
 | Plugin | What it is | Durable state |
 |---|---|---|
-| `cli` | Shared Gear CLI, plugin discovery and Python runtime setup. | shared runtime under `~/.bootgear/runtimes/` |
+| `cli` | Shared Gear CLI, plugin discovery and Python runtime setup. | shared runtime under `~/.bootgear/runtimes/`; host plugin store under `~/.bootgear/host-plugins/` |
 | `engine` | Autonomous task loop: clarify once, then execute a state machine to `succeeded`/`failed`. | `~/.bootgear/session/<run-id>.md` |
 | `converge` | Settles facts behind a claim slate: find, attack, cut by separate agents; computes which claims are findings. | `~/.bootgear/converge/` |
 | `review` | Review domain skill: lens finders plus converge attack and cut, and applying accepted feedback. | via converge |
@@ -101,24 +101,47 @@ discovers registrations from `gear.toml` and does not use a fixed plugin list.
 - **Routing.** `<gear> --host <host> <plugin> <command> [args]` runs the declared
   executable. Gear preserves caller paths and provider roots. The child's exit
   code is returned unchanged.
+- **Host.** Gear takes the host from `--host`, else `BOOTGEAR_HOST`, else the
+  host whose session variable is set. With both variables set, it takes the
+  nearest `claude` or `codex` ancestor process, else `claude`.
 - **Runtime.** Python commands use the prepared shared interpreter and imports.
   `cli:setup` prepares dependencies. Normal commands and hooks do not install them.
 - **Events.** `<gear> --host <host> event <event>` runs every matching reminder in
   (`order`, plugin name, `dedupe`) order, skipping repeated `dedupe` keys. A
   failing `gate` reminder stops the run and returns its code. A failing
   `reminder` is reported on stderr and routing continues.
-- **Reconcile on route miss.** Reconciliation runs when a plugin or command is
-  unknown, or when an event has no reminders. It adds enabled host-installed
-  plugin roots from `claude plugin list --json` and `codex plugin list --json`.
-  A repository-local registration wins over an installed one with the same
-  name. Gear then retries the original route exactly once. A second miss
-  on a plugin or command is a final error; an event that still has no
-  reminders exits 0 silently. Reconciliation only reads host metadata. It never
-  installs, enables or trusts anything. Host query failures are warnings on
-  stderr.
+- **Reconciliation.** A checkout Gear reconciles on a route miss: a plugin or
+  command is unknown, or an event has no reminders. An installed Gear
+  reconciles on every call except a `cli` route, with the stored host plugin list. A routed call
+  queries the host only when no list is stored, or at a route miss. Reconciliation adds enabled host-installed plugin
+  roots from `claude plugin list --json` and `codex plugin list --json`. A
+  repository-local registration wins over an installed one with the same name.
+  After a miss, Gear reconciles again and retries the original route exactly
+  once. A second miss on a plugin or command is a final error. An event that
+  still has no reminders exits 0 silently. Reconciliation only reads host
+  metadata. It never installs, enables or trusts anything. Host query failures
+  are warnings on stderr.
+- **Host plugin store.** Gear and the hook loaders share one host plugin list
+  for each session. Each entry is `<data>/host-plugins/<host>/<session-id>.json`.
+  `<data>` is `$XDG_DATA_HOME/bootgear`, else `~/.bootgear`. Only the user can
+  read and write the store. Gear keys the entry by the session id from the
+  environment. A hook loader keys it by the hook payload `session_id`. Without
+  a safe session id, Gear and the loaders skip the store. They then query the
+  host for each list. A stored list stays in use until the next session
+  start, resume or route miss. The miss queries the host once more and rewrites the
+  entry. The `reconcile` built-in always queries the host. Only a fresh query
+  warns about a missing plugin folder. Each fresh write deletes entries older
+  than 7 days.
+- **Session-start refresh.** A cli `SessionStart` hook queries the host on
+  startup and resume. It rewrites the entry of that session and prints nothing.
+  A plugin install, upgrade or disable takes effect at the next session start
+  or resume, or at a route miss. Codex skips this hook until the user trusts it.
 - **Built-ins.** `list` prints commands and `@event` reminders. `doctor`
   prints the root and the plugin names. `reconcile` runs a reconciliation and
   exits 1 when it produced warnings.
+- **Host sandbox.** Bootgear supports Claude Code and Codex only without the
+  host sandbox. Bootgear code has no fallback for an operation that a sandbox
+  denies. A denied operation is an environment fault.
 
 The shared CLI owns `clikit`. Provider commands import it through Gear's
 prepared runtime and resolve caller-relative paths through `GEAR_CALLER_CWD`.

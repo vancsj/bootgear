@@ -1,12 +1,13 @@
 {
   "name": "cli",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Shared Gear CLI, plugin discovery, and runtime setup for Bootgear.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
   },
   "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Bootgear CLI",
     "shortDescription": "Route plugin commands through Gear and prepare its shared runtime.",

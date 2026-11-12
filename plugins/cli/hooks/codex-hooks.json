@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume)$",
+        "hooks": [{ "type": "command", "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex session-start" }]
+      }
+    ]
+  }
+}

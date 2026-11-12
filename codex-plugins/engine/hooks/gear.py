@@ -2,30 +2,108 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import re
 import subprocess
 import sys
+import tempfile
+import time
 import tomllib
 from pathlib import Path
 
+SESSION_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
+STORE_MAX_AGE = 7 * 24 * 60 * 60
+QUERY_TIMEOUT = 5
 
-def _inventory(host: str) -> object:
+
+def safe_session(value: object) -> str | None:
+    """`value` when it is a session id that can name a store file, else None."""
+    return value if isinstance(value, str) and SESSION_PATTERN.match(value) else None
+
+
+def store_path(host: str, session: str) -> Path:
+    """The store entry of one host session under the bootgear data root."""
+    data = os.environ.get("XDG_DATA_HOME")
+    base = Path(data).expanduser() / "bootgear" if data else Path.home() / ".bootgear"
+    return base / "host-plugins" / host / f"{session}.json"
+
+
+def _read_entry(path: Path) -> tuple[bool, object]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False, None
+    if isinstance(document, dict) and isinstance(document.get("inventory"), (list, dict)):
+        return True, document["inventory"]
+    return False, None
+
+
+def _write_entry(path: Path, inventory: object) -> None:
+    """Replace the entry in one step, then prune old entries; failures are ignored."""
+    try:
+        path.parent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.parent.mkdir(exist_ok=True, mode=0o700)
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.stem}.", suffix=".tmp", dir=path.parent)
+    except OSError:
+        return
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump({"inventory": inventory}, stream)
+        os.replace(temporary, path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        return
+    cutoff = time.time() - STORE_MAX_AGE
+    with contextlib.suppress(OSError):
+        for entry in path.parent.iterdir():
+            with contextlib.suppress(OSError):
+                if entry.is_file() and entry.stat().st_mtime < cutoff:
+                    entry.unlink()
+
+
+def host_inventory(host: str, session: str | None, *, refresh: bool = False) -> tuple[object, bool]:
+    """The `<host> plugin list --json` data, and True when it came from the session store.
+
+    Without `refresh`, a valid stored entry wins. Otherwise query the host, then store the
+    result when `session` is safe. Raises RuntimeError or ValueError that names the host
+    command when the query fails or prints invalid JSON, and OSError or TimeoutExpired when
+    the host cannot run."""
+    key = safe_session(session)
+    path = store_path(host, key) if key else None
+    if path is not None and not refresh:
+        found, inventory = _read_entry(path)
+        if found:
+            return inventory, True
     result = subprocess.run(
         [host, "plugin", "list", "--json"], stdin=subprocess.DEVNULL,
-        capture_output=True, text=True, timeout=5, check=False,
+        capture_output=True, text=True, timeout=QUERY_TIMEOUT, check=False,
     )
     if result.returncode:
-        raise RuntimeError(result.stderr.strip() or f"{host} inventory failed: exit {result.returncode}")
-    return json.loads(result.stdout)
+        detail = result.stderr.strip() or f"exit code {result.returncode}"
+        raise RuntimeError(f"{host} plugin list --json failed: {detail}")
+    try:
+        inventory = json.loads(result.stdout)
+    except ValueError as exc:
+        raise ValueError(f"{host} plugin list --json returned invalid JSON: {exc}") from exc
+    if path is not None:
+        _write_entry(path, inventory)
+    return inventory, False
 
 
-def _find_gear(root: Path, host: str) -> Path | None:
-    for ancestor in root.parents:
-        candidate = ancestor / "plugins" / "cli" / "bin" / "gear"
-        if candidate.is_file() and (ancestor / "codex-plugins").is_dir():
-            return candidate
-    inventory = _inventory(host)
+def codex_cache_root(record: dict) -> Path | None:
+    """The Codex cache folder of an installed plugin record; None when its identity is incomplete."""
+    values = [record.get(key) for key in ("marketplaceName", "name", "version")]
+    if not all(isinstance(value, str) and value and value not in {".", ".."}
+               and "/" not in value and "\\" not in value for value in values):
+        return None
+    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    return home.joinpath("plugins", "cache", *(str(value) for value in values))
+
+
+def _cli_gear(host: str, inventory: object) -> Path | None:
     if isinstance(inventory, list):
         records = inventory
     elif isinstance(inventory, dict):
@@ -45,17 +123,35 @@ def _find_gear(root: Path, host: str) -> Path | None:
                 continue
             candidate = Path(location) / "bin" / "gear"
         else:
-            if record.get("name") != "cli":
+            installed = codex_cache_root(record) if record.get("name") == "cli" else None
+            if installed is None:
                 continue
-            values = [record.get(key) for key in ("marketplaceName", "name", "version")]
-            if not all(isinstance(value, str) and value and value not in {".", ".."}
-                       and "/" not in value and "\\" not in value for value in values):
-                continue
-            home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
-            candidate = home.joinpath("plugins", "cache", *(str(value) for value in values), "bin", "gear")
+            candidate = installed / "bin" / "gear"
         if candidate.is_file():
             return candidate
     return None
+
+
+def _find_gear(root: Path, host: str, plugin: str, session: str | None) -> Path | None:
+    for ancestor in root.parents:
+        candidate = ancestor / "plugins" / "cli" / "bin" / "gear"
+        if candidate.is_file() and (ancestor / "codex-plugins").is_dir():
+            return candidate
+    if plugin == "cli" and (root / "bin" / "gear").is_file():
+        return root / "bin" / "gear"
+    inventory, stored = host_inventory(host, session)
+    gear = _cli_gear(host, inventory)
+    if gear is None and stored:
+        gear = _cli_gear(host, host_inventory(host, session, refresh=True)[0])
+    return gear
+
+
+def _payload_session(payload: bytes) -> str | None:
+    try:
+        event = json.loads(payload)
+    except ValueError:
+        return None
+    return safe_session(event.get("session_id")) if isinstance(event, dict) else None
 
 
 def _remind(payload: bytes, detail: str) -> int:
@@ -79,13 +175,15 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     payload = sys.stdin.buffer.read()
     try:
-        gear = _find_gear(root, args.host)
+        plugin = tomllib.loads((root / "gear.toml").read_text())["plugin"]["name"]
+        session = _payload_session(payload)
+        gear = _find_gear(root, args.host, plugin, session)
         if gear is None:
             return _remind(payload, "The shared CLI plugin is missing.")
-        plugin = tomllib.loads((root / "gear.toml").read_text())["plugin"]["name"]
+        env = {**os.environ, **({"BOOTGEAR_SESSION_ID": session} if session else {})}
         result = subprocess.run(
             [str(gear), "--host", args.host, plugin, args.command, *args.arguments],
-            input=payload, capture_output=True, check=False,
+            input=payload, capture_output=True, env=env, check=False,
         )
         if result.returncode == 2 and b"Shared runtime" in result.stderr:
             return _remind(payload, result.stderr.decode(errors="replace").strip())
