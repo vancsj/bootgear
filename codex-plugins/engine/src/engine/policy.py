@@ -55,9 +55,9 @@ _SESSION_NUDGE: Final = (
 _CODEX_SESSION_NUDGE: Final = (
     "This session just compacted. If an engine run is active, run "
     f"{gear_command('engine', 'task')} session recall --dir "
-    "<session-dir> outside the sandbox with host-level access before "
-    "anything else — re-read the session ledger's settlement from disk "
-    "rather than trusting whatever this compaction summarized."
+    "<session-dir> before anything else — re-read the session ledger's "
+    "settlement from disk rather than trusting whatever this compaction "
+    "summarized."
 )
 _CODEX_SESSION_ID_MISSING: Final = (
     "Codex did not provide a session_id. Do not start or resume an engine run "
@@ -304,7 +304,9 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
             parts.insert(0, _CODEX_SESSION_NUDGE)
     else:
         parts = [_SESSION_NUDGE] if active is not None and source == "compact" else []
-    settlement = _read_settlement(active[1]) if active is not None else None
+    if active is None:
+        return Intent.add_context("\n\n".join(parts)) if parts else Intent.observe()
+    settlement = _read_settlement(active[1])
     goal = _goal_text(settlement)
     if goal:
         label = "goal" if context.host == "codex" else "/goal"

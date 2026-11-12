@@ -33,12 +33,12 @@ advisor, mailbox, or memory-ledger implementation modules.
 
 | Host | Event | Matcher | Handler(s) | Result |
 |---|---|---|---|---|
-| Claude | `SessionStart` | `startup\|clear\|compact` | `session_recall` | native context: principles and standards block always; with an active ledger, goal, and compact adds recall |
+| Claude | `SessionStart` | `startup\|clear\|compact` | `session_recall` | native context with an active ledger only: goal, principles and standards block; compact adds recall |
 | Claude | `Stop` | none | `stop_reminder` | native context |
 | Claude | `PostToolUse` | `.*` | `state_nudge` | native context |
 | Claude | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |
 | Claude | `PostCompact` | `manual|auto` | `compaction_observe` | observe only |
-| Codex | `SessionStart` | `^(startup\|resume\|compact)$` | `session_recall` | session id, principles and standards block always; with an active ledger, goal, and compact adds recall |
+| Codex | `SessionStart` | `^(startup\|resume\|compact)$` | `session_recall` | session id always; with an active ledger only: goal, principles and standards block; compact adds recall |
 | Codex | `Stop` | none | `stop_reminder` | continuation-compatible output |
 | Codex | `PostToolUse` | `.*` | `state_nudge`, `stop_reminder` | independent context handlers |
 | Codex | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |

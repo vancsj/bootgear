@@ -37,9 +37,12 @@ IDENTITY = (
     "Codex session_id: fixture-codex. It is the engine run id. Engine commands read it "
     "from the session environment; omit <run-id> and never generate a replacement."
 )
-IDENTITY_AND_PRINCIPLES = (
-    f"{IDENTITY}\n\nMerged principles (user/project/task):\n[project]\n- project rule"
+ACTIVE_LEDGER = "## settlement\ngoal: the goal text\n"
+GOAL_AND_PRINCIPLES = (
+    "This run's goal:\nthe goal text\n\n"
+    "Merged principles (user/project/task):\n[project]\n- project rule"
 )
+RECALL = f"{IDENTITY}\n\n{GOAL_AND_PRINCIPLES}"
 STANDARDS_BLOCK = (
     "Standards (read each file in full before you judge or write):\n"
     "[review-standard] .bootgear/config/review-standard.md: R001 [must], R002 [should]\n"
@@ -95,21 +98,23 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         )
 
     def test_standard_files_add_the_standards_block_after_the_principles(self):
+        self.ledger.write_text(ACTIVE_LEDGER)
         self._write_standards()
-        for source in ("startup", "resume", "compact"):
+        for source in ("startup", "resume"):
             with self.subTest(source=source):
-                self.assertEqual(
-                    self._context(source),
-                    f"{IDENTITY_AND_PRINCIPLES}\n\n{STANDARDS_BLOCK}",
-                )
+                self.assertEqual(self._context(source), f"{RECALL}\n\n{STANDARDS_BLOCK}")
+        self.assertTrue(
+            self._context("compact").endswith(f"{RECALL}\n\n{STANDARDS_BLOCK}")
+        )
 
     def test_no_standard_file_omits_the_standards_block(self):
+        self.ledger.write_text(ACTIVE_LEDGER)
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertNotIn("Standards", self._context(source))
 
     def test_partial_standard_files_list_only_the_files_with_rules(self):
-        self._write_standards()
+        self.ledger.write_text(ACTIVE_LEDGER)
         config = self.cwd / ".bootgear" / "config"
         cases = {
             "only review": ("test-standard.md", None, STANDARDS_BLOCK.rsplit("\n", 1)[0]),
@@ -136,47 +141,39 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
                     (config / file).write_bytes(text)
                 else:
                     (config / file).write_text(text)
-                self.assertEqual(self._context("startup"), f"{IDENTITY_AND_PRINCIPLES}\n\n{block}")
+                self.assertEqual(self._context("startup"), f"{RECALL}\n\n{block}")
 
     def test_repo_hook_output_fits_the_limit(self):
+        self.ledger.write_text(ACTIVE_LEDGER)
         context = self._context("startup", cwd=REPO_ROOT)
         self.assertIn("Standards (read each file in full before you judge or write):", context)
         self.assertLess(len(context), 10000)
 
     def test_active_ledger_adds_nudge_on_compact_with_goal_and_principles(self):
-        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        self.ledger.write_text(ACTIVE_LEDGER)
         context = self._context("compact")
         self.assertIn("This session just compacted", context)
-        self.assertIn(" session recall --dir <session-dir> ", context)
-        self.assertIn(IDENTITY, context)
-        self.assertIn("the goal text", context)
-        self.assertIn("[project]\n- project rule", context)
+        self.assertIn(" session recall --dir <session-dir> before anything else", context)
+        self.assertTrue(context.endswith(RECALL), context)
 
-    def test_no_ledger_emits_identity_and_principles(self):
-        for source in ("startup", "resume", "compact"):
-            with self.subTest(source=source):
-                self.assertEqual(self._context(source), IDENTITY_AND_PRINCIPLES)
-
-    def test_no_ledger_and_no_principles_emits_identity_only(self):
-        (self.cwd / ".bootgear" / "config" / "principles.md").unlink()
+    def test_no_ledger_emits_identity_only(self):
+        self._write_standards()
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
                 self.assertEqual(self._context(source), IDENTITY)
 
-    def test_closed_ledger_emits_identity_and_principles(self):
-        self.ledger.write_text("## settlement\ngoal: the goal text\n\n## closed\nsucceeded\n")
+    def test_closed_ledger_emits_identity_only(self):
+        self._write_standards()
+        self.ledger.write_text(f"{ACTIVE_LEDGER}\n## closed\nsucceeded\n")
         for source in ("startup", "resume", "compact"):
             with self.subTest(source=source):
-                self.assertEqual(self._context(source), IDENTITY_AND_PRINCIPLES)
+                self.assertEqual(self._context(source), IDENTITY)
 
     def test_active_ledger_on_startup_and_resume_adds_goal_without_the_nudge(self):
-        self.ledger.write_text("## settlement\ngoal: the goal text\n")
+        self.ledger.write_text(ACTIVE_LEDGER)
         for source in ("startup", "resume"):
             with self.subTest(source=source):
-                context = self._context(source)
-                self.assertIn(IDENTITY, context)
-                self.assertIn("the goal text", context)
-                self.assertNotIn("This session just compacted", context)
+                self.assertEqual(self._context(source), RECALL)
 
     def test_closed_text_that_is_not_a_heading_keeps_the_ledger_active(self):
         self.ledger.write_text("## settlement\ngoal: the goal text\n\n## notes\nnot ## closed yet\n## closed-loop notes\n")
@@ -184,9 +181,9 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
         self.assertIn("This session just compacted", context)
         self.assertIn("the goal text", context)
 
-    def test_unreadable_ledger_emits_identity_and_principles(self):
+    def test_unreadable_ledger_emits_identity_only(self):
         self.ledger.write_bytes(b"\xff\xfe\x00bad-utf8")
-        self.assertEqual(self._context("compact"), IDENTITY_AND_PRINCIPLES)
+        self.assertEqual(self._context("compact"), IDENTITY)
 
 
 class ActiveStatePolicyRoutingTest(unittest.TestCase):
