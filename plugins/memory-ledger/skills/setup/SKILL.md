@@ -225,5 +225,4 @@ Codex: instructions file = ~/.codex/AGENTS.md
 
 Use the absolute path returned by `cli:gear` as `<gear>`.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
-Without hook context, pass `--host <claude|codex> --session-id <full-session-id>` before the subcommand.
+Gear sets the host from `--host`. The CLI reads the session id from the environment.

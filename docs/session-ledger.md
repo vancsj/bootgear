@@ -6,7 +6,7 @@ Code: `plugins/engine/src/engine/session.py`, exposed as `task session init|vali
 
 ## Location
 
-The ledger is one Markdown file per run, at `<dir>/<run-id>.md`. The directory `<dir>` defaults to `~/.bootgear/session/` and can be changed with `--dir`. That default is outside every repo, so the ledger is never committed. `<run-id>` is the host's session ID, and it may contain only letters, digits, `.`, `_` and `-`. The engine hooks find the ledger by that session ID in the default directory. A single writer is assumed, and the file is never locked.
+The ledger is one Markdown file per run, at `<dir>/<run-id>.md`. The directory `<dir>` defaults to `~/.bootgear/session/` and can be changed with `--dir`. That default is outside every repo, so the ledger is never committed. `<run-id>` is the host's session id, and it may contain only letters, digits, `.`, `_` and `-`. The engine hooks find the ledger by that session id in the default directory. A single writer is assumed, and the file is never locked.
 
 ## Layout
 
@@ -69,7 +69,7 @@ The file always has five sections, in this order: `settlement`, `decisions`, `to
 
 **Todos.** Each entry is exactly `- [ ] <text>` or `- [x] <text>`. This section is the only one edited in place, apart from the `current:` line in `## state`.
 
-- `update-todo "<text>"` adds an open todo, and `--done` marks a todo done.
+- `update-todo --text "<text>"` adds an open todo, and `--done` marks a todo done.
 - Reopening a done todo requires `--reopen`, so completed work is never undone silently.
 - Text is matched first as an exact match and then as a substring. When the text matches more than one todo, `update-todo` refuses.
 
@@ -81,7 +81,7 @@ The file always has five sections, in this order: `settlement`, `decisions`, `to
 
 ## Close
 
-`close succeeded|failed [--reason]` appends `## closed` with the outcome, and `failed` requires a reason. `close` refuses in three cases:
+`close --outcome succeeded|failed [--reason]` appends `## closed` with the outcome, and `failed` requires a reason. `close` refuses in three cases:
 
 - A debate question is still open.
 - `current:` is not already the matching terminal node. `close` then names the transition or close command to run.

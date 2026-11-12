@@ -50,7 +50,7 @@ A shared field vocabulary does not make unrelated operations interchangeable.
 | Skill | Operations or modes | Handback |
 | --- | --- | --- |
 | `engine:start` | Start from the original request. | Hands off to `engine:clarify`. |
-| `engine:clarify` | Assessment, task type, state machine, goal, run manifest. | Confirmed settlement with run ID, `session_dir`, `goal`, `state_machine`, permitted mutations; or a work question. |
+| `engine:clarify` | Assessment, task type, state machine, goal, run manifest. | Confirmed settlement with `session_dir`, `goal`, `state_machine`, permitted mutations; the run id comes from the environment. Or a work question. |
 | `engine:execute` | Run the settled state machine. | Progress handbacks; terminal `succeeded` or `failed`. |
 | `engine:recall` | Read settlement, amendments, todos, current node, pitches. | Current run state; read-only. |
 | `engine:resolve` | Resolve one contested decision from `source_of_truth`. | Resolved from a named source, or escalated to `engine:debate`. |

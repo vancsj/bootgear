@@ -174,7 +174,7 @@ Call `cli:gear` and use its returned absolute path to run `engine task` commands
 ```
 <gear> --host <host> engine task session init|validate|read|record-decision|next-question-id|update-todo|record-pitch|write-ticket|close
                (Codex also: recall)
-<gear> --host <host> engine task session write-ticket <run-id> --dir <session-dir> --body-file <file>
+<gear> --host <host> engine task session write-ticket --dir <session-dir> --body-file <file>
                writes the run's ticket body; the only writer of ticket_path
 <gear> --host <host> engine task state transition|current|amend|show|validate|diagram
 <gear> --host <host> engine task config resolve

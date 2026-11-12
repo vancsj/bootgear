@@ -19,8 +19,8 @@ nodes:
     - spec
   spec:
     reminder:
-      do: 'Draft requirements and design with spec. Pass `stop_after: design`. Pass `<run-id>`, `<engine-root>` and
-        `<session-dir>`. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`.
+      do: 'Draft requirements and design with spec. Pass `stop_after: design`. Pass `<engine-root>` and
+        `<session-dir>`. `<run-id>` is this session''s id from the environment. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`.
         `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. When you leave, pass `--leave-arg
         output_dir=<directory holding requirements.md and design.md>`. Does not: write `task.md` or review the files.
         Form mental and conceptual models. Confirm only uncertain or materially changed models. Use five status sections

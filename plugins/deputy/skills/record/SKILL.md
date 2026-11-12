@@ -22,7 +22,6 @@ Outcomes, reported to the caller:
 - `RIVAL <slug>`: a different answer to a recorded question was added to that entry as a rival. Its votes start at zero.
 - `NEW <slug>`: no entry exists for this question. A new entry was written.
 - `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, the entry breaks the Q&A standards in `references/qa-standards.md` (the message names each problem), or the write failed. Report the message and stop.
-- `REFUSED`: the root has a remote, the session ledger does not contain the answer, `memory-ledger` is not found (`REFUSED memory-ledger not found; install the memory-ledger plugin`), a Codex call has no session id from `--session-id` or the environment, or the write failed. Report the message and stop.
 
 ## Procedure
 
@@ -40,7 +39,4 @@ Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool ca
 Replace `<host>` with `claude` or `codex`, based on the current host.
 The standards file is `references/qa-standards.md` in this plugin.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-For Codex without hook context, add `--session-id <session_id>` with the full host session ID.
-If `--session-id` is omitted, the command uses `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
-Host hooks supply shared host and session context.
-Without hook context, pass explicit host and session options to `record`.
+The command reads the session id from the environment. `--session-id` overrides it; the environment normally supplies it.

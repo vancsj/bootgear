@@ -55,7 +55,7 @@ Use `claude` or `codex` as `<host>`, based on the current host.
 - Each ledger is a git repo. `resolve-roots` prints where yours are; missing or unset → tell the user to run the memory-ledger setup skill.
 - Defaults: `~/.memory-ledger/shared` and `~/.memory-ledger/local`.
 - Roots come from, each beating the last: `--root` / `--local-root` → `$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` → `memory.root` / `memory.local_root` in the config file → the defaults. Relative paths resolve from the caller context, including `GEAR_CALLER_CWD` on the gear route.
-- Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`. Explicit `--host` and `--session-id` take precedence. Without hook context, supply both flags before the subcommand. The native Claude session ID is a fallback. Codex signers use `codex:<full-session-id>`; `--as`, when supplied, must match. Invalid or missing Codex identity is rejected before a write.
+- Gear sets the host from `--host`. The CLI reads the session id from the environment. `--session-id`, placed before the subcommand, overrides it; the environment normally supplies it. Codex signers use `codex:<full-session-id>`; `--as`, when supplied, must match. Invalid or missing Codex identity is rejected before a write.
 - The config file is the first that exists: `./.memory-ledger/config.yaml` → `./.bootgear/config.yaml` → `~/.memory-ledger/config.yaml` → `~/.bootgear/config.yaml`.
 - Shared has a remote and reaches the team; local never does.
 - The two must be separate repos; the tool refuses if both roots resolve to one path.

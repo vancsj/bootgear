@@ -73,7 +73,7 @@ After the settlement is written, the tiers are never resolved again. The run's m
 ## Transition: the hard gate
 
 ```text
-task state transition <run-id> --dir <session-dir> --to <node> --reason "<why>" [--confirm-leave] [--leave-arg name=value ...]
+task state transition --dir <session-dir> --to <node> --reason "<why>" [--confirm-leave] [--leave-arg name=value ...]
 ```
 
 `transition` reads the machine in force and `current:` from the ledger. It refuses the move in any of these cases:
@@ -105,7 +105,7 @@ A `leave_check` is code that the engine runs, so the approval of the check at `c
 ## Amend
 
 ```text
-task state amend <run-id> --dir <session-dir> --machine-file <file> --reason "<why>"
+task state amend --dir <session-dir> --machine-file <file> --reason "<why>"
 ```
 
 The settlement is write-once, so a machine that changes mid-run is appended as a new version. `amend` exits at once on a closed ledger. Otherwise it collects every problem and names them in one refusal:

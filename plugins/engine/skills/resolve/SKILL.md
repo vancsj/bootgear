@@ -26,8 +26,9 @@ Run `resolve` when `execute` sends a disagreement in either case:
 ## How it works
 
 1. If the settlement is not fresh in context, call `recall` first. Pass the same
-   `<run-id>`/`<engine-root>`/`<session-dir>` this call has. Do not resolve
-   against a remembered settlement that may have compacted.
+   `<engine-root>` and `<session-dir>` this call has. The run id comes from the
+   environment. Do not resolve against a remembered settlement that may have
+   compacted.
 
 2. Classify the disagreement's domain. Use the settlement's per-domain `source_of_truth`. Classify the domain as `scope and outcome`, `current behavior`, `implementation approach`, or `correctness`. Classify "is this in scope?" as `scope and outcome`. Classify "should this change existing behavior?" as `current behavior`.
 
@@ -40,7 +41,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
      - the touched domain(s) and the unsatisfied settlement condition for each
      - the full `source_of_truth` for every domain
      - `debate_threshold`, `task_type`, `goal`, and merged user, project, and task principles
-     - the same `<run-id>`/`<engine-root>`/`<session-dir>` this call already has
+     - the same `<engine-root>` and `<session-dir>` this call already has
 
      Require `debate` to read `debate_roster`, `debate_parties`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, and `debate_admission` itself via its own recall. Do not relay those fields as settlement data.
 
@@ -53,7 +54,7 @@ Run `resolve` when `execute` sends a disagreement in either case:
 Write one line in the session ledger for every disagreement `resolve` decides:
 
 ```text
-<gear> --host <host> engine task session record-decision <run-id> --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
+<gear> --host <host> engine task session record-decision --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
 ```
 
 During a stuck round, record the decided entry without `--question`, and state in the summary that it broke a debate stall.

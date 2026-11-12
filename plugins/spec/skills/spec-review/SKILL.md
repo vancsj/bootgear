@@ -6,7 +6,7 @@ description: Independently review requirements, design, and ticket artifacts for
 ## Inputs and outcomes
 
 Obtain the request, confirmed intent amendments, primary artifact paths, base commit, and project root from the caller.
-In an active run, also obtain run ID, session directory, and `<n>`, the cumulative spec-review visit number.
+In an active run, also obtain the session directory and `<n>`, the cumulative spec-review visit number. The run id comes from the environment.
 Read primary Open questions. Do not treat the ticket as proof of current behaviour.
 Optional input: raw observation inventory path.
 When supplied, read [references/observations.md](references/observations.md) for independent checks and feedback gates.
@@ -83,7 +83,7 @@ Do not use `--snapshot` or `--since`.
 For active runs, export the public settlement and pass that file through `--settlement`:
 
 ```text
-<gear> --host <host> engine task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
+<gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
 ```
 
 Read [references/lenses.md](references/lenses.md) when briefing each lens.
@@ -172,6 +172,7 @@ Do not replace missing request evidence with the author's interpretation.
 
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
+`<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
 
 Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 Run engine commands as `<gear> --host claude engine task <command> [arguments]`.

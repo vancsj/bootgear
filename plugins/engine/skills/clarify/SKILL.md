@@ -9,7 +9,7 @@ Run at the start of every engine run, before `execute`. Input: the user's reques
 
 Outcomes:
 
-- **Goal confirmed** — the settlement is written through `init` (required fields in `## Writing the settlement`), and the run is handed to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+- **Goal confirmed** — `init` writes the settlement (required fields in `## Writing the settlement`). Clarify hands the run to `execute` with `<engine-root>` and `<session-dir>`. The run id comes from the environment.
 - **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
 - **Ledger already exists** — `init` refuses; follow `## Recovery`.
 - **`<gear> --host <host> engine task state validate` fails after the fallback** — follow `## Recovery`.
@@ -19,7 +19,7 @@ Outcomes:
 
 For `mode: checkpoint`, dispatch before initial assessment, advisor startup, goal sign-off or session initialization.
 Inputs: checkpoint kind (`models` or `source-selection`), task folder, pending payload, scope and existing confirmation references.
-Active callers also supply run ID, engine root and session directory.
+Active callers also supply engine root and session directory.
 For this mode, read [references/confirmation-checkpoints.md](references/confirmation-checkpoints.md).
 Return to the requesting caller:
 
@@ -31,7 +31,7 @@ This mode never initializes a run, restarts advisors, or grants mutation permiss
 
 ## Workflow
 
-Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, startup choice, approved launcher, and existing advisor pairings → on confirmation, `init` the settlement → hand off to `execute` with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, startup choice, approved launcher, and existing advisor pairings → on confirmation, `init` the settlement → hand off to `execute` with `<engine-root>` and `<session-dir>`.
 
 ## What to settle
 
@@ -211,18 +211,16 @@ Show the draft. Get explicit confirmation before handing off to `execute`. Allow
 
 After confirmation:
 
-1. Set `run-id` to the exact session identity supplied by the host.
-
-2. Call `init` with this run-id and the settlement body. Pass `--dir` only when this run needs a non-default ledger location. Omit `--dir` for the default:
+1. Call `init` with the settlement body. `<run-id>` is this session's id (see Host mechanics). `init` reads it from the environment. Pass `--dir` only when this run needs a non-default ledger location. Omit `--dir` for the default:
    ```
-   <gear> --host <host> engine task session init <run-id> --settlement-file <file>
+   <gear> --host <host> engine task session init --settlement-file <file>
    ```
 
    When `init` refuses because a ledger already exists at this path, or because the settlement fails validation, follow `## Recovery`.
 
-3. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. `init` prints `INIT <ledger-file>`, the ledger file inside that directory. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
+2. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. `init` prints `INIT <ledger-file>`, the ledger file inside that directory. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
 
-4. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly when starting `execute`.
+3. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<engine-root>` and `<session-dir>` explicitly when starting `execute`.
 
 Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `task_folder` for `ticket-to-pr` or `change-review`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
 
@@ -239,7 +237,7 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 - **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
 - **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
 - **`<gear> --host <host> engine task state validate` fails on the resolved machine** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
-- **Settlement fails validation** — `init` prints the problems and writes no ledger. Fix every listed problem in the settlement file, then run `init` again with the same run-id. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
+- **Settlement fails validation** — `init` prints the problems and writes no ledger. Fix every listed problem in the settlement file, then run `init` again. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
 
 ## Host mechanics
 
@@ -249,8 +247,7 @@ Use `claude` for `<host>`.
 - Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
 - If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Supply `<plugin-dir>` as `<engine-root>` in the handoff to `execute`.
-- Supply the host's exact session identity as `<run-id>`: the value of
-  `$CLAUDE_CODE_SESSION_ID`.
+- `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
 - A host-supported debate party mechanism is `native_subagent` or `advisor`.
 - Item 10: only `refuter` and `gap-hunter` need the paired listener; the debate
   roles use a direct `codex exec`, so they need no listener and are available

@@ -66,9 +66,6 @@ class SkillTests(unittest.TestCase):
                 self.assertIn("<gear> --host <host> deputy deputy", self.text(name))
                 self.assertNotIn("${PLUGIN_ROOT}", self.text(name))
 
-    def test_record_passes_the_codex_session_on_codex(self) -> None:
-        self.assertIn("--session-id <session_id>", section(self.text("record"), "## Host mechanics"))
-
 
 if __name__ == "__main__":
     unittest.main()

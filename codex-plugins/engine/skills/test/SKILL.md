@@ -7,7 +7,7 @@ In an active Engine run, keep `session_dir` in context. Omit `--dir` for the def
 
 Use this skill when a task needs test cases written, tests run, or a failure understood.
 
-Inputs: the change or requirement, or the failing output to triage. Inside an active `engine` run, also `<run-id>`, `<engine-root>`, `<session-dir>` and the sub-task label passed by `execute`.
+Inputs: the change or requirement, or the failing output to triage. Inside an active `engine` run, also `<engine-root>`, `<session-dir>` and the sub-task label passed by `execute`. The run id comes from the environment.
 
 ## Reporting back
 
@@ -30,7 +30,7 @@ Before any other action:
 1. If running inside an active `engine` run, read the settlement:
 
    ```text
-   <gear> --host <host> engine task session read <run-id> --section settlement
+   <gear> --host <host> engine task session read --section settlement
    ```
 
    Read `test_override`, then apply the engine `recall` contract for an `AMENDMENT test_override` decision; its latest value, if present, wins.
@@ -43,7 +43,7 @@ Before any other action:
 
 3. Otherwise, use the default implementation below.
 
-When delegating inside an active run, pass `<run-id>`, `<engine-root>`, and `<session-dir>` according to the engine `execute` handoff contract. The override must use the reporting format in "Reporting back". Do not adapt this skill to compensate for an override that does not.
+When delegating inside an active run, pass `<engine-root>` and `<session-dir>` according to the engine `execute` handoff contract. The override must use the reporting format in "Reporting back". Do not adapt this skill to compensate for an override that does not.
 
 ## Default implementation
 

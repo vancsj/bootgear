@@ -64,32 +64,33 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
 
 - **Channel.** A channel has a number of at least four digits and two seats,
   `listener` and `asker`. The role matches the mode. A seat records the
-  host's session ID and a `seen_at` heartbeat.
+  host's session id and a `seen_at` heartbeat.
 - **Lease.** A channel is one-time. A seat is live while its owner's `seen_at`
   heartbeat stamp or `hook_seen_at` hook stamp is under 10 seconds old, or
   while it is inside a restart grace; a seat with no stamp is stale. `register`
   stamps the seat, and the owner then keeps it fresh with `heartbeat`, which
-  stamps every 3 seconds. `heartbeat --session` must match the seat's owner,
-  so no other session can refresh it. Seat ownership is a string match on
-  the session ID within the owner-only mailbox, not an authentication.
-  `heartbeat` runs in the background and ends with one JSON line whose
-  `next` names the follow-up: on stdout `{"stopped": ...}` with
-  `channel_closed`, `max_age` (`--max-age`, 6180 seconds by default; `next`
-  is the same command), `signal` (SIGTERM, SIGINT or SIGHUP), or
-  `seat_taken` (exit 2) when this session does not hold the seat, at start
-  or later; on stderr an error with category `heartbeat_failed` after three
-  failed stamps in a row (an unreadable or missing record included),
-  `channel_missing`, `invalid_args` or `invalid_role`. A `max_age` stop
+  stamps every 3 seconds. The heartbeat's session must match the seat's
+  owner, so no other session can refresh it. Seat ownership is a string match on
+  the session id within the owner-only mailbox, not an authentication.
+  `heartbeat` runs in the background. On stdout it ends with a
+  `stopped: <reason>` line and a `next: <command>` line. With `--json`, it
+  prints one JSON object instead. The reasons are `channel_closed`, `max_age`
+  (`--max-age`, 6180 seconds by default; `next` is the same command), `signal`
+  (SIGTERM, SIGINT or SIGHUP), and `seat_taken` (exit 2). `seat_taken` means
+  that this session does not hold the seat, at start or later. On stderr, it
+  prints a JSON error. The category is `heartbeat_failed` after three failed
+  stamps in a row, an unreadable or missing record included. Other categories
+  are `channel_missing`, `invalid_args` and `invalid_role`. A `max_age` stop
   writes `<role>_restart_until`, 720 seconds ahead, under the channel lock;
   the seat reads live until then unless the same owner's next stamp clears
   it first. A value that is not a finite timestamp, or lies more than the
   grace ahead, counts as absent. The total bound is `--max-age` plus the
   grace, 6900 seconds by default, below Claude Code's 2-hour background
   task cap. After any other stop the seat can read stale until a new
-  heartbeat's first stamp. `register --channel` with the same
-  session ID takes the seat back, so a restarted process that keeps its
-  session ID can reclaim it and start a new `heartbeat`; any other session
-  gets `seat_claimed`, even when the holder is stale or restarting.
+  heartbeat's first stamp. `register --channel` with the same session id
+  takes the seat back. A restarted process that keeps its session id can thus
+  reclaim the seat and start a new `heartbeat`. Any other session gets
+  `seat_claimed`, even when the holder is stale or restarting.
   The 10-second bound on a dead seat holds after a normal host exit and a
   confirmed heartbeat termination. After a crash, kill or terminal close, an
   orphaned heartbeat keeps the seat live up to `--max-age` plus the restart
@@ -106,21 +107,23 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   stale, PostToolUse and UserPromptSubmit inject the exact `heartbeat`
   restart command at most once a minute (`<role>_hook_nudged_at`); Stop and
   subagent calls never inject. After compaction, SessionStart injects the
-  seat status that `whoami --session S` prints: channel, role, state, peer
-  liveness, heartbeat, unread count, last read message, the read request
-  still owed a response, and a `next` (heartbeat restart if stopped, then
-  the owed request, else `receive`), plus the engine run id when the
-  session has an active engine ledger (no `## closed` heading). Every hook
-  failure exits 0 with no output.
+  seat status that `whoami` prints. The status holds the channel, role,
+  state, peer liveness, heartbeat and unread count. It also holds the last
+  read message and the read request still owed a response. Its `next` is a
+  heartbeat restart if stopped, then the owed request, else `receive`. When
+  the session has an active engine ledger (no `## closed` heading), the
+  status also holds the engine run id. Every hook failure exits 0 with no
+  output.
 - **Pairing.** A listener always creates a new channel. An asker runs
-  `list --live-for asker --session S`, which prints the open channels updated
-  in the last 48 hours whose listener is live and whose asker seat is free
-  or held by S, most recently updated first, and a `next` command that
-  registers the first. A listener that is busy counts as taken and may be
-  absent. With no candidate, `list` prints a `note` and exits 0, and its
-  `next` says to wait with `--wait 120` only for a listener the asker
-  started itself or the user said is starting, and otherwise to tell the
-  user and stop; `--wait N` polls up to N seconds and exits 1 on timeout.
+  `list --live-for asker`. It prints the open channels updated in the last
+  48 hours, most recently updated first. Each listed channel has a live
+  listener and an asker seat that is free or held by this session. Then
+  `list` prints a `next` command that registers the first channel. A
+  listener that is busy counts as taken and may be absent. With no
+  candidate, `list` prints a `note` and exits 0. Its `next` can say to wait
+  with `--wait 120`. It says so only for a listener that the asker started,
+  or that the user said is starting. Otherwise `next` says to tell the user
+  and stop. `--wait N` polls up to N seconds and exits 1 on timeout.
   Both hosts must run the same advisor version: a listener from an
   older version stamps its seat on a different cadence, so its liveness
   reads wrong. The asker claims the most recently updated channel. If another
@@ -183,7 +186,7 @@ record, message, and lock file to `0600`, on every call.
 ## Host differences
 
 - **Codex CLI.** The mailbox root is outside the sandbox's writable roots, so
-  every `channel.py` call runs with escalated sandbox permissions. The Codex
+  every channel Gear call runs with escalated sandbox permissions. The Codex
   manifest and `agents/openai.yaml` describe the listening role and allow
   implicit invocation.
 - **Claude Code.** `direct` runs `codex exec` read-only from an empty scratch
@@ -197,10 +200,12 @@ record, message, and lock file to `0600`, on every call.
 - **Codex direct calls.** Codex calls `claude -p` with safe mode, tools disabled, and no session persistence.
   Authentication stays unchanged. `BOOTGEAR_ADVISOR_CLAUDE_MODEL` and `BOOTGEAR_ADVISOR_CLAUDE_EFFORT`
   supply optional overrides; unset values keep native defaults.
-- **Both, channel mode.** `SESSION_ID` must be the host's real session identifier. If it is not
-  available, the skill fails instead of making one up. Claude Code passes
-  `$CLAUDE_CODE_SESSION_ID`; Codex CLI passes the `session_id` the host gives
-  the agent when it runs the Gear command. The registered `advisor channel`
-  command receives shared hook context; an explicit `--session` still wins.
+- **Both, channel mode.** The channel CLI reads the session id from the
+  environment. It reads `BOOTGEAR_SESSION_ID` first, then the session
+  variable of the declared host. That variable is `CLAUDE_CODE_SESSION_ID`
+  or `CODEX_SESSION_ID`. Last, it reads the variable of the other host.
+  `--session` overrides it; the environment normally supplies it. With none,
+  the CLI refuses. Only `register`, `heartbeat`, `list` and `whoami` accept
+  `--session`.
 - **Heartbeat.** Claude Code starts `heartbeat` with the Bash tool's
   `run_in_background` and `timeout: 7200000`; Codex CLI leaves it running in a terminal session.

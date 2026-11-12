@@ -128,10 +128,10 @@ Only skills listed in `debate_admission` may call `debate` directly.
   `spec` for authoring nodes, `spec-review` for independent artifact review,
   `test` for test and triage nodes, `review` for review
   nodes, `resolve`/`debate` for `*-debate` nodes.
-- `execute` invokes domain skills by public name and passes `<run-id>`,
-  `<engine-root>`, `<session-dir>`. Each domain skill checks its own
-  `*_override` (including amendments) and hands off to a project skill when one
-  is set. A missing required domain skill fails the run.
+- `execute` invokes domain skills by public name and passes `<engine-root>`
+  and `<session-dir>`. The run id comes from the environment. Each
+  domain skill checks its own `*_override` (including amendments) and hands off
+  to a project skill when one is set. A missing required domain skill fails the run.
 - `review` files every finding through converge; `converge gate`, as the
   review node's exit check on its forward exit, blocks that exit until the slate is complete.
 - `memory-ledger:ledger` is asked before investigating an unknown fact and
@@ -157,8 +157,9 @@ fallback reminds when the previous turn never reached `Stop`. The Claude
 session-start hook fires on startup, clear and compaction; the Codex one
 fires on startup, resume and compaction. On both hosts it adds the goal only
 while a run is active and the recall nudge only after a compaction in an
-active run. The Codex hook always hands the model its host `session_id` to use
-as the run id; Claude skills get the id by substitution.
+active run. The Codex hook always prints the host `session_id`, which is the run
+id. On both hosts, engine commands read the run id from the environment.
+No hook injects the run id into a Bash command.
 
 ## State and invariants
 

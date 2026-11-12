@@ -74,8 +74,7 @@ status message for `unconfigured` or `broken`, and no output for `cooldown` or
 
 - Anything off → `doctor` first.
 - Roots missing or unset → tell the user to run the memory-ledger setup skill.
-- Session identity missing, malformed or conflicting → the write is refused.
-  Pass `--session-id` to override the environment value.
+- Session identity missing, malformed or conflicting → the write is refused. Report the refusal to the user and stop.
 
 ## Host mechanics
 
@@ -84,8 +83,6 @@ Run `<gear> --host <host> memory-ledger ledger <command> [arguments]`.
 Use `claude` or `codex` as `<host>`, based on the current host.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
 
-Host hooks supply `BOOTGEAR_HOST` and `BOOTGEAR_SESSION_ID`.
-Explicit `--host` and `--session-id` values take precedence.
-Without hook context, pass both flags before the subcommand.
-The native Claude session ID remains a fallback when shared context is absent.
+Gear sets the host from `--host`. The CLI reads the session id from the environment.
+`--session-id`, placed before the subcommand, overrides it; the environment normally supplies it.
 Codex signers are `codex:<full-session-id>`; `--as`, when given, must match.

@@ -56,25 +56,25 @@ Any task can use either communication doc — pick `channel` when the task needs
 
 ### Heartbeat (channel, both modes)
 
-Right after `register`, start the heartbeat in the background (see "Host mechanics") and keep it running until `close`:
+After `register`, run the heartbeat from its `next` line in the background (see "Host mechanics"). Keep it running until `close`. The command has this form:
 
 ```sh
-<gear> --host <host> advisor channel heartbeat --channel "$CHANNEL" --role <mine> --session "$SESSION_ID"
+<gear> --host <host> advisor channel heartbeat --channel <channel> --role <mine>
 ```
 
 - It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
-- Host reports the task stopped with no output, or handle lost: run `register` again with the same `SESSION_ID`, then start a new heartbeat.
+- The host reports the task stopped with no output, or the handle is lost. Then run `register --channel <channel> --role <mine>` again, and start the heartbeat it prints.
 - A hook message `advisor: your heartbeat for channel N (ROLE) is not running; ...`: act on it like a `next` — start the command it names in a new background session.
 
 ### After compaction (channel, both modes)
 
-Do what the `next` of the injected seat status says. With no status in context, run `<gear> --host <host> advisor channel whoami --session "$SESSION_ID"` and do what its `next` says (see `references/channel.md` § Resuming after compaction).
+Do what the `next` of the injected seat status says. With no status in context, run `<gear> --host <host> advisor channel whoami`. Then do what its `next` says (see `references/channel.md` § Resuming after compaction).
 
 ### mode=listening
 
 Read-only advisor for the paired session. Don't contact the peer except in response to a mailbox request. Never answer the human directly for a mailbox request.
 
-Set `CHANNEL_SCRIPT` and `SESSION_ID` as in "Host mechanics". Run every `channel.py` call with the host's escalation, if any (see "Host mechanics").
+Run every channel Gear call with the host's escalation, if any (see "Host mechanics").
 
 #### 1. Register first, report immediately
 
@@ -87,21 +87,22 @@ Create the durable goal: *continuously poll the mailbox and process requests unt
 #### 3. Check for unfinished work
 
 ```sh
-<gear> --host <host> advisor channel receive --channel "$CHANNEL" --for <mine> --timeout 5
+<gear> --host <host> advisor channel receive --channel <channel> --for <mine> --timeout 5
 ```
 Read-only, safe anytime. Check the last 3 for a request from `<peer>` with `answered: false` — that's open; handle it in the loop below as if freshly arrived. `answered: true` means you already sent a response naming it as `parent_id`.
 
 #### 4. First poll
 
-Before any other work, run one bounded `receive` and collect its output. Foreground, or a terminal session polled with `write_stdin`. Exit status `1` = no new message (its `note` says so); a request can take many minutes to come, so start the next bounded wait immediately — unless its `peer_live` is `false`: then run `close --role <mine> --channel "$CHANNEL" --if-peer-stale`. If it closes, your heartbeat ends; tell the user the asker's heartbeat is stale. If it refuses, do what its `next` says and keep listening. A background listener nobody polls doesn't count as listening.
+Before any other work, run one bounded `receive` and collect its output. Foreground, or a terminal session polled with `write_stdin`. Exit status `1` = no new message (its `note` says so). A request can take many minutes to come, so start the next bounded wait immediately. If its `peer_live` is `false`, do not wait: run `close --role <mine> --channel <channel> --if-peer-stale`. If it closes, your heartbeat ends; tell the user the asker's heartbeat is stale. If it refuses, do what its `next` says and keep listening. A background listener nobody polls doesn't count as listening.
 
 Never return to the human after one empty poll while claiming to still be listening — start the next `receive` immediately, until a request arrives, `close --if-peer-stale` closes the channel, the user stops the advisor, or the channel closes.
 
 #### 5. Listener loop
 
-`<mine>` is your own role — `listener` if you're in `mode=listening`, `asker` if you're in `mode=asking` — fixed by mode, never chosen freely; `<peer>` is the other one.
+`<mine>` is your own role — `listener` if you're in `mode=listening`, `asker` if you're in `mode=asking` — fixed by mode, never chosen freely; `<peer>` is the other one. Replace `<channel>` in the first line with the channel number.
 
 ```sh
+CHANNEL=<channel>
 while :; do
   <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
   RECEIVE_JSON=$(<gear> --host <host> advisor channel receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
@@ -156,13 +157,13 @@ Never echo the peer's banner, streamed reasoning, or raw request/response payloa
 - Out-of-scope request → return the boundary, ask the peer to get human direction.
 - Close on session end:
   ```sh
-  <gear> --host <host> advisor channel close --role <mine> --channel "$CHANNEL"
+  <gear> --host <host> advisor channel close --role <mine> --channel <channel>
   ```
 
 ## Fallbacks
 
 - No `--mode` → ask the caller to re-invoke with one.
-- Channel: no real session id available → fail.
+- Channel: no session id in the environment → stop and tell the user.
 - CLI plugin missing → Claude Code: run `/plugin install cli@bootgear`; Codex CLI: run `codex plugin add cli@bootgear`. Then call `cli:gear` again.
 - Channel peer `advisor` plugin missing → tell the user; never fall back to `direct`.
 - Direct peer CLI missing or refusing a flag → report the exact error and stop.
@@ -176,12 +177,8 @@ For channel mode, call `cli:gear`. Replace `<gear>` with its literal absolute pa
 Replace `<host>` with `claude` or `codex`, based on the current host.
 Run channel commands as `<gear> --host <host> advisor channel <command> [arguments]`.
 
-For channel mode, set `SESSION_ID` to the real host session ID. If none is available, fail.
-
-The channel CLI resolves `--session` first, then `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`.
-
-- Claude Code: `SESSION_ID="${BOOTGEAR_SESSION_ID:-$CLAUDE_CODE_SESSION_ID}"`.
-- Codex CLI: use `BOOTGEAR_SESSION_ID` when it is set. Otherwise, use the `session_id` the host gives you in your context and pass it with `--session`.
+Channel commands read this session's id from the environment. If no session id is in the environment, stop and tell the user.
+Only `register`, `heartbeat`, `list` and `whoami` accept `--session`; the environment normally supplies it.
 
 Escalation (Codex CLI): every channel Gear call needs `sandbox_permissions: require_escalated` — `~/.bootgear/advisor` is outside the normal writable roots. Escalate on every call, not just the first.
 
@@ -189,5 +186,3 @@ Background heartbeat:
 
 - Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000`.
 - Codex CLI: a terminal session left running, as for `receive`.
-
-Keep explicit session values for compound and background calls without hook context.

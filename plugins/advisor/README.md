@@ -66,7 +66,7 @@ sequenceDiagram
     participant A as Asker session
     L->>M: register --role listener (always a new channel)
     L-->>L: report the channel number, start heartbeat
-    A->>M: list --live-for asker --session S
+    A->>M: list --live-for asker
     A->>M: register --role asker on the most recently updated channel
     A-->>A: start heartbeat
     A->>M: send request
@@ -76,16 +76,16 @@ sequenceDiagram
 ```
 
 - **A channel is a one-time lease kept alive by a heartbeat.** Each of its two seats,
-  `listener` and `asker`, records the owner's session ID and a `seen_at` stamp. After
-  `register`, the owner runs `heartbeat` in the background; it stamps every 3 seconds, and a
-  seat is live while the stamp is under 10 seconds old. Only the owner's `--session` can
-  refresh it; ownership is a string match on the session ID within the owner-only mailbox, not
-  an authentication. `heartbeat` ends with a `stopped:` line and a `next:` line naming the follow-up:
+  `listener` and `asker`, records the owner's session id and a `seen_at` stamp. After
+  `register`, the owner runs `heartbeat` in the background. It stamps every 3 seconds. A
+  seat is live while the stamp is under 10 seconds old. Only the owner's session can
+  refresh it. Ownership is a string match on the session id within the owner-only mailbox,
+  not an authentication. `heartbeat` ends with a `stopped:` line and a `next:` line naming the follow-up:
   `channel_closed`, `max_age` (6180 seconds; `next` restarts it, and the seat stays live for a
   720-second restart grace meanwhile, so at most 6900 seconds in all), `signal` (SIGTERM, SIGINT or
   SIGHUP), `seat_taken` when this session does not hold the seat, or the errors
   `heartbeat_failed` (three failed stamps in a row, an unreadable or missing record included),
-  `channel_missing`, `invalid_args` and `invalid_role`. After a restart, the same session ID
+  `channel_missing`, `invalid_args` and `invalid_role`. After a restart, the same session id
   can register its seat again and start a new heartbeat; any other session gets `seat_claimed`. A dead seat reads stale
   within 10 seconds after a normal host exit; after a crash, kill or terminal close an orphaned
   heartbeat keeps the seat live up to its maximum age plus the restart grace. A stall over 10 seconds makes a live
@@ -123,14 +123,14 @@ Design detail, including the on-disk layout, lives in [docs/advisor.md](../../do
 | `/advisor:advisor --mode asking` (Codex: `$advisor:advisor --mode asking`) | ask the other model, one-shot or through the mailbox |
 | `/advisor:advisor --mode listening` (Codex: `$advisor:advisor --mode listening`) | open a channel and advise the paired session until stopped |
 
-The `channel` Gear command runs `skills/advisor/scripts/channel.py` on both hosts.
+Run channel commands as `<gear> --host <host> advisor channel <command>`.
 The `cli:gear` skill returns the Gear path for each host:
 
 ```
 register  take a seat: a listener gets a new channel, an asker claims an existing one
 init      print a channel's directory path, creating the directory (not a channel record)
 heartbeat keep a seat live; run in the background after register
-list      list channels; --live-for asker --session S shows the ones an asker can claim; --wait N waits for one
+list      list channels; --live-for asker shows the ones an asker can claim; --wait N waits for one
 send      post a request, response or stop
 receive   wait for an unread message; prints previews of the last three and a next command
 fetch     read a message's full body, mark it read, and remind the caller to receive
@@ -139,6 +139,9 @@ close     close the channel; --if-peer-stale closes only if the peer is not live
 status    show a channel's record
 whoami    show this session's seat: role, unread, last read, owed request, and the next command
 ```
+
+Channel commands read this session's id from the environment. Only `register`, `heartbeat`,
+`list` and `whoami` accept `--session`; the environment normally supplies it.
 
 ---
 
@@ -164,8 +167,8 @@ Requirements:
 - For channel mode: the same advisor version on both hosts.
 - For direct mode: the target CLI, installed and signed in. Claude Code calls Codex; Codex calls Claude Code.
 
-On Codex CLI, the mailbox root sits outside the sandbox's writable roots, so every
-`channel.py` call runs with escalated sandbox permissions.
+On Codex CLI, the mailbox root sits outside the sandbox's writable roots.
+Every channel Gear call therefore runs with escalated sandbox permissions.
 
 Configuration:
 

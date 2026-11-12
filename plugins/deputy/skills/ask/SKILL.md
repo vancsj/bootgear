@@ -52,5 +52,4 @@ Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool ca
 Replace `<host>` with `claude` or `codex`, based on the current host.
 The standards file is `references/qa-standards.md` in this plugin.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-Host hooks supply shared host and session context.
-Without hook context, pass explicit host and session options to `record`.
+The CLI reads the host from `--host` and the session id from the environment.

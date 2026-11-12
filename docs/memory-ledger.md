@@ -70,13 +70,17 @@ Evidence: test -f example.cfg
   `lint` reports a replaced check as `EVIDENCE-REWRITTEN`. `e=N` is how many checks the
   answer had when signed, and a `>` block is that run's recorded output.
 - **Signer** is the AI session, never the human. Claude: the first segment of
-  `CLAUDE_CODE_SESSION_ID`, overridable by `--as`. Codex: exactly
-  `codex:<session_id>`. The session is `--session-id`, else
-  `BOOTGEAR_SESSION_ID`, else `CLAUDE_CODE_SESSION_ID`. `--as` may be omitted, and an
+  the session id, overridable by `--as`. Codex: exactly
+  `codex:<session_id>`. The CLI reads the session id from the environment:
+  `BOOTGEAR_SESSION_ID`, else the session variable of the declared host.
+  That variable is `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID`. Last comes
+  the variable of the other host. `--session-id`, placed before the subcommand,
+  overrides it; the environment normally supplies it. `--as` may be omitted, and an
   unsafe session id or conflicting `--as` is rejected. Standalone or gear:
-  `--as`, else `--session-id`, then those same session sources. The host is
-  `--host`, else `$BOOTGEAR_HOST`, else Claude when
-  `CLAUDE_CODE_SESSION_ID` is set, else standalone.
+  `--as`, else the same session sources. The host is
+  `--host`, else `$BOOTGEAR_HOST`, else the host whose session variable is set.
+  With both set, it is the nearest `claude` or `codex` parent process, else Claude.
+  With neither set, it is standalone.
 - **Write gates.** `new` and `rival` run each shell check (180 s timeout) and report the
   result without refusing on it, then record the author's `✓ (author)`. They refuse a claim
   over 40 words and (on `new`) a blatant restatement of an existing question. `new`,
@@ -150,7 +154,7 @@ session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
 |---|---|---|
 | Entry point | `cli:gear`, then `--host claude memory-ledger ledger` | `cli:gear`, then `--host codex memory-ledger ledger` |
 | CLI setup | `cli` dependency installs with the plugin | Install `cli@bootgear` before using the plugin |
-| Signer | first segment of `CLAUDE_CODE_SESSION_ID`, or `--as` | `codex:<id>` from `--host codex` and `--session-id` or the default session sources; `--as`, if given, must equal it |
+| Signer | first segment of the session id, or `--as` | `codex:<id>` from the session sources; `--as`, if given, must equal it |
 | Manifest | `.claude-plugin`, `hooks/hooks.json` | `.codex-plugin`, `hooks/codex-hooks.json` |
 | Hook status output | `additionalContext` | `systemMessage`; the hook first validates the session id and stays silent if it is invalid |
 

@@ -10,8 +10,9 @@ Review a change and apply accepted feedback.
 ## Inputs and outcomes
 
 Inputs: the diff, branch, or PR under review; the linked ticket, if any; the
-depth label `quick` or `full`; in an active run, also `<run-id>`,
-`<engine-root>`, `<session-dir>`, the sub-task label, and `review_fix_mode`.
+depth label `quick` or `full`. In an active run, also `<engine-root>`,
+`<session-dir>`, the sub-task label, and `review_fix_mode`. The run id comes
+from the environment.
 Authoring callers also supply authoring context, the fixed task folder and any current self-review checkpoint reference.
 
 Hand back to the caller (`execute` in an active run, the user standalone)
@@ -110,8 +111,7 @@ A completed cap leaves deeper issues open. The caller retains them until explici
 ## Check for an override first
 
 1. If an active `engine` run exists, read its settlement through the engine
-   session interface using the exact `<run-id>` and `<session-dir>` supplied by
-   `execute`.
+   session interface. Use the exact `<session-dir>` that `execute` supplied.
 
    Then scan the active run's full decisions for `AMENDMENT review_override` or
    `AMENDMENT review_fix_mode`; the latest valid value wins over the field read
@@ -131,7 +131,7 @@ A completed cap leaves deeper issues open. The caller retains them until explici
 
 3. Otherwise, use the default implementation below.
 
-When delegating from an active run, pass `<run-id>`, the host engine root, and
+When delegating from an active run, pass the host engine root and
 `<session-dir>` using the active run's handoff contract. The delegated skill
 must return the fields defined in `Inputs and outcomes`.
 
@@ -201,12 +201,12 @@ iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
 that file is missing, select anew. Write the enabled pack file names, one per
 line, to `<converge-dir>/<slate>.packs` (an empty file when none). In an
 active run, record
-`<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
+`<gear> --host <host> engine task session record-decision --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
 If `init` refuses with a duplicate angle id that names a pack, remove that
 pack from `--angles` and from the `.packs` file, and run `init` again.
 
 In an active run, write the settlement with
-`<gear> --host <host> engine task session read <run-id> --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
+`<gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
 and add `--settlement <that file>` to `init`. At `quick`, add `--refuters 1`.
 
 In an active run, add `--snapshot --pass <n>` to `init`; for `<n>` ≥ 2, also
@@ -216,7 +216,7 @@ change under review. Right after `init` succeeds, record the slate so
 `execute` prunes its snapshot however the review ends:
 
 ```text
-<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review slate <slate> snapshot=<sha>"
+<gear> --host <host> engine task session record-decision --mode solo --summary "review slate <slate> snapshot=<sha>"
 ```
 
 If `init` refuses a `--since` check, keep `--pass <n>` and stop: have
@@ -307,7 +307,7 @@ that `init` printed. Keep the slate and converge directory in the handback.
 Use the selected exit's public check for leave arguments:
 
 ```text
-<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
+<gear> --host <host> engine task session record-decision --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
 ```
 
 ### 6. Apply accepted feedback
@@ -400,6 +400,7 @@ unavailable), stop and report `blocked`, naming the missing role. Claims start
 
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
+`<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
 
 - Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 - Run engine commands as `<gear> --host claude engine task <command> [arguments]`.

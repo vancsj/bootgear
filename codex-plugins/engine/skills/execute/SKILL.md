@@ -17,13 +17,13 @@ Hand back to the user a final pitch and a closed session ledger. Every run ends 
 
 ## Picking up from clarify
 
-Use the `<run-id>` selected after the single settlement initialization. Do not call `init` from `execute`. Accept `<run-id>`, `<engine-root>`, and `<session-dir>` as the absolute directory actually used, whether default or not. Call `recall` first with all three values.
+Do not call `init` from `execute`. Accept `<engine-root>` and `<session-dir>`, the absolute directory actually used, whether default or not. The run id comes from the environment. Call `recall` first with both values.
 
 Validate `recall`'s result before doing anything else.
 
 ## Workflow
 
-Pick up from `clarify` → `recall` with `<run-id>`, `<engine-root>` and `<session-dir>` → validate the settlement → loop {recall, act on the current node, transition, report, check `goal`} until the run succeeds or fails → prune review slates → final pitch → `close`.
+Pick up from `clarify` → `recall` with `<engine-root>` and `<session-dir>` → validate the settlement → loop {recall, act on the current node, transition, report, check `goal`} until the run succeeds or fails → prune review slates → final pitch → `close`.
 
 ## Settlement validation
 
@@ -61,7 +61,7 @@ Keep factual verification separate from quality judgements. Required challenge a
 A review can report defects and explicit uncertainty. Completion does not mean the artefact is good or ready to publish.
 If a required public command or role is unavailable, retain its diagnostic and follow the blocked or failed path.
 
-For a domain-skill override that is a mapping keyed by sub-task label, pass the label with `<run-id>`, `<engine-root>`, and `<session-dir>`.
+For a domain-skill override that is a mapping keyed by sub-task label, pass the label with `<engine-root>` and `<session-dir>`.
 
 ## The loop
 
@@ -69,13 +69,13 @@ Recall and goal-check wrap every iteration regardless of which node is current. 
 
 For each iteration, follow these steps:
 
-1. **Recall.** Re-read the settlement and open todos. Run `<gear> --host <host> engine task state current <run-id>` for this run's node and reminder. Apply the latest valid amendment from the full decisions section. Check for a `[qN]` tag with no closing entry. If one exists, resume it under the public `debate` skill before doing anything else in the iteration. Do not start new work or run goal-check with a debate genuinely open.
+1. **Recall.** Re-read the settlement and open todos. Run `<gear> --host <host> engine task state current` for this run's node and reminder. Apply the latest valid amendment from the full decisions section. Check for a `[qN]` tag with no closing entry. If one exists, resume it under the public `debate` skill before doing anything else in the iteration. Do not start new work or run goal-check with a debate genuinely open.
 
 2. **Act.** Do the current node's `reminder.do`, calling the skill it names. A node with no `reminder` relies on ordinary prose toward `goal`. Only when that work is about to investigate a domain fact this run does not already have from the ticket, the settlement, or this ledger — current behavior, a convention, a prior decision on the same question, not something already established earlier this run or in an earlier iteration of the same node — invoke `memory-ledger:ledger` with the question first (see "Checking and recording in memory-ledger" below) and use a settled hit instead of re-deriving it. A later iteration of the same multi-iteration node (e.g. `test-code` re-running after a fix) skips this when it has no new fact to investigate. Update todos as work starts and completes:
 
    ```text
-   <gear> --host <host> engine task session update-todo <run-id> "<text>"
-   <gear> --host <host> engine task session update-todo <run-id> "<text>" --done
+   <gear> --host <host> engine task session update-todo --text "<text>"
+   <gear> --host <host> engine task session update-todo --text "<text>" --done
    ```
 
    A debate/resolve node is worked like any other: check the debate threshold, run `resolve`, and run `debate` only if `resolve` escalates. For a reversible, narrow decision below the threshold, first call `deputy:ask` with the decision, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and continue to the existing path. On `answered`, check that every cited slug is in the candidate list; if so, decide solo with the answer and record it with its cited slugs. On `escalate` or `not-applicable`, use the existing debate threshold path (no question is asked mid-run). Production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to `deputy:ask`. Record the decision with its below-threshold basis:
@@ -83,7 +83,7 @@ For each iteration, follow these steps:
    When a debate node's `reminder.do` names `debate_mode`, apply it to that node's choice claims: `mandatory` resolves every claim, while `threshold` decides below-threshold claims solo and resolves only claims at or above `debate_threshold`. A `spec-debate` node returns through `spec`, then `spec-review`.
 
    ```text
-   <gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "<decision; below-threshold basis>"
+   <gear> --host <host> engine task session record-decision --mode solo --summary "<decision; below-threshold basis>"
    ```
 
 When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this run (a convention, a root cause, a durable "why," not this run's own todo or PR state), judge whether it belongs in memory-ledger and record the `record-decision` entry with a `ledger:<slug>` citation or an explicit `no-ledger:`/`ledger-worthy-unrecorded:` marker per "Checking and recording in memory-ledger" below. Make this judgment every time, whether or not the plugin is installed.
@@ -91,7 +91,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 3. **Transition on an ordinary decision.** Once the current node's work reaches a decision, other than reaching `goal`'s succeeded condition (step 5 handles that one), find the matching destination in its `reminder.branches` and call `transition`:
 
    ```text
-   <gear> --host <host> engine task state transition <run-id> --to <node> --reason "<why>" [--confirm-leave]
+   <gear> --host <host> engine task state transition --to <node> --reason "<why>" [--confirm-leave]
    ```
 
    Pass `--confirm-leave` when the current node's `reminder.leave` is set, only once the named condition is actually true, never to get past the gate; omit it otherwise. `--to failed` needs no `--confirm-leave`, from any node. Read+merge principles per "Reading and merging principles" below, and state the merged result in the same turn as the `transition` call. Read the printed reminder for the new node before continuing; it is this run's instruction for the next iteration's Act step, not merely a log line.
@@ -101,7 +101,7 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 4. **Report periodically.** Report meaningful milestones, blockers, and direction changes directly to the user and record each one:
 
    ```text
-   <gear> --host <host> engine task session record-pitch <run-id> "<what changed>"
+   <gear> --host <host> engine task session record-pitch --text "<what changed>"
    ```
 
    Use pitches to report progress. Do not use a pitch to ask a question.
@@ -110,10 +110,10 @@ When `resolve`, `debate`, `spec`, or `review` settles a fact that outlives this 
 
    If the same next unit of work fails in consecutive iterations with no new information from a pitch, resolve, or debate, re-read the failed condition against that stuck point instead of trying it a third time.
 
-   - When the succeeded condition is met, call `transition --to succeeded` before calling `close succeeded`. `transition` does not itself verify the condition; this check is what makes the call honest.
-   - End unsuccessfully with the failed condition as the reason if the stuck point matches it. Call `transition --to failed` before `close failed`.
+   - When the succeeded condition is met, call `transition --to succeeded` before calling `close --outcome succeeded`. `transition` does not itself verify the condition; this check is what makes the call honest.
+   - End unsuccessfully with the failed condition as the reason if the stuck point matches it. Call `transition --to failed` before `close --outcome failed`.
    - Treat a non-matching stuck point as a gap in `goal`'s failed condition. Report the gap and keep working the next unit toward `goal` if one exists.
-   - Call `transition --to failed` then `close ... failed` if no other unit of work remains, even when no `goal` condition was literally met. Give the exhausted-stall gap as the reason: name the stuck point, state that `goal`'s failed condition does not cover it, and record it as a gap in `goal`, not as a genuine match.
+   - Call `transition --to failed` then `close --outcome failed` if no other unit of work remains, even when no `goal` condition was literally met. Give the exhausted-stall gap as the reason: name the stuck point, state that `goal`'s failed condition does not cover it, and record it as a gap in `goal`, not as a genuine match.
 
 ## Delegating to `spec`, `test`, and `review`
 
@@ -125,17 +125,17 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 - On a `review` outcome of `handoff`, stay at `review` and check the returned claim ids first. Before building a fix that adds a mechanism the signed-off spec does not name (a command, flag, check, guard, node or file), run `resolve` in the `scope and outcome` domain, with the spec as the scope source, or else the ticket or PR. On a settled rejection, the fix is out of scope: do not build it. On an undecided `resolve`, go to `review-debate`. Then transition to the current node's `fix` branch and apply the remaining claim ids there; with none remaining, take the branch that matches the review without them.
 - In the `fix` node under `review_fix_mode: auto_within_permitted_mutations`, apply each `fix-now` claim marked `apply` by its patch (`<gear> --host <host> <converge-plugin> converge render --json` `fix_now`) within `permitted_mutations`, and run the tests and checks; revert the patch of each claim marked `revert` after its failed `fix-check`. Then return to `review`: its next pass, `--since` the previous one, is the patch-only re-review that records each `fix-check`.
 - On `comment_only`, report the claims and take the branch that matches the reported outcome.
-- Pass `<run-id>`, `<engine-root>`, and `<session-dir>` so the domain skill can perform its override check.
+- Pass `<engine-root>` and `<session-dir>` so the domain skill can perform its override check.
 - When the current node's `reminder.do` names `stop_after`, pass it to `spec` on every call from that node, re-entry included.
 - Handle a required model or source-selection checkpoint before the ordinary blocked-spec failure path.
   Invoke `engine:clarify` with `mode: checkpoint`, kind, pending payload, task folder and confirmation evidence.
-  Preserve the caller's run ID, engine root and session directory. Do not initialize or select another run.
+  Preserve the caller's engine root and session directory. Do not initialize or select another run.
   Complete the public mode invocation; reading a reference alone does not complete the checkpoint.
   On `checkpoint-confirmed`, re-enter the original skill with the confirmed values and typed references.
   On `needs-confirmation` or `unavailable`, retain pending work and use the existing stopped path with its actual diagnostic.
   This exception permits no routine design question or extra mutation.
 - On any other `spec` return of `blocked`, transition to `failed` with the missing statement as the reason.
-- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the visit number `<n>` of the node that runs it (the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`). On `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. On another result, run `<gear> --host <host> engine task state show <run-id>` and read the machine in force before you name a node. Then use the first rule that matches:
+- For `spec-review`, pass the original request/ticket, artifact paths, base commit, project root, and the visit number `<n>` of the node that runs it (the slate id, and from `<n>` >= 3 spec-review's `--pass <n>`). On `blocked`, transition to `failed` with the missing role/coverage or claim IDs and evidence in the reason. On another result, run `<gear> --host <host> engine task state show` and read the machine in force before you name a node. Then use the first rule that matches:
   - `choices` is non-empty: take the review node's branch to its debate node. Pass the claim IDs, render path, slate, converge directory, and the `revise`, `inline`, `deferred` and `follow-up` lists.
   - `revise` is non-empty: take the review node's branch back to the drafting node. Pass the same fields.
   - `ready` with a non-empty `inline` list: take the same branch back to the drafting node. Pass the `inline` list. Apply the patches there. Do not run a new review. Then take the drafting node's inline exit: its branch for applied `inline` patches.
@@ -143,7 +143,7 @@ Before using `spec`, `spec-review`, `test`, or `review`:
 
   Pass only the leave arguments required by the selected exit's public check.
   Keep the slate and converge directory in the handback, including for exits without checks.
-- After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `<gear> --host <host> engine task session update-todo <run-id> "follow-up [<stage>]: <claim text>"`, where `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists. Record each returned `deferred` claim the same way as `"deferred [spec-review]: <claim text>"`; mark a `deferred` todo done only after `review` has received it, never because a later return no longer lists it.
+- After `review` or `spec-review` returns, and before the run closes, record each returned follow-up claim with `<gear> --host <host> engine task session update-todo --text "follow-up [<stage>]: <claim text>"`. `<stage>` is `review` or `spec-review`. The same claim text from a later pass matches the todo already there and adds no second one; a refusal because that todo is marked done means it was settled: skip it. Then mark done (`--done`) each open `follow-up [<stage>]` todo of that stage that the new return no longer lists. Record each returned `deferred` claim the same way as `"deferred [spec-review]: <claim text>"`; mark a `deferred` todo done only after `review` has received it, never because a later return no longer lists it.
 - When invoking `review`, append the open `deferred [spec-review]:` todos to the linked-ticket input as a "Deferred spec-review findings" section.
 - Under `review_fix_mode: accepted_only`, record each returned `fix-now` claim the same way as `"fix-now [<stage>]: <claim text>"`, never as `follow-up`, and mark done each open `fix-now [<stage>]` todo the new return no longer lists.
 
@@ -210,7 +210,7 @@ Do not add a versioning scheme to `ledger:<slug>` citations.
 Do not rewrite the settlement. Record a user-requested change as its own decision:
 
 ```text
-<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "AMENDMENT <field>: <old value> -> <new value>, per user request"
+<gear> --host <host> engine task session record-decision --mode solo --summary "AMENDMENT <field>: <old value> -> <new value>, per user request"
 ```
 
 Prefix the summary with `AMENDMENT <field>`. Name the exact settlement field being changed, such as `permitted_mutations`, `goal`, or `debate_threshold`.
@@ -227,8 +227,8 @@ Do not write a diff, a field name alone, or prose without the complete value.
 To change `state_machine`:
 
 ```text
-<gear> --host <host> engine task state show <run-id>
-<gear> --host <host> engine task state amend <run-id> --machine-file <file> --reason "<why>, per user request"
+<gear> --host <host> engine task state show
+<gear> --host <host> engine task state amend --machine-file <file> --reason "<why>, per user request"
 ```
 
 Save the YAML that `show` prints below its `MACHINE` line to `<file>`, edit it, then run `amend`. On a refusal, fix every listed problem and rerun `amend`.
@@ -253,7 +253,7 @@ Reconcile any real conflict yourself. Across levels, task overrides project over
 When that narrow test finds a real conflict and you resolve it, record it:
 
 ```text
-<gear> --host <host> engine task session record-decision <run-id> --mode solo --summary "principles reconciliation: <source> says <X>, <source> says <Y>, cannot both hold; took <winner> per precedence"
+<gear> --host <host> engine task session record-decision --mode solo --summary "principles reconciliation: <source> says <X>, <source> says <Y>, cannot both hold; took <winner> per precedence"
 ```
 
 `<source>` is the level, plus the principle's position when both come from the same level (e.g. `[project] #2`).
@@ -295,7 +295,7 @@ Do not perform a `goal` done-condition mutation absent from `permitted_mutations
 
 ## Fallbacks
 
-End each of these as `failed`: call `transition --to failed`, then `close ... failed` with the stated reason (see "Ending the run").
+End each of these as `failed`: call `transition --to failed`, then `close --outcome failed` with the stated reason (see "Ending the run").
 
 - **Validation refusal:** report the refusal's grouped field-level problems; that refusal is the reason.
 - **Missing required dependency:** if the task type requires a missing dependency, such as `test` for ticket-to-PR, report it once and name the dependency as the reason. Do not retry.
@@ -314,8 +314,7 @@ Use `engine` for `<converge-plugin>`.
 - Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 - Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
 - If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Run `<gear> --host codex engine task session validate <run-id>` with the exact run
-  and session directory.
+- Run `<gear> --host codex engine task session validate`. Add `--dir <session-dir>` only for a custom directory.
 - Supply `<plugin-root>` as `<engine-root>` in the handoff to downstream skills.
 
-When delegating, invoke the domain skills by their plugin-qualified names `engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`. Do not read skill fields yourself and call that skill instead. Pass `<run-id>`, `<engine-root>`, and `<session-dir>` explicitly.
+When delegating, invoke the domain skills by their plugin-qualified names `engine:spec`, `engine:spec-review`, `engine:test` and `engine:review`. Do not read skill fields yourself and call that skill instead. Pass `<engine-root>` and `<session-dir>` explicitly.

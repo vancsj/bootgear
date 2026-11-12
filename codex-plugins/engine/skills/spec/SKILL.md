@@ -7,7 +7,7 @@ description: Investigate a request, write requirements and useful design, check 
 
 Inputs: request or ticket, project root, repository evidence, and one fixed task folder.
 Include supplied project review context, candidate skill inventory, confirmed selections, and applicable model confirmations.
-In an active run, include run ID, engine root, session directory, and stage label.
+In an active run, include engine root, session directory, and stage label. The run id comes from the environment.
 On re-entry, include the independent review render, claim IDs, and settled choices.
 Optional `stop_after` accepts only `design`.
 
@@ -50,7 +50,7 @@ Use its public intake, primary artifact binding, and gate handback.
 In an active run, read the settlement through the public session command:
 
 ```text
-<gear> --host <host> engine task session read <run-id> --section settlement
+<gear> --host <host> engine task session read --section settlement
 ```
 
 Use `spec_override`, including its latest valid amendment.
@@ -59,8 +59,7 @@ A mapping uses stage labels `requirements`, `design`, `review`, and `task`.
 An absent matching entry uses this skill's default stage. Do not search for another override.
 Standalone, use a clearly named or registered project spec skill when its description matches the request.
 
-Pass run ID, engine root, session directory, task folder, authoring context, and `stop_after` to an override.
-Keep session identifiers in separate command arguments.
+Pass engine root, session directory, task folder, authoring context, and `stop_after` to an override.
 Overrides return each stage's artifact and the applicable author-review handback.
 When `stop_after` is `design`, invoke no mapped task stage and return no task artifact.
 An incompatible override returns `blocked`; obtain the missing author check through its public skill before independent handoff.
