@@ -20,8 +20,8 @@ nodes:
     reminder:
       do: Draft requirements, design, and tasks with spec. Cite the request's acceptance criteria; record open interpretations
         and design choices without inventing answers. Form mental and conceptual models. Confirm only uncertain or
-        materially changed models. Use five status sections in requirements and design. Complete bounded spec-stage
-        self-review before handoff.
+        materially changed models. Keep primary specs concise, with material status information. Read artifacts and fix clear
+        issues before recording bounded spec-stage self-review.
       leave: The primary package and author check are complete enough for independent spec review. Keep final sign-off
         with spec-review. The author checkpoint is clean or limit-reached; retain remaining caller work. For
         the inline exit to impl only, apply its approved patches and pass both gates with finder-written

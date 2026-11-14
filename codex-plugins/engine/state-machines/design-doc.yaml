@@ -23,8 +23,8 @@ nodes:
         `<session-dir>`. `<run-id>` is this session''s id from the environment. Output paths: `<work_dir>/<run-id>/requirements.md` and `<work_dir>/<run-id>/design.md`.
         `<work_dir>` is the settled `work_dir`. Input: the request. Output: the two files. When you leave, pass `--leave-arg
         output_dir=<directory holding requirements.md and design.md>`. Does not: write `task.md` or review the files.
-        Form mental and conceptual models. Confirm only uncertain or materially changed models. Use five status sections
-        in requirements and design. Complete bounded spec-stage self-review before handoff.'
+        Form mental and conceptual models. Confirm only uncertain or materially changed models. Keep primary specs concise,
+        with material status information. Read artifacts and fix clear issues before recording bounded spec-stage self-review.'
       leave: requirements.md and design.md are at the output paths and are complete enough for independent review;
         do not resolve the final spec sign-off here. The author checkpoint is clean or limit-reached; retain remaining
         caller work.

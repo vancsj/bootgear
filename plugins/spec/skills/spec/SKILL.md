@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Investigate a request, write requirements and useful design, check the author draft, and derive tasks before independent spec review. Use when behaviour, design choices, or an implementation checklist need settling.
+description: Write concise requirements, material design choices and derived tasks before independent review. Use when behaviour or design needs settling.
 ---
 
 ## Inputs and outcomes
@@ -23,7 +23,7 @@ Packages and delegated authoring handbacks include `author_review`: `task_folder
 Only author-review outcomes `clean` and `limit-reached` permit independent handoff.
 Keep `unresolved_refs` with the caller, separate from independent role inputs.
 A limit does not resolve those items.
-Keep contract questions in the primary documents' Open questions.
+Keep contract questions visible in the primary documents as Open questions.
 
 For required confirmation, return `blocked` with `checkpoint_outcome: needs-confirmation`, `checkpoint_kind`, `pending_payload`, and `missing_confirmation`.
 Source selections also retain the public self-review result and all missing candidate names.
@@ -78,8 +78,12 @@ If either is uncertain or materially changed, return the pending checkpoint befo
 Clear, unchanged models need no new confirmation.
 
 Read [references/document-status.md](references/document-status.md) when writing or updating requirements or design.
-Write terse `requirements.md` with the required behaviour, boundaries, compatibility target, and feature model.
-Include Facts, Assumptions, Constraints, Decisions, and Open questions, using `None` for empty sections.
+Write concise `requirements.md` with the goal, boundaries, required behaviour, constraints and acceptance checks.
+Include a compatibility target or feature model only when it defines the requested behaviour.
+Use relevant arc42 sections. Keep material facts, assumptions, constraints, decisions and open questions clear without empty headings.
+State each contract once. Reference that statement elsewhere.
+Remove avoidable descriptive counts. Preserve behaviour-defining numbers, identifiers and useful citations.
+Keep run controls in the settlement.
 Write rationale in task-local `requirements-notes.md`.
 Challenge any exclusion that prevents the requested outcome; return the concrete scope choice to the caller.
 Do not decide unresolved interpretations through guesswork, resolve, or debate within this stage.
@@ -93,14 +97,15 @@ Standalone, the direct caller handles them.
 Run this stage for real trade-offs. Always run it when `stop_after` is `design`.
 Otherwise, a small task can use requirements alone.
 
-State concrete changes, locations, resulting behaviour, and order in `design.md`.
+Explain material choices, consequences, affected boundaries, resulting behaviour and necessary order in `design.md`.
 Cite the existing pattern being followed.
 For real alternatives, state the selected approach and each rejected option's cost or risk.
 Keep these alternatives in the primary design for independent review.
-Use the same five status sections as requirements.
+Use relevant arc42 sections. Keep material status information clear through sections or concise labels.
+Leave routine internal naming and implementation inventories to implementation.
 Put additional rationale in task-local `design-notes.md`.
 Read [references/views-security.md](references/views-security.md) for affected architecture, data, lifecycle, relations, or security boundaries.
-Choose only views that explain the changed mechanism.
+Choose useful C4 or runtime views that explain the changed mechanism. Do not require a diagram without a useful view.
 
 Return the design artifact: primary path and content, notes path, and unresolved material trade-offs.
 Retain those trade-offs in primary Open questions.
@@ -110,7 +115,7 @@ Retain those trade-offs in primary Open questions.
 Read primary requirements and design, when present. Do not rely on notes.
 Check the design, or requirements when design was skipped:
 
-1. Each change names a specific existing or new file and its function, section, or heading.
+1. Each material change identifies its affected boundary or location clearly enough for implementation.
 2. Each change states the resulting behaviour.
 3. Changes have a stated order, or are explicitly order-independent.
 4. No substantive choice remains as TBD, an implementation-time decision, or competing options.
@@ -127,6 +132,7 @@ Do not derive tasks from a failing artifact.
 Skip this stage when `stop_after` is `design`.
 Derive ordered `task.md` steps from unambiguous primary requirements or design statements.
 Each step names its source statement. Do not invent behaviour or a material design choice.
+Name work units and acceptance checks. Reference primary contracts instead of repeating design details or implementation inventories.
 If a step cannot be derived, make one bounded return to design or completeness with the exact gap.
 If the same gap remains, return `blocked`, no task artifact, and the missing statement.
 Include related claim IDs and evidence on re-entry.
@@ -137,6 +143,9 @@ Return the task artifact: content and path, or the structural refusal.
 ### Stage 5: author check and package return
 
 Invoke self-review through its public interface at stage `spec`, using the fixed task folder and authoring context.
+Supply the actual requirements, design when present, tasks and relevant settlement text.
+Follow its reading-and-fix workflow. Do not replace it with checkpoint helper calls.
+Keep mechanical results separate from the author's recorded result. Keep deeper questions open for independent review.
 Keep its default two-pass budget. Stop earlier when clean.
 Reuse an open checkpoint after edits, retries, configuration changes, or compaction.
 Renew a closed checkpoint only with related independent-revision or confirmed-intent-change evidence.

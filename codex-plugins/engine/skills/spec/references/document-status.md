@@ -1,7 +1,16 @@
-# Document status
+# Document content and status
 
-Use these separate sections in both `requirements.md` and `design.md`.
-Write `None` when a section is empty.
+Keep primary specs focused on behaviour, material choices and acceptance checks.
+Select relevant arc42 sections. Use architecture or runtime views only when they explain a material change.
+Keep requirements clear about the goal, boundaries, behaviour and acceptance checks.
+Keep design clear about material choices, consequences and useful structure or runtime views.
+Derive ordered tasks from primary source statements. Reference those statements instead of repeating their detail.
+State each contract once. Keep run controls in the settlement.
+Remove avoidable descriptive counts. State the rule or cite its source instead.
+Preserve behaviour-defining numbers, identifiers and useful citations.
+
+Keep material status information clear in requirements and design.
+Use separate sections or concise labels for the following content. Omit empty headings.
 
 | Section | Required content |
 |---|---|
@@ -16,7 +25,7 @@ Use a check that detects the false condition, rather than only a successful near
 Promote verified assumptions into Facts with evidence.
 Promote confirmed choices into Decisions.
 Keep smaller assumptions visible with specific verification steps.
-Search diagrams, tables, tasks, and prose for hidden assumptions outside the Assumptions section.
+Search diagrams, tables, tasks and prose for assumptions without a clear status.
 Keep contract questions in primary Open questions for independent review.
 Keep private author hypotheses and unresolved references with the caller.
 
