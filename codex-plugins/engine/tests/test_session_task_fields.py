@@ -112,6 +112,42 @@ class TaskTypeTest(SettlementCase):
                               f"    - must be one of: {', '.join(TASK_TYPES)}\n", result.stderr)
 
 
+class StateMachineScalarTest(SettlementCase):
+    def _quoted_machine(self, task_type: str = "ticket-to-pr") -> Path:
+        body = self._settlement(task_type).split("state_machine: |\n", 1)[0]
+        path = self.tmp / "quoted-machine.yaml"
+        path.write_text(body + f"state_machine: {json.dumps(self.machine)}\n")
+        return path
+
+    def test_init_refuses_quoted_machine_before_writing_and_allows_correction(self):
+        source = self._quoted_machine()
+        args = ("session", "init", "quoted-run", "--dir", str(self.session_dir),
+                "--settlement-file", str(source), "--prose")
+        refused = self._task(*args)
+        self.assertEqual(refused.returncode, 1, refused.stderr)
+        self.assertIn("  state_machine (1):\n", refused.stderr)
+        self.assertIn("must use a literal YAML block", refused.stderr)
+        self.assertFalse((self.session_dir / "quoted-run.md").exists())
+
+        source.write_text(self._settlement("ticket-to-pr"))
+        accepted = self._task(*args)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        current = self._task("state", "current", "quoted-run",
+                             "--dir", str(self.session_dir), "--prose")
+        self.assertEqual(current.returncode, 0, current.stderr)
+        self.assertIn("current: clarify", current.stdout)
+
+    def test_validate_groups_quoted_machine_and_other_missing_fields(self):
+        source = self._quoted_machine("triage")
+        result = self._task("session", "validate", "quoted-run",
+                            "--dir", str(self.session_dir),
+                            "--settlement-file", str(source), "--prose")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("  state_machine (1):\n", result.stderr)
+        self.assertIn("must use a literal YAML block", result.stderr)
+        self.assertIn("  triage_cutoff (1):\n", result.stderr)
+
+
 class TriageCutoffTest(SettlementCase):
     def _one_user_file(self, root: Path) -> Path:
         path = root / ".bootgear" / "config" / "cutoff-one-user.yaml"

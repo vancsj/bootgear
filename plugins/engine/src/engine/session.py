@@ -823,6 +823,9 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
         if not isinstance(machine_value, str) or not machine_value.strip():
             problems.append(("state_machine", "must be a non-empty YAML block"))
         else:
+            from engine import state
+            if not state.STATE_MACHINE_FIELD_RE.search(body):
+                problems.append(("state_machine", "must use a literal YAML block: state_machine: |"))
             try:
                 machine = yaml.safe_load(machine_value)
             except yaml.YAMLError as exc:
@@ -831,7 +834,6 @@ def _validate_settlement(body: str, run_id: str, session_dir: Path,
                 if not isinstance(machine, dict):
                     problems.append(("state_machine", "must contain a YAML mapping"))
                 else:
-                    from engine import state
                     problems.extend(("state_machine", problem) for problem in state.validate(machine))
 
     machine_name = machine.get("name") if isinstance(machine, dict) else None
