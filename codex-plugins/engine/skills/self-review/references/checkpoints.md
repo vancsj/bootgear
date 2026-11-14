@@ -24,7 +24,10 @@ Record a pass with this shape:
 ```
 
 Use the expected next number. A duplicate call refuses and returns current state without another pass.
-Use `clean` when the quick check is clean after authorised fixes. Use `found` when issues remain.
+Read the actual artifacts and fix clear issues before recording the author's result.
+Use `clean` when the author check is clean after authorised fixes. Use `found` when issues remain.
+Treat `check_kind: author-record` as a record of the author's declared result.
+Do not treat checkpoint output as proof that the helper read or checked the artifacts.
 Record only still-open references. A record never certifies that an open issue was resolved.
 `clean` closes the checkpoint, including at the cap. `found` at the cap closes it as `limit-reached`.
 Closed checkpoints remain immutable. Only `clean` and `limit-reached` permit independent-review handoff.

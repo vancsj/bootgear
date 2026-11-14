@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: Run bounded author checks with confirmed source skill selections before independent spec or code review.
+description: Read and fix authored artifacts, check sentence limits, and record bounded author results before independent review.
 ---
 
 ## When to invoke, inputs and handback
@@ -8,8 +8,9 @@ description: Run bounded author checks with confirmed source skill selections be
 Use before independent review of an artifact you authored or changed.
 Accept the fixed task folder, project root, stage `spec` or `code`, artifacts, request and applicable standards.
 Accept a caller candidate inventory and explicit user selections. Accept related renewal evidence when needed.
+For a writing check alone, accept selected Markdown files and kind `procedure` or `description`.
 
-Return the public command handback to the authoring caller:
+Return checkpoint handbacks to the authoring caller with `check_kind: author-record`:
 
 | Field | Meaning |
 |---|---|
@@ -27,23 +28,53 @@ Only `clean` and `limit-reached` permit independent-review handoff. A cap does n
 Return `needs-candidates` or `needs-selection` to the caller for confirmation. Do not infer choices.
 Return `refused` for correction. Map `unavailable` to the caller's `blocked` result and preserve pending work.
 
+Return writing results to the author with `check_kind: mechanical-writing`:
+
+| Field | Meaning |
+|---|---|
+| `outcome` | `passed`, `needs-reading`, `refused` or `unavailable`. |
+| `kind`, `checked_files` | Selected text kind and checked paths. |
+| `findings` | Entries with `path`, `line`, `words`, `limit` and `text`. |
+| `diagnostics` | File failures with `path` and `message`. |
+| `checks`, `counting_policy`, `limitations` | Supported checks, Markdown word rules and remaining author checks. |
+| `next` | The author's next action. |
+
+Treat `passed` as no mechanical findings. Treat `needs-reading` as findings for author review.
+Correct `refused` calls. Resolve `unavailable` file failures and retain any reported findings.
+A writing result never establishes completed author reading or full ASD-STE100 compliance.
+
 ## Procedure
 
-1. Run `settings` to learn defaults and supported inputs.
-2. Read [references/checkpoints.md](references/checkpoints.md) before opening, configuring, renewing or completing a checkpoint.
-3. Read [references/source-selections.md](references/source-selections.md) when building candidates or applying selected source modes.
-4. Use public `status` to reuse the current checkpoint. Keep separate spec and code budgets.
-5. Apply each confirmed source mode. Follow invoked workflows and their public handbacks.
-6. Check clear terms, short sentences, obvious rule breaks, factual sources and conflicting sections.
-7. Compare the request, decisions, tables, diagrams, tasks and outcome checks. Fix easy issues within authorised scope.
-8. Record the artifact's state after fixes. Use `found` when issues remain, and keep only still-open references.
-9. Follow the command's next action. Stop early when clean. Keep deeper work open with the caller.
+For a writing check alone, read [references/writing-check.md](references/writing-check.md), run `check` and return its result.
+For an author pass, follow the reading workflow below within the current checkpoint budget.
+
+### Read and fix
+
+Check public `status` before another checkpointed pass. Follow its next action and retain a closed checkpoint's bound.
+
+1. Read the request, applicable rules and actual artifacts. Do not rely on a summary or earlier verdict.
+2. For specs, read requirements, design when present, tasks and relevant settlement text.
+3. For code, read the complete current change, related prose and relevant tests.
+4. Compare behaviour, decisions, tables, diagrams, tasks and acceptance checks. Check wording, consistency, omissions, easy facts and basic rules.
+5. Run `settings`. Read [references/source-selections.md](references/source-selections.md) before building candidates or applying confirmed source modes.
+6. Apply each confirmed source mode. Follow invoked workflows and their public handbacks.
+7. Read [references/writing-check.md](references/writing-check.md) before checking relevant prose with `check`.
+8. Read again for meaning, simple words, active voice, consistent terms and ASD-STE100 rules outside the mechanical check.
+9. Fix clear issues within authorised scope. Remove avoidable descriptive counts and repeated detail. Preserve behaviour-defining numbers, identifiers and citations.
+
+### Record the author result
+
+1. Read [references/checkpoints.md](references/checkpoints.md) before opening, configuring, renewing or completing a checkpoint.
+2. Use public `status` to reuse the current checkpoint. Keep separate spec and code budgets.
+3. Record the author's result after reading and fixes. Use `found` when issues remain. Keep only still-open references.
+4. Follow the command's next action. Stop early when clean. Keep deeper questions open with the caller.
 
 ## Judgment rules and safety boundaries
 
 Judge quick-check effort by the check, not only the issue's severity.
 Keep the default two-pass bound. Edits, retries, compaction and configuration changes never reset it.
 Source skills add no mutation permission. The helper records choices; it cannot prove reading, fixes or confirmation truth.
+Keep mechanical findings separate from author records. A writing check creates no checkpoint and consumes no author pass.
 The caller checks candidate completeness and semantic coverage. A matching stage label does not prove coverage.
 
 Keep author hypotheses, suspect lines and private unresolved lists with the caller.
@@ -66,6 +97,6 @@ Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool ca
 Run Claude commands as `<gear> --host claude review self-review <command> [arguments]`.
 Run Codex commands as `<gear> --host codex engine self-review <command> [arguments]`.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-The commands support `settings`, `status`, `open`, `configure` and `pass`.
-Use scalar routing flags and one JSON file or stdin for structured input. Add `--json` for structured handbacks.
+The commands support `settings`, `check`, `status`, `open`, `configure` and `pass`.
+Use scalar routing flags. For checkpoint input, use one JSON file or stdin. Add `--json` for structured handbacks.
 Resolve relative caller paths through `GEAR_CALLER_CWD` when supplied.

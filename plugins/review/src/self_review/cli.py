@@ -10,14 +10,15 @@ import tempfile
 from pathlib import Path
 from typing import Any, NoReturn, TextIO, TypeGuard
 
-from bootgear_cli.clikit import current_program
+from bootgear_cli.clikit import current_program, emit
 
 PROGRAM = current_program("review", "self-review")
 STAGES = ("spec", "code")
 MODES = ("invoke", "absorb", "neither")
 ORIGINS = ("project-config", "user-request", "host-registration", "caller-judgement")
 CONFIRMATIONS = ("user-message", "user-confirmed-ledger-entry")
-COMMANDS = ("settings", "status", "open", "configure", "pass")
+COMMANDS = ("settings", "status", "open", "configure", "pass", "check")
+WRITING_KINDS = ("procedure", "description")
 
 
 class Refusal(Exception):
@@ -32,8 +33,15 @@ class Refusal(Exception):
 class Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         command = next((item for item in sys.argv[1:] if item in COMMANDS), "status")
-        self.exit(2, f"Error: {message}\nExample: {PROGRAM} {command} --task-folder TASK --stage spec --json\n"
-                     f"Commands: {', '.join(COMMANDS)}\nNext: Caller corrects the arguments and retries.\n")
+        example = (f"{PROGRAM} check --kind procedure --files FILE" if command == "check"
+                   else f"{PROGRAM} {command} --task-folder TASK --stage spec --json")
+        next_step = "Caller corrects the arguments and retries."
+        if "--json" in sys.argv or ("--prose" not in sys.argv and os.environ.get("BOOTGEAR_OUTPUT") == "json"):
+            self.exit(2, json.dumps({"check_kind": "mechanical-writing" if command == "check" else "author-record",
+                                     "outcome": "refused", "diagnostic": message, "example": example,
+                                     "commands": list(COMMANDS), "next": next_step}) + "\n")
+        self.exit(2, f"Error: {message}\nExample: {example}\n"
+                     f"Commands: {', '.join(COMMANDS)}\nNext: {next_step}\n")
 
 
 def nonempty(value: Any) -> bool:
@@ -244,7 +252,8 @@ def atomic_write(path: Path, state: dict[str, Any]) -> None:
 
 def summary(task: Path, stage: str | None, state: dict[str, Any]) -> dict[str, Any]:
     checkpoints = copy.deepcopy([item for item in state["checkpoints"] if stage is None or item["stage"] == stage])
-    result = {"outcome": "ready", "task_folder": str(task), "record_path": str(task / "self-review.json"),
+    result = {"check_kind": "author-record", "outcome": "ready",
+              "task_folder": str(task), "record_path": str(task / "self-review.json"),
               "record_exists": (task / "self-review.json").exists(), "stage": stage, "checkpoints": checkpoints,
               "pending": [], "diagnostic": "", "unresolved_refs": []}
     if checkpoints:
@@ -261,7 +270,7 @@ def next_action(outcome: str) -> str:
         return "Caller returns blocked with this diagnostic and preserves pending author work."
     if outcome == "refused":
         return "Caller corrects the reported problems and retries without resetting the checkpoint."
-    return "Author applies confirmed source modes, checks the artifact, then records the expected next pass."
+    return "Author reads and fixes the actual artifacts, applies confirmed source modes and writing checks, then records the next pass."
 
 
 def path_value(raw: str, label: str) -> Path:
@@ -386,19 +395,52 @@ def run(args: argparse.Namespace, task: Path) -> dict[str, Any]:
         lock.close()
 
 
+def writing_check(args: argparse.Namespace) -> int:
+    from self_review.prose import check_files
+
+    try:
+        result = check_files([path_value(raw, "file") for raw in args.files], args.kind)
+    except Refusal as exc:
+        result = {"check_kind": "mechanical-writing", "kind": args.kind, "outcome": "refused",
+                  "checked_files": [], "findings": [], "diagnostics": [{"path": "", "message": str(exc)}],
+                  "checks": ["sentence-length"], "counting_policy": ["No files checked."],
+                  "limitations": ["Author reading remains required."],
+                  "next": "Caller corrects the file arguments and retries without recording an author pass."}
+    mode = "json" if args.json or (not args.prose and os.environ.get("BOOTGEAR_OUTPUT") == "json") else "prose"
+    lines = ["Mechanical writing check: sentence length only.", f"Text kind: {result['kind']}"]
+    lines.extend(f"Counting policy: {rule}" for rule in result["counting_policy"])
+    for path in result["checked_files"]:
+        lines.append(f"Checked: {path}")
+    for finding in result["findings"]:
+        lines.append(f"{finding['path']}:{finding['line']}: {finding['words']} words; limit {finding['limit']}.")
+        lines.append(f"  {finding['text']}")
+    for diagnostic in result["diagnostics"]:
+        lines.append(f"{diagnostic['path']}: {diagnostic['message']}")
+    lines.extend(f"Author check: {item}" for item in result["limitations"])
+    lines.append(f"Outcome: {result['outcome']}")
+    emit(mode, result, lines, next=result["next"])
+    return {"passed": 0, "needs-reading": 1, "refused": 2, "unavailable": 3}[result["outcome"]]
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = Parser(prog=PROGRAM, description="Record bounded author self-review checkpoints.")
+    parser = Parser(prog=PROGRAM, description="Check writing and record bounded author self-review checkpoints.")
     commands = parser.add_subparsers(dest="command", required=True)
     for command in COMMANDS:
         sub = commands.add_parser(command)
-        sub.add_argument("--task-folder", required=command != "settings", default=".")
-        sub.add_argument("--project-root", default=os.environ.get("GEAR_CALLER_CWD", os.getcwd()))
-        sub.add_argument("--stage", choices=STAGES, required=command in ("open", "configure", "pass"))
-        sub.add_argument("--input", help="One JSON file, or '-' for stdin")
+        if command == "check":
+            sub.add_argument("--kind", choices=WRITING_KINDS, required=True)
+            sub.add_argument("--files", nargs="+", required=True, metavar="FILE")
+        else:
+            sub.add_argument("--task-folder", required=command != "settings", default=".")
+            sub.add_argument("--project-root", default=os.environ.get("GEAR_CALLER_CWD", os.getcwd()))
+            sub.add_argument("--stage", choices=STAGES, required=command in ("open", "configure", "pass"))
+            sub.add_argument("--input", help="One JSON file, or '-' for stdin")
         output = sub.add_mutually_exclusive_group()
         output.add_argument("--json", action="store_true")
         output.add_argument("--prose", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "check":
+        return writing_check(args)
     task = Path(os.getcwd())
     try:
         task = path_value(args.task_folder, "task-folder")
@@ -418,12 +460,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.json or (not args.prose and os.environ.get("BOOTGEAR_OUTPUT") == "json"):
         print(json.dumps(result, ensure_ascii=False))
     else:
-        print(f"Self-review: {result['record_path']}")
+        print(f"Author checkpoint record: {result['record_path']}")
+        print("Check kind: author-record. The author supplies the verdict; this command does not review artifacts.")
         if "visit" in result:
             print(f"{result['stage']} visit {result['visit']}: {result['passes']}/{result['limit']} passes")
         if result["diagnostic"]:
             print(f"Diagnostic: {result['diagnostic']}")
-        print(f"Outcome: {result['outcome']}")
+        print(f"Outcome: {result['outcome']} (author-reported)")
         print(f"Next: {result['next']}")
     return 3 if result["outcome"] == "unavailable" else 2 if result["outcome"] in ("refused", "needs-candidates", "needs-selection") else 0
 
