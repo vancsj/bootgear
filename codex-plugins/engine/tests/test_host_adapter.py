@@ -70,7 +70,7 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
                 "--handler",
                 "session_recall",
                 "--matcher-pattern",
-                "^(startup|resume|compact)$",
+                "^(startup|resume|clear|compact|fork)$",
             ],
             input=json.dumps({
                 "session_id": "fixture-codex",

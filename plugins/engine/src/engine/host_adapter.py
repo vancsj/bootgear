@@ -220,6 +220,20 @@ def _validate_value(name: str, value: Any, spec: FieldSpec) -> None:
         if type(value) is not bool:
             raise AdapterError("invalid_field", f"{name} must be a boolean")
         return
+    if spec.kind == "task_list":
+        if not isinstance(value, list):
+            raise AdapterError("invalid_field", f"{name} must be an array")
+        invalid = [
+            str(index) for index, item in enumerate(value)
+            if not isinstance(item, dict)
+            or any(not _is_nonempty_string(item.get(key)) for key in ("type", "status"))
+        ]
+        if invalid:
+            raise AdapterError(
+                "invalid_field",
+                f"{name} entries need non-empty type and status; invalid indices: {', '.join(invalid)}",
+            )
+        return
     if spec.kind == "json":
         if not _is_json_value(value):
             raise AdapterError("invalid_field", f"{name} must be a JSON value")
@@ -324,7 +338,7 @@ def _check_event_values(raw: Mapping[str, Any], contract: EventContract, value: 
         allowed = (
             {"startup", "clear", "compact"}
             if contract.host == "claude"
-            else {"startup", "resume", "compact"}
+            else {"startup", "resume", "clear", "compact", "fork"}
         )
         if raw.get("source") not in allowed:
             raise AdapterError("invalid_matcher", "unsupported SessionStart source")
@@ -372,6 +386,11 @@ def normalize_event(
     for name in contract.fields:
         if name in raw and name not in {"session_id", "cwd", "hook_event_name", "turn_id"}:
             payload[name] = raw[name]
+    if "background_tasks" in payload:
+        payload["background_tasks"] = [
+            {"type": item["type"], "status": item["status"]}
+            for item in payload["background_tasks"]
+        ]
 
     turn_id = raw.get("turn_id")
     if turn_id is not None and not _is_nonempty_string(turn_id):

@@ -131,7 +131,8 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
                 None,
                 _COMMON_REQUIRED + _required("stop_hook_active", kind="bool"),
                 _COMMON_OPTIONAL
-                + _optional("last_assistant_message", kind="nullable_text", nullable=True),
+                + _optional("last_assistant_message", kind="nullable_text", nullable=True)
+                + _optional("background_tasks", kind="task_list"),
                 ("stop_reminder",),
                 frozenset({"observe", "add_context"}),
             ),
@@ -177,7 +178,7 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
             "SessionStart": _contract(
                 host,
                 "SessionStart",
-                "^(startup|resume|compact)$",
+                "^(startup|resume|clear|compact|fork)$",
                 "source",
                 _COMMON_REQUIRED + _required("source"),
                 _COMMON_OPTIONAL + _optional(*_NULLABLE_TEXT, nullable=True),

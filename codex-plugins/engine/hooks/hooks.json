@@ -12,11 +12,11 @@
     ],
     "SessionStart": [
       {
-        "matcher": "^(startup|resume|compact)$",
+        "matcher": "^(startup|resume|clear|compact|fork)$",
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler session_recall --matcher-pattern '^(startup|resume|compact)$'",
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler session_recall --matcher-pattern '^(startup|resume|clear|compact|fork)$'",
             "statusMessage": "Restoring engine context"
           }
         ]

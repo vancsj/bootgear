@@ -95,11 +95,11 @@ class CodexPackageContractTest(unittest.TestCase):
         hooks = json.loads(HOOKS.read_text())["hooks"]
         self.assertNotIn("PreToolUse", hooks)
         session_start = hooks["SessionStart"][0]
-        self.assertEqual(session_start["matcher"], "^(startup|resume|compact)$")
+        self.assertEqual(session_start["matcher"], "^(startup|resume|clear|compact|fork)$")
         self.assertIn('"${PLUGIN_ROOT}/hooks/gear" --host codex adapter',
                       session_start["hooks"][0]["command"])
         self.assertIn(
-            "--matcher-pattern '^(startup|resume|compact)$'",
+            "--matcher-pattern '^(startup|resume|clear|compact|fork)$'",
             session_start["hooks"][0]["command"],
         )
         self.assertIn("${PLUGIN_ROOT}", session_start["hooks"][0]["command"])

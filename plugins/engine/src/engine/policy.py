@@ -25,11 +25,13 @@ from typing import Any, Final
 from bootgear_cli.clikit import gear_argv, gear_command
 
 from .host_adapter import AdapterError, Event, HostContext, Intent
+from .subagent_state import has_running_descendant
 
 _CLOSED_HEADING_RE: Final = re.compile(r"(?m)^## closed\s*$")
 _RAPID_SECONDS: Final = 30
 _MAX_NUDGES: Final = 1
 _MAX_TURNS: Final = 32
+_CODEX_RUNTIME_SOURCES: Final = frozenset({"startup", "resume", "clear", "fork"})
 _STALE_SECONDS: Final = 5 * 60
 _MIN_RECHECK_SECONDS: Final = 60
 _ESCALATE_AFTER_SECONDS: Final = 15 * 60
@@ -190,6 +192,13 @@ def _apply_marker(update: MarkerUpdate, *, locked_path: Path | None = None) -> N
 
 
 def _event_marker(event: Event, context: HostContext) -> Path | None:
+    if (
+        event.host == "codex"
+        and event.handler_kind == "session_recall"
+        and event.hook_event_name == "SessionStart"
+        and event.payload.get("source") in _CODEX_RUNTIME_SOURCES
+    ):
+        return _marker_path(context, "stop_reminder_state")
     if event.handler_kind == "stop_reminder" and event.hook_event_name in {
         "Stop",
         "PostToolUse",
@@ -291,6 +300,14 @@ def _standards(context: HostContext) -> str | None:
 def _session_recall(event: Event, context: HostContext) -> Intent:
     payload = event.payload
     source = payload.get("source")
+    update = None
+    if context.host == "codex" and source in _CODEX_RUNTIME_SOURCES:
+        marker = _marker_path(context, "stop_reminder_state")
+        state = _normalise_codex_marker(
+            _read_json(marker, {"turns": [], "nudge_count": 0, "last_nudge_at": 0.0})
+        )
+        state["runtime_started_at"] = time.time()
+        update = MarkerUpdate(marker, state)
     active = _active_ledger(context)
     if context.host == "codex":
         identity = (
@@ -305,7 +322,7 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
     else:
         parts = [_SESSION_NUDGE] if active is not None and source == "compact" else []
     if active is None:
-        return Intent.add_context("\n\n".join(parts)) if parts else Intent.observe()
+        return Intent.add_context("\n\n".join(parts), update) if parts else Intent.observe(update)
     settlement = _read_settlement(active[1])
     goal = _goal_text(settlement)
     if goal:
@@ -317,7 +334,7 @@ def _session_recall(event: Event, context: HostContext) -> Intent:
     standards = _standards(context)
     if standards:
         parts.append(standards)
-    return Intent.add_context("\n\n".join(parts)) if parts else Intent.observe()
+    return Intent.add_context("\n\n".join(parts), update) if parts else Intent.observe(update)
 
 
 def _should_nudge(state: dict[str, Any], now: float) -> bool:
@@ -362,6 +379,10 @@ def _normalise_codex_marker(value: Any) -> dict[str, Any]:
         or not math.isfinite(last)
     ):
         raise AdapterError("invalid_marker", "Codex reminder marker has invalid structure")
+    if "runtime_started_at" in value:
+        started = value["runtime_started_at"]
+        if isinstance(started, bool) or not isinstance(started, (int, float)) or not math.isfinite(started):
+            raise AdapterError("invalid_marker", "Codex runtime boundary has invalid structure")
     value["turns"] = turns[-_MAX_TURNS:]
     return value
 
@@ -376,6 +397,11 @@ def _turn(state: dict[str, Any], turn_id: str) -> dict[str, Any] | None:
 def _stop_claude(event: Event, context: HostContext) -> Intent:
     active = _active_ledger(context)
     if active is None or event.payload.get("stop_hook_active") is True:
+        return Intent.observe()
+    if any(
+        task["type"] == "subagent" and task["status"] == "running"
+        for task in event.payload.get("background_tasks", [])
+    ):
         return Intent.observe()
     marker = _marker_path(context, "stop_reminder_state")
     state = _read_json(marker, {"nudge_count": 0, "last_nudge_at": 0.0})
@@ -410,6 +436,8 @@ def _stop_codex(event: Event, context: HostContext) -> Intent:
     turn_id = event.turn_id
     if not turn_id:
         return Intent.error_intent(AdapterError("invalid_field", "Codex Stop/PostToolUse needs turn_id"))
+    if has_running_descendant(event.session_id, state.get("runtime_started_at")):
+        return Intent.observe()
     current = _turn(state, turn_id)
     should_emit = False
     if event.hook_event_name == "Stop":
@@ -594,7 +622,7 @@ POLICY_TABLE: dict[tuple[str, str, str | None, str], Policy] = {
     ("claude", "PostCompact", "manual|auto", "compaction_observe"): Policy(
         "compaction_observe", _compaction_observe
     ),
-    ("codex", "SessionStart", "^(startup|resume|compact)$", "session_recall"): Policy(
+    ("codex", "SessionStart", "^(startup|resume|clear|compact|fork)$", "session_recall"): Policy(
         "session_recall", _session_recall
     ),
     ("codex", "Stop", None, "stop_reminder"): Policy("stop_reminder", _stop_codex),

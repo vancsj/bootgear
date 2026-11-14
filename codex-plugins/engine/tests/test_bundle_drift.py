@@ -260,7 +260,7 @@ class BundleDriftTest(unittest.TestCase):
             self.assertSameBytes(source, copy)
 
     def test_host_adapter_core_matches_claude_source(self):
-        for name in ("host_adapter.py", "host_contracts.py", "policy.py"):
+        for name in ("host_adapter.py", "host_contracts.py", "policy.py", "subagent_state.py"):
             self.assertSameBytes(
                 CLAUDE_ENGINE / "src" / "engine" / name,
                 PLUGIN_DIR / "src" / "engine" / name,
