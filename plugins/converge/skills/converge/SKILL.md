@@ -27,7 +27,7 @@ The cutoff gives each claim one result:
 
 Nothing verified is dropped.
 
-Hand back to the caller the render, every finding carrying a `choice`, the `fix-now` claims with their patches (`converge render --json` `fix_now`), the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8). The caller asks `deputy:ask` for each choice, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it; this handback does not change:
+Hand back to the caller the render, every finding carrying a `choice`, the `fix-now` claims with their patches (`<gear> --host <host> <converge-plugin> converge render --json` `fix_now`), the follow-up list with its count and each follow-up's `choice`, the killed claims, and exactly one outcome (step 8). The caller asks `deputy:ask` for each choice, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it; this handback does not change:
 
 - `converged`: no finding is `disputed`; give the finding, fix-now, fixed, follow-up and killed counts.
 - `unconverged`: list the `disputed` findings.
@@ -62,7 +62,7 @@ Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as
 - Spawn each role once and reuse it across the slate by continuing that agent; never spawn a new agent for a role that already has one.
 - For an advisor seat, run its printed preparation when its first task is due. Honor the settled startup choice.
   Let a deferred listener stay unstarted while other roles work. Reuse its recorded channel for later tasks.
-- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
+- Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `<gear> --host <host> <converge-plugin> converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
 
 Include this common context in every role brief and each new or continued native or advisor turn.
 Before each brief or advisor request, the main agent fills this required part by hand:
@@ -170,6 +170,10 @@ Hand back the render, every finding carrying a `choice`, and exactly one outcome
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
 
@@ -177,3 +181,20 @@ Use `converge` for `<converge-plugin>`.
 - Run commands with `<gear> --host claude converge converge <command> [arguments]`.
 - If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Invoke `advisor:advisor`; run an advisor seat's background step with the Bash tool's `run_in_background`.
+
+### Codex
+
+Use `codex` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+
+- Spawn each role once as a fresh native subagent with `spawn_agent`. Continue that agent for later rounds with the host messaging tool. Never spawn a replacement for a role that already has one: the slate's agent budget (`caps.agents`, main included) counts every distinct agent.
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run commands as `<gear> --host codex converge converge <command> [arguments]`.
+- Give role agents the Gear path and command form `<gear> --host codex converge converge <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Invoke skills by their public name through the host Skill interface; the ledger skill is `memory-ledger:ledger`.
+- Invoke `advisor:advisor` (a separate plugin: `codex plugin add advisor@bootgear`); run an advisor seat's background step in a terminal session left running.
+- A role agent is unavailable when its native subagent cannot be created or times out. In a headless run, a fresh approval request also makes it unavailable. Stop with outcome `blocked` (step 8).
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `converge` as the next step.
+Resume after setup verifies the required plugins.

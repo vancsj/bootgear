@@ -7,9 +7,9 @@ uv run --project quality --locked python quality/check.py
 ```
 
 It runs the skill cross-reference check, the content check, Ruff,
-BasedPyright, and every plugin's test tree. The mirrored engine trees have
-same-named test modules, so the runner invokes each tree separately to avoid
-pytest import collisions.
+BasedPyright, and every plugin's test tree. Engine, Converge, spec, and review
+suites each run with `BOOTGEAR_TEST_HOST=claude` and `BOOTGEAR_TEST_HOST=codex`.
+Native adapter cases retain their distinct host contracts.
 
 The content check (`check_content.py`) rejects home-directory and scratchpad
 paths, `docs/` pointers from code or skills, development-diary phrases, and

@@ -46,11 +46,12 @@ bootgear keeps the opinionated core but treats customizability as a first-class 
 
 | Platform | Status |
 |---|---|
-| Claude Code | **engine, converge, spec, test, review, advisor, memory-ledger, and deputy**, as plugins — see Install |
+| Claude Code | **cli, engine, converge, spec, test, review, advisor, memory-ledger, and deputy**, as plugins |
 | opencode | Not shipped |
-| Codex | **memory-ledger, engine, advisor, and deputy**, as plugins — see Install |
+| Codex | The same plugins, skills, and command sources, with native manifests and hooks |
 
-Skill/hook formats differ across platforms; bootgear aims to keep one conceptual gear set with platform-specific adapters.
+Both marketplaces load the same `plugins/<name>` directories.
+Each shared skill selects its host mechanics explicitly.
 
 ## Architecture
 
@@ -95,26 +96,16 @@ The [SVG version](assets/software-engineering-use-case.svg) keeps the diagram ed
 
 ```
 bootgear/
-├── plugins/         # gear that ships today; most plugins are Claude Code-only,
-│                    # some (e.g. memory-ledger, advisor, deputy) also ship a Codex CLI
-│                    # manifest from the same source directory
-├── codex-plugins/   # gear that ships as Codex CLI-only plugins, with no
-│                    # Claude Code counterpart
+├── plugins/         # one authored source directory per plugin, with both native manifests
+├── .claude-plugin/  # Claude Code marketplace
 ├── .agents/         # Codex marketplace
-├── .bootgear/       # this repo's own bootgear config; the same place any project puts its config
-├── plugins/cli/     # shared Gear CLI, plugin discovery and runtime setup
+├── .bootgear/       # project workflow configuration
 ├── docs/            # current design
 └── quality/         # repository validation and quality checks
 ```
 
-A plugin that serves both hosts ships from one source directory under `plugins/`,
-with a `.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by
-side (see `cli`, `memory-ledger`, `advisor`, `deputy`). `codex-plugins/` holds plugins with no
-Claude Code counterpart at all (e.g. `engine`'s Codex-CLI port). Both retain
-platform-native manifests, hooks, and invocation contracts.
-`converge` is the exception to both: it ships as a Claude Code plugin from
-`plugins/converge` and is bundled into the Codex `engine` rather than carrying
-its own `.codex-plugin`, so there is no separate Codex install.
+Each plugin has `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`.
+Both hosts use its shared skills and providers. Hook registrations retain each host's native contract.
 
 ## Install
 
@@ -125,8 +116,8 @@ reviewer, or the converge refuter and gap hunter) go to the other vendor's host 
 Claude Code session listening through `advisor`.
 
 Each plugin installs on its own — you do not need the rest of bootgear. The table's
-"installs … with it" notes describe Claude Code's declared dependencies; Codex CLI packages
-differ (see [Codex CLI](#codex-cli)).
+"installs … with it" notes describe Claude Code's declared dependencies.
+Codex uses explicit setup to install the same dependencies (see [Codex CLI](#codex-cli)).
 
 After installation, call `cli:setup` once to prepare the shared runtime.
 Call `cli:gear` to get the literal Gear path.
@@ -150,30 +141,25 @@ Call `cli:gear` to get the literal Gear path.
 
 ### Codex CLI
 
-[cli](plugins/cli), [advisor](plugins/advisor), and [deputy](plugins/deputy) each ship from one source
-directory serving both hosts (the same pattern as `memory-ledger`): a
-`.claude-plugin/plugin.json` and a `.codex-plugin/plugin.json` side by side, so
-each is registered in both `.claude-plugin/marketplace.json` and
-`.agents/plugins/marketplace.json`.
-Codex CLI's plugin mechanism only ever sees plugins listed in the latter.
-Install:
+Both marketplaces contain every plugin and point to the same source directories.
+Codex does not install transitive dependencies. Install the target and CLI first:
 
-```
+```sh
 codex plugin marketplace add vancsj/bootgear
 codex plugin add cli@bootgear
-codex plugin add memory-ledger@bootgear
-codex plugin add advisor@bootgear
-codex plugin add deputy@bootgear
 codex plugin add engine@bootgear
 ```
 
-On Codex, start an engine run with `$engine:start`, and set up the ledger with
-`$memory-ledger:setup`.
+Call `cli:setup` with target `engine`. It runs `<gear> --host codex cli setup --plugin engine`.
+Setup reads the installed target's declared dependencies, installs missing peers, and verifies their enabled installed roots.
+Choose another installed plugin as the target for a standalone workflow.
+Normal commands and hooks never install dependencies.
 
-`advisor` pairs a Codex CLI session with a Claude Code session through a
-shared mailbox, or answers a one-shot direct call — either host can run
-either side of the pair. `channel.py` is co-located under the one shared
-skill directory, so no runtime path resolution between hosts is needed.
+Start an engine run with `$engine:start`. Set up the ledger with `$memory-ledger:setup`.
+Trust plugin hooks through the native `/hooks` interface when Codex requests it.
+
+`advisor` pairs a Codex session with a Claude Code listener through a shared mailbox.
+Claude Code can also send direct requests to Codex.
 
 ## Status
 

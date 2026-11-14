@@ -36,6 +36,7 @@ TEMP_PATH_PATTERN = re.compile(
 class Check:
     name: str
     command: tuple[str, ...]
+    host: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,6 @@ CHECKS = (
             "plugins/spec",
             "plugins/deputy",
             "plugins/memory-ledger",
-            "codex-plugins/engine",
         ),
     ),
     Check(
@@ -80,26 +80,14 @@ CHECKS = (
         "pytest-quality",
         ("python", "-m", "pytest", "quality/tests"),
     ),
-    Check(
-        "pytest-plugins",
-        ("python", "-m", "pytest", "-n", "auto", "plugins/engine/tests"),
-    ),
-    Check(
-        "pytest-converge",
-        ("python", "-m", "pytest", "-n", "auto", "plugins/converge/tests"),
-    ),
-    Check(
-        "pytest-review",
-        ("python", "-m", "pytest", "plugins/review/tests"),
-    ),
-    Check(
-        "pytest-spec",
-        ("python", "-m", "pytest", "plugins/spec/tests"),
-    ),
-    Check(
-        "pytest-codex",
-        ("python", "-m", "pytest", "-n", "auto", "codex-plugins/engine/tests"),
-    ),
+    *(Check(
+        f"pytest-{provider}-{host}",
+        ("python", "-m", "pytest",
+         *(("-n", "auto") if provider in ("engine", "converge") else ()),
+         f"plugins/{provider}/tests"),
+        host=host,
+    ) for provider in ("engine", "converge", "review", "spec")
+      for host in ("claude", "codex")),
     Check(
         "pytest-memory-ledger",
         ("python", "-m", "pytest", "plugins/memory-ledger/tests"),
@@ -141,6 +129,8 @@ def _check_environment(check: Check) -> dict[str, str] | None:
     if not check.name.startswith("pytest-"):
         return None
     env = os.environ.copy()
+    if check.host is not None:
+        env["BOOTGEAR_TEST_HOST"] = check.host
     paths = [str(CLI_SOURCE)]
     existing = env.get("PYTHONPATH")
     if existing:

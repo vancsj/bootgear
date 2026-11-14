@@ -145,7 +145,7 @@ Three hooks keep a long run on track, each reading the ledger by session id:
 
 | Hook | Reminds the agent to |
 |---|---|
-| session start | on startup, clear and compaction (Codex: startup, resume and compaction), while a run is open: the run's `goal`, merged principles and the project's standard files with their rule IDs; run `recall` after a compaction. Codex always adds the session id |
+| session start | on startup, clear and compaction (Codex: startup, resume, clear, fork and compaction), while a run is open: the run's `goal`, merged principles and the project's standard files with their rule IDs; run `recall` after a compaction. Codex always adds the session id |
 | stop | run `recall` before ending a turn while a run is open |
 | state nudge | transition when the current node has had no transition for 5 minutes |
 
@@ -172,8 +172,7 @@ so they are listed by skill name rather than as a command to type.
 Call `cli:gear` and use its returned absolute path to run `engine task` commands:
 
 ```
-<gear> --host <host> engine task session init|validate|read|record-decision|next-question-id|update-todo|record-pitch|write-ticket|close
-               (Codex also: recall)
+<gear> --host <host> engine task session init|validate|read|recall|record-decision|next-question-id|update-todo|record-pitch|write-ticket|close
 <gear> --host <host> engine task session write-ticket --dir <session-dir> --body-file <file>
                writes the run's ticket body; the only writer of ticket_path
 <gear> --host <host> engine task state transition|current|amend|show|validate|diagram
@@ -204,14 +203,11 @@ Codex CLI:
 codex plugin marketplace add vancsj/bootgear
 codex plugin add cli@bootgear
 codex plugin add engine@bootgear
-codex plugin add advisor@bootgear
-codex plugin add memory-ledger@bootgear
-codex plugin add deputy@bootgear
 ```
 
-The Codex Engine bundles `spec`, `test`, `review` and `converge`. Install the
-CLI, Advisor, Memory Ledger and Deputy plugins as separate peers.
-Run `cli:setup` to prepare the shared runtime.
+Call `cli:setup` with target `engine` to prepare the shared runtime and required peers.
+Setup reads the installed dependency declarations and verifies enabled installed roots.
+Engine, spec, test, review and Converge each have their own shared plugin source.
 
 Project customisation lives in `.bootgear/config/`: `principles.md`, the
 standards `review-standard.md` and `test-standard.md` (named in every role

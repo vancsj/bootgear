@@ -419,6 +419,10 @@ unavailable), stop and report `blocked`, naming the missing role. Claims start
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
 `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
@@ -427,3 +431,17 @@ Use `converge` for `<converge-plugin>`.
 - Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
 - Run converge commands as `<gear> --host claude converge converge <command> [arguments]`.
 - If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
+
+### Codex
+
+Use `codex` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+`<run-id>` is the value of `$CODEX_SESSION_ID`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+Run converge commands as `<gear> --host codex converge converge <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `review` as the next step.
+Resume after setup verifies the required plugins.

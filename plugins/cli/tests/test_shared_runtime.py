@@ -59,9 +59,12 @@ class SharedRuntimeTests(unittest.TestCase):
             self._write_executable(
                 self.fake_bin / name,
                 "#!/usr/bin/env python3\n"
-                "import os\n"
+                "import json\nimport os\nimport sys\n"
                 "from pathlib import Path\n"
-                f"print(Path(os.environ[{variable!r}]).read_text(encoding='utf-8'), end='')\n",
+                "if sys.argv[1:] == ['plugin', 'marketplace', 'list', '--json']:\n"
+                "    print(json.dumps({'marketplaces': [{'name': 'bootgear'}]}))\n"
+                "else:\n"
+                f"    print(Path(os.environ[{variable!r}]).read_text(encoding='utf-8'), end='')\n",
             )
 
     def _write_fake_uv(self) -> None:
@@ -248,12 +251,33 @@ class SharedRuntimeTests(unittest.TestCase):
         self.assertEqual(data_v1["clikit"], data_v2["clikit"])
         self.assertEqual(self.uv_log.read_text(encoding="utf-8"), setup_log)
 
+    def test_targeted_setup_routes_through_gear_and_checks_skill_only_peers_on_both_hosts(self) -> None:
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                records = []
+                for name, dependencies in (("fixture-target", ["fixture-skill"]), ("fixture-skill", [])):
+                    root = (self.codex_home / "plugins" / "cache" / "bootgear" / name / "1.0.0"
+                            if host == "codex" else self.claude_home / "plugins" / name)
+                    manifest = root / ".claude-plugin" / "plugin.json"
+                    manifest.parent.mkdir(parents=True)
+                    manifest.write_text(json.dumps({"name": name, "dependencies": dependencies}))
+                    records.append({"name": name, "marketplaceName": "bootgear", "version": "1.0.0",
+                                    "id": f"{name}@bootgear", "installPath": str(root), "enabled": True})
+                listing = self.codex_list if host == "codex" else self.claude_list
+                listing.write_text(json.dumps({"installed": records} if host == "codex" else records))
+                result = self._run("cli", "setup", "--plugin", "fixture-target", "--json",
+                                   root=self.base / "empty-source", host=host)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["plugins"], ["fixture-skill", "fixture-target"])
+                self.assertEqual(json.loads(result.stdout)["next"], "Return to the calling skill.")
+        self.assertEqual(self.uv_log.read_text().splitlines(), ["python find", "sync --locked"])
+
     def test_sdk_routes_sibling_commands_in_the_selected_root_and_caller(self) -> None:
         roots: dict[str, Path] = {}
         callers: dict[str, Path] = {}
-        for host, registration_dir in (("claude", "plugins"), ("codex", "codex-plugins")):
+        for host in ("claude", "codex"):
             root = self.base / f"sdk-root-{host}"
-            base = root / registration_dir
+            base = root / "plugins"
             provider = base / "external-demo"
             sibling = base / "external-sibling"
             provider.mkdir(parents=True)

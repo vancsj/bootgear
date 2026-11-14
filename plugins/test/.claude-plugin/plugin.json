@@ -1,10 +1,12 @@
 {
   "name": "test",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "General testing domain interface: writing cases, running them, and reading/triaging reports as one skill. Delegates to a project's own specialized test skill(s) when registered.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
   },
-  "dependencies": ["cli"]
+  "dependencies": [
+    "cli"
+  ]
 }

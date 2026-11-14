@@ -6,7 +6,7 @@ import copy
 import json
 from typing import Any
 
-from conftest import MAIN, Converge
+from conftest import HOST, MAIN, Converge
 from converge import config as config_mod
 from converge import ledger, model
 
@@ -58,8 +58,8 @@ def test_defaults(cv: Converge) -> None:
 
 
 def test_layers_merge_later_wins(cv: Converge) -> None:
-    (cv.home / ".claude").mkdir()
-    (cv.home / ".claude" / "converge.yaml").write_text(
+    (cv.home / f".{HOST}").mkdir()
+    (cv.home / f".{HOST}" / "converge.yaml").write_text(
         "caps: {per_lens: {default: 5}, cut_rounds: 4}\n")
     project_cfg = cv.project / ".bootgear" / "config"
     project_cfg.mkdir(parents=True)
@@ -75,13 +75,13 @@ def test_layers_merge_later_wins(cv: Converge) -> None:
     assert eff["cutoff"]["lenses"]["default"] == config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
 
 
-def test_codex_host_reads_codex_user_path(cv: Converge) -> None:
-    (cv.home / ".claude").mkdir()
-    (cv.home / ".claude" / "converge.yaml").write_text("caps: {per_lens: {default: 7}}\n")
-    (cv.home / ".codex").mkdir()
-    (cv.home / ".codex" / "converge.yaml").write_text("caps: {per_lens: {default: 9}}\n")
-    assert _effective(cv)["caps"]["per_lens"] == {"default": 7}
-    assert _effective(cv, env={"BOOTGEAR_HOST": "codex"})["caps"]["per_lens"] == {"default": 9}
+def test_each_explicit_host_reads_its_own_user_path(cv: Converge) -> None:
+    for host, value in (("claude", 7), ("codex", 9)):
+        (cv.home / f".{host}").mkdir()
+        (cv.home / f".{host}" / "converge.yaml").write_text(
+            f"caps: {{per_lens: {{default: {value}}}}}\n")
+    for host, value in (("claude", 7), ("codex", 9)):
+        assert _effective(cv, env={"BOOTGEAR_HOST": host})["caps"]["per_lens"] == {"default": value}
 
 
 def test_missing_task_config_refused(cv: Converge) -> None:
@@ -337,8 +337,8 @@ def test_project_layer_overrides_caller_defaults_per_lens(cv: Converge) -> None:
 
 
 def test_caller_layer_sits_below_user(cv: Converge) -> None:
-    (cv.home / ".claude").mkdir()
-    (cv.home / ".claude" / "converge.yaml").write_text(
+    (cv.home / f".{HOST}").mkdir()
+    (cv.home / f".{HOST}" / "converge.yaml").write_text(
         "cutoff: {lenses: {correctness: {attack_if: [{rate_at_least: 1}]}}}\n")
     cv.init("s1", "correctness", MAIN, "--defaults", _defaults_file(cv))
     lenses = cv.events()[0]["config"]["cutoff"]["lenses"]

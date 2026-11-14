@@ -16,14 +16,14 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from gear_commands import HOST, display
 from gear_commands import TASK as TASK_COMMAND
-from gear_commands import display
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = PLUGIN_DIR.parents[1]
 PROG = display("engine", "task")
-FREQUENT = ("session read", "session record-decision", "state transition")
+FREQUENT = ("session recall", "session record-decision", "state transition")
 
 SMOKE_MACHINE = """\
 name: smoke
@@ -337,7 +337,7 @@ class CliOutputTest(unittest.TestCase):
                                            f"<session-dir> --section state")
         self.assertIn("state transition", error["commands"])
         self.assertNotIn("session read", error["commands"])
-        self.assertEqual(set(error["examples"]), set(self.frequent) - {"session read"})
+        self.assertEqual(set(error["examples"]), set(self.frequent))
 
     # --- one refusal per scan ---------------------------------------------
 
@@ -511,7 +511,7 @@ class CliOutputTest(unittest.TestCase):
         prose = self._current("bare-run", "--prose")
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
-                         ["STATE    current: clarify", "no reminder: work toward /goal"])
+                         ["STATE    current: clarify", "no reminder: work toward goal"])
         data = self._current_json("bare-run")
         self.assertEqual(set(data), {"current", "terminal", "reminder"})
         self.assertIsNone(data["reminder"])
@@ -606,6 +606,9 @@ class CliOutputTest(unittest.TestCase):
         data = self._current_json("pitch-run")
         self.assertEqual(data["reminder"]["do"], "report the pitch")
         self.assertNotIn("next", data)
+        recalled = json.loads(self._json_task("session", "recall", "pitch-run", "--dir",
+                                              str(self.session_dir)).stdout)
+        self.assertNotIn("next", recalled["current_node"])
 
     def test_state_current_refuses_unusable_machine(self):
         self._init_run_raw("no-machine", SETTLEMENT.split("state_machine: |")[0])
@@ -785,7 +788,7 @@ class CliOutputTest(unittest.TestCase):
              "--dir", str(self.session_dir), "--mode", "debate",
              "--summary", "round 1, party 'main-agent': x", "--prose"],
             capture_output=True, text=True, check=False,
-            env=_env(BOOTGEAR_PROG=PROG, BOOTGEAR_HOST="claude"))
+            env=_env(BOOTGEAR_PROG=PROG, BOOTGEAR_HOST=HOST))
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("record-decision refused", result.stderr)
         self.assertLess(result.stderr.index("example: "), result.stderr.index("record-decision refused"))
@@ -799,6 +802,97 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(probe["examples"], probe["leaves"])
         self.assertEqual(probe["bad"], {})
         self.assertEqual(tuple(probe["frequent"]), self.frequent)
+
+
+    def _exported_session(self, cmd, *args):
+        return self._task("session", cmd, self.run_id, "--dir", str(self.session_dir),
+                          *args, BOOTGEAR_OUTPUT="json")
+
+    def test_wrapper_pipe_default_is_prose(self):
+        result = self._task("session", "read", self.run_id, "--dir",
+                            str(self.session_dir), "--section", "state")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("current: clarify\n"), result.stdout)
+        flagged = self._task("session", "read", self.run_id, "--dir",
+                             str(self.session_dir), "--section", "state", "--json")
+        self.assertEqual(json.loads(flagged.stdout)["current"], "clarify")
+
+    def test_recall_json(self):
+        self._session("update-todo", "write tests")
+        data = json.loads(self._session("recall").stdout)
+        self.assertEqual(set(data), {"run_id", "settlement", "decisions", "open_todos",
+                                     "state", "current_node", "recent_pitches"})
+        self.assertEqual(set(data["current_node"]), {"current", "terminal", "reminder", "next"})
+        self.assertEqual(data["current_node"]["next"], "check the output contract")
+        self.assertEqual(data["current_node"]["current"], "clarify")
+        self.assertFalse(data["current_node"]["terminal"])
+        self.assertEqual(data["current_node"]["reminder"]["do"], "check the output contract")
+        self.assertIn("task_type: ticket-to-pr", data["settlement"])
+        self.assertEqual(data["open_todos"], ["- [ ] write tests"])
+        self.assertEqual(data["state"][0], "current: clarify")
+        self.assertEqual((data["decisions"], data["recent_pitches"]), ([], []))
+        prose = self._session("recall", "--prose").stdout
+        self.assertTrue(prose.startswith("-- settlement --\ntask_type: ticket-to-pr\n"),
+                        prose)
+        self.assertIn("-- open todos --\n- [ ] write tests\n", prose)
+        self.assertIn("-- current node --\nclarify\ndo: check the output contract\n", prose)
+
+    def test_json_mode_state_fields(self):
+        result = self._exported_session("read", "--section", "state")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["run_id"], self.run_id)
+        self.assertEqual(data["section"], "state")
+        self.assertEqual(data["current"], "clarify")
+        self.assertRegex(data["started"], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+        self.assertEqual(data["transitions"], [])
+        self.assertEqual(data["lines"][0], "current: clarify")
+
+    def test_prose_flag_beats_exported_json(self):
+        result = self._exported_session("read", "--section", "state", "--prose")
+        self.assertTrue(result.stdout.startswith("current: clarify\n"), result.stdout)
+
+    def test_json_mode_refusal_is_one_json_error_object(self):
+        result = self._exported_session("read", "--last", "0")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        error = json.loads(result.stderr)["error"]
+        self.assertEqual(error["command"], "session read")
+        self.assertEqual(error["message"], "--last must be a positive integer")
+        self.assertEqual(error["example"], f"{self.prog} session read --dir "
+                                           f"<session-dir> --section state")
+        self.assertIn("state transition", error["commands"])
+        self.assertNotIn("session read", error["commands"])
+        self.assertEqual(set(error["examples"]), set(self.frequent))
+
+    def test_recall_current_node_matches_state_current_on_terminal_node(self):
+        self._transition("succeeded")
+        close = (f"{self.prog} session close {self.run_id} --dir "
+                 f"{self.session_dir.resolve()} --outcome succeeded")
+        prose = self._task("session", "recall", self.run_id, "--dir",
+                           str(self.session_dir), "--prose").stdout
+        self.assertIn(f"-- current node --\nsucceeded\nterminal: close the ledger\n"
+                      f"next: {close}\n", prose)
+        data = json.loads(self._session("recall").stdout)["current_node"]
+        self.assertEqual(data, {"current": "succeeded", "terminal": True,
+                                "reminder": None, "next": close})
+        self._session("close", "succeeded")
+        prose = self._task("session", "recall", self.run_id, "--dir",
+                           str(self.session_dir), "--prose").stdout
+        self.assertIn("-- current node --\nsucceeded\nterminal: the run already ended\n",
+                      prose)
+
+    def test_recall_survives_unusable_machine(self):
+        self._init_run_raw("no-machine", SETTLEMENT.split("state_machine: |")[0])
+        result = self._json_task("session", "recall", "no-machine", "--dir",
+                                 str(self.session_dir))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIsNone(data["current_node"])
+        self.assertIn("task_type: ticket-to-pr", data["settlement"])
+        prose = self._task("session", "recall", "no-machine", "--dir",
+                           str(self.session_dir), "--prose").stdout
+        self.assertIn("-- current node --\n(unavailable: ", prose)
 
 
 if __name__ == "__main__":

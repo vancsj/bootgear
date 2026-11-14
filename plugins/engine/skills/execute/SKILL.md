@@ -188,7 +188,7 @@ Brief each sub-agent that writes code or docs, or that judges, with the paths of
 
 ## Checking and recording in memory-ledger
 
-`memory-ledger` is a declared dependency; it may still be unconfigured or missing. Reach it through its public name `memory-ledger:ledger`, never its implementation script directly. Preserve its compact capability status: `configured`, `unconfigured`, `broken`, `cooldown`, or `missing`. A missing skill or untrusted host adapter is `missing`, not a configured no-op; record the marker and continue because memory-ledger never gates `goal`.
+`memory-ledger` may be unconfigured or missing. Reach it through its public name `memory-ledger:ledger`, never its implementation script directly. Preserve its compact capability status: `configured`, `unconfigured`, `broken`, `cooldown`, or `missing`. A missing skill or untrusted host adapter is `missing`, not a configured no-op; record the marker and continue because memory-ledger never gates `goal`.
 
 **Before investigating** a domain fact this run doesn't already have from the ticket, the settlement, or a prior step: ask `memory-ledger:ledger` to look up `<question>`. On a hit, ask `memory-ledger:ledger` to verify it before you act on it — a lookup is never used unverified — then use it instead of re-deriving the fact. Treat no match, or a hit that fails verification, as "not yet settled" and investigate normally. When one iteration's Act step surfaces several distinct facts to look up, ask about all of them in one invocation rather than one round-trip per fact.
 
@@ -269,7 +269,7 @@ At the same triggers, read `.bootgear/config/review-standard.md` and `.bootgear/
 Before `close`, succeeded or failed, delete this run's review snapshots, naming each slate of a `review slate <slate> ...` decision once; skip it when there is none:
 
 ```text
-converge prune <slate> [<slate>...] --project-root <repo root>
+<gear> --host <host> <converge-plugin> converge prune <slate> [<slate>...] --project-root <repo root>
 ```
 
 Call `close` exactly once when the run ends, as the `session close` command that `transition` prints as `next`. For `failed`, set `--reason` to one of:
@@ -308,6 +308,10 @@ If `close` refuses because a question is still open, resume and close the named 
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
 
@@ -318,3 +322,19 @@ Use `converge` for `<converge-plugin>`.
 - Supply `<plugin-dir>` as `<engine-root>` in the handoff to downstream skills.
 
 When delegating, invoke the domain skills by their plugin-qualified names `spec:spec`, `spec:spec-review`, `test:test` and `review:review`. Do not read skill fields yourself and call that skill instead. Pass `<engine-root>` and `<session-dir>` explicitly.
+
+### Codex
+
+Use `codex` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Run `<gear> --host codex engine task session validate`. Add `--dir <session-dir>` only for a custom directory.
+- Supply `<plugin-root>` as `<engine-root>` in the handoff to downstream skills.
+
+When delegating, invoke the domain skills by their plugin-qualified names `spec:spec`, `spec:spec-review`, `test:test` and `review:review`. Do not read skill fields yourself and call that skill instead. Pass `<engine-root>` and `<session-dir>` explicitly.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
+Resume after setup verifies the required plugins.

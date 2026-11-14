@@ -441,7 +441,7 @@ def current_node_report(view: dict, run_id: str, path: Path) -> tuple[list[str],
         lines.append("terminal: close the ledger")
         next_step = _close_command(run_id, path, view["current"])
     elif not view["text"]:
-        lines.append("no reminder: work toward /goal")
+        lines.append("no reminder: work toward goal")
     data = {k: view[k] for k in ("current", "terminal", "reminder")}
     json_next = next_step
     if not view["terminal"]:
@@ -573,7 +573,7 @@ def cmd_transition(args: argparse.Namespace) -> None:
     confirm = None
     next_step = None
     if dest_node.get("terminal"):
-        confirm = (f"before entering '{dest}': confirm /goal's {dest} "
+        confirm = (f"before entering '{dest}': confirm goal's {dest} "
                    f"condition genuinely holds now — not merely that no other "
                    f"path remains.")
         prose.append(f"CONFIRM  {confirm}")

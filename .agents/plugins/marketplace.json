@@ -26,21 +26,55 @@
       "category": "Productivity"
     },
     {
-      "name": "advisor",
-      "source": "./plugins/advisor",
-      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or send a one-shot prompt to either CLI, for a rewrite, an opinion, an adversarial review, or delegated investigation. Runs on Codex CLI or Claude Code — install via `codex plugin add advisor@bootgear`."
-    },
-    {
       "name": "engine",
-      "source": {
-        "source": "local",
-        "path": "./codex-plugins/engine"
-      },
+      "source": "./plugins/engine",
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "Productivity"
+      "category": "Productivity",
+      "description": "Autonomous tasks through a clarified goal and validated session state."
+    },
+    {
+      "name": "spec",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "source": "./plugins/spec"
+    },
+    {
+      "name": "test",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "source": "./plugins/test"
+    },
+    {
+      "name": "converge",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "source": "./plugins/converge"
+    },
+    {
+      "name": "review",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "source": "./plugins/review"
+    },
+    {
+      "name": "advisor",
+      "source": "./plugins/advisor",
+      "description": "Pair Claude Code and Codex CLI through a shared mailbox, or send a one-shot prompt to either CLI, for a rewrite, an opinion, an adversarial review, or delegated investigation. Runs on Codex CLI or Claude Code \u2014 install via `codex plugin add advisor@bootgear`."
     },
     {
       "name": "deputy",

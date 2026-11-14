@@ -13,7 +13,7 @@ host hook stdin
 
 ## Package boundary
 
-The shared core is mirrored in both independently installable engine bundles:
+The engine has one shared source directory for both hosts:
 
 - `src/engine/host_adapter.py` — input bounds, normalization, validation,
   host context, dispatch, effects, rendering, and safe traces.
@@ -25,7 +25,7 @@ The shared core is mirrored in both independently installable engine bundles:
   forwards the event to the plugin's registered handler.
 - `hooks/adapter.py` — handler entry point and import bootstrap.
 
-The Claude and Codex cores are byte-identical. Native hook loaders supply host
+The active host selects its native hook registration. Native hook loaders supply host
 paths, input contracts, and output envelopes. The engine layer does not import
 advisor, mailbox, or memory-ledger implementation modules.
 
@@ -38,7 +38,7 @@ advisor, mailbox, or memory-ledger implementation modules.
 | Claude | `PostToolUse` | `.*` | `state_nudge` | native context |
 | Claude | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |
 | Claude | `PostCompact` | `manual|auto` | `compaction_observe` | observe only |
-| Codex | `SessionStart` | `^(startup\|resume\|compact)$` | `session_recall` | session id always; with an active ledger only: goal, principles and standards block; compact adds recall |
+| Codex | `SessionStart` | `^(startup\|resume\|clear\|compact\|fork)$` | `session_recall` | session id always; with an active ledger only: goal, principles and standards block; compact adds recall |
 | Codex | `Stop` | none | `stop_reminder` | continuation-compatible output |
 | Codex | `PostToolUse` | `.*` | `state_nudge`, `stop_reminder` | independent context handlers |
 | Codex | `PreCompact` | `manual|auto` | `compaction_observe` | observe only |
@@ -90,10 +90,8 @@ the declared host, then the other one. An explicit argument wins.
 
 The canonical parameterized fixture corpus lives under
 `plugins/engine/tests/fixtures/host_adapter/`; Claude and Codex runners execute
-it through their respective adapters. The Codex bundle drift test compares the
-mirrored adapter core, policy, and contracts byte for byte. Engine configuration,
-session, and state modules use a narrow host-adaptation allowlist; their comparison
-ignores blank lines.
+it through the shared adapter with explicit host context.
+The same engine suite runs for each host. Native cases retain distinct output envelopes and event contracts.
 
 The exact host contracts are checked against the official Claude Code and Codex
 hook references and fresh-host smoke checks. Fixture tests remain authoritative

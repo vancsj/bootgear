@@ -429,6 +429,10 @@ assessment. Do not claim that a retry occurred.
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 - Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 - Run session commands as `<gear> --host claude engine task <command> [arguments]`.
 - Run converge commands as `<gear> --host claude converge converge <command> [arguments]`.
@@ -440,8 +444,35 @@ assessment. Do not claim that a retry occurred.
   unavailable; never replace it silently with another mechanism.
 - `independent-reviewer` runs as a fresh sub-agent with the full brief and no
   main-agent position.
-- `adversarial-reviewer` defaults to the `advisor` skill with `--mode asking`,
-  direct communication, and its `review` task: send the full brief and request
-  counterexamples.
+- `adversarial-reviewer` defaults to `advisor` with `--mode asking`, direct communication, and its `review` task.
+  Send the full brief and request counterexamples.
 - A party whose mechanism is `native_subagent` runs as a sub-agent; a party
   whose mechanism is `advisor` runs as `adversarial-reviewer` does.
+
+### Codex
+
+Use `codex` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run session commands as `<gear> --host codex engine task <command> [arguments]`.
+- Run converge commands as `<gear> --host codex converge converge <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Use the host-supported party dispatch mechanism; do not substitute another
+  host's mechanism. Codex supports `native_subagent` and `advisor`.
+- A party whose mechanism is `native_subagent` runs as a native subagent.
+- A party with mechanism `advisor` asks a Claude Code listener through `advisor`.
+  Use `--mode asking`, communication `channel` (never `direct`), and its `review` task. Use the debate channel named in the run
+  ledger's `advisor channels:` decision (read through `recall`), never the `r2`
+  channel. For deferred startup without a debate channel, run the settled launcher at the first advisor request.
+  Pair through `advisor` with `--mode asking` and communication `channel`, then record the debate channel in the run ledger.
+  Preserve any recorded `r2` channel. If startup is early, require the existing debate pairing.
+  Before each advisor request, reclaim that channel's live seat
+  through the `advisor` skill's scan and claim (the scan offers a seat this session
+  holds).
+- A party is unavailable when its native subagent cannot be created or times out.
+  It is also unavailable when its `advisor` call fails, times out, or finds no live listener.
+  A missing `advisor` skill also makes it unavailable. Never fall back to the other
+  channel or another mechanism.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
+Resume after setup verifies the required plugins.

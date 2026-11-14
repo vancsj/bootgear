@@ -73,9 +73,25 @@ Escalate to `debate` when the settlement is ambiguous or silent on the domain. D
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 
 - Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 - Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
 - If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Pass `<plugin-dir>` as `<engine-root>` in the handoff to this skill.
+
+### Codex
+
+Use `codex` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Pass `<plugin-root>` as `<engine-root>` in the handoff to this skill.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
+Resume after setup verifies the required plugins.

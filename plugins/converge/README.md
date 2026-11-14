@@ -162,11 +162,11 @@ follow-up by `report_if`.
 
 | | |
 |---|---|
-| `/converge:converge` (Codex: `$engine:converge`) | run a slate through the role agents |
+| `/converge:converge` (Codex: `$converge:converge`) | run a slate through the role agents |
 
 Call `cli:gear` and use its returned path for the registered `converge` command.
 Claude Code uses `--host claude converge converge`; Codex uses
-`--host codex engine converge`.
+`--host codex converge converge`.
 
 ```
 init        start a slate: lenses, angle files, refuters; --snapshot pins the work tree
@@ -210,8 +210,8 @@ Run `cli:setup` to prepare the shared runtime before the first Gear command.
 
 This installs `memory-ledger`, `advisor`, `deputy` and `cli` with it.
 
-On Codex CLI there is no separate install: converge ships inside the `engine` plugin
-(`codex plugin add engine@bootgear`).
+On Codex, install `cli@bootgear` and `converge@bootgear`.
+Call `cli:setup` with target `converge` to prepare its declared dependencies and shared runtime.
 
 Ledgers are one JSONL file per slate under `~/.bootgear/converge/` unless `--dir` says
 otherwise. Configuration layers deep-merge, later winning: built-in defaults, then a calling

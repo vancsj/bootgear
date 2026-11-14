@@ -16,13 +16,16 @@ import yaml
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PLUGIN_DIR.parents[1]
 GEAR = REPO_ROOT / "plugins" / "cli" / "bin" / "gear"
-def gear_args(host: str = "claude") -> list[str]:
+HOST = os.environ.get("BOOTGEAR_TEST_HOST", "claude")
+
+
+def gear_args(host: str = HOST) -> list[str]:
     return [str(GEAR), "--host", host, "--root", str(REPO_ROOT), "converge", "converge"]
 
 
 GEAR_ARGS = gear_args()
-GEAR_COMMAND = shlex.join([str(GEAR), "--host", "claude", "converge", "converge"])
-os.environ.setdefault("BOOTGEAR_HOST", "claude")
+GEAR_COMMAND = shlex.join([str(GEAR), "--host", HOST, "converge", "converge"])
+os.environ["BOOTGEAR_HOST"] = HOST
 sys.path.insert(0, str(REPO_ROOT / "plugins" / "cli" / "src"))
 sys.path.insert(0, os.environ.get("CONVERGE_SRC", str(PLUGIN_DIR / "src")))
 
@@ -87,7 +90,7 @@ class Converge:
             self.env.pop(var, None)
 
     def run(self, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        host = (env or {}).get("BOOTGEAR_HOST", "claude")
+        host = (env or {}).get("BOOTGEAR_HOST", HOST)
         return subprocess.run(
             [*gear_args(host), *args],
             capture_output=True, text=True, env={**self.env, **(env or {})},

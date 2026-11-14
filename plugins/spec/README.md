@@ -67,7 +67,7 @@ An override must return the same artifacts each stage defines. See
 
 | | |
 |---|---|
-| `/spec:spec` (Codex: `$engine:spec`) | run the stages for a ticket, bug report or request |
+| `/spec:spec` (Codex: `$spec:spec`) | run the stages for a ticket, bug report or request |
 
 ## Setup
 
@@ -78,8 +78,8 @@ An override must return the same artifacts each stage defines. See
 
 Claude installs `converge`, `review` and `cli` with `spec`.
 
-On Codex CLI, `spec` has no separate install: it is bundled into the Codex `engine` package
-(`codex plugin add engine@bootgear`). The `cli` plugin is a separate peer.
+On Codex, install `cli@bootgear` and `spec@bootgear`.
+Call `cli:setup` with target `spec` to prepare its declared dependencies and shared runtime.
 
 ## Standalone, or as bootgear gear
 

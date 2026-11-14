@@ -171,7 +171,7 @@ def _cli_gear(host: str, inventory: object) -> Path | None:
 def _find_gear(root: Path, host: str, plugin: str, session: str | None) -> Path | None:
     for ancestor in root.parents:
         candidate = ancestor / "plugins" / "cli" / "bin" / "gear"
-        if candidate.is_file() and (ancestor / "codex-plugins").is_dir():
+        if candidate.is_file():
             return candidate
     if plugin == "cli" and (root / "bin" / "gear").is_file():
         return root / "bin" / "gear"

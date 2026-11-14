@@ -4,14 +4,13 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import os
 import re
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
 import yaml
-from bootgear_cli.clikit import caller_cwd, caller_path, emit
+from bootgear_cli.clikit import caller_cwd, caller_path, emit, host
 
 from engine import seats
 
@@ -104,7 +103,7 @@ def resolve(name: str, project_root: Path, user_path: Path | None,
     if not project_root.is_dir():
         _fail(f"project root is not a directory: {project_root}")
 
-    host_dir = (".codex" if os.environ.get("BOOTGEAR_HOST") == "codex" else ".claude")
+    host_dir = (".codex" if host() == "codex" else ".claude")
     paths = {
         "user": (user_path or (Path.home() / host_dir / f"{name}.yaml")).expanduser(),
         "project": project_path or (project_root / ".bootgear" / "config" / f"{name}.yaml"),

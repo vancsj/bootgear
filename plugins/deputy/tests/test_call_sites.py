@@ -15,10 +15,6 @@ ASKING = [
     "plugins/engine/skills/resolve/SKILL.md",
     "plugins/engine/skills/debate/SKILL.md",
     "plugins/review/skills/review/SKILL.md",
-    "codex-plugins/engine/skills/clarify/SKILL.md",
-    "codex-plugins/engine/skills/execute/SKILL.md",
-    "codex-plugins/engine/skills/resolve/SKILL.md",
-    "codex-plugins/engine/skills/debate/SKILL.md",
 ]
 HANDBACK_ONLY = ["plugins/converge/skills/converge/SKILL.md"]
 HARD_GATE = ("production change, outward send, irreversible action, goal sign-off, "

@@ -1,7 +1,7 @@
 {
   "name": "engine",
-  "version": "0.28.6",
-  "description": "General autonomous task-execution loop: clarify settles task type, approach, per-domain source-of-truth, debate threshold, and autonomy scope, then execute runs unattended to a succeeded/failed /goal. Declared dependencies, installed automatically: cli, converge, spec, test, review, advisor, memory-ledger, deputy.",
+  "version": "0.29.0",
+  "description": "Autonomous task execution through a clarified goal, session ledger, and validated state machine.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"

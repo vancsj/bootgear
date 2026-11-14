@@ -317,7 +317,7 @@ class SessionRecallAdapterTest(unittest.TestCase):
             }),
             capture_output=True,
             text=True,
-            env={**os.environ, "HOME": str(self.home), "CLAUDE_PLUGIN_ROOT": str(PLUGIN_DIR)},
+            env={**os.environ, "HOME": str(self.home), "CLAUDE_PLUGIN_ROOT": str(PLUGIN_DIR), "BOOTGEAR_HOST": "claude"},
             check=False,
         )
 

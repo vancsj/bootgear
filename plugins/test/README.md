@@ -56,7 +56,7 @@ An override must report in the same per-sub-task format. See
 
 | | |
 |---|---|
-| `/test:test` (Codex: `$engine:test`) | write cases, run tests, or triage a failure for a change or requirement |
+| `/test:test` (Codex: `$test:test`) | write cases, run tests, or triage a failure for a change or requirement |
 
 ## Setup
 
@@ -67,8 +67,8 @@ An override must report in the same per-sub-task format. See
 
 Claude installs `cli` with `test`.
 
-On Codex CLI, `test` has no separate install: it is bundled into the Codex `engine` package
-(`codex plugin add engine@bootgear`). The `cli` plugin is a separate peer.
+On Codex, install `cli@bootgear` and `test@bootgear`.
+Call `cli:setup` with target `test` to prepare its declared dependencies and shared runtime.
 
 ## Standalone, or as bootgear gear
 

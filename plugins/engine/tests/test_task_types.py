@@ -1,8 +1,7 @@
-"""C30a checks for the six engine task types, on the Claude host.
+"""C30a checks for the six engine task types, on each host.
 
 Host paths use registered Gear commands for task and Converge, and
-the bootgear overrides in `.bootgear/config/`. The cross-host byte copies and the shared docs
-are read from the repo root. Subprocesses run in scratch dirs, never in the repo.
+the bootgear overrides in `.bootgear/config/`. Shared configuration is read from the repo root. Subprocesses run in scratch dirs, never in the repo.
 """
 import importlib
 import json
@@ -17,12 +16,13 @@ from pathlib import Path
 
 import yaml
 from gear_commands import CONVERGE as CONVERGE_COMMAND
+from gear_commands import HOST
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
-HOST_ROOT_VAR = "CLAUDE_PLUGIN_ROOT"
+HOST_ROOT_VAR = "CLAUDE_PLUGIN_ROOT" if HOST == "claude" else "PLUGIN_ROOT"
 ENGINE_SRC = PLUGIN_DIR / "src"
 MACHINES = PLUGIN_DIR / "state-machines"
 REFERENCES = PLUGIN_DIR / "references"
@@ -322,12 +322,11 @@ class StaticChecks(Scratch):
     def test_check_v_design_doc_has_no_impl_node(self):
         self.assertNotIn("impl", _load_yaml(MACHINES / "design-doc.yaml")["nodes"])
 
-    def test_check_vi_product_cutoff_and_triage_angles_are_byte_identical_on_both_hosts(self):
+    def test_product_cutoff_and_triage_angles_have_one_shared_location(self):
         for rel in ("references/cutoff-product.yaml", "references/angles-triage.yaml"):
-            with self.subTest(file=rel):
-                claude = (REPO_ROOT / "plugins" / "engine" / rel).read_bytes()
-                codex = (REPO_ROOT / "codex-plugins" / "engine" / rel).read_bytes()
-                self.assertEqual(claude, codex)
+            matches = list((REPO_ROOT / "plugins").glob(f"*/{rel}"))
+            self.assertEqual(matches, [PLUGIN_DIR / rel])
+            self.assertTrue(yaml.safe_load(matches[0].read_text()))
 
     def test_check_vii_every_copy_of_the_six_value_list_names_the_same_values(self):
         clarify = (PLUGIN_DIR / "skills" / "clarify" / "SKILL.md").read_text()
@@ -467,8 +466,6 @@ class GateChecks(Scratch):
     def test_check_ix_cutoff_profiles_match_d3_and_converge_init_exits_0(self):
         profiles = {
             REPO_ROOT / "plugins" / "engine" / "references" / "cutoff-product.yaml":
-                [PRODUCT_RULE, EVERY_CLAIM_RULE],
-            REPO_ROOT / "codex-plugins" / "engine" / "references" / "cutoff-product.yaml":
                 [PRODUCT_RULE, EVERY_CLAIM_RULE],
             OVERRIDES / "cutoff-one-user.yaml": [PRODUCT_RULE, UNREACHABLE_RULE, EVERY_CLAIM_RULE],
         }

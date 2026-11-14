@@ -1,4 +1,4 @@
-"""Prepare and borrow the shared dependency environment."""
+"""Prepare the shared runtime and declared plugin dependencies."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NoReturn
 
 CLI_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_VERSION = "3.12"
@@ -19,6 +20,11 @@ PYTHON_VERSION = "3.12"
 
 class RuntimeNotReady(Exception):
     """Explicit setup is required before running a provider."""
+
+
+class SetupParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        self.exit(2, f"gear: {message}\nexample: {self.prog} --help\ncommands: setup, session-start\n")
 
 
 def environment_path(cli_root: Path = CLI_ROOT) -> Path:
@@ -84,22 +90,30 @@ def prepared(cli_root: Path = CLI_ROOT) -> Iterator[Path]:
 
 
 def main() -> int:
-    from bootgear_cli import clikit
+    from bootgear_cli import clikit, dependencies
 
-    parser = argparse.ArgumentParser(prog=clikit.current_program("cli", "setup"), description=__doc__)
+    parser = SetupParser(prog=clikit.current_program("cli", "setup"), description=__doc__)
     flags = parser.add_mutually_exclusive_group()
     flags.add_argument("--json", action="store_true")
     flags.add_argument("--prose", action="store_true")
+    parser.add_argument("--plugin", help="prepare the installed plugin's declared sibling dependencies")
     args = parser.parse_args()
     mode = clikit.resolve_mode(args.json, args.prose)
     try:
         environment = setup()
-    except (OSError, RuntimeNotReady) as exc:
+        plugins = dependencies.prepare(args.plugin) if args.plugin else ()
+    except (OSError, RuntimeNotReady, dependencies.DependencySetupError) as exc:
         error = json.dumps({"error": str(exc)}) if mode == "json" else f"gear: {exc}"
         print(error, file=sys.stderr)
         return 2
-    clikit.emit(mode, {"runtime": str(environment)}, f"Shared runtime ready: {environment}",
-                next="Use cli:gear to get the Gear path, then run a registered command.")
+    result: dict[str, object] = {"runtime": str(environment)}
+    prose = f"Shared runtime ready: {environment}"
+    if args.plugin:
+        result["plugins"] = list(plugins)
+        prose += f"\nRequired plugins ready: {', '.join(plugins)}"
+    clikit.emit(mode, result, prose,
+                next="Return to the calling skill." if args.plugin else
+                "Use cli:gear to get the Gear path, then run a registered command.")
     return 0
 
 

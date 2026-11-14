@@ -1,13 +1,13 @@
 # Skill authoring
 
-These rules apply to every skill in `plugins/` and `codex-plugins/`.
+These rules apply to every shared skill in `plugins/`.
 
 ## Public interface
 
 Skills are public functions. Another skill sees a skill's signature and never
 its body. The public interface of a skill is:
 
-- its **name**, used to invoke it through the `Skill` tool (for example
+- its **name**, used to invoke it through the host skill interface (for example
   `memory-ledger:ledger`, `spec`, `review`);
 - its **modes** and their **handbacks**;
 - its **`settings` subcommand**, which prints what a caller must supply to use

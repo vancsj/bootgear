@@ -204,6 +204,10 @@ Do not treat unavailable history as empty history or request new mutation permis
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `spec` for `<spec-plugin>`.
 
 Use `claude` for `<host>`.
@@ -214,3 +218,21 @@ Use `claude` for `<host>`.
 - Run feedback commands as `<gear> --host claude spec spec-feedback <command> [arguments]`.
 - If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 - Keep `session_dir` in context. Supply `--dir` only for a custom session directory.
+
+### Codex
+
+Use `spec` for `<spec-plugin>`.
+
+Use `codex` for `<host>`.
+
+- Invoke skills by public name.
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run feedback commands as `<gear> --host codex spec spec-feedback <command> [arguments]`.
+- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Keep `<engine-root>` from the caller for active-run handoffs.
+- Keep `session_dir` in context. Supply `--dir` only for a custom session directory.
+- If required self-review or its public command is missing, return `blocked` with the actual diagnostic.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `spec` as the next step.
+Resume after setup verifies the required plugins.

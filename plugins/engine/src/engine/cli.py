@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unified engine command line.
 
-    task session init|validate|read|record-decision|update-todo|next-question-id|
+    task session init|validate|read|recall|record-decision|update-todo|next-question-id|
                  record-pitch|close|write-ticket ...
     task state   transition|current|amend|show|validate|diagram ...
 
@@ -28,6 +28,7 @@ EXAMPLES = {
     "session init": "session init --settlement-file <file>",
     "session validate": "session validate --dir <session-dir>",
     "session read": "session read --dir <session-dir> --section state",
+    "session recall": "session recall --dir <session-dir>",
     "session record-decision": ('session record-decision --dir <session-dir> '
                                 '--mode solo --summary "<decision>"'),
     "session update-todo": ('session update-todo --dir <session-dir> '
@@ -49,7 +50,7 @@ EXAMPLES = {
     "config resolve": "config resolve --name <name> --project-root <dir>",
 }
 CATALOG = Catalog(prog=session.PROG, examples=EXAMPLES,
-                  frequent=("session read", "session record-decision", "state transition"),
+                  frequent=("session recall", "session record-decision", "state transition"),
                   legacy_json=frozenset({"config resolve"}))
 
 
@@ -72,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     state_sub = state_parser.add_subparsers(dest="cmd", required=True)
     state.add_subparsers(state_sub, dir_parent)
 
-    config_parser = top.add_parser("config", help="layered configuration")
+    config_parser = top.add_parser("config", help="resolve layered configuration")
     config_sub = config_parser.add_subparsers(dest="cmd", required=True)
     config.add_subparsers(config_sub)
 

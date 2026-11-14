@@ -101,7 +101,7 @@ standalone it uses the current project's own review skill when one fits. See
 
 | | |
 |---|---|
-| `/review:review` (Codex: `$engine:review`) | review a diff, branch or PR, or apply its accepted comments |
+| `/review:review` (Codex: `$review:review`) | review a diff, branch or PR, or apply its accepted comments |
 
 ## Setup
 
@@ -110,9 +110,9 @@ standalone it uses the current project's own review skill when one fits. See
 /plugin install review@bootgear
 ```
 
-This installs `converge`, `deputy` and `cli` with it. On Codex CLI, `review` has no separate install:
-it is bundled into the Codex `engine` package (`codex plugin add engine@bootgear`). The
-`cli` plugin is a separate peer.
+Claude installs `converge`, `deputy` and `cli` with it.
+On Codex, install `cli@bootgear` and `review@bootgear`.
+Call `cli:setup` with target `review` to prepare its declared dependencies and shared runtime.
 
 ## Standalone, or as bootgear gear
 

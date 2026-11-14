@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "host_adapter" / "cases.json"
 PLUGIN_ROOTS = {
     "claude": REPO_ROOT / "plugins" / "engine",
-    "codex": REPO_ROOT / "codex-plugins" / "engine",
+    "codex": REPO_ROOT / "plugins" / "engine",
 }
 
 
@@ -24,6 +24,7 @@ def _run(case: dict, home: Path) -> None:
     wrapper = plugin_root / "hooks" / "adapter.py"
     env = os.environ.copy()
     env["HOME"] = str(home)
+    env["BOOTGEAR_HOST"] = host
     env["CLAUDE_PLUGIN_ROOT" if host == "claude" else "PLUGIN_ROOT"] = str(plugin_root)
     for item in case.get("setup", {}).get("files", []):
         target = (home / item["path"]).resolve()

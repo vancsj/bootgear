@@ -1,5 +1,4 @@
-"""spec-review's cutoff table: same file on both hosts, a valid converge
-config layer, and the report decisions it encodes."""
+"""Shared spec-review cutoff configuration and report decisions."""
 
 from __future__ import annotations
 
@@ -15,15 +14,13 @@ sys.path.insert(0, str(PLUGIN_DIR.parent / "converge/src"))
 from converge.config import rereview, validate_config
 from converge.model import rule_matches
 
-REPO_ROOT = PLUGIN_DIR.parents[1]
-CLAUDE_CUTOFF = PLUGIN_DIR / "skills/spec-review/references/cutoff.yaml"
-CODEX_CUTOFF = REPO_ROOT / "codex-plugins/engine/skills/spec-review/references/cutoff.yaml"
+CUTOFF = PLUGIN_DIR / "skills/spec-review/references/cutoff.yaml"
 LENSES = {"default", "request-fit", "simplicity", "proportionality"}
 CHOICE_LENSES = ("simplicity", "proportionality")
 
 
 def _table() -> dict:
-    return yaml.safe_load(CLAUDE_CUTOFF.read_text())
+    return yaml.safe_load(CUTOFF.read_text())
 
 
 def _rules(cutoff: dict, lens: str, key: str) -> list:
@@ -47,13 +44,9 @@ def _attacked(cutoff: dict, lens: str, impact: str) -> bool:
     return any(rule_matches(rule, values) for rule in _rules(cutoff, lens, "attack_if"))
 
 
-def test_codex_copy_matches_claude_file() -> None:
-    assert CODEX_CUTOFF.read_bytes() == CLAUDE_CUTOFF.read_bytes()
-
-
 def test_table_is_a_valid_config_layer() -> None:
     table = _table()
-    assert validate_config(table, str(CLAUDE_CUTOFF)) == []
+    assert validate_config(table, str(CUTOFF)) == []
     assert set(table) == {"cutoff"}
     assert set(table["cutoff"]) == {"cheap", "difficulty_basis", "lenses", "rereview"}
     assert table["cutoff"]["cheap"] == {"enabled": False}

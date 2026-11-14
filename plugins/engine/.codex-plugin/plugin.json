@@ -1,0 +1,20 @@
+{
+  "name": "engine",
+  "version": "0.29.0",
+  "description": "Autonomous task execution through a clarified goal, session ledger, and validated state machine.",
+  "author": {
+    "name": "vancsj",
+    "url": "https://github.com/vancsj/bootgear"
+  },
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "Engine",
+    "shortDescription": "Run durable Codex task loops.",
+    "longDescription": "Engine carries a clarified goal through an atomic session ledger and validated state machine until it succeeds or fails.",
+    "developerName": "vancsj",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Start an engine run for this task."
+  }
+}

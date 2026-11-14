@@ -25,7 +25,7 @@ CLI_ROOT = Path(__file__).resolve().parents[2]
 
 def _checkout_root() -> Path:
     for ancestor in CLI_ROOT.parents:
-        if (ancestor / "plugins" / "cli").resolve() == CLI_ROOT and (ancestor / "codex-plugins").is_dir():
+        if (ancestor / "plugins" / "cli").resolve() == CLI_ROOT:
             return ancestor
     return CLI_ROOT
 
@@ -140,14 +140,7 @@ def _load_plugin(path: Path, *, repository_root: Path) -> Plugin:
 
 
 def _registration_paths(root: Path, plugin_roots: Sequence[Path]) -> list[Path]:
-    roots = [root / "plugins", root / "codex-plugins"]
-    if os.environ.get("BOOTGEAR_HOST") != "codex":
-        roots.reverse()
-    selected: dict[str, Path] = {}
-    for base in roots:
-        if base.exists():
-            selected.update({path.parent.name: path for path in base.glob("*/gear.toml")})
-    registrations = list(selected.values())
+    registrations = list((root / "plugins").glob("*/gear.toml"))
     registrations.extend(plugin_root / "gear.toml" for plugin_root in plugin_roots)
     seen: set[Path] = set()
     unique: list[Path] = []
@@ -196,20 +189,26 @@ def _host_inventory(host: str, source: str, session: str | None, *,
 
 
 def _host_plugin_roots(root: Path, *,
-                       refresh: bool = False) -> tuple[tuple[Path, ...], tuple[str, ...], bool]:
+                       refresh: bool = False, strict: bool = False,
+                       host: str | None = None) -> tuple[tuple[Path, ...], tuple[str, ...], bool]:
     """Enabled host plugin roots, the warnings, and whether a host list came from the store.
 
     The session store is used unless `refresh` asks for a query. A stored record whose
-    folder is gone is skipped silently; warnings come from fresh queries."""
+    folder is gone is skipped silently; warnings come from fresh queries.
+    Strict setup calls reject query failures and invalid inventory structures."""
     roots: list[Path] = []
     warnings: list[str] = []
 
-    host = os.environ.get("BOOTGEAR_HOST")
+    host = host or os.environ.get("BOOTGEAR_HOST")
     session = _session_key()
     claude_data, claude_stored, warning = ((None, False, None) if host == "codex"
                                            else _host_inventory("claude", "Claude", session, refresh=refresh))
     if warning:
+        if strict:
+            raise GearError(warning)
         warnings.append(warning)
+    if strict and host == "claude" and not isinstance(claude_data, list):
+        raise GearError("claude plugin list --json returned an invalid installed plugin list.")
     if isinstance(claude_data, list):
         caller = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
         for record in claude_data:
@@ -227,7 +226,12 @@ def _host_plugin_roots(root: Path, *,
     codex_data, codex_stored, warning = ((None, False, None) if host == "claude"
                                          else _host_inventory("codex", "Codex", session, refresh=refresh))
     if warning:
+        if strict:
+            raise GearError(warning)
         warnings.append(warning)
+    if strict and host == "codex" and (not isinstance(codex_data, dict)
+                                      or not isinstance(codex_data.get("installed"), list)):
+        raise GearError("codex plugin list returned an invalid installed plugin list.")
     if isinstance(codex_data, dict):
         for record in codex_data.get("installed", []):
             if not isinstance(record, dict) or not record.get("enabled") or not record.get("installed", True):

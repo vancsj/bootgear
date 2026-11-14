@@ -1,10 +1,12 @@
 {
   "name": "memory-ledger",
-  "version": "4.16.9",
-  "description": "Append-only ledger of settled questions, rival answers, and the evidence check behind each — signed per AI session so consensus accumulates across runs, split across a shared team ledger, a machine-local one and a deputy ledger of your own decisions. Start with /memory-ledger:setup.",
+  "version": "4.16.10",
+  "description": "Append-only ledger of settled questions, rival answers, and the evidence check behind each \u2014 signed per AI session so consensus accumulates across runs, split across a shared team ledger, a machine-local one and a deputy ledger of your own decisions. Start with /memory-ledger:setup.",
   "author": {
     "name": "vancsj",
     "url": "https://github.com/vancsj/bootgear"
   },
-  "dependencies": ["cli"]
+  "dependencies": [
+    "cli"
+  ]
 }

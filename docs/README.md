@@ -50,41 +50,29 @@ deputy ──needs──> cli, memory-ledger
 engine run's `*_override` settlement field and hands off to a project skill
 when one is set.
 
-## Host split
+## Shared sources and host mechanics
 
+```text
+plugins/<name>/
+  .claude-plugin/plugin.json       Claude manifest and dependency declarations
+  .codex-plugin/plugin.json        Codex manifest
+  skills/                          shared instructions with explicit host sections
+  src/                             shared providers
+.claude-plugin/marketplace.json     Claude marketplace
+.agents/plugins/marketplace.json    Codex marketplace
 ```
-plugins/<name>/            one source tree per plugin
-  .claude-plugin/          Claude Code manifest (all plugins)
-  .codex-plugin/           Codex manifest (cli, memory-ledger, advisor, deputy)
-codex-plugins/engine/      Codex engine: engine skills + bundled spec, test,
-                           review, converge
-.claude-plugin/marketplace.json   Claude marketplace: all plugins
-.agents/plugins/marketplace.json  Codex marketplace: cli, memory-ledger, advisor, deputy, engine
-```
 
-- `cli`, `memory-ledger`, `advisor` and `deputy` serve both hosts from one directory
-  with two manifests.
-- `engine` has a separate Codex package that bundles the engine, converge,
-  review, spec and test code and skills. It has no separate Codex installs for
-  converge, review, spec or test. It uses the shared CLI, Advisor, Ledger and Deputy plugins.
-- Host-specific parts: manifests, hook registrations and output envelopes,
-  native hook loaders, session
-  identity delivery, user config directory (`~/.claude` vs `~/.codex`),
-  advisor dispatch (both hosts accept the party and seat mechanisms
-  `native_subagent` and `advisor`; on Claude Code an `advisor` debate party is
-  a one-shot Codex call and an `advisor` converge seat a Codex listener over
-  `channel`; on Codex both are Claude Code listeners over `channel`, one per
-  use), and the Codex-only `task session recall` command. The Codex compact
-  hook tells the agent to run this command; Claude's hook tells the agent to
-  call the `recall` skill.
-- Shared parts: Gear routing, the Python runtime, clikit, ledger formats and built-in state machines.
-  Shared command examples use host-neutral placeholders.
-  Each skill's Host mechanics section supplies the host and provider values.
+Both marketplaces load the same directory for every plugin.
+Native manifests use the same release version for each plugin.
+Claude resolves declared dependencies. Explicit Codex setup reads those declarations and installs missing peers.
+Normal commands and hooks never install dependencies.
 
-Shared behavior changes on both hosts in the same change.
-Parity tests compare source copies and check explicit host adapters.
-Gear, the runtime and clikit each have one shared implementation.
-The Engine, Converge, review and spec source copies retain their declared host adaptations.
+Host mechanics retain native hook registrations, output envelopes, identity delivery, configuration paths, and advisor dispatch.
+Claude debate advisors use direct Codex calls. Claude Converge advisors use Codex listeners.
+Codex uses separate Claude listeners for debate and Converge.
+Both hosts accept `native_subagent` and `advisor` mechanisms.
+Shared session recall, state machines, CLI routing, and provider code have one implementation.
+Shared provider suites run for each host. Native adapter tests retain each host's payload and lifecycle contracts.
 
 ## Gear CLI
 
@@ -95,8 +83,7 @@ discovers registrations from `gear.toml` and does not use a fixed plugin list.
   `[plugin] name`, `[commands.<name>] exec = [...]`, and optional
   `[reminders.<event>]` with `exec`, `severity` (`reminder` | `gate`), `order`
   and `dedupe`.
-- **Discovery.** Discovery reads `plugins/*/gear.toml` and
-  `codex-plugins/*/gear.toml` under the repository root. Two registrations with
+- **Discovery.** Discovery reads `plugins/*/gear.toml` under the repository root. Two registrations with
   the same plugin name are an error.
 - **Routing.** `<gear> --host <host> <plugin> <command> [args]` runs the declared
   executable. Gear preserves caller paths and provider roots. The child's exit
@@ -105,7 +92,8 @@ discovers registrations from `gear.toml` and does not use a fixed plugin list.
   host whose session variable is set. With both variables set, it takes the
   nearest `claude` or `codex` ancestor process, else `claude`.
 - **Runtime.** Python commands use the prepared shared interpreter and imports.
-  `cli:setup` prepares dependencies. Normal commands and hooks do not install them.
+  `cli:setup` prepares the Python runtime. With a target plugin, setup verifies its transitive plugin dependencies.
+  Codex setup installs missing peers through the native CLI and refreshes enabled installed roots.
 - **Events.** `<gear> --host <host> event <event>` runs every matching reminder in
   (`order`, plugin name, `dedupe`) order, skipping repeated `dedupe` keys. A
   failing `gate` reminder stops the run and returns its code. A failing

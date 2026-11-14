@@ -11,6 +11,16 @@ from quality import check
 
 
 class QualityCheckTests(unittest.TestCase):
+    def test_shared_provider_suites_run_on_both_hosts(self) -> None:
+        for provider in ("engine", "converge", "review", "spec"):
+            with self.subTest(provider=provider):
+                hosts = {
+                    (check._check_environment(item) or {}).get("BOOTGEAR_TEST_HOST")
+                    for item in check.CHECKS
+                    if f"plugins/{provider}/tests" in item.command
+                }
+                self.assertEqual({"claude", "codex"}, hosts)
+
     def test_run_checks_runs_every_check_and_reports_in_check_order(self) -> None:
         calls: list[tuple[str, ...]] = []
 

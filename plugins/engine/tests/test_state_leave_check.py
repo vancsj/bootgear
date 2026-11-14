@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from gear_commands import HOST
 from settlement_fixture import valid_settlement
 from state_validate_fixture import validate_reminder
 
@@ -23,7 +24,7 @@ sys.path.insert(0, str(PLUGIN_DIR / "src"))
 from engine import state as leave_state
 
 GEAR = REPOSITORY_ROOT / "plugins" / "cli" / "bin" / "gear"
-TASK_COMMAND = [str(GEAR), "--host", "claude", "engine", "task"]
+TASK_COMMAND = [str(GEAR), "--host", HOST, "engine", "task"]
 PROGRAM = "engine-test-leave-check"
 
 
@@ -115,7 +116,7 @@ class LeaveCheckSchemaTest(unittest.TestCase):
         self.assertIn("3 problem(s) found", result.stdout)
 
     def test_registered_command_prefix_is_spliced_before_leave_args(self):
-        prefix = [str(GEAR), "--host", "claude", "converge", "converge"]
+        prefix = [str(GEAR), "--host", HOST, "converge", "converge"]
         process = Mock(returncode=0)
         process.communicate.return_value = (b"passed\n", None)
         with (patch.object(leave_state, "resolve_command", return_value=prefix, create=True),

@@ -9,6 +9,7 @@ many-compaction run.
 
     init              create a new ledger, write its settlement once
     read              print a section, or the whole file
+    recall            print the settlement and recovery state together
     record-decision   append a decisions line
     next-question-id  print the next unused debate question id
     update-todo       toggle a todo's done state in place
@@ -1014,6 +1015,48 @@ def cmd_read(args: argparse.Namespace) -> None:
         }, text.strip("\n"))
 
 
+def _recall_section(label: str, body: str, empty: str = "(none)") -> list[str]:
+    body = body.strip("\n")
+    return [f"-- {label} --", body if body else empty]
+
+
+def cmd_recall(args: argparse.Namespace) -> None:
+    path = _ledger_path(args.run_id, args.dir)
+    text = _read_text(path)
+    open_todos = [line for line in _section_body(text, "todos").strip("\n").split("\n")
+                  if line.strip().startswith("- [ ]")]
+    pitches = [line for line in _section_body(text, "pitches").strip("\n").split("\n")
+               if line.strip()]
+    data = {
+        "run_id": args.run_id,
+        "settlement": _lines(_section_body(text, "settlement")),
+        "decisions": _lines(_section_body(text, "decisions")),
+        "open_todos": open_todos,
+        "state": _lines(_section_body(text, "state")),
+        "current_node": None,
+        "recent_pitches": pitches[-3:],
+    }
+    # state.py imports this module at load, so import it here.
+    from engine.state import current_node_report, try_current_node_view
+    view, error = try_current_node_view(text, path)
+    if view is None:
+        current_node = f"(unavailable: {error})"
+    else:
+        lines, data["current_node"], next_step = current_node_report(view, args.run_id, path)
+        if next_step:
+            lines.append(f"next: {next_step}")
+        current_node = "\n".join([view["current"], *lines])
+    prose = [
+        *_recall_section("settlement", _section_body(text, "settlement")),
+        *_recall_section("decisions (full)", _section_body(text, "decisions")),
+        *_recall_section("open todos", "\n".join(open_todos)),
+        *_recall_section("state", _section_body(text, "state")),
+        *_recall_section("current node", current_node),
+        *_recall_section("recent pitches (last 3)", "\n".join(pitches[-3:])),
+    ]
+    emit(args.output_mode, data, prose)
+
+
 def _has_content_after_prefix(summary: str, prefix: str) -> bool:
     """True only if `summary` starts with `prefix` and something more than
     whitespace follows it — a closing summary that is just the bare prefix
@@ -1855,6 +1898,12 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "id (e.g. 'q1') — use to resume one debate without "
                         "scanning the whole decisions section")
     s.set_defaults(func=_run_id_command(cmd_read))
+
+    s = sub.add_parser("recall", parents=[dir_parent],
+                        help="print settlement, full decisions, open todos, state, "
+                             "and recent pitches")
+    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
+    s.set_defaults(func=_run_id_command(cmd_recall))
 
     s = sub.add_parser("record-decision", parents=[dir_parent],
                         help="append a decisions entry")

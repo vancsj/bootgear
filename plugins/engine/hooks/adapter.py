@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Installed Claude Code host adapter entry point."""
+"""Installed host adapter entry point."""
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 
-HOST = "claude"
-_ROOT_ENV = "CLAUDE_PLUGIN_ROOT"
+from bootgear_cli.clikit import host
+
+HOST = host() or "claude"
+_ROOT_ENV = "PLUGIN_ROOT" if HOST == "codex" else "CLAUDE_PLUGIN_ROOT"
 
 
 def _source_dir() -> Path:

@@ -1,12 +1,13 @@
-"""Gear command prefixes for Claude Engine tests."""
+"""Gear command prefixes for shared Engine tests."""
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 GEAR = REPOSITORY_ROOT / "plugins" / "cli" / "bin" / "gear"
-HOST = "claude"
+HOST = os.environ.get("BOOTGEAR_TEST_HOST", "claude")
 
 
 def command(plugin: str, name: str, host: str = HOST) -> list[str]:

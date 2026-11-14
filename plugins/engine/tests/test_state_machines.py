@@ -1,6 +1,5 @@
-"""CLI contract tests for Claude built-ins and Bootgear project machines."""
+"""CLI contract tests for shared built-ins and Bootgear project machines."""
 import os
-import re
 import subprocess
 import tempfile
 import unittest
@@ -21,10 +20,9 @@ SPEC_REVIEW_GRAPHS = {
     "design-doc": ("spec-review", "spec", "spec-debate", "succeeded"),
     "ticket-writing": ("ticket-review", "ticket", "ticket-debate", "succeeded"),
 }
-SKILL_TOKEN = re.compile(r"(?:/|\$)(spec|test|review)\b")
 
 
-class ClaudeStateMachineTest(unittest.TestCase):
+class SharedStateMachineTest(unittest.TestCase):
     def _task(self, *args):
         return subprocess.run(
             [*TASK_COMMAND, *args],
@@ -73,7 +71,7 @@ class ClaudeStateMachineTest(unittest.TestCase):
                         self.assertEqual(nodes["fix"]["max_visits"], 4)
                         self.assertEqual(nodes["review-debate"]["max_visits"], 3)
 
-    def test_every_v1_task_type_has_a_valid_claude_builtin(self):
+    def test_every_v1_task_type_has_a_valid_shared_builtin(self):
         for task_type in TASK_TYPES:
             self._assert_valid_diagram(
                 PLUGIN_DIR / "state-machines" / f"{task_type}.yaml"
@@ -83,26 +81,6 @@ class ClaudeStateMachineTest(unittest.TestCase):
         for task_type in OVERRIDE_TYPES:
             self._assert_valid_diagram(
                 REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
-            )
-
-    def test_claude_generic_graphs_match_codex_after_skill_normalization(self):
-        for task_type in TASK_TYPES:
-            claude = yaml.safe_load(
-                (PLUGIN_DIR / "state-machines" / f"{task_type}.yaml").read_text()
-            )
-            codex = yaml.safe_load(
-                (
-                    REPO_ROOT
-                    / "codex-plugins"
-                    / "engine"
-                    / "state-machines"
-                    / f"{task_type}.yaml"
-                ).read_text()
-            )
-            self.assertEqual(
-                self._normalize(claude),
-                self._normalize(codex),
-                task_type,
             )
 
     def test_spec_review_is_the_only_gate_before_the_exit(self):
@@ -163,7 +141,6 @@ class ClaudeStateMachineTest(unittest.TestCase):
     def _machine_dirs():
         return [
             REPO_ROOT / "plugins" / "engine" / "state-machines",
-            REPO_ROOT / "codex-plugins" / "engine" / "state-machines",
             REPO_ROOT / ".bootgear" / "config",
         ]
 
@@ -171,7 +148,7 @@ class ClaudeStateMachineTest(unittest.TestCase):
         """(path, graph) for each machine whose review node runs spec-review."""
         return [
             (machine_dir / f"{prefix}{task_type}.yaml", graph)
-            for machine_dir, prefix in zip(self._machine_dirs(), ("", "", "state-machine-"))
+            for machine_dir, prefix in zip(self._machine_dirs(), ("", "state-machine-"))
             for task_type, graph in SPEC_REVIEW_GRAPHS.items()
             if prefix == "" or task_type in OVERRIDE_TYPES
         ]
@@ -183,30 +160,8 @@ class ClaudeStateMachineTest(unittest.TestCase):
     def _ticket_writing_machines(self):
         return [
             machine_dir / f"{prefix}ticket-writing.yaml"
-            for machine_dir, prefix in zip(self._machine_dirs(), ("", "", "state-machine-"))
+            for machine_dir, prefix in zip(self._machine_dirs(), ("", "state-machine-"))
         ]
-
-    @staticmethod
-    def _normalize(machine):
-        nodes = {}
-        for name, node in machine["nodes"].items():
-            normalized = {
-                "next": node.get("next", []),
-                "terminal": node.get("terminal", False),
-                "max_visits": node.get("max_visits"),
-            }
-            if "reminder" in node:
-                reminder = dict(node["reminder"])
-                # leave_check names a program resolved per host by state.py,
-                # so it is compared verbatim, never token-normalized.
-                reminder["leave_check"] = reminder.get("leave_check")
-                if "do" in reminder:
-                    reminder["do"] = SKILL_TOKEN.sub("<skill>", reminder["do"])
-                if "leave" in reminder:
-                    reminder["leave"] = SKILL_TOKEN.sub("<skill>", reminder["leave"])
-                normalized["reminder"] = reminder
-            nodes[name] = normalized
-        return {"name": machine["name"], "nodes": nodes}
 
     def _pr_review_machines(self):
         return [
@@ -268,13 +223,13 @@ class ClaudeStateMachineTest(unittest.TestCase):
 
     def test_no_machine_carries_reminder_skill(self):
         paths = [
-            REPO_ROOT / host / "engine" / "state-machines" / f"{task_type}.yaml"
-            for host in ("plugins", "codex-plugins") for task_type in TASK_TYPES
+            PLUGIN_DIR / "state-machines" / f"{task_type}.yaml"
+            for task_type in TASK_TYPES
         ] + [
             REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
             for task_type in OVERRIDE_TYPES
         ]
-        self.assertEqual(len(paths), 16)
+        self.assertEqual(len(paths), 10)
         for path in paths:
             machine = yaml.safe_load(path.read_text())
             for name, node in machine["nodes"].items():
@@ -283,13 +238,13 @@ class ClaudeStateMachineTest(unittest.TestCase):
 
     def test_every_non_terminal_node_has_a_reminder_leave(self):
         paths = [
-            REPO_ROOT / host / "engine" / "state-machines" / f"{task_type}.yaml"
-            for host in ("plugins", "codex-plugins") for task_type in TASK_TYPES
+            PLUGIN_DIR / "state-machines" / f"{task_type}.yaml"
+            for task_type in TASK_TYPES
         ] + [
             REPO_ROOT / ".bootgear" / "config" / f"state-machine-{task_type}.yaml"
             for task_type in OVERRIDE_TYPES
         ]
-        self.assertEqual(len(paths), 16)
+        self.assertEqual(len(paths), 10)
         for path in paths:
             machine = yaml.safe_load(path.read_text())
             for name, node in machine["nodes"].items():

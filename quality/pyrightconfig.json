@@ -5,7 +5,6 @@
     "../plugins/converge",
     "../plugins/review",
     "../plugins/spec",
-    "../codex-plugins/engine",
     "."
   ],
   "pythonVersion": "3.11",
@@ -35,7 +34,8 @@
       "root": "../plugins/review",
       "extraPaths": [
         "../plugins/review/src",
-        "../plugins/cli/src"
+        "../plugins/cli/src",
+        "../plugins/converge/src"
       ]
     },
     {
@@ -43,13 +43,6 @@
       "extraPaths": [
         "../plugins/spec/src",
         "../plugins/converge/src",
-        "../plugins/cli/src"
-      ]
-    },
-    {
-      "root": "../codex-plugins/engine",
-      "extraPaths": [
-        "../codex-plugins/engine/src",
         "../plugins/cli/src"
       ]
     },

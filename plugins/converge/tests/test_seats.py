@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import GEAR, GEAR_COMMAND, PLUGIN_DIR, Converge
+from conftest import GEAR, GEAR_COMMAND, HOST, PLUGIN_DIR, Converge
 from converge import ledger, model
 
 ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
@@ -97,7 +97,7 @@ def _scope_converge(scope: str) -> Path:
 def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None = None) -> None:
     step = _line(lines, "DRIVER r2 step (one background step per turn): ")
     step = step.split(": ", 1)[1]
-    channel_command = shlex.join([str(GEAR), "--host", "claude", "advisor", "channel"])
+    channel_command = shlex.join([str(GEAR), "--host", HOST, "advisor", "channel"])
     assert step.startswith(f"{channel_command} send ")
     assert ' send --channel "$CHANNEL" --from asker --to listener --kind request --body-file ' in step
     assert f"--body-file {cv.dir}/s1.r2.request.txt && " in step

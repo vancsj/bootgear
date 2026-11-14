@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[3]
 CLI_ROOT = REPO / "plugins" / "cli"
 GEAR = CLI_ROOT / "bin" / "gear"
 HOOK_TEMPLATE = CLI_ROOT / "src" / "bootgear_cli" / "hook_loader.py"
-LOADER_PLUGINS = ("codex-plugins/engine", "plugins/advisor", "plugins/cli", "plugins/deputy",
+LOADER_PLUGINS = ("plugins/advisor", "plugins/cli", "plugins/deputy",
                   "plugins/engine", "plugins/memory-ledger")
 sys.path.insert(0, str(CLI_ROOT / "src"))
 gear = importlib.import_module("bootgear_cli.gear")
@@ -50,8 +50,7 @@ class ResolveCommandTests(unittest.TestCase):
 
 class HookManifestPopulationTests(unittest.TestCase):
     def test_no_plugin_declares_a_pre_tool_use_hook(self) -> None:
-        manifests = sorted([*REPO.glob("plugins/*/hooks/*.json"),
-                            *REPO.glob("codex-plugins/*/hooks/*.json")])
+        manifests = sorted(REPO.glob("plugins/*/hooks/*.json"))
         self.assertTrue(manifests)
         declaring = [str(path.relative_to(REPO)) for path in manifests
                      if "PreToolUse" in json.loads(path.read_text(encoding="utf-8")).get("hooks", {})]
@@ -168,7 +167,7 @@ class GearIntegrationTests(unittest.TestCase):
         """))
 
     def _hook_provider(self, host: str) -> Path:
-        source = REPO / ("plugins" if host == "claude" else "codex-plugins") / "engine"
+        source = REPO / "plugins" / "engine"
         root = self.base / f"{host}-provider"
         hooks = root / "hooks"
         hooks.mkdir(parents=True)
@@ -216,10 +215,10 @@ class GearIntegrationTests(unittest.TestCase):
                 self.assertIn("cli setup", result.stdout)
 
     def test_provider_route_errors_print_provider_example_with_selected_root(self) -> None:
-        for host, registration_dir in (("claude", "plugins"), ("codex", "codex-plugins")):
+        for host in HOSTS:
             with self.subTest(host=host):
                 root = self.base / f"route-error-root-{host}"
-                provider = root / registration_dir / "fixture-provider"
+                provider = root / "plugins" / "fixture-provider"
                 self._plugin(provider, "fixture-provider", "provider-command-ran")
                 expected = shlex.join([
                     str(GEAR), "--host", host, "--root", str(root.resolve()),
@@ -245,19 +244,18 @@ class GearIntegrationTests(unittest.TestCase):
                         self.assertEqual(positive.returncode, 0, positive.stderr)
                         self.assertEqual(positive.stdout, "provider-command-ran\n")
 
-    def test_codex_session_without_host_routes_to_the_codex_package(self) -> None:
+    def test_codex_session_without_host_routes_to_the_shared_package(self) -> None:
         root = self.base / "host-default-root"
-        for registration_dir in ("plugins", "codex-plugins"):
-            provider = self._plugin(root / registration_dir / "fixture-provider", "fixture-provider", "")
-            self._write_executable(provider / "bin" / "probe",
-                                   f'#!/bin/sh\necho "{registration_dir} $BOOTGEAR_HOST"\n')
+        provider = self._plugin(root / "plugins" / "fixture-provider", "fixture-provider", "")
+        self._write_executable(provider / "bin" / "probe",
+                               '#!/bin/sh\necho "plugins $BOOTGEAR_HOST"\n')
         result = subprocess.run(
             [str(GEAR), "--root", str(root), "fixture-provider", "probe"],
             cwd=self.base, env={**self.env, "CODEX_SESSION_ID": "codex-id"},
             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "codex-plugins codex\n")
+        self.assertEqual(result.stdout, "plugins codex\n")
 
     def test_codex_uses_installed_cache_code_after_marketplace_checkout_changes(self) -> None:
         marketplace = self.base / "marketplace-checkout"
@@ -343,7 +341,7 @@ class GearIntegrationTests(unittest.TestCase):
 
     def test_native_hook_loaders_match_the_shared_template(self) -> None:
         loaders = sorted(str(path.parent.parent.relative_to(REPO)) for path in
-                         [*REPO.glob("plugins/*/hooks/gear.py"), *REPO.glob("codex-plugins/*/hooks/gear.py")])
+                         list(REPO.glob("plugins/*/hooks/gear.py")))
         self.assertEqual(loaders, list(LOADER_PLUGINS))
         launcher = (REPO / "plugins" / "engine" / "hooks" / "gear").read_bytes()
         for plugin in LOADER_PLUGINS:

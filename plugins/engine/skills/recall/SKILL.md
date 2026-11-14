@@ -170,9 +170,25 @@ Reject an amendment in any of these cases. Keep the last valid value:
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 
 Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 Run `<gear> --host claude engine task session validate`.
 If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
+
+### Codex
+
+Use `codex` for `<host>`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run `<gear> --host codex engine task session validate`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+`<run-id>` is the value of `$CODEX_SESSION_ID`.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
+Resume after setup verifies the required plugins.

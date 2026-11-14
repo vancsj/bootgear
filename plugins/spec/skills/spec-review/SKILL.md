@@ -189,6 +189,10 @@ Do not replace missing request evidence with the author's interpretation.
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 Use `converge` for `<converge-plugin>`.
 `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
@@ -202,3 +206,21 @@ If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
 Invoke skills through the Skill tool.
 The spec plugin declares its converge dependency.
 Keep `session_dir` in context; pass `--dir` only for a custom session directory.
+
+### Codex
+
+Use `codex` for `<host>`.
+Use `converge` for `<converge-plugin>`.
+`<run-id>` is the value of `$CODEX_SESSION_ID`.
+
+Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+Run feedback commands as `<gear> --host codex spec spec-feedback <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+
+Invoke skills by public name.
+If required converge or spec-feedback capability is missing, return `blocked` with its actual diagnostic and named mechanism.
+Keep `session_dir` in context; pass `--dir` only for a custom session directory.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `spec` as the next step.
+Resume after setup verifies the required plugins.

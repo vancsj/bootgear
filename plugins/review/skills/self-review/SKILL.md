@@ -93,10 +93,22 @@ Do not require an engine run for standalone authoring. The direct caller obtains
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
 Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-Run Claude commands as `<gear> --host claude review self-review <command> [arguments]`.
-Run Codex commands as `<gear> --host codex engine self-review <command> [arguments]`.
-If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
 The commands support `settings`, `check`, `status`, `open`, `configure` and `pass`.
 Use scalar routing flags. For checkpoint input, use one JSON file or stdin. Add `--json` for structured handbacks.
 Resolve relative caller paths through `GEAR_CALLER_CWD` when supplied.
+
+### Claude Code
+
+Run commands as `<gear> --host claude review self-review <command> [arguments]`.
+If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
+
+### Codex
+
+Run commands as `<gear> --host codex review self-review <command> [arguments]`.
+If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `review` as the next step.
+Resume after setup verifies the required plugins.

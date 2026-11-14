@@ -2,6 +2,7 @@
 import concurrent.futures
 import json
 import os
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -9,8 +10,10 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 REPO = PLUGIN.parents[1]
-COMMAND = [str(REPO / "plugins" / "cli" / "bin" / "gear"), "--host", "claude",
+HOST = os.environ.get("BOOTGEAR_TEST_HOST", "claude")
+COMMAND = [str(REPO / "plugins" / "cli" / "bin" / "gear"), "--host", HOST,
            "--root", str(REPO), "review", "self-review"]
+PROGRAM = shlex.join([COMMAND[0], "--host", HOST, "review", "self-review"])
 
 
 class SelfReviewTest(unittest.TestCase):
@@ -491,6 +494,8 @@ class SelfReviewTest(unittest.TestCase):
     def test_usage_error_names_commands_example_and_next(self):
         result = subprocess.run([*COMMAND, "open"], text=True, capture_output=True, check=False)
         self.assertEqual(result.returncode, 2)
+        self.assertIn(f"Example: {PROGRAM} open --task-folder TASK --stage spec --json",
+                      result.stdout + result.stderr)
         for fragment in ("Example:", "Commands:", "Next:"):
             self.assertIn(fragment, result.stdout + result.stderr)
 

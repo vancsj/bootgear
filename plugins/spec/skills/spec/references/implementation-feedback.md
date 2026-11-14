@@ -75,7 +75,7 @@ The CLI checks structure and coverage. The caller checks meaning, independence, 
 
 Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
 For Claude Code, use `claude` for `<host>` and `spec` for `<spec-plugin>`.
-For Codex CLI, use `codex` for `<host>` and `engine` for `<spec-plugin>`.
+For Codex CLI, use `codex` for `<host>` and `spec` for `<spec-plugin>`.
 If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`.
 On Codex CLI, run `codex plugin add cli@bootgear` first.
 If self-review, converge, or spec-feedback is missing, return blocked with the actual diagnostic.

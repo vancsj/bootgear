@@ -241,6 +241,10 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 
 ## Host mechanics
 
+Read only the subsection for the current host. Skip the other host subsection.
+
+### Claude Code
+
 Use `claude` for `<host>`.
 
 - Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
@@ -249,6 +253,22 @@ Use `claude` for `<host>`.
 - Supply `<plugin-dir>` as `<engine-root>` in the handoff to `execute`.
 - `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
 - A host-supported debate party mechanism is `native_subagent` or `advisor`.
-- Item 10: only `refuter` and `gap-hunter` need the paired listener; the debate
-  roles use a direct `codex exec`, so they need no listener and are available
-  when `command -v codex` succeeds.
+- Item 10: only `refuter` and `gap-hunter` need the paired listener.
+  Debate roles use direct `codex exec` calls. They are available when `command -v codex` succeeds.
+
+### Codex
+
+Use `codex` for `<host>`.
+
+- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
+- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
+- Supply `<plugin-root>` as `<engine-root>` in the handoff to `execute`.
+- `<run-id>` is the value of `$CODEX_SESSION_ID`.
+- A host-supported debate party mechanism is `native_subagent` or `advisor`.
+- Item 10: `refuter`/`gap-hunter` and debate roles each need their own listener.
+  Naming both kinds pairs two listeners.
+- If the `advisor` skill is missing, tell the user and record no advisor role.
+
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
+Resume after setup verifies the required plugins.
