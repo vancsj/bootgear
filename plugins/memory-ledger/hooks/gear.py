@@ -16,6 +16,7 @@ from pathlib import Path
 SESSION_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
 STORE_MAX_AGE = 7 * 24 * 60 * 60
 QUERY_TIMEOUT = 5
+CODEX_REMOTE_MARKETPLACE = "openai-curated-remote"
 
 
 def safe_session(value: object) -> str | None:
@@ -64,30 +65,65 @@ def _write_entry(path: Path, inventory: object) -> None:
                     entry.unlink()
 
 
+def _query_inventory(command: list[str]) -> object:
+    label = " ".join(command)
+    try:
+        result = subprocess.run(
+            command, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=QUERY_TIMEOUT, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"could not query {label}: {exc}") from exc
+    if result.returncode:
+        detail = result.stderr.strip() or f"exit code {result.returncode}"
+        raise RuntimeError(f"{label} failed: {detail}")
+    try:
+        return json.loads(result.stdout)
+    except ValueError as exc:
+        raise ValueError(f"{label} returned invalid JSON: {exc}") from exc
+
+
+def _codex_inventory() -> object:
+    command = ["codex", "plugin", "marketplace", "list", "--json"]
+    listing = _query_inventory(command)
+    marketplaces = listing.get("marketplaces") if isinstance(listing, dict) else None
+    if not isinstance(marketplaces, list) or any(
+        not isinstance(record, dict) or not isinstance(record.get("name"), str) or not record["name"]
+        for record in marketplaces
+    ):
+        raise ValueError("codex plugin marketplace list --json returned an invalid marketplace list.")
+    names = list(dict.fromkeys(record["name"] for record in marketplaces
+                               if record["name"] != CODEX_REMOTE_MARKETPLACE))
+    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    cache = home / "plugins" / "cache"
+    if any(path.relative_to(cache).parts[0] not in names for path in cache.glob("*/*/*/gear.toml")
+           if path.is_file()):
+        return _query_inventory(["codex", "plugin", "list", "--json"])
+    installed = []
+    for name in names:
+        command = ["codex", "plugin", "list", "--marketplace", name, "--json"]
+        inventory = _query_inventory(command)
+        records = inventory.get("installed") if isinstance(inventory, dict) else None
+        if not isinstance(records, list):
+            raise TypeError(f"{' '.join(command)} returned an invalid installed plugin list.")
+        installed.extend(records)
+    return {"installed": installed, "available": []}
+
+
 def host_inventory(host: str, session: str | None, *, refresh: bool = False) -> tuple[object, bool]:
-    """The `<host> plugin list --json` data, and True when it came from the session store.
+    """The host's installed plugin data, and True when it came from the session store.
 
     Without `refresh`, a valid stored entry wins. Otherwise query the host, then store the
-    result when `session` is safe. Raises RuntimeError or ValueError that names the host
-    command when the query fails or prints invalid JSON, and OSError or TimeoutExpired when
-    the host cannot run."""
+    result when `session` is safe. Raises RuntimeError, TypeError or ValueError that names the host
+    command when the query fails, cannot run, times out, or prints invalid JSON."""
     key = safe_session(session)
     path = store_path(host, key) if key else None
     if path is not None and not refresh:
         found, inventory = _read_entry(path)
         if found:
             return inventory, True
-    result = subprocess.run(
-        [host, "plugin", "list", "--json"], stdin=subprocess.DEVNULL,
-        capture_output=True, text=True, timeout=QUERY_TIMEOUT, check=False,
-    )
-    if result.returncode:
-        detail = result.stderr.strip() or f"exit code {result.returncode}"
-        raise RuntimeError(f"{host} plugin list --json failed: {detail}")
-    try:
-        inventory = json.loads(result.stdout)
-    except ValueError as exc:
-        raise ValueError(f"{host} plugin list --json returned invalid JSON: {exc}") from exc
+    inventory = (_codex_inventory() if host == "codex"
+                 else _query_inventory([host, "plugin", "list", "--json"]))
     if path is not None:
         _write_entry(path, inventory)
     return inventory, False

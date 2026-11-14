@@ -186,12 +186,11 @@ def _host_inventory(host: str, source: str, session: str | None, *,
                     refresh: bool) -> tuple[object | None, bool, str | None]:
     if shutil.which(host) is None:
         return None, False, None
-    command = f"{host} plugin list --json"
     try:
         inventory, stored = hook_loader.host_inventory(host, session, refresh=refresh)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return None, False, f"{source}: could not query {command}: {exc}"
-    except (RuntimeError, ValueError) as exc:
+        return None, False, f"{source}: could not read {host} plugin inventory: {exc}"
+    except (RuntimeError, TypeError, ValueError) as exc:
         return None, False, f"{source}: {exc}"
     return inventory, stored, None
 

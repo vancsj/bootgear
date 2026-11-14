@@ -380,6 +380,18 @@ class GearIntegrationTests(unittest.TestCase):
                     self.assertEqual(self._gear_call(host)["session"], "session-1")
                 self.assertEqual(self._query_count(host), 1)
 
+    def test_codex_cold_hook_uses_scoped_cli_inventory(self) -> None:
+        self._install_fake_cli("codex")
+        root = self._hook_provider("codex")
+        self.env["GEAR_TEST_CODEX_UNSCOPED_FAIL"] = "1"
+
+        result = self._run_hook("codex", root, b'{"session_id":"cold-hook"}')
+
+        self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+        self.assertEqual(self.queries.read_text().splitlines(), [
+            "codex plugin marketplace list --json",
+            "codex plugin list --marketplace fixture-marketplace --json"])
+
     def test_hook_refreshes_once_when_the_stored_cli_is_gone(self) -> None:
         payload = b'{"hook_event_name":"PostToolUse","session_id":"session-1"}'
         for host in ("claude", "codex"):
@@ -422,7 +434,8 @@ class GearIntegrationTests(unittest.TestCase):
 
                 self.assertEqual(result.returncode, 0, result.stderr.decode())
                 context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
-                self.assertEqual(context, f"Gear setup required: {host} plugin list --json failed: "
+                command = f"{host} plugin " + ("marketplace list --json" if host == "codex" else "list --json")
+                self.assertEqual(context, f"Gear setup required: {command} failed: "
                                           "exit code 1 Invoke cli:setup, then retry.")
 
     def test_hook_names_a_host_query_with_invalid_json(self) -> None:
@@ -436,8 +449,9 @@ class GearIntegrationTests(unittest.TestCase):
 
                 self.assertEqual(result.returncode, 0, result.stderr.decode())
                 context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+                command = f"{host} plugin " + ("marketplace list --json" if host == "codex" else "list --json")
                 self.assertTrue(context.startswith(
-                    f"Gear setup required: {host} plugin list --json returned invalid JSON: "), context)
+                    f"Gear setup required: {command} returned invalid JSON: "), context)
 
     def test_hook_replaces_a_stored_inventory_of_the_wrong_type(self) -> None:
         payload = b'{"hook_event_name":"PostToolUse","session_id":"session-1"}'

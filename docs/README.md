@@ -114,7 +114,10 @@ discovers registrations from `gear.toml` and does not use a fixed plugin list.
   command is unknown, or an event has no reminders. An installed Gear
   reconciles on every call except a `cli` route, with the stored host plugin list. A routed call
   queries the host only when no list is stored, or at a route miss. Reconciliation adds enabled host-installed plugin
-  roots from `claude plugin list --json` and `codex plugin list --json`. A
+  roots from `claude plugin list --json`. Codex lists configured marketplaces,
+  then queries each with `codex plugin list --marketplace NAME --json`.
+  Other cached Gear registrations require the full `codex plugin list --json` query.
+  Cache files never decide which plugins are enabled or which version runs. A
   repository-local registration wins over an installed one with the same name.
   After a miss, Gear reconciles again and retries the original route exactly
   once. A second miss on a plugin or command is a final error. An event that

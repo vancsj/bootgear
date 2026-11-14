@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from bootgear_cli import gear
+from bootgear_cli import gear, hook_loader
 
 from .host_fixture import HOSTS, link_shared_runtime, query_count, write_fake_host
 
@@ -328,6 +328,99 @@ class HostPluginStoreTests(unittest.TestCase):
                 self.assertEqual(self._query_count(host), 1)
                 self.assertTrue(self._entry(host, "session-1").is_file())
 
+    def test_codex_cold_route_uses_dynamic_marketplaces_without_remote_catalog(self) -> None:
+        self._provider("codex", "first", "first-ran")
+        self._provider("codex", "second", "second-ran")
+        old = self.homes["codex"] / "plugins" / "cache" / "fixture-marketplace" / "second"
+        new = old.parents[1] / "another-marketplace" / "second"
+        new.parent.mkdir(parents=True)
+        old.rename(new)
+        self.records["codex"][1]["marketplaceName"] = "another-marketplace"
+        self._write_list("codex")
+        marketplaces = self.base / "marketplaces.json"
+        marketplaces.write_text(json.dumps({"marketplaces": [
+            {"name": name, "root": str(self.base / name)}
+            for name in ("fixture-marketplace", "another-marketplace")]}))
+        self.env.update({"GEAR_TEST_CODEX_MARKETPLACES": str(marketplaces),
+                         "GEAR_TEST_CODEX_UNSCOPED_FAIL": "1"})
+        app = self.homes["codex"] / "plugins" / "cache" / "remote-apps" / "calendar" / "1.0"
+        app.mkdir(parents=True)
+        (app / "bundle.json").write_text("{}")
+
+        for name in ("first", "second"):
+            result = self._gear("codex", name, "probe", BOOTGEAR_SESSION_ID="cold-session")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, f"{name}-ran\n")
+        self.assertEqual(self.queries.read_text().splitlines(), [
+            "codex plugin marketplace list --json",
+            "codex plugin list --marketplace fixture-marketplace --json",
+            "codex plugin list --marketplace another-marketplace --json"])
+
+    def test_codex_remote_registration_requires_authoritative_enabled_inventory(self) -> None:
+        self._provider("codex", "local", "local-ran")
+        old = self._provider("codex", "remote", "remote-ran")
+        new = old.parents[2] / "remote-catalog" / "remote" / "1.0.0"
+        new.parent.mkdir(parents=True)
+        old.rename(new)
+        self.records["codex"][-1].update({"marketplaceName": "remote-catalog", "enabled": False})
+        self._write_list("codex")
+
+        result = self._gear("codex", "list", BOOTGEAR_SESSION_ID="remote-session")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("local probe", result.stdout)
+        self.assertNotIn("remote probe", result.stdout)
+        self.assertEqual(self.queries.read_text().splitlines(), [
+            "codex plugin marketplace list --json", "codex plugin list --json"])
+
+        self.records["codex"][-1]["enabled"] = True
+        self._write_list("codex")
+        enabled = self._gear("codex", "remote", "probe", BOOTGEAR_SESSION_ID="enabled-remote")
+
+        self.assertEqual(enabled.returncode, 0, enabled.stderr)
+        self.assertEqual(enabled.stdout, "remote-ran\n")
+        self.assertEqual(self.queries.read_text().splitlines()[-2:], [
+            "codex plugin marketplace list --json", "codex plugin list --json"])
+
+    def test_codex_empty_marketplaces_do_not_query_remote_catalog(self) -> None:
+        marketplaces = self.base / "marketplaces.json"
+        marketplaces.write_text('{"marketplaces": []}')
+        self.env.update({"GEAR_TEST_CODEX_MARKETPLACES": str(marketplaces),
+                         "GEAR_TEST_CODEX_UNSCOPED_FAIL": "1"})
+
+        result = self._gear("codex", "list", BOOTGEAR_SESSION_ID="empty-session")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(self.queries.read_text().splitlines(), ["codex plugin marketplace list --json"])
+
+    def test_codex_remote_catalog_name_is_not_a_local_marketplace_query(self) -> None:
+        self._provider("codex", "local", "local-ran")
+        marketplaces = self.base / "marketplaces.json"
+        marketplaces.write_text(json.dumps({"marketplaces": [
+            {"name": name, "root": str(self.base / name)}
+            for name in ("fixture-marketplace", "openai-curated-remote")]}))
+        self.env["GEAR_TEST_CODEX_MARKETPLACES"] = str(marketplaces)
+
+        result = self._gear("codex", "local", "probe", BOOTGEAR_SESSION_ID="reserved-name")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "local-ran\n")
+        self.assertEqual(self.queries.read_text().splitlines(), [
+            "codex plugin marketplace list --json",
+            "codex plugin list --marketplace fixture-marketplace --json"])
+
+    def test_codex_scoped_query_timeout_names_the_failed_command(self) -> None:
+        marketplace = subprocess.CompletedProcess([], 0, json.dumps({"marketplaces": [
+            {"name": "fixture-marketplace", "root": str(self.base)}]}), "")
+        command = ["codex", "plugin", "list", "--marketplace", "fixture-marketplace", "--json"]
+        timeout = subprocess.TimeoutExpired(command, 5)
+        with (patch.dict(os.environ, self.env, clear=True),
+              patch.object(hook_loader.subprocess, "run", side_effect=[marketplace, timeout]),
+              self.assertRaisesRegex(RuntimeError,
+                                     "could not query codex plugin list --marketplace fixture-marketplace --json")):
+            hook_loader.host_inventory("codex", None)
+
     def test_route_miss_after_a_stored_read_queries_once(self) -> None:
         for host in HOSTS:
             with self.subTest(host=host):
@@ -382,9 +475,10 @@ class HostPluginStoreTests(unittest.TestCase):
 
                 result = self._gear(host, "list", BOOTGEAR_SESSION_ID="session-1")
 
-                self.assertIn(f"gear: {source}: {host} plugin list --json failed: exit code 1\n",
+                command = f"{host} plugin " + ("marketplace list --json" if host == "codex" else "list --json")
+                self.assertIn(f"gear: {source}: {command} failed: exit code 1\n",
                               result.stderr)
-                self.assertEqual(result.stderr.count("plugin list --json failed"), 1, result.stderr)
+                self.assertEqual(result.stderr.count(f"{command} failed"), 1, result.stderr)
 
     def test_host_query_with_invalid_json_names_the_command_once(self) -> None:
         for host, source in (("claude", "Claude"), ("codex", "Codex")):
@@ -393,9 +487,10 @@ class HostPluginStoreTests(unittest.TestCase):
 
                 result = self._gear(host, "list", BOOTGEAR_SESSION_ID="session-1")
 
-                self.assertIn(f"gear: {source}: {host} plugin list --json returned invalid JSON: ",
+                command = f"{host} plugin " + ("marketplace list --json" if host == "codex" else "list --json")
+                self.assertIn(f"gear: {source}: {command} returned invalid JSON: ",
                               result.stderr)
-                self.assertEqual(result.stderr.count("plugin list --json"), 1, result.stderr)
+                self.assertEqual(result.stderr.count(command), 1, result.stderr)
 
     def test_without_session_every_call_queries(self) -> None:
         for host in HOSTS:
