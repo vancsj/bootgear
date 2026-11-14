@@ -110,10 +110,18 @@ def main() -> int:
     prose = f"Shared runtime ready: {environment}"
     if args.plugin:
         result["plugins"] = list(plugins)
-        prose += f"\nRequired plugins ready: {', '.join(plugins)}"
-    clikit.emit(mode, result, prose,
-                next="Return to the calling skill." if args.plugin else
-                "Use cli:gear to get the Gear path, then run a registered command.")
+        prose += f"\nRequired plugin installations verified: {', '.join(plugins)}"
+    next_step = ("Return to the calling skill." if args.plugin else
+                 "Use cli:gear to get the Gear path, then run a registered command.")
+    if clikit.host() == "codex":
+        result["activation"] = "unverified"
+        prose += "\nPlugin activation is unverified. Setup did not check hook trust or session loading."
+        next_step = (
+            "Ask the user to review and trust new or changed plugin hooks in /hooks. "
+            "Restart Codex first if the new hooks are not listed. "
+            "Then ask them to start a fresh Codex session before continuing the workflow."
+        )
+    clikit.emit(mode, result, prose, next=next_step)
     return 0
 
 

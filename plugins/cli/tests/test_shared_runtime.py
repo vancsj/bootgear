@@ -269,7 +269,12 @@ class SharedRuntimeTests(unittest.TestCase):
                                    root=self.base / "empty-source", host=host)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout)["plugins"], ["fixture-skill", "fixture-target"])
-                self.assertEqual(json.loads(result.stdout)["next"], "Return to the calling skill.")
+                if host == "codex":
+                    self.assertEqual(json.loads(result.stdout)["activation"], "unverified")
+                    self.assertIn("/hooks", json.loads(result.stdout)["next"])
+                    self.assertIn("fresh Codex session", json.loads(result.stdout)["next"])
+                else:
+                    self.assertEqual(json.loads(result.stdout)["next"], "Return to the calling skill.")
         self.assertEqual(self.uv_log.read_text().splitlines(), ["python find", "sync --locked"])
 
     def test_sdk_routes_sibling_commands_in_the_selected_root_and_caller(self) -> None:

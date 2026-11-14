@@ -89,6 +89,37 @@ class DependencySetupTests(unittest.TestCase):
         self.assertEqual(self.refreshes, [])
         self.assertEqual(self.installs, [])
 
+    def test_codex_success_keeps_hook_trust_and_session_actions_pending(self) -> None:
+        self._plugin("engine")
+        for target in ((), ("--plugin", "engine")):
+            for output in ((), ("--json",)):
+                with self.subTest(target=target, output=output):
+                    result, stdout, stderr = self._run(*target, *output)
+                    self.assertEqual(result, 0, stderr)
+                    if output:
+                        data = json.loads(stdout)
+                        self.assertEqual(data["activation"], "unverified")
+                        follow_up = data["next"]
+                    else:
+                        self.assertIn("Plugin activation is unverified", stdout)
+                        follow_up = stdout
+                    self.assertIn("user", follow_up)
+                    self.assertIn("/hooks", follow_up)
+                    self.assertIn("fresh Codex session", follow_up)
+                    self.assertNotIn("Required plugins ready", stdout)
+
+    def test_claude_success_keeps_its_workflow_handback(self) -> None:
+        self.host = "claude"
+        self._plugin("engine")
+        for target in ((), ("--plugin", "engine")):
+            with self.subTest(target=target):
+                result, stdout, stderr = self._run(*target, "--json")
+                self.assertEqual(result, 0, stderr)
+                follow_up = json.loads(stdout)["next"]
+                self.assertNotIn("/hooks", follow_up)
+                self.assertNotIn("Codex", follow_up)
+                self.assertIn("calling skill" if target else "cli:gear", follow_up)
+
     def test_missing_plugin_value_reports_a_valid_example(self) -> None:
         result, _, stderr = self._run("--plugin")
         self.assertEqual(result, 2)
