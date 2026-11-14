@@ -131,6 +131,10 @@ A completed cap leaves deeper issues open. The caller retains them until explici
 
 3. Otherwise, use the default implementation below.
 
+Before invoking an override, hand-fill the test part from sub-task 3 and pass it in the existing invocation context.
+Require the override to include that part and its instructions in every new or continued role brief.
+Keep memory-ledger lookup and record allowed, including for read-only roles.
+
 When delegating from an active run, pass the host engine root and
 `<session-dir>` using the active run's handoff contract. The delegated skill
 must return the fields defined in `Inputs and outcomes`.
@@ -248,6 +252,22 @@ standard file in `.bootgear/config/` as context files for F, R1, R2 and C, each
 when present. In an active run, add the `principles` text of the settlement.
 Each role reads the files before it files, attacks or cuts.
 
+Before each new or continued finder brief, the main agent fills this required part by hand:
+
+```text
+Tests already ran:
+- latest test: <recorded command>; result: <one recorded result line>
+```
+
+Use the latest test command recorded in the run ledger, even if it covers only part of the tests.
+Use one result line from that record. Include no exit code or record path.
+Do not combine commands that did not run together.
+If no test result is recorded, write `none recorded`.
+Tell the role to skip redundant runs covered by recorded test commands.
+The role can probe behaviour those commands did not cover.
+Allow memory-ledger lookup and record, including for read-only roles.
+Scope other write limits to preserve these operations.
+
 For `<n>` ≥ 2, also give F the `git diff` command `init` printed and the
 previous slate's `converge render` output as settled context. A claim outside
 that diff is in scope only when the diff changes that code's behaviour. When
@@ -268,6 +288,7 @@ claims with `--as r2` and `origin: gap-hunt`; they go through the same
 
 - the current `converge render` output;
 - the diff and the linked ticket;
+- the hand-filled test part and instructions from sub-task 3, refreshed for each new or continued turn;
 - the question: what did every lens miss, and does the ticket match the diff
   in both directions (asked but missing, present but unasked)?
 

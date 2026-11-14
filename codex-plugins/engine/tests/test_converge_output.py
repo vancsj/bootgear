@@ -8,6 +8,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
 from gear_commands import CONVERGE as CONVERGE_COMMAND
 from gear_commands import display
 
@@ -598,6 +599,57 @@ def test_bundled_init_prints_advisor_driver(tmp_path: Path) -> None:
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
     assert "prints the Gear command and channel number" in nxt
     assert "keep the channel open after this slate" in nxt
+
+
+@pytest.mark.parametrize("command", ["init", "status"])
+@pytest.mark.parametrize("output", ["--prose", "--json"])
+def test_bundled_advisor_request_requires_hand_filled_test_context(
+        tmp_path: Path, command: str, output: str) -> None:
+    ledger = tmp_path / "ledgers"
+    settlement = _settlement(tmp_path, ADVISOR_SETTLEMENT)
+    if command == "init":
+        result = _seat_init(tmp_path, ledger, "--settlement", str(settlement), output)
+    else:
+        _seat_init(tmp_path, ledger, "--settlement", str(settlement))
+        for angle in ("changed-contract", "failure-path"):
+            _ok(tmp_path, "angle-na", "s1", "--dir", str(ledger), "--as", FINDER,
+                "--phase", "find", "--lens", "correctness", "--angle", angle,
+                "--reason", "no I/O in diff")
+        result = _ok(tmp_path, "status", "s1", "--dir", str(ledger), output)
+    if command == "status" and output == "--prose":
+        lines = result.stdout.splitlines()
+        assert lines[0].startswith("SLATE s1 lenses=correctness ")
+        assert lines[-1].startswith("next: ")
+        assert not any(line.startswith(("DRIVER", "REQUEST", "Tests already ran:")) for line in lines)
+        return
+    if output == "--json":
+        lines = json.loads(result.stdout)["drivers"][0]["request"].splitlines()
+    else:
+        lines = result.stdout.splitlines()
+        head = lines.index(_one(lines, "REQUEST r2 (write to the body file before each send"))
+        lines = lines[head + 1:]
+    assert lines[0] == "TYPE: delegate"
+    assert lines[1].startswith("USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1.")
+    assert lines[2].startswith("CONTEXT: <claims under test")
+    assert lines[3].startswith(f"SCOPE: write events only with: {PROGRAM} ")
+    assert lines[4:6] == [
+        "Tests already ran:",
+        "- latest test: <recorded command>; result: <one recorded result line>",
+    ]
+    for fragment in ("memory-ledger lookup and record are allowed", "change no other files",
+                     "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>",
+                     "; if a write is denied, run nothing else",
+                     'reply "WRITE-DENIED r2: <the error text>"'):
+        assert fragment in lines[3], lines[3]
+    request = "\n".join(lines[6:])
+    for fragment in ("Required: main agent fills this part by hand before each send.",
+                     "latest test command recorded in the run ledger", "only part of the tests",
+                     "one result line from that record", "no exit code or record path",
+                     "Do not combine commands that did not run together.",
+                     "If no test result is recorded, write none recorded.",
+                     "Skip redundant runs covered by recorded test commands.",
+                     "You can probe behaviour those commands did not cover."):
+        assert fragment in request, request
 
 
 def test_bundled_init_refuses_seat_mismatch(tmp_path: Path) -> None:

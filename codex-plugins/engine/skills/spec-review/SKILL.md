@@ -47,6 +47,25 @@ Otherwise use this skill.
 Standalone, delegate once to a registered project spec-review skill when one matches.
 Require the same public handback from an override.
 
+Before each role brief or override invocation, the main agent fills this required part by hand:
+
+```text
+Tests already ran:
+- latest test: <recorded command>; result: <one recorded result line>
+```
+
+Use the latest test command recorded in the run ledger, even if it covers only part of the tests.
+Use one result line from that record. Include no exit code or record path.
+Do not combine commands that did not run together.
+If no test result is recorded, write `none recorded`.
+Pass the filled part and these instructions in the existing override invocation context.
+Require every override to include them in each new or continued role brief.
+Include them in each new or continued native role brief or advisor request.
+Tell each role to skip redundant runs covered by recorded test commands.
+Roles can probe behaviour those commands did not cover.
+Allow memory-ledger lookup and record, including for read-only roles.
+Scope other write limits to preserve these operations.
+
 Give fresh converge roles only authoritative intent, primary artifacts, relevant repository evidence, standards, and their role briefs.
 Include raw observations when supplied.
 Exclude author transcripts, notes, hypotheses, private unresolved lists, suspect-line lists, and another role's reasoning.

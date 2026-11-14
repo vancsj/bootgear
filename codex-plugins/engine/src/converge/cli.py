@@ -413,8 +413,19 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                  f"--dir {quoted_dir} --as {seat} ...; these commands append to "
                  f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}; if a write is denied, "
                  f'run nothing else and reply "WRITE-DENIED {seat}: '
-                 f'<the error text>"; read any file; change nothing else; reply with every line '
+                 f'<the error text>"; read any file; memory-ledger lookup and record are allowed; '
+                 f'change no other files; reply with every line '
                  f"those commands print"),
+                "Tests already ran:",
+                "- latest test: <recorded command>; result: <one recorded result line>",
+                "Required: main agent fills this part by hand before each send.",
+                ("Use the latest test command recorded in the run ledger, even if it covers "
+                 "only part of the tests."),
+                "Use one result line from that record; include no exit code or record path.",
+                "Do not combine commands that did not run together.",
+                "If no test result is recorded, write none recorded.",
+                "Skip redundant runs covered by recorded test commands.",
+                "You can probe behaviour those commands did not cover.",
             )),
         })
     return drivers

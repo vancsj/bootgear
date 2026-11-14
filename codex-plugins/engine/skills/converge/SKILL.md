@@ -64,6 +64,23 @@ Spawn each role by the seat mechanism `init` prints: a `native_subagent` seat as
   Let a deferred listener stay unstarted while other roles work. Reuse its recorded channel for later tasks.
 - Give a role agent only the artifact, its role brief from the steps below, the claims under test with their `id`, `claim`, `loc`, `trigger`, `evidence` and `tier` from `<gear> --host <host> <converge-plugin> converge status --json`, its effective `difficulty_basis`, its agent id, `<slate>`, `<dir>`, the exact `converge` command it writes, the context files that the caller names, and the instruction to read them.
 
+Include this common context in every role brief and each new or continued native or advisor turn.
+Before each brief or advisor request, the main agent fills this required part by hand:
+
+```text
+Tests already ran:
+- latest test: <recorded command>; result: <one recorded result line>
+```
+
+Use the latest test command recorded in the run ledger, even if it covers only part of the tests.
+Use one result line from that record. Include no exit code or record path.
+Do not combine commands that did not run together.
+If no test result is recorded, write `none recorded`.
+Tell each role to skip redundant runs covered by recorded test commands.
+Roles can probe behaviour those commands did not cover.
+Allow memory-ledger lookup and record, including for read-only roles.
+Scope other write limits to preserve these operations.
+
 ## 3. Find
 
 Spawn F once with one brief that lists every lens and, per lens, all its find angles (`<gear> --host <host> <converge-plugin> converge angles --tag find --angles <file>…`; an angle whose `lens=` names another lens belongs only to that lens). Finder brief:
@@ -90,8 +107,10 @@ For each batch of escalate rows, continue each row's finder (F for lens claims, 
 ## 5. Cut and attack
 
 Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON status action and, for each batch of its `plan`, continue each row's `agent_role` with the row's claims, batch and angles.
+Refresh and include section 2's common role context in each continued turn.
 
 1. Cut rows (`cut-before`, `cut-after`). Cutter brief:
+   - Include section 2's common role context.
    - Default verdict: cut. Rate a value higher only when evidence justifies it.
    - For each claim set `impact`, `size` and `reach`, and `rate` (an integer
      count) when the CLI requires it for the claim's lens; after the attack
@@ -112,6 +131,7 @@ Repeat until `converge status` reports `phase: cutoff`: run the CLI's JSON statu
 
    For `accept` rows, continue the claim's finder with that round's cut values and evidence; it answers with `accept`, or `rebut` with new evidence. Continue C with each rebuttal for the next round.
 2. Attack rows. Refuter brief:
+   - Include section 2's common role context.
    - The claim is refuted unless the artifact's code or evidence proves it. Read every source you cite.
    - Table batch: attack the claim with every angle in the row whose tell applies, and record each other angle not applicable with the reason its tell is absent.
    - Fresh-eye batch (`batch` `fresh-eye`): the row has `angles: []`, `used` (the angles already attacked on the claim) and `rule`. Choose up to `caps.angles_per_claim` new angle names that are not in `used`, including names outside the fixed list. The fixed list is not a menu for this batch. For example, choose `retry after timeout`. Each name must be one printable line without edge whitespace. The batch closes when it reaches the cap. You do not need `--last` then. If you stop before the cap, mark the last attack `--last`. An empty `fixed_remaining` means the table batches are complete; the fresh-eye batch still runs.
