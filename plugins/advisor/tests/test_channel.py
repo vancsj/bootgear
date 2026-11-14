@@ -1310,6 +1310,43 @@ class ArgumentRefusalTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in (self.root / "channels").iterdir()), ["0001"])
 
 
+class StateClosureTests(unittest.TestCase):
+    def test_closed_channel_refuses_state_updates_without_writing(self) -> None:
+        for host in ("claude", "codex"):
+            with self.subTest(host=host), tempfile.TemporaryDirectory(prefix="advisor-state-") as folder:
+                root = Path(folder)
+                env = {"BOOTGEAR_HOST": host}
+                registered = run(root, "register", "--role", "listener", "--session", "s1", env=env)
+                self.assertEqual(registered.returncode, 0, registered.stderr)
+                closed = run(root, "close", "--channel", "0001", "--role", "listener", env=env)
+                self.assertEqual(closed.returncode, 0, closed.stderr)
+                before = channel_json(root).read_bytes()
+                for role in ("listener", "asker"):
+                    for value in ("waiting", "busy"):
+                        with self.subTest(role=role, value=value):
+                            result = run(root, "state", "--channel", "0001",
+                                         "--role", role, "--value", value, env=env)
+                            self.assertEqual(result.returncode, 2, result.stderr)
+                            self.assertEqual(result.stdout, "")
+                            payload = json.loads(result.stderr)
+                            self.assertEqual(payload["category"], "channel_closed")
+                            self.assertIn("tell the user", payload["next"])
+                            self.assertEqual(channel_json(root).read_bytes(), before)
+
+    def test_open_channel_accepts_state_changes_and_repeated_close(self) -> None:
+        for host in ("claude", "codex"):
+            with self.subTest(host=host), tempfile.TemporaryDirectory(prefix="advisor-state-") as folder:
+                root = Path(folder)
+                env = {"BOOTGEAR_HOST": host}
+                registered = run(root, "register", "--role", "listener", "--session", "s1", env=env)
+                self.assertEqual(registered.returncode, 0, registered.stderr)
+                for value in ("busy", "waiting", "closed", "closed"):
+                    result = run(root, "state", "--channel", "0001",
+                                 "--role", "listener", "--value", value, env=env)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout)["state"], value)
+
+
 class SendLivenessTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))

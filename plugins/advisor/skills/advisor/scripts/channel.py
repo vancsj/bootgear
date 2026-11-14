@@ -447,6 +447,8 @@ def write_state(args: argparse.Namespace, value: str, check=None) -> None:
     lock = channel_lock(path)
     try:
         record = read_channel_record(path)
+        if record.get("state") == "closed" and value != "closed":
+            closed_channel(args.channel)
         if check is not None:
             check(root, path, record)
         record.update({"state": value, "state_role": args.role, "updated_at": time.time()})

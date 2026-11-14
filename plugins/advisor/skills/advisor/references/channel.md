@@ -110,6 +110,8 @@ Closed channel or malformed message → protocol error, not a guess.
 ```
 
 `close` closes unconditionally. `close --if-peer-stale` rechecks under the channel lock that the peer seat is not live (a restart grace counts as live) and that no unread message is addressed to `<mine>`; it closes only if both hold, and otherwise refuses with `peer_live` or `unread_message` (exit 2), leaves the channel open, and its `next` is the `receive` to run to keep listening. A peer silent past the 10-second TTL when the close runs counts as dead; it cannot rejoin the closed channel later. Closing clears both seats' restart grace. `send` and `receive` on a closed channel fail with `channel_closed`; tell the user.
+`state` also refuses `waiting` and `busy` on a closed channel.
+Repeated `close` and `state --value closed` calls remain allowed.
 
 ## Return to the user (mode=asking only)
 
