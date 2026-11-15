@@ -50,6 +50,9 @@ A command argv can contain a substituted value, such as a placeholder or a `--le
 An input then cannot change the flags that the checked program sees.
 
 ## R010 [must]
+Public help must explain arguments, legal values, conditional requirements, and a concise working example.
+Check registered routes, nested task commands, Gear commands, and event-only input contracts.
+Providers own legal values and domain conditions. Shared rendering must not duplicate their argument schemas.
 An AI caller can use a subcommand incorrectly. The usage errors are: an unknown subcommand, a missing required option, or a value outside a fixed set (for example a role or a kind).
 In these cases, the subcommand must print the error. It must also print one correct example of that subcommand and a short list of the other subcommands.
 Made-up values and edge-case values are out of scope. Examples are malformed numbers, odd flag orders, abbreviations and hand-edited state. Do not report a claim that needs one of these.
@@ -57,6 +60,7 @@ Made-up values and edge-case values are out of scope. Examples are malformed num
 ## R011 [must]
 A CLI can find more than one problem of the same kind, for example bad entries in a list. The CLI must report all of them in one grouped message. The message must name each offending item.
 The CLI must list every problem in one run. It must not stop at the first problem.
+Validate the complete mutation before writing. A refused request must leave persistent workflow state unchanged.
 
 ## R012 [must]
 The default output format of a CLI must be short prose for each stdout sink.
@@ -70,6 +74,9 @@ If another role owns the next step, the `next` line must tell the caller to hand
 Show the reminder only when it changes what the caller does next.
 A skill may include concise examples for common, stable commands. Use placeholders for caller-supplied values. Do not repeat state-dependent branches, gates, or next commands that the CLI prints.
 Keep the overall workflow outline in the skill.
+Role work must come from the current saved state, with relevant evidence, definitions, and valid action inputs.
+Generated role commands must use the role's explicit executing host, including delegated work packages.
+Keep evidence and judgment fields for the role to fill. Refresh stale work before retrying a refused action.
 
 ## R014 [must]
 Code, docs, skill prose, commit messages, and PRs can state a fact about the platform. Examples are a hook event, the real behavior of a tool, or a CLI flag.
@@ -84,3 +91,15 @@ The reviewer must flag personal or company info that the script cannot match.
 Code and skills must never point to `docs/`.
 Comments, docstrings, messages, and skill prose must state the rule themselves.
 `quality/check_content.py` flags the pointers.
+
+## R017 [must]
+Explicit force transitions must accept a nonempty reason and bypass workflow controls only.
+Preserve role checks, valid destinations, open runs, and ledger validation.
+Skip bypassed gate programs and their fallback transitions.
+Record and show force use, the reason, requested destination, and bypassed controls in prose and JSON.
+Preserve ordinary transition behavior. Force grants no artifact mutation or delivery permission.
+
+## R018 [must]
+Read-only role limits apply to the target artifact.
+Permit assigned workflow records and memory-ledger lookup and record. Preserve all other write limits and judging independence.
+Keep author private analysis and another role's private reasoning out of judging briefs.

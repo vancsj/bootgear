@@ -1,4 +1,5 @@
-0. If two principles conflict, the earlier one wins. List the winner first. The engine resolves a conflict in this order.
+0. Project principles must be general, clear, concise, invariant, and unambiguous. They state properties that always hold or an agreed direction. Prefer ASD-STE100 wording.
+1. If two principles conflict, the earlier one wins. List the winner first. The engine resolves a conflict in this order.
 
 ## Plugins and skills
 
@@ -26,12 +27,12 @@
 - Every plugin script is a Gear command. Register it under `[commands]` in its plugin's `gear.toml`. Call it as `gear <plugin> <command>`. When `GEAR_CALLER_CWD` is set, the script resolves the caller's relative paths against it.
 - Shared host context: Gear takes the host from `--host`, else `BOOTGEAR_HOST`, else the host whose session variable is set. With both variables set, it takes the nearest `claude` or `codex` ancestor process, else `claude`. Gear sets `BOOTGEAR_HOST` to that host. Gear commands read the session id from `BOOTGEAR_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` for the declared host, then the other one. Explicit host and session arguments take precedence. Standalone calls can supply the same context explicitly.
 - Bootgear supports Claude Code and Codex only without the host sandbox. Bootgear code has no fallback for an operation that a sandbox denies. A denied operation is an environment fault.
-- Design the CLI output for an LLM reader. Keep the retries and tokens of the reader to a minimum.
+- Design the CLI output for an LLM reader. Minimize total task tokens and retries, including instruction reads, discovery, and recovery. Keep enough CLI guidance to complete the task, and keep skill docs brief.
 - Put the most important information last in the CLI output. The result, the errors, and the next step are the final lines. Readers often use `tail` on the output.
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.
-- A skill states the overall workflow. The model then knows where each step leads and can use its judgment. The CLI prints deterministic detail at the step where it matters (the next command, legal branches, gates, argument tables). That detail comes from validated CLI-owned state or configuration. A skill may include concise examples for common, stable commands. Do not repeat state-dependent branches, gates, or next commands in skill text. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks.
+- A skill states the overall workflow so the model can apply its judgment and knowledge. The CLI controls normal workflow steps and transitions. It prints deterministic detail from validated CLI-owned state or configuration when the caller needs it. Force transitions must let callers pass workflow gates with a recorded reason. Role checks and ledger validation still apply. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks. Skills may show concise examples for common, stable commands. Do not repeat CLI-owned, state-dependent detail in skill text.
 - A script enforces a rule about data or behavior that the script can check (CLI validation, a gate, a cap). Do not state such a rule in text only. The review standard enforces rules about doc content. Tests and scripts do not, except mechanical repo hygiene such as `check_content.py`.
-- When an AI caller makes an invalid call or omits a required parameter, the CLI must report the error and leave the workflow state ready for a corrected call.
+- Support valid inputs and common mistakes from an LLM caller. Report clear errors and leave the workflow state ready for a corrected call. Invented or very rare cases do not require defensive handling.
 
 ## Docs and repo content
 
@@ -44,7 +45,8 @@
 ## Run behavior
 
 - If an advisor from a different vendor is available, it takes the refuter or adversarial role by default. The user can say no.
-- Reviews (including spec reviews), refutations, and tests cover only what an LLM caller can produce. Do not report a claim that needs a made-up value or an edge-case value. Do not report a claim that needs hand-edited state or an environment that the run never uses.
+- Reviews (including spec reviews), refutations, and tests cover valid inputs and common mistakes from an LLM caller. Exclude invented or very rare cases, hand-edited state, and environments that the run never uses.
+- Read-only roles may read and write memory-ledger entries. Their other write limits still apply.
 - The main agent keeps reviewers, refuters, cutters, gap hunters, and other judging roles independent. It gives each role only the context that the task needs. That context is: the request, the artifacts, the evidence, the applicable principles and standards, and the role brief. It never gives a role its own conclusions, hypotheses, preferred answers, or the reasoning of another role.
 - Give each judging or writing role the principles and standards that apply to its task. Name the files in the role brief. The role reads them. They are context, not the conclusions of another role.
 - A claim slate is immutable. Each review or triage visit uses a new slate. To keep a claim from an earlier slate, copy it to the new slate. Never change a claim or its events on an earlier slate.

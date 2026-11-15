@@ -23,3 +23,18 @@ The test must fail before the fix. The test must pass after the fix.
 You must check a change to how a plugin is installed, loaded or cached. Check it in a fresh host session on each affected host.
 You must record the real output.
 Such a change can be to the manifest, dependencies, hooks, `bin/` script wrappers, or marketplace entries.
+
+## R006 [must]
+Test valid caller inputs and common caller mistakes through the affected public CLI.
+Verify required output fields, grouped problems, and unchanged persistent state after a refusal.
+Cover shared behavior on both supported hosts. Do not test document wording as behavior.
+
+## R007 [must]
+Test forced and ordinary transitions separately.
+Verify bypassed controls, skipped programs, unchanged validation, and force details in records, prose, and JSON.
+
+## R008 [must]
+Compare complete matched tasks when claiming reduced task costs.
+Include instruction reads, discovery, action preparation, submissions, errors, and recovery.
+Separate measured proxies, observed calls and retries, inferred counts, and unavailable measurements.
+Do not count an unavailable measurement as zero.
