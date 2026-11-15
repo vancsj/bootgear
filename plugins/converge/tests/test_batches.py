@@ -51,7 +51,7 @@ def test_table_batches_are_fixed_chunks_of_angles_per_claim(cv: Converge) -> Non
 def test_batch_completes_with_attacks_and_not_applicable_angles(cv: Converge) -> None:
     cv.ready(config=TWO_BATCHES)
     for angle in BATCH_1[:4]:
-        assert cv.attack("F001", angle) == []
+        assert cv.check("F001", angle) == []
     assert (_next(cv), _batch_state(cv, 1)) == (1, "open")
     assert _na(cv, BATCH_1[4]) == []
     assert (_next(cv), _batch_state(cv, 1)) == (2, "done")
@@ -61,12 +61,9 @@ def test_batch_completes_with_attacks_and_not_applicable_angles(cv: Converge) ->
 def test_attack_outside_the_open_batch_is_refused(cv: Converge) -> None:
     cv.ready(config=TWO_BATCHES)
     open_batch = ", ".join(BATCH_1)
-    assert (f"attack: angle {BATCH_2[0]!r} is not in F001's open batch 1 ({open_batch})"
-            in cv.attack("F001", BATCH_2[0]))
-    assert ("attack: F001's open batch is 1 (open); got batch 2"
-            in cv.attack("F001", BATCH_2[0], batch=2))
-    assert ("attack: F001's open batch is 1 (open); got batch fresh-eye"
-            in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye"))
+    assert (any((f"attack: angle {BATCH_2[0]!r} is not in F001's open batch 1 ({open_batch})") in problem for problem in cv.check("F001", BATCH_2[0])))
+    assert (any(("attack: F001's open batch is 1 (open); got batch 2") in problem for problem in cv.check("F001", BATCH_2[0], batch=2)))
+    assert (any(("attack: F001's open batch is 1 (open); got batch fresh-eye") in problem for problem in cv.check("F001", "retry timing", agent=R2, batch="fresh-eye")))
     assert (f"angle-na: angle {BATCH_2[0]!r} is not in F001's open batch 1 ({open_batch})"
             in _na(cv, BATCH_2[0]))
 
@@ -75,23 +72,21 @@ def test_next_batch_starts_when_the_dispute_is_done(cv: Converge) -> None:
     cv.ready(config=TWO_BATCHES)
     cv.batch_1(refuted=(BATCH_1[1],))
     assert (_next(cv), _batch_state(cv, 1)) == (1, "awaiting-reply-1")
-    assert ("attack: F001's open batch is 1 (awaiting-reply-1); got batch 2"
-            in cv.attack("F001", BATCH_2[0], batch=2))
+    assert (any(("attack: F001's open batch is 1 (awaiting-reply-1); got batch 2") in problem for problem in cv.check("F001", BATCH_2[0], batch=2)))
     assert ("verdict: F001 batch 1 is awaiting-reply-1; verdict needs awaiting-verdict"
             in cv.append("verdict", R1, claim="F001", batch=1, verdict="agree"))
     assert _reply(cv) == []
-    assert ("attack: F001 batch 1 is awaiting-verdict; attack needs open"
-            in cv.attack("F001", BATCH_1[0]))
+    assert (any(("attack: F001 batch 1 is awaiting-verdict; attack needs open") in problem for problem in cv.check("F001", BATCH_1[0])))
     assert ("reply: F001 batch 1 is awaiting-verdict; reply needs awaiting-reply-1 or "
             "awaiting-reply-2") in _reply(cv, evidence="e2")
     assert cv.append("verdict", R1, claim="F001", batch=1, verdict="agree") == []
     assert _next(cv) == 2
-    assert cv.attack("F001", BATCH_2[0], batch=2) == []
+    assert cv.check("F001", BATCH_2[0], batch=2) == []
 
 
 def test_reply_waits_for_the_batch_to_complete(cv: Converge) -> None:
     cv.ready()
-    assert cv.attack("F001", BATCH_1[0], outcome="refuted") == []
+    assert cv.check("F001", BATCH_1[0], outcome="refuted") == []
     assert ("reply: F001 batch 1 is open; reply needs awaiting-reply-1 or awaiting-reply-2"
             in _reply(cv))
 
@@ -100,15 +95,14 @@ def test_every_claim_gets_its_own_batch(cv: Converge) -> None:
     cv.ready(claims=2, config=TWO_BATCHES)
     cv.batch_1("F001")
     assert (_next(cv, "F001"), _next(cv, "F002")) == (2, 1)
-    assert cv.attack("F001", BATCH_2[0], batch=2) == []
-    assert cv.attack("F002", BATCH_1[0]) == []
+    assert cv.check("F001", BATCH_2[0], batch=2) == []
+    assert cv.check("F002", BATCH_1[0]) == []
 
 
 def test_table_batches_are_attacked_by_r1(cv: Converge) -> None:
     cv.ready(claims=2)
-    assert cv.attack("F001", BATCH_1[0]) == []
-    assert ("attack: table batches are attacked by r1 (r1), not r2"
-            in cv.attack("F002", BATCH_1[0], agent=R2))
+    assert cv.check("F001", BATCH_1[0]) == []
+    assert (any(("attack: table batches are attacked by r1 (r1), not r2") in problem for problem in cv.check("F002", BATCH_1[0], agent=R2)))
     assert "angle-na: table batches are attacked by r1 (r1), not r2" in _na(
         cv, BATCH_1[0], "F002", R2)
 
@@ -120,7 +114,7 @@ def test_fresh_eye_follows_the_last_table_batch(cv: Converge) -> None:
     cv.ready(config=TWO_BATCHES)
     cv.batch_1()
     for angle in BATCH_2:
-        assert cv.attack("F001", angle, batch=2) == []
+        assert cv.check("F001", angle, batch=2) == []
     assert _next(cv) == "fresh-eye"
 
 
@@ -129,18 +123,17 @@ def test_fresh_eye_batch_holds_up_to_angles_per_claim_attacks(cv: Converge) -> N
     cv.batch_1()
     for n in range(1, 6):
         assert _next(cv) == "fresh-eye"
-        assert cv.attack("F001", f"angle {n}", agent=R2, batch="fresh-eye") == []
+        assert cv.check("F001", f"angle {n}", agent=R2, batch="fresh-eye") == []
     assert _next(cv) is None
     assert _batch_state(cv, "fresh-eye") == "done"
-    assert ("attack: F001 has finished its attack"
-            in cv.attack("F001", "angle 6", agent=R2, batch="fresh-eye"))
+    assert (any(("attack: F001 has finished its attack") in problem for problem in cv.check("F001", "angle 6", agent=R2, batch="fresh-eye")))
 
 
 def test_fresh_eye_batch_closes_at_configured_cap_without_last(cv: Converge) -> None:
     cv.ready(angles_per_claim=20)
     cv.batch_1()
     for n in range(1, 21):
-        assert cv.attack("F001", f"angle {n}", agent=R2, batch="fresh-eye") == []
+        assert cv.check("F001", f"angle {n}", agent=R2, batch="fresh-eye") == []
     assert _next(cv) is None
     assert _batch_state(cv, "fresh-eye") == "done"
 
@@ -148,9 +141,9 @@ def test_fresh_eye_batch_closes_at_configured_cap_without_last(cv: Converge) -> 
 def test_last_closes_the_fresh_eye_batch(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert cv.attack("F001", "angle 1", agent=R2, batch="fresh-eye", last=False) == []
+    assert cv.check("F001", "angle 1", agent=R2, batch="fresh-eye", last=False) == []
     assert _next(cv) == "fresh-eye"
-    assert cv.attack("F001", "angle 2", agent=R2, batch="fresh-eye", last=True) == []
+    assert cv.check("F001", "angle 2", agent=R2, batch="fresh-eye", last=True) == []
     assert _next(cv) is None
 
 
@@ -165,17 +158,15 @@ def test_fresh_eye_batch_needs_one_attack(cv: Converge) -> None:
 def test_fresh_eye_attacker_is_r2(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert ("attack: the fresh-eye batch of F001 is attacked by r2, not r1 (r1)"
-            in cv.attack("F001", "angle 1", agent=R1, batch="fresh-eye"))
-    assert cv.attack("F001", "angle 1", agent=R2, batch="fresh-eye") == []
+    assert (any(("attack: the fresh-eye batch of F001 is attacked by r2, not r1 (r1)") in problem for problem in cv.check("F001", "angle 1", agent=R1, batch="fresh-eye")))
+    assert cv.check("F001", "angle 1", agent=R2, batch="fresh-eye") == []
 
 
 def test_fresh_eye_attacker_is_r1_with_one_refuter(cv: Converge) -> None:
     cv.ready(refuters=1)
     cv.batch_1()
-    assert ("attack: the fresh-eye batch of F001 is attacked by r1 (r1), not r2"
-            in cv.attack("F001", "angle 1", agent=R2, batch="fresh-eye"))
-    assert cv.attack("F001", "angle 1", agent=R1, batch="fresh-eye", last=True) == []
+    assert (any(("attack: the fresh-eye batch of F001 is attacked by r1 (r1), not r2") in problem for problem in cv.check("F001", "angle 1", agent=R2, batch="fresh-eye")))
+    assert cv.check("F001", "angle 1", agent=R1, batch="fresh-eye", last=True) == []
 
 
 def test_fresh_eye_attacker_is_r1_on_a_gap_hunt_claim(cv: Converge) -> None:
@@ -186,11 +177,11 @@ def test_fresh_eye_attacker_is_r1_on_a_gap_hunt_claim(cv: Converge) -> None:
     assert cv.file(agent=R2, origin="gap-hunt") == "F002"
     cv.batch_1("F001")
     cv.batch_1("F002")
-    assert cv.attack("F001", "angle 1", agent=R2, batch="fresh-eye", last=True) == []
-    problems = cv.attack("F002", "angle 1", agent=R2, batch="fresh-eye")
-    assert "attack: r2 filed F002 and may not attack it" in problems
-    assert "attack: the fresh-eye batch of F002 is attacked by r1 (r1), not r2" in problems
-    assert cv.attack("F002", "angle 1", agent=R1, batch="fresh-eye", last=True) == []
+    assert cv.check("F001", "angle 1", agent=R2, batch="fresh-eye", last=True) == []
+    problems = cv.check("F002", "angle 1", agent=R2, batch="fresh-eye")
+    assert any(("attack: r2 filed F002 and may not attack it") in problem for problem in problems)
+    assert any(("attack: the fresh-eye batch of F002 is attacked by r1 (r1), not r2") in problem for problem in problems)
+    assert cv.check("F002", "angle 1", agent=R1, batch="fresh-eye", last=True) == []
 
 
 # -- phase order ------------------------------------------------------------------

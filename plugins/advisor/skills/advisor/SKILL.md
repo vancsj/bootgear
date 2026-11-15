@@ -25,6 +25,7 @@ Outcomes:
 - channel peer `advisor` plugin not installed → told the user;
 - peer heartbeat stale → told the user;
 - protocol error → reported, no guess;
+- direct call needs a write → returned the need before attempting the write;
 - `mode=listening` stopped (`stop` request, user interrupt, turn limit, channel closed, or stale peer) → reported the stop reason to the user.
 
 ## Workflow
@@ -53,6 +54,7 @@ Two independent choices — load exactly one doc from each row.
 | `delegate` | `references/delegate.md` | Hand off investigation or scoped work the peer does itself. |
 
 Any task can use either communication doc — pick `channel` when the task needs Codex to look things up itself or the exchange may take several rounds; `direct` otherwise. `delegate` almost always needs `channel`.
+Select `channel` before assigning workflow-record or memory-ledger writes.
 
 ### Heartbeat (channel, both modes)
 
@@ -72,7 +74,11 @@ Do what the `next` of the injected seat status says. With no status in context, 
 
 ### mode=listening
 
-Read-only advisor for the paired session. Don't contact the peer except in response to a mailbox request. Never answer the human directly for a mailbox request.
+Keep the target artifact read-only unless the request permits changes.
+Write only assigned workflow records and permitted memory-ledger entries outside that artifact.
+Verify and record your own entries under your own identity. Never sign as the peer.
+Keep every other write limit. Do not contact the peer except in response to a mailbox request.
+Never answer the human directly for a mailbox request.
 
 #### 1. Register first, report immediately
 
@@ -140,7 +146,7 @@ Never echo the peer's banner, streamed reasoning, or raw request/response payloa
 
 ### Handling requests (listening)
 
-- `discuss` → read-only investigation; return evidence, conclusions, assumptions, open risks.
+- `discuss` → keep the target artifact read-only; return evidence, conclusions, assumptions, open risks.
 - `delegate` → follow the stated scope exactly. No commit, push, external contact, production mutation, or irreversible action unless explicitly authorized.
 - One response per request, addressed to `<peer>`, with `parent_id` = the request's id.
 - `send` rejects at the pending cap (2) — treat a rejected response send as a protocol error, not a reason to raise the cap.

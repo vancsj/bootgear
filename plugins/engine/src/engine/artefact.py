@@ -617,21 +617,21 @@ def cmd_gate(args):
 
 def add_subparsers(sub, dir_parent):
     parser = sub.add_parser('settings',help='show resolved rubric, evidence rules and exact stage schemas')
-    parser.add_argument('--project-root',type=caller_path,default=caller_cwd())
-    parser.add_argument('--task-config-file',type=caller_path)
+    parser.add_argument('--project-root',type=caller_path,default=caller_cwd(),help='project root for layered rubric configuration')
+    parser.add_argument('--task-config-file',type=caller_path,help='task rubric YAML override')
     parser.add_argument('--task-folder',type=caller_path,help='read the prepared configuration snapshot')
     parser.set_defaults(func=cmd_settings)
     parser = sub.add_parser('prepare',parents=[dir_parent],help='bind a review to its run and input revision')
     parser.add_argument('run_id',nargs='?',help=session.RUN_ID_HELP)
-    parser.add_argument('--task-folder',type=caller_path)
-    parser.add_argument('--refresh',action='store_true')
-    parser.add_argument('--reason')
+    parser.add_argument('--task-folder',type=caller_path,help='must match the run settlement task folder')
+    parser.add_argument('--refresh',action='store_true',help='capture changed input or configuration; requires existing preparation and --reason')
+    parser.add_argument('--reason',help='required with --refresh; explains the changed evidence binding')
     parser.set_defaults(func=cmd_prepare)
     for name,func in (('record',cmd_record),('gate',cmd_gate),('report',cmd_report)):
         parser = sub.add_parser(name,help=f'{name} validated review evidence')
-        parser.add_argument('--task-folder',type=caller_path,required=True)
+        parser.add_argument('--task-folder',type=caller_path,required=True,help='fixed folder containing prepared review evidence')
         if name != 'report':
-            parser.add_argument('--stage',choices=STAGES,required=True)
+            parser.add_argument('--stage',choices=STAGES,required=True,help='evidence stage; its prerequisites must pass')
         if name == 'record':
-            parser.add_argument('--record-file',type=caller_path,required=True)
+            parser.add_argument('--record-file',type=caller_path,required=True,help='JSON stage record; artefact settings prints its exact schema')
         parser.set_defaults(func=func)

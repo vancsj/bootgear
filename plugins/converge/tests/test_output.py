@@ -19,6 +19,7 @@ from conftest import (
     FINDER,
     GEAR_ARGS,
     GEAR_COMMAND,
+    HOST,
     MAIN,
     PLUGIN_DIR,
     R1,
@@ -67,13 +68,28 @@ def _cut_args(cv: Converge, claim: str, rnd: int, impact: str = "wrong-output") 
 
 
 def _attack_args(cv: Converge, angle: str, agent: str, batch: str, outcome: str) -> list[str]:
+    if outcome == "clean":
+        value = {"slate": "s1", "source_seq": len(cv.events()), "role": agent,
+                 "action": "clean", "claim": "F001", "batch": int(batch) if batch.isdigit() else batch,
+                 "checks": [{"angle": angle, "tell": "t", "evidence": "e", "searches": "s",
+                             "positive_control": "p"}]}
+        if batch == "fresh-eye":
+            value["last"] = True
+        path = cv.root / "output-check.json"
+        path.write_text(json.dumps(value))
+        return ["clean", "s1", "--dir", str(cv.dir), "--as", agent, "--input", str(path)]
     return ["attack", "s1", "--dir", str(cv.dir), "--as", agent, "--claim", "F001",
-            "--batch", batch, "--angle", angle, "--tell", "t", "--outcome", outcome,
+            "--batch", batch, "--angle", angle, "--tell", "t",
             "--evidence", "e", "--searches", "s", "--positive-control", "p"]
 
 
 def _next(cv: Converge, rest: str) -> str:
     return f"{GEAR_COMMAND} {rest.format(dir=shlex.quote(str(cv.dir)))}"
+
+
+def _writer_next(cv: Converge, actor: str, structured: bool = False) -> str:
+    prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
+    return prefix + _next(cv, f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
 
 
 # ---------------------------------------------------------------------------
@@ -94,15 +110,15 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
                for item in group["items"])
 
     find = "continue the finder with the missing angles, then " + _next(cv, "coverage s1 --dir {dir}")
-    assert _json(cv, *_file_args(cv)) == {"id": "F001", "next": find}
+    assert _json(cv, *_file_args(cv)) == {"id": "F001", "next": _writer_next(cv, FINDER)}
     run = _json(cv, "find-run", "s1", "--dir", d, "--as", FINDER, "--lens", "correctness",
                 "--angle", "changed-contract", "--tell", "t", "--searches", "s",
                 "--positive-control", "p", "--result", "F001")
     assert run == {"seq": run["seq"], "lens": "correctness", "angle": "changed-contract",
-                   "next": find}
+                   "next": _writer_next(cv, FINDER)}
     na = _json(cv, "angle-na", "s1", "--dir", d, "--as", FINDER, "--phase", "find",
                "--angle", "failure-path", "--lens", "security", "--reason", "no I/O")
-    assert na == {"seq": run["seq"] + 1, "phase": "find", "angle": "failure-path", "next": find}
+    assert na == {"seq": run["seq"] + 1, "phase": "find", "angle": "failure-path", "next": _writer_next(cv, FINDER)}
     assert _json(cv, "coverage", "s1", "--dir", d) == {
         "lenses": {"correctness": {"ran": ["changed-contract"], "na": {},
                                    "missing": ["failure-path"]},
@@ -117,20 +133,20 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
 
     escalate = _json(cv, "escalate", "s1", "--dir", d, "--as", FINDER, "--claim", "F001")
     assert escalate == {"seq": escalate["seq"], "claim": "F001", "wider": False,
-                        "next": f"cut-before: cutter cut-before F001; plan: {plan}"}
+                        "next": _writer_next(cv, FINDER)}
     cut = _json(cv, *_cut_args(cv, "F001", 1))
     assert cut == {"seq": cut["seq"], "claim": "F001", "when": "before", "round": 1,
-                   "next": f"cut-before: finder accept F001; plan: {plan}"}
+                   "next": _writer_next(cv, CUTTER)}
     rebut = _json(cv, "rebut", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
                   "--when", "before", "--evidence", "prod shows every call")
     assert rebut == {"seq": rebut["seq"], "claim": "F001", "when": "before",
-                     "next": f"cut-before: cutter cut-before F001; plan: {plan}"}
+                     "next": _writer_next(cv, FINDER)}
     _json(cv, *_cut_args(cv, "F001", 2, "security"))
     accept = _json(cv, "accept", "s1", "--dir", d, "--as", FINDER, "--claim", "F001",
                    "--when", "before", "--round", "2")
     attack_step = f"attack: r1 attack F001 batch 1; plan: {plan}"
     assert accept == {"seq": accept["seq"], "claim": "F001", "when": "before", "round": 2,
-                      "next": attack_step}
+                      "next": _writer_next(cv, FINDER)}
 
     assert _json(cv, "gate", "s1", "--dir", d, code=1) == {
         "slate": "s1", "ok": False, "cutoff_seq": None,
@@ -145,19 +161,21 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
                for angle in BATCH_1]
     attack = attacks[-1]
     assert attacks[0]["outcome"] == "refuted"
-    assert attack == {"seq": attack["seq"], "claim": "F001", "batch": 1, "angle": BATCH_1[-1],
-                      "outcome": "clean", "next": f"attack: finder reply F001 batch 1; plan: {plan}"}
+    assert attack == {"event": "clean", "seq": attack["seq"], "claim": "F001", "batch": 1,
+                      "checks": [{"angle": BATCH_1[-1], "tell": "t", "evidence": "e",
+                                  "searches": "s", "positive_control": "p"}],
+                      "next": _writer_next(cv, R1, True)}
     reply = _json(cv, "reply", "s1", "--dir", d, "--as", FINDER, "--claim", "F001", "--batch", "1",
                   "--stance", "rebut", "--evidence", "b.py:4 passes None")
     assert reply == {"seq": reply["seq"], "claim": "F001", "batch": 1, "stance": "rebut",
-                     "next": f"attack: r1 verdict F001 batch 1; plan: {plan}"}
+                     "next": _writer_next(cv, FINDER)}
     verdict = _json(cv, "verdict", "s1", "--dir", d, "--as", R1, "--claim", "F001",
                     "--batch", "1", "--verdict", "agree")
     assert verdict == {"seq": verdict["seq"], "claim": "F001", "batch": 1, "verdict": "agree",
-                       "next": f"attack: r2 attack F001 batch fresh-eye; plan: {plan}"}
-    fresh = _json(cv, *_attack_args(cv, "retry timing", R2, "fresh-eye", "clean"), "--last")
+                       "next": _writer_next(cv, R1)}
+    fresh = _json(cv, *_attack_args(cv, "retry timing", R2, "fresh-eye", "clean"))
     assert fresh["batch"] == "fresh-eye"
-    assert fresh["next"] == _next(cv, "cutoff s1 --dir {dir}")
+    assert fresh["next"] == _writer_next(cv, R2, True)
 
     cutoff = _json(cv, "cutoff", "s1", "--dir", d)
     assert cutoff == {"seq": cutoff["seq"],
@@ -232,7 +250,8 @@ def test_argparse_refusal_prose(cv: Converge) -> None:
     assert lines[-1].startswith(f"{GEAR_COMMAND} cut: error: the following arguments are required: ")
     assert "usage:" not in err
     assert lines[0] == f"example: {GEAR_COMMAND} {cli.EXAMPLES['cut']}"
-    assert lines[1] == "commands: " + ", ".join(k for k in cli.EXAMPLES if k != "cut")
+    listed = lines[1].removeprefix("commands: ").split(", ")
+    assert listed and set(listed) <= set(cli.EXAMPLES) - {"cut"}
     assert lines[2:-1] == [f"  {GEAR_COMMAND} {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
 
 

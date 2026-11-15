@@ -86,8 +86,7 @@ def test_before_cut_claims_are_unverified_and_never_attacked(cv: Converge) -> No
     cv.rate("F002", "before", **BELOW)
     assert protocol.unverified_ids(_slate(cv)) == {"F002"}
     assert _status(cv, "F002") == "unverified"
-    assert ("attack: F002 is unverified (cut before the attack); it takes no attack"
-            in cv.attack("F002", BATCH_1[0]))
+    assert (any(("attack: F002 is unverified (cut before the attack); it takes no attack") in problem for problem in cv.check("F002", BATCH_1[0])))
     cv.clean("F001")
     assert protocol.slate_phase(_slate(cv)) == "cutoff"
     assert _cuts(cv) == {"F001": (False, "report_if[0]"), "F002": (True, "unverified")}
@@ -166,8 +165,8 @@ def test_per_lens_cap_applies_per_lens(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "after", "gap_hunt": False, "escalate": False},
                     "angles": {"disable": DISABLED},
                     "caps": {"per_lens": {"default": 1, "security": 2}}})
-    for lens in ("correctness", "correctness", "security", "security"):
-        cv.file(lens=lens)
+    for index, lens in enumerate(("correctness", "correctness", "security", "security")):
+        cv.file(lens=lens, claim=f"supported claim {index}")
     cv.cover()
     for cid in ("F001", "F002", "F003", "F004"):
         cv.clean(cid)

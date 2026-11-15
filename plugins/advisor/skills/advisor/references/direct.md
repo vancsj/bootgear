@@ -3,6 +3,9 @@
 Make one call to the other CLI: Claude Code calls Codex; Codex calls Claude Code.
 Use no mailbox or saved conversation. Put all task facts in the prompt. Mark unverified facts as unverified.
 Give the peer its role scope. For a review, forbid engine loops, other advisors, and work beyond that role.
+Select `channel` before assigning work that requires workflow-record or memory-ledger writes.
+Tell the peer to return unexpected write needs before attempting writes.
+Do not switch communication silently or bypass a sandbox denial.
 
 ## Claude Code calls Codex
 
@@ -28,6 +31,7 @@ cat "$OUT"
 
 Pass model and effort flags only when their variables are set. Otherwise, use Codex's native defaults.
 Do not read user config or rules for this call.
+Keep the target artifact read-only.
 Keep streamed output in `LOG`. Read only the final answer from `OUT` after success.
 On failure, read the retained diagnostic log. Report only the actual error, then delete that log.
 Never print the full stream, prompt, banner, or reasoning.

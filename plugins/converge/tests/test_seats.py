@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -133,17 +132,15 @@ def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None
         "USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1. Act only as r2.")
     assert lines[head + 3].startswith("CONTEXT: <claims under test")
     scope = lines[head + 4]
-    assert scope.startswith("SCOPE: write events only with: ")
+    assert scope.startswith("SCOPE: Call cli:gear through your own host.")
     assert "UV_CACHE_DIR" not in scope
-    for fragment in (f"--dir {cv.dir} --as r2", f"append to {cv.dir}/s1.jsonl",
-                     "; if a write is denied, run nothing else",
-                     'reply "WRITE-DENIED r2: <the error text>"', "|escalate|angle-na>"):
+    for fragment in (f"--dir {cv.dir} --as r2", str(cv.dir / "s1.jsonl"),
+                     "--role-host <your executing host>", "Fill a generated action",
+                     'reply "WRITE-DENIED r2: <the error text>"'):
         assert fragment in scope, scope
-    assert "permission" not in scope, scope
-    path = _scope_converge(scope)
-    assert path.is_absolute() and path.is_file() and os.access(path, os.X_OK), path
+    assert GEAR_COMMAND not in scope
     if converge_path is not None:
-        assert path == converge_path
+        assert converge_path.is_file()
 
 
 def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> None:
@@ -178,6 +175,17 @@ def test_init_with_advisor_settlement_json(cv: Converge) -> None:
     assert data["next"].startswith("reclaim the advisor channel for r2")
 
 
+def test_advisor_request_uses_the_listeners_own_host(cv: Converge) -> None:
+    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
+    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json"),
+                         env=PIPE).stdout)
+    request = data["drivers"][0]["request"]
+    assert "--role-host" in request
+    assert "your own host" in request
+    assert GEAR_COMMAND not in request
+    assert "generated action" in request
+
+
 def test_init_driver_names_the_gear_command(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
     lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
@@ -210,14 +218,14 @@ def test_advisor_request_requires_hand_filled_test_context(
     assert lines[0] == "TYPE: delegate"
     assert lines[1].startswith("USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1.")
     assert lines[2].startswith("CONTEXT: <claims under test")
-    assert lines[3].startswith(f"SCOPE: write events only with: {GEAR_COMMAND} ")
+    assert lines[3].startswith("SCOPE: Call cli:gear through your own host.")
     assert lines[4:6] == [
         "Tests already ran:",
         "- latest test: <recorded command>; result: <one recorded result line>",
     ]
-    for fragment in ("memory-ledger lookup and record are allowed", "change no other files",
-                     "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>",
-                     "; if a write is denied, run nothing else",
+    for fragment in ("memory-ledger entries", "Preserve all other write limits",
+                     "--role-host <your executing host>",
+                     "If a write is denied, stop",
                      'reply "WRITE-DENIED r2: <the error text>"'):
         assert fragment in lines[3], lines[3]
     request = "\n".join(lines[6:])
@@ -418,7 +426,7 @@ def test_deferred_advisor_first_use_can_be_fresh_eye_without_gap_hunt(cv: Conver
         for row in batch:
             assert row["agent_role"] == "r1" and row["action"] == "attack"
             for angle in row["angles"]:
-                assert cv.attack(row["claim"], angle, agent="r1", batch=row["batch"]) == []
+                assert cv.check(row["claim"], angle, agent="r1", batch=row["batch"]) == []
 
 
 def test_invalid_startup_refuses_without_writing_a_slate(cv: Converge) -> None:

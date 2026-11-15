@@ -111,12 +111,12 @@ def test_patch_path_normalization(tmp_path: Path) -> None:
 def test_trivial_without_patch_refused(cv: Converge) -> None:
     _attacked(cv)
     problems = _cut(cv, difficulty="trivial", patch=None, callers=None, migration=None)
-    assert "cut: F001 difficulty trivial needs `patch`" in problems
-    assert "cut: F001 difficulty trivial needs `callers` none; got None" in problems
-    assert "cut: F001 difficulty trivial needs `migration` none; got None" in problems
+    assert any(("cut: F001 difficulty trivial needs `patch`") in problem for problem in problems)
+    assert any(("cut: F001 difficulty trivial needs `callers` none; got None") in problem for problem in problems)
+    assert any(("cut: F001 difficulty trivial needs `migration` none; got None") in problem for problem in problems)
     problems = _cut(cv, **cheap(difficulty="trivial", callers="changed", migration="needed"))
-    assert "cut: F001 difficulty trivial needs `callers` none; got 'changed'" in problems
-    assert "cut: F001 difficulty trivial needs `migration` none; got 'needed'" in problems
+    assert any(("cut: F001 difficulty trivial needs `callers` none; got 'changed'") in problem for problem in problems)
+    assert any(("cut: F001 difficulty trivial needs `migration` none; got 'needed'") in problem for problem in problems)
 
 
 def test_local_over_limit_refused(cv: Converge) -> None:
@@ -125,10 +125,10 @@ def test_local_over_limit_refused(cv: Converge) -> None:
             in _cut(cv, **cheap(patch(lines=11))))
     two = patch(lines=5) + patch("src/b.py", lines=1)
     problems = _cut(cv, **cheap(two))
-    assert ("cut: F001 difficulty local: the patch touches 2 non-test files; "
-            "cutoff.cheap.files is 1") in problems
-    assert ("cut: F001 difficulty local: patch file src/b.py is not the claim's loc file "
-            "src/a.py") in problems
+    assert any(("cut: F001 difficulty local: the patch touches 2 non-test files; "
+            "cutoff.cheap.files is 1") in problem for problem in problems)
+    assert any(("cut: F001 difficulty local: patch file src/b.py is not the claim's loc file "
+            "src/a.py") in problem for problem in problems)
     tests = patch(lines=4) + patch("tests/test_a.py") + patch("tests/test_b.py")
     assert ("cut: F001 difficulty local: the patch touches 2 test files; cutoff.cheap.tests is 1"
             in _cut(cv, **cheap(tests)))

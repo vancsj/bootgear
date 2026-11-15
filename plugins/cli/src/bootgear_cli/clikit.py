@@ -23,7 +23,7 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, NoReturn, TextIO
+from typing import Any, ClassVar, NoReturn, TextIO, TypeVar, overload
 
 ENV_MODE = "BOOTGEAR_OUTPUT"
 ENV_PROG = "BOOTGEAR_PROG"
@@ -34,6 +34,7 @@ HOST_SESSION_ENV = {"claude": "CLAUDE_CODE_SESSION_ID", "codex": "CODEX_SESSION_
 HOST_PROCESS = {"claude", "codex"}
 ANCESTOR_STEPS = 32
 PS_TIMEOUT = 2
+_NamespaceT = TypeVar("_NamespaceT")
 
 
 def gear_argv(plugin: str, command: str, *, root: str | Path | None = None,
@@ -217,11 +218,44 @@ class _CatalogParser(argparse.ArgumentParser):
     catalog: ClassVar[Catalog]
     # argv `run` is parsing, so a parse error's mode follows run(argv=...)
     argv: ClassVar[list[str] | None] = None
+    _input_problems: list[str]
+
+    def _check_value(self, action: argparse.Action, value: Any) -> None:
+        try:
+            super()._check_value(action, value)
+        except argparse.ArgumentError as exc:
+            if isinstance(action, argparse._SubParsersAction):
+                raise
+            self._input_problems.append(str(exc))
+
+    @overload
+    def parse_known_args(self, args: Iterable[str] | None = None, namespace: None = None) -> tuple[argparse.Namespace, list[str]]: ...
+
+    @overload
+    def parse_known_args(self, args: Iterable[str] | None, namespace: _NamespaceT) -> tuple[_NamespaceT, list[str]]: ...
+
+    @overload
+    def parse_known_args(self, *, namespace: _NamespaceT) -> tuple[_NamespaceT, list[str]]: ...
+
+    def parse_known_args(self, args: Iterable[str] | None = None, namespace: Any = None) -> Any:
+        self._input_problems = []
+        result = super().parse_known_args(args, namespace)
+        if self._input_problems:
+            message = self._input_problems[0] if len(self._input_problems) == 1 else "invalid argument values"
+            self.error(message)
+        return result
+
+    def format_help(self) -> str:
+        text = super().format_help()
+        example = command_example(self.catalog, _command_of_prog(self.catalog, self.prog))
+        return text + (f"\nexample: {example}\n" if example else "")
 
     def error(self, message: str) -> NoReturn:
         argv = type(self).argv
         mode = argv_mode(sys.argv[1:] if argv is None else argv)
-        refusal = Refusal(f"{self.prog}: error: {message}", code=2)
+        problems = getattr(self, "_input_problems", [])
+        refusal = Refusal(f"{self.prog}: error: {message}",
+                          (("invalid argument", item) for item in problems) if len(problems) > 1 else (), code=2)
         render_refusal(self.catalog, _command_of_prog(self.catalog, self.prog), refusal, mode)
         sys.exit(2)
 
@@ -230,6 +264,42 @@ def parser_class(catalog: Catalog) -> type[argparse.ArgumentParser]:
     """ArgumentParser subclass whose parse errors render a usage refusal and
     exit 2. Subparsers inherit it from the root parser."""
     return type("CatalogParser", (_CatalogParser,), {"catalog": catalog})
+
+
+def command_example(catalog: Catalog, command: str | None) -> str | None:
+    """Return the command's example, or one leaf example under its group."""
+    key = command if command in catalog.examples else next(
+        (leaf for leaf in catalog.examples if not command or leaf.startswith(command + " ")),
+        None,
+    )
+    return catalog.command(catalog.examples[key]) if key is not None else None
+
+
+def add_help_examples(parser: argparse.ArgumentParser, catalog: Catalog) -> None:
+    """Add Catalog examples to a provider's custom parser and its subparsers."""
+    def visit(node: argparse.ArgumentParser, path: str) -> None:
+        if node.formatter_class is argparse.HelpFormatter:
+            node.formatter_class = argparse.RawDescriptionHelpFormatter
+        example = command_example(catalog, path or None)
+        if example:
+            node.epilog = "\n".join(filter(None, [node.epilog, f"example: {example}"]))
+        for action in _subparsers(node):
+            for name, child in action.choices.items():
+                visit(child, " ".join(filter(None, [path, name])))
+
+    visit(parser, "")
+
+
+def event_help(plugin: str, command: str, inputs: str, payload: dict[str, Any],
+               arguments: str = "") -> bool:
+    """Print event input help before the handler reads stdin; return whether help was requested."""
+    if not any(value in {"-h", "--help"} for value in sys.argv[1:]):
+        return False
+    program = current_program(plugin, command)
+    call = " ".join(filter(None, [program, arguments]))
+    print(f"usage: {call} < event.json\n\nEvent input: {inputs}\n"
+          f"example: printf '%s\\n' {shlex.quote(json.dumps(payload))} | {call}")
+    return True
 
 
 def _command_of_prog(catalog: Catalog, prog: str) -> str | None:
@@ -408,8 +478,12 @@ def group(problems: Iterable[tuple[str, str]]) -> list[tuple[str, list[str]]]:
 def render_refusal(catalog: Catalog, command: str | None, refusal: Refusal,
                    mode: str) -> None:
     """Write the refusal to stderr as prose lines or one JSON error object."""
-    example = catalog.command(catalog.examples[command]) if command in catalog.examples else None
+    example = command_example(catalog, command)
+    prefix = (command.rpartition(" ")[0] if command in catalog.examples else command) or ""
     others = [leaf for leaf in catalog.examples if leaf != command]
+    if prefix:
+        others.sort(key=lambda leaf: not leaf.startswith(prefix + " "))
+    others = others[:5]
     frequent = {leaf: catalog.command(catalog.examples[leaf])
                 for leaf in catalog.frequent if leaf != command and leaf in catalog.examples}
     grouped = group(refusal.problems)

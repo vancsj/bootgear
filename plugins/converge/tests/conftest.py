@@ -206,28 +206,44 @@ class Converge:
             return exc.problems
         return []
 
-    def attack(self, cid: str, angle: str, agent: str = R1, batch: Any = 1,
+    def check(self, cid: str, angle: str, agent: str = R1, batch: Any = 1,
                outcome: str = "clean", slate: str = "s1", **extra: Any) -> list[str]:
-        return self.append("attack", agent, slate=slate, claim=cid, batch=batch, angle=angle,
-                           tell="tell applies", outcome=outcome, evidence="read a.py:10",
-                           searches="rg foo", positive_control="rg bar finds bar", **extra)
+        fields = {"angle": angle, "tell": "tell applies", "evidence": "read a.py:10",
+                  "searches": "rg foo", "positive_control": "rg bar finds bar"}
+        if outcome == "clean":
+            last = {"last": extra.pop("last")} if "last" in extra else {}
+            return self.append("clean", agent, slate=slate, claim=cid, batch=batch,
+                               checks=[{**fields, **extra}], **last)
+        return self.append("attack", agent, slate=slate, claim=cid, batch=batch,
+                           **fields, **extra)
 
-    def attack_cli(self, cid: str, angle: str, *extra: str, agent: str = R1, batch: Any = 1,
+    def check_cli(self, cid: str, angle: str, *extra: str, agent: str = R1, batch: Any = 1,
                    outcome: str = "clean", slate: str = "s1",
                    code: int = 0) -> subprocess.CompletedProcess[str]:
-        """One `attack` through the CLI."""
+        """One checked angle through the public event command."""
+        if outcome == "clean":
+            value = {"slate": slate, "source_seq": len(self.events(slate)), "role": agent,
+                     "action": "clean", "claim": cid, "batch": batch,
+                     "checks": [{"angle": angle, "tell": "tell applies", "evidence": "read a.py:10",
+                                 "searches": "rg foo", "positive_control": "rg bar finds bar"}]}
+            if "--last" in extra:
+                value["last"] = True
+                extra = tuple(item for item in extra if item != "--last")
+            path = self.root / "check.json"
+            path.write_text(json.dumps(value))
+            return self.ok("clean", slate, "--as", agent, "--input", str(path), *extra, code=code)
         return self.ok("attack", slate, "--as", agent, "--claim", cid, "--batch", str(batch),
-                       "--angle", angle, "--tell", "tell applies", "--outcome", outcome,
+                       "--angle", angle, "--tell", "tell applies",
                        "--evidence", "read a.py:10", "--searches", "rg foo",
                        "--positive-control", "rg bar finds bar", *extra, code=code)
 
     def batch_1(self, cid: str = "F001", refuted: tuple[str, ...] = (), agent: str = R1) -> None:
         for angle in BATCH_1:
             outcome = "refuted" if angle in refuted else "clean"
-            assert self.attack(cid, angle, agent=agent, outcome=outcome) == []
+            assert self.check(cid, angle, agent=agent, outcome=outcome) == []
 
     def fresh_eye(self, cid: str = "F001", agent: str = R2) -> None:
-        assert self.attack(cid, "retry timing", agent=agent, batch="fresh-eye", last=True) == []
+        assert self.check(cid, "retry timing", agent=agent, batch="fresh-eye", last=True) == []
 
     def clean(self, cid: str = "F001", fresh_eye_agent: str = R2) -> None:
         """Every batch of a `ready` slate's claim, all clean."""

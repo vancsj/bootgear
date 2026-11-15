@@ -1918,7 +1918,7 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "unavailable, fewer than the full roster responded), "
                         "scope-settled (closes a question's round-0 scoping "
                         "phase; round 1+ substance follows separately)")
-    s.add_argument("--summary", required=True)
+    s.add_argument("--summary", required=True, help="one-line decision, reason, and cited evidence")
     s.add_argument("--question", metavar="QID",
                    help="stable id (e.g. 'q1') tying every round and the "
                         "closing entry of one debate together; required for "
@@ -1959,7 +1959,7 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
 
     s = sub.add_parser("close", parents=[dir_parent], help="mark the ledger closed")
     s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
-    s.add_argument("outcome", nargs="?", choices=["succeeded", "failed"])
+    s.add_argument("outcome", nargs="?", choices=["succeeded", "failed"], help="goal result; use this or --outcome")
     s.add_argument("--outcome", dest="outcome_option", choices=["succeeded", "failed"],
                     help="the run outcome")
     s.add_argument("--reason", help="required in practice for a failed outcome, "

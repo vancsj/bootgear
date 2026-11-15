@@ -289,6 +289,11 @@ Call `close` for every run. Treat a run without `close` as invalid.
 
 ## Calling the session CLI safely
 
+Use the CLI's normal next action for workflow transitions.
+Use `state transition --force --reason` when an authorized decision needs to pass a workflow gate.
+Keep run, destination, role, and ledger validation. A force transition grants no artifact or delivery permission.
+Report its reason, requested destination, and bypassed controls.
+
 Pass every free-text argument (`--summary`, todo text, pitch text, or `--reason`) as its own quoted argument in every `session.py` call `execute` makes. Never interpolate free text into one shell string.
 
 Do not perform a `goal` done-condition mutation absent from `permitted_mutations`. Report the goal requirement and missing permission. Fail the run if no other path can complete it.

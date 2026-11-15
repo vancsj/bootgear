@@ -86,6 +86,10 @@ class Slate:
     def plan(self) -> str:
         return self.cmd("status s1 --dir {dir} --json")
 
+    def role_next(self, actor: str, *, structured: bool = False) -> str:
+        prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
+        return "next: " + prefix + self.cmd(f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
+
     def init(self, *extra: str, config: str = STEPS) -> None:
         path = self.root / "task.yaml"
         path.write_text(config)
@@ -125,16 +129,28 @@ class Slate:
         return self.lines("accept", "--as", FINDER, "--claim", claim, "--when", when,
                           "--round", "1")
 
-    def attack(self, angle: str, *extra: str, agent: str = R1, batch: str = "1",
-               outcome: str = "clean", code: int = 0) -> list[str]:
-        return self.lines("attack", "--as", agent, "--claim", "F001", "--batch", batch,
-                          "--angle", angle, "--tell", "tell applies", "--outcome", outcome,
+    def check(self, angle: str, *extra: str, agent: str = R1, batch: str = "1",
+               outcome: str = "clean", code: int = 0, claim: str = "F001") -> list[str]:
+        if outcome == "clean":
+            value = {"slate": "s1", "source_seq": len((self.dir / "s1.jsonl").read_text().splitlines()),
+                     "role": agent, "action": "clean", "claim": claim,
+                     "batch": int(batch) if batch.isdigit() else batch,
+                     "checks": [{"angle": angle, "tell": "tell applies", "evidence": "read a.py:1",
+                                 "searches": "rg x", "positive_control": "rg y finds y"}]}
+            if "--last" in extra:
+                value["last"] = True
+                extra = tuple(item for item in extra if item != "--last")
+            path = self.root / "check.json"
+            path.write_text(json.dumps(value))
+            return self.lines("clean", "--as", agent, "--input", str(path), *extra, code=code)
+        return self.lines("attack", "--as", agent, "--claim", claim, "--batch", batch,
+                          "--angle", angle, "--tell", "tell applies",
                           "--evidence", "read a.py:1", "--searches", "rg x",
                           "--positive-control", "rg y finds y", *extra, code=code)
 
     def batch_1(self, refuted: tuple[str, ...] = ()) -> None:
         for angle in BATCH_1:
-            self.attack(angle, outcome="refuted" if angle in refuted else "clean")
+            self.check(angle, outcome="refuted" if angle in refuted else "clean")
 
     def status(self) -> dict:
         data = json.loads(self.ok("status", "--json").stdout)
@@ -157,7 +173,7 @@ class Slate:
     def to_cut_after(self) -> None:
         self.to_attack()
         self.batch_1()
-        self.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
+        self.check("retry timing", "--last", agent=R2, batch="fresh-eye")
 
 
 def _seq(lines: list[str]) -> str:
@@ -214,13 +230,11 @@ def test_shared_init_refuses_the_removed_mode_flag(tmp_path: Path) -> None:
 def test_shared_find_commands_print_the_finder_step(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.init()
-    find = "next: continue the finder with the missing angles, then " + slate.cmd(
-        "coverage s1 --dir {dir}")
-    assert slate.file("c").stdout.splitlines() == ["FILED F001", find]
+    assert slate.file("c").stdout.splitlines() == ["FILED F001", slate.role_next(FINDER, structured=False)]
     out = slate.lines("find-run", "--as", FINDER, "--lens", "correctness",
                       "--angle", "changed-contract", "--tell", "t", "--searches", "s",
                       "--positive-control", "p", "--result", "F001")
-    assert out == ["FIND-RUN seq=3 lens=correctness angle=changed-contract", find]
+    assert out == ["FIND-RUN seq=3 lens=correctness angle=changed-contract", slate.role_next(FINDER, structured=False)]
     out = slate.lines("angle-na", "--as", FINDER, "--phase", "find", "--angle", "failure-path",
                       "--lens", "correctness", "--reason", "no I/O")
     assert out[0] == "ANGLE-NA seq=4 phase=find angle=failure-path"
@@ -235,8 +249,7 @@ def test_shared_gap_hunt_files_after_find_coverage(tmp_path: Path) -> None:
                       "--loc", "a.py:1", "--claim", "ticket asks for retries",
                       "--trigger", "caller retries", *FILE_ARGS, *gap, code=2)
     assert "  - file: gap-hunt claims are filed after find coverage is complete" in err
-    assert err[-1] == ("next: continue the finder with the missing angles, then "
-                       + slate.cmd("coverage s1 --dir {dir}"))
+    assert err[-1] == (slate.role_next(R2, structured=False))
     slate.cover()
     out = slate.lines("file", "--as", R2, "--lens", "correctness", "--angle", "changed-contract",
                       "--loc", "a.py:1", "--claim", "ticket asks for retries",
@@ -248,23 +261,22 @@ def test_shared_escalate_and_cut_before_print_the_plan_step(tmp_path: Path) -> N
     slate = Slate(tmp_path)
     slate.init()
     slate.file()
-    slate.file()
+    slate.file(claim="another supported claim")
     slate.cover()
     out = slate.escalate("F001")
-    assert out[1] == f"next: escalate: finder escalate F002; plan: {slate.plan()}"
+    assert out[1] == slate.role_next(FINDER, structured=False)
     assert "file: claims are filed before the first escalate, cut or attack event" in slate.file(
         code=2).stderr
     out = slate.escalate("F002")
     assert out[0].endswith(" F002 wider=no")
-    assert out[1] == f"next: cut-before: cutter cut-before F001, F002; plan: {slate.plan()}"
+    assert out[1] == slate.role_next(FINDER, structured=False)
     out = slate.cut("F001", "before")
     assert out == [f"CUT seq={_seq(out)} F001 when=before round=1",
-                   (f"next: cut-before: finder accept F001; cutter cut-before F002; "
-                    f"plan: {slate.plan()}")]
+                   (slate.role_next(CUTTER, structured=False))]
     out = slate.lines("rebut", "--as", FINDER, "--claim", "F001", "--when", "before",
                       "--evidence", "prod shows every call")
     assert out == [f"REBUT seq={_seq(out)} F001 when=before",
-                   f"next: cut-before: cutter cut-before F001, F002; plan: {slate.plan()}"]
+                   slate.role_next(FINDER, structured=False)]
 
 
 def test_shared_cut_round_waits_for_the_finder_answer(tmp_path: Path) -> None:
@@ -277,7 +289,7 @@ def test_shared_cut_round_waits_for_the_finder_answer(tmp_path: Path) -> None:
     err = slate.cut("F001", "before", rnd=2, code=2)
     assert ("  - cut: F001 before round 1 awaits its finder; the finder must accept or rebut "
             "it first") in err
-    assert err[-1] == f"next: cut-before: finder accept F001; plan: {slate.plan()}"
+    assert err[-1] == slate.role_next(CUTTER, structured=False)
     slate.ok("rebut", "--as", FINDER, "--claim", "F001", "--when", "before",
              "--evidence", "the retry path is guarded")
     out = slate.cut("F001", "before", rnd=2)
@@ -293,7 +305,7 @@ def test_shared_cut_before_leads_to_the_attack(tmp_path: Path) -> None:
     slate.cut("F001", "before")
     out = slate.accept("F001", "before")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=before round=1",
-                   f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"]
+                   slate.role_next(FINDER, structured=False)]
 
 
 # -- attack, reply, verdict -----------------------------------------------------------
@@ -302,54 +314,54 @@ def test_shared_cut_before_leads_to_the_attack(tmp_path: Path) -> None:
 def test_shared_attack_reply_verdict_walk_the_dispute(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.to_attack()
-    out = slate.attack(BATCH_1[0], outcome="refuted")
+    out = slate.check(BATCH_1[0], outcome="refuted")
     assert out == [f"ATTACK seq={_seq(out)} F001 batch=1 angle={BATCH_1[0]} outcome=refuted",
-                   f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"]
+                   slate.role_next(R1, structured=False)]
     for angle in BATCH_1[1:4]:
-        slate.attack(angle)
+        slate.check(angle)
     out = slate.lines("angle-na", "--as", R1, "--phase", "attack", "--claim", "F001",
                       "--angle", BATCH_1[4], "--reason", "no default in the diff")
-    assert out[1] == f"next: attack: finder reply F001 batch 1; plan: {slate.plan()}"
+    assert out[1] == slate.role_next(R1, structured=False)
     out = slate.lines("reply", "--as", FINDER, "--claim", "F001", "--batch", "1",
                       "--stance", "rebut", "--evidence", "the caller in b.py:4 passes None",
                       "--text", "None from b.py:4 crashes the parser")
     assert out == [f"REPLY seq={_seq(out)} F001 batch=1 stance=rebut",
-                   f"next: attack: r1 verdict F001 batch 1; plan: {slate.plan()}"]
+                   slate.role_next(FINDER, structured=False)]
     out = slate.lines("verdict", "--as", R1, "--claim", "F001", "--batch", "1",
                       "--verdict", "agree")
     assert out == [f"VERDICT seq={_seq(out)} F001 batch=1 verdict=agree",
-                   f"next: attack: r2 attack F001 batch fresh-eye; plan: {slate.plan()}"]
-    out = slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
-    assert out == [f"ATTACK seq={_seq(out)} F001 batch=fresh-eye angle=retry timing outcome=clean",
-                   f"next: cut-after: cutter cut-after F001; plan: {slate.plan()}"]
+                   slate.role_next(R1, structured=False)]
+    out = slate.check("retry timing", "--last", agent=R2, batch="fresh-eye")
+    assert out == [f"CLEAN seq={_seq(out)} F001",
+                   slate.role_next(R2, structured=True)]
     assert slate.status()["by_id"]["F001"]["claim"] == "None from b.py:4 crashes the parser"
 
 
 def test_shared_attack_refusals_name_the_role_and_the_next_step(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.to_attack()
-    err = slate.attack(BATCH_1[0], agent=FINDER, code=2)
-    assert err[0].startswith("example: ") and " attack <slate> " in err[0]
-    assert err[-3:] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it",
-                        f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"]
-    err = slate.attack(BATCH_1[0], agent=MAIN, code=2)
-    assert "  - attack: orch wrote init; the orchestrator never writes attack" in err
-    err = slate.attack(BATCH_1[0], agent=CUTTER, code=2)
-    assert "  - attack: cutter cut F001; refuters and cutters are disjoint" in err
-    err = slate.attack(BATCH_1[0], batch="2", code=2)
-    assert "  - attack: F001's open batch is 1 (open); got batch 2" in err
+    err = slate.check(BATCH_1[0], agent=FINDER, code=2)
+    assert err[0].startswith("example: ") and " clean <slate> " in err[0]
+    assert any("finder filed F001 and may not attack it" in line for line in err)
+    assert err[-1] == slate.role_next(FINDER, structured=True)
+    err = slate.check(BATCH_1[0], agent=MAIN, code=2)
+    assert any("orch wrote init; the orchestrator never writes attack" in line for line in err)
+    err = slate.check(BATCH_1[0], agent=CUTTER, code=2)
+    assert any("cutter cut F001; refuters and cutters are disjoint" in line for line in err)
+    err = slate.check(BATCH_1[0], batch="2", code=2)
+    assert any("F001's open batch is 1 (open); got batch 2" in line for line in err)
 
 
 def test_shared_fresh_eye_reuse_refusal_explains_angle_choice(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.to_attack()
     slate.batch_1()
-    slate.attack("retry timing", agent=R2, batch="fresh-eye")
-    err = slate.attack("retry timing", agent=R2, batch="fresh-eye", code=2)
-    assert (
-        "  - attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
+    slate.check("retry timing", agent=R2, batch="fresh-eye")
+    err = slate.check("retry timing", agent=R2, batch="fresh-eye", code=2)
+    assert any((
+        "attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
         "including names outside the fixed list; "
-        "the fixed list is not a menu for this batch") in err
+        "the fixed list is not a menu for this batch") in line for line in err)
 
 
 def test_shared_fresh_eye_plan_explains_angle_choice(tmp_path: Path) -> None:
@@ -369,7 +381,7 @@ def test_shared_fresh_eye_closes_at_cap_twenty_without_last(tmp_path: Path) -> N
     slate.to_attack(config=STEPS + "caps: {angles_per_claim: 20}\n")
     slate.batch_1()
     for n in range(1, 21):
-        slate.attack(f"angle {n}", agent=R2, batch="fresh-eye")
+        slate.check(f"angle {n}", agent=R2, batch="fresh-eye")
     status = slate.status()
     assert status["phase"] == "cut-after"
     assert status["by_id"]["F001"]["fresh_eye"] == [f"angle {n}" for n in range(1, 21)]
@@ -382,17 +394,16 @@ def _example(lines: list[str]) -> str:
 def test_shared_angle_na_refusal_shows_the_form_for_its_phase(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.to_attack()
-    attack_step = f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"
     err = slate.lines("angle-na", "--as", FINDER, "--phase", "find", "--angle", "failure-path",
                       "--reason", "no I/O", code=2)
     assert _example(err).startswith(f"example: {PROGRAM} angle-na ")
     assert "--phase find --lens" in _example(err)
-    assert err[-1] == attack_step
+    assert err[-1] == slate.role_next(FINDER, structured=False)
     err = slate.lines("angle-na", "--as", R1, "--phase", "attack", "--angle", BATCH_1[0],
                       "--reason", "no boundary in a constant", code=2)
     assert _example(err).startswith(f"example: {PROGRAM} angle-na ")
     assert "--phase attack --claim" in _example(err)
-    assert err[-1] == attack_step
+    assert err[-1] == slate.role_next(R1, structured=False)
 
 
 def test_shared_angle_na_usage_refusal_follows_the_phase(tmp_path: Path) -> None:
@@ -415,7 +426,7 @@ def test_shared_decline_kills_the_claim(tmp_path: Path) -> None:
     out = slate.lines("reply", "--as", FINDER, "--claim", "F001", "--batch", "1",
                       "--stance", "decline")
     assert out == [f"REPLY seq={_seq(out)} F001 batch=1 stance=decline",
-                   "next: " + slate.cmd("cutoff s1 --dir {dir}")]
+                   slate.role_next(FINDER, structured=False)]
     claim = slate.status()["by_id"]["F001"]
     assert (claim["status"], claim["cut"]) == ("killed", "no")
 
@@ -437,7 +448,7 @@ def test_shared_cutoff_gate_render_converged(tmp_path: Path) -> None:
         f"no current cutoff (run `{PROGRAM} cutoff` after the last state change)",
         f"next: cut-after: finder accept F001; plan: {slate.plan()}"]
     out = slate.accept("F001", "after")
-    assert out == [f"ACCEPT seq={_seq(out)} F001 when=after round=1", cutoff_step]
+    assert out == [f"ACCEPT seq={_seq(out)} F001 when=after round=1", slate.role_next(FINDER, structured=False)]
     assert slate.lines("converged", code=1) == ["OPEN phase=cutoff claims=0", cutoff_step]
     out = slate.lines("cutoff")
     seq = _seq(out)
@@ -466,7 +477,7 @@ def test_shared_render_choices_hold_findings_only(tmp_path: Path) -> None:
     slate.cut("F002", "before", "cosmetic", extra=("--choice", "drop or keep"))
     slate.accept("F002", "before")
     slate.batch_1()
-    slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
+    slate.check("retry timing", "--last", agent=R2, batch="fresh-eye")
     slate.cut("F001", "after", difficulty="redesign", extra=("--choice", "split or patch"))
     slate.accept("F001", "after")
     slate.ok("cutoff")
@@ -489,7 +500,7 @@ def test_shared_converged_lists_the_disputed_findings(tmp_path: Path) -> None:
              "--verdict", "disagree", "--evidence", "b.py:4 is dead code")
     slate.ok("reply", "--as", FINDER, "--claim", "F001", "--batch", "1", "--stance", "rebut",
              "--evidence", "the router reaches b.py:4")
-    slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
+    slate.check("retry timing", "--last", agent=R2, batch="fresh-eye")
     slate.cut("F001", "after", "security")
     slate.accept("F001", "after")
     slate.ok("cutoff")
@@ -523,7 +534,7 @@ def test_shared_converge_reserves_the_converge_agent_id(tmp_path: Path) -> None:
 def test_shared_status_prints_claims_plan_and_next(tmp_path: Path) -> None:
     slate = Slate(tmp_path)
     slate.to_attack()
-    slate.attack(BATCH_1[0])
+    slate.check(BATCH_1[0])
     out = slate.lines("status")
     assert out[0] == ("SLATE s1 lenses=correctness phase=attack cutoff=none claims=2 "
                       "difficulty_basis=artifact agents=4/5 advisor=-")
@@ -586,16 +597,15 @@ def test_shared_init_prints_advisor_driver(tmp_path: Path) -> None:
     check = _one(lines, "DRIVER r2 check: ")
     assert "WRITE-DENIED" in check and "never redo the turn with a native subagent" in check
     scope = _one(lines, "SCOPE: ")
-    assert scope.startswith("SCOPE: write events only with: ")
+    assert scope.startswith("SCOPE: Call cli:gear through your own host.")
     assert "UV_CACHE_DIR" not in scope
-    assert f'{PROGRAM} <attack|reply|verdict|file|rebut|accept|escalate|angle-na>' in scope
+    assert PROGRAM not in scope
     gear = Path(shlex.split(PROGRAM)[0])
     assert gear.is_file() and os.access(gear, os.X_OK)
-    for fragment in (f"--dir {ledger} --as r2", "; if a write is denied, run nothing else",
+    for fragment in (f"--dir {ledger} --as r2", "If a write is denied, stop",
                      'reply "WRITE-DENIED r2: <the error text>"',
-                     "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>"):
+                     "--role-host <your executing host>"):
         assert fragment in scope, scope
-    assert "permission" not in scope, scope
     nxt = lines[-1]
     assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
     assert "prints the Gear command and channel number" in nxt
@@ -632,14 +642,14 @@ def test_shared_advisor_request_requires_hand_filled_test_context(
     assert lines[0] == "TYPE: delegate"
     assert lines[1].startswith("USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1.")
     assert lines[2].startswith("CONTEXT: <claims under test")
-    assert lines[3].startswith(f"SCOPE: write events only with: {PROGRAM} ")
+    assert lines[3].startswith("SCOPE: Call cli:gear through your own host.")
     assert lines[4:6] == [
         "Tests already ran:",
         "- latest test: <recorded command>; result: <one recorded result line>",
     ]
-    for fragment in ("memory-ledger lookup and record are allowed", "change no other files",
-                     "<attack|reply|verdict|file|rebut|accept|escalate|angle-na>",
-                     "; if a write is denied, run nothing else",
+    for fragment in ("memory-ledger entries", "Preserve all other write limits",
+                     "--role-host <your executing host>",
+                     "If a write is denied, stop",
                      'reply "WRITE-DENIED r2: <the error text>"'):
         assert fragment in lines[3], lines[3]
     request = "\n".join(lines[6:])
@@ -755,7 +765,7 @@ def test_shared_fix_now_flow(tmp_path: Path) -> None:
     slate.file("None crashes the parser")
     slate.cover()
     slate.batch_1()
-    slate.attack("retry timing", "--last", agent=R2, batch="fresh-eye")
+    slate.check("retry timing", "--last", agent=R2, batch="fresh-eye")
     slate.cut("F001", "after", difficulty="local",
               extra=("--patch", PATCH, "--callers", "none", "--migration", "none"))
     slate.accept("F001", "after")
@@ -821,13 +831,8 @@ def test_shared_fix_check_compares_against_last_cutoff_before_the_first_fix_chec
     slate.cover()
     for claim in ("F001", "F002"):
         for angle in BATCH_1:
-            slate.ok("attack", "--as", R1, "--claim", claim, "--batch", "1", "--angle", angle,
-                     "--tell", "tell applies", "--outcome", "clean", "--evidence", "read a.py:1",
-                     "--searches", "rg x", "--positive-control", "rg y finds y")
-        slate.ok("attack", "--as", R2, "--claim", claim, "--batch", "fresh-eye",
-                 "--angle", "retry timing", "--tell", "tell applies", "--outcome", "clean",
-                 "--evidence", "read a.py:1", "--searches", "rg x",
-                 "--positive-control", "rg y finds y", "--last")
+            slate.check(angle, claim=claim)
+        slate.check("retry timing", "--last", agent=R2, batch="fresh-eye", claim=claim)
     for claim in ("F001", "F002"):
         slate.cut(claim, "after", difficulty="local",
                   extra=("--patch", PATCH, "--callers", "none", "--migration", "none"))

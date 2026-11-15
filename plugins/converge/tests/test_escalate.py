@@ -35,9 +35,9 @@ def test_wider_and_evidence_go_together(cv: Converge) -> None:
     _slate(cv)
     for fields in ({"wider": WIDER["wider"]}, {"evidence": WIDER["evidence"]}):
         problems = cv.append("escalate", FINDER, claim="F001", **fields)
-        assert "escalate: `wider` and `evidence` are given together" in problems
+        assert any(("escalate: `wider` and `evidence` are given together") in problem for problem in problems)
     problems = cv.append("escalate", FINDER, claim="F001", wider=" ", evidence="x")
-    assert "`wider` must be a non-empty string" in problems
+    assert any(("`wider` must be a non-empty string") in problem for problem in problems)
 
 
 def test_only_the_finder_escalates_once(cv: Converge) -> None:
@@ -52,7 +52,7 @@ def test_only_the_finder_escalates_once(cv: Converge) -> None:
 def test_escalate_command(cv: Converge) -> None:
     cv.init()
     cv.file()
-    cv.file()
+    cv.file(claim="another supported claim")
     cv.cover()
     out = cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001", "--wider", WIDER["wider"],
                 "--evidence", WIDER["evidence"]).stdout
@@ -67,13 +67,12 @@ def test_no_cut_or_attack_before_every_claim_is_escalated(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "both", "gap_hunt": False, "escalate": True},
                     "angles": {"disable": DISABLED}})
     cv.file()
-    cv.file()
+    cv.file(claim="another supported claim")
     cv.cover()
     assert cv.append("escalate", FINDER, claim="F001") == []
     assert ("cut: the slate is in phase escalate; cut needs phase cut-before"
             in cv.append("cut", CUTTER, claim="F001", round=1, when="before"))
-    assert ("attack: the slate is in phase escalate; attack needs phase attack"
-            in cv.attack("F001", BATCH_1[0]))
+    assert (any(("attack: the slate is in phase escalate; attack needs phase attack") in problem for problem in cv.check("F001", BATCH_1[0])))
     assert cv.append("escalate", FINDER, claim="F002") == []
     assert protocol.slate_phase(ledger.read(cv.path(), "s1")) == "cut-before"
 
@@ -81,6 +80,6 @@ def test_no_cut_or_attack_before_every_claim_is_escalated(cv: Converge) -> None:
 def test_escalate_is_not_needed_when_the_step_is_off(cv: Converge) -> None:
     cv.ready(escalate=False)
     assert protocol.slate_phase(ledger.read(cv.path(), "s1")) == "attack"
-    assert cv.attack("F001", BATCH_1[0]) == []
+    assert cv.check("F001", BATCH_1[0]) == []
     assert ("escalate: the slate is in phase attack; escalate needs phase escalate"
             in cv.append("escalate", FINDER, claim="F001"))

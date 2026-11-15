@@ -335,7 +335,8 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(error["message"], "--last must be a positive integer")
         self.assertEqual(error["example"], f"{self.prog} session read --dir "
                                            f"<session-dir> --section state")
-        self.assertIn("state transition", error["commands"])
+        self.assertIn("session recall", error["commands"])
+        self.assertLessEqual(len(error["commands"]), 5)
         self.assertNotIn("session read", error["commands"])
         self.assertEqual(set(error["examples"]), set(self.frequent))
 
@@ -494,7 +495,7 @@ class CliOutputTest(unittest.TestCase):
 
     def test_state_current_prints_node_and_full_reminder(self):
         data = self._current_json()
-        self.assertEqual(set(data), {"current", "terminal", "reminder", "next"})
+        self.assertEqual(set(data), {"current", "terminal", "reminder", "next", "destinations"})
         self.assertEqual((data["current"], data["terminal"]), ("clarify", False))
         self.assertEqual(set(data["reminder"]),
                          {"do", "branches", "leave", "leave_check", "exit_checks"})
@@ -503,7 +504,7 @@ class CliOutputTest(unittest.TestCase):
         prose = self._current(None, "--prose")
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
-                         ["STATE    current: clarify", "do: check the output contract"])
+                         ["STATE    current: clarify", "do: check the output contract", "destinations: succeeded, failed"])
 
     def test_state_current_node_without_reminder(self):
         self._init_run("bare-run", SETTLEMENT.replace(
@@ -511,9 +512,9 @@ class CliOutputTest(unittest.TestCase):
         prose = self._current("bare-run", "--prose")
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
-                         ["STATE    current: clarify", "no reminder: work toward goal"])
+                         ["STATE    current: clarify", "no reminder: work toward goal", "destinations: succeeded, failed"])
         data = self._current_json("bare-run")
-        self.assertEqual(set(data), {"current", "terminal", "reminder"})
+        self.assertEqual(set(data), {"current", "terminal", "reminder", "destinations"})
         self.assertIsNone(data["reminder"])
 
     def test_state_current_reads_strip_chomping_machine_block(self):
@@ -578,7 +579,7 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(prose.returncode, 0, prose.stderr)
         self.assertEqual(prose.stdout.splitlines(),
                          ["STATE    current: clarify",
-                          "do: check the output contract Call the test skill."])
+                          "do: check the output contract Call the test skill.", "destinations: work, succeeded, failed"])
         data = self._current_json("old-run")
         self.assertEqual(data["reminder"]["do"],
                          "check the output contract Call the test skill.")
@@ -861,7 +862,8 @@ class CliOutputTest(unittest.TestCase):
         self.assertEqual(error["message"], "--last must be a positive integer")
         self.assertEqual(error["example"], f"{self.prog} session read --dir "
                                            f"<session-dir> --section state")
-        self.assertIn("state transition", error["commands"])
+        self.assertIn("session recall", error["commands"])
+        self.assertLessEqual(len(error["commands"]), 5)
         self.assertNotIn("session read", error["commands"])
         self.assertEqual(set(error["examples"]), set(self.frequent))
 

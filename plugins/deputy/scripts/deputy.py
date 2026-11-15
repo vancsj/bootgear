@@ -217,16 +217,26 @@ def assert_(deputy_root: Path, slug: str, answer: str, why: str, confirmed: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog=current_program("deputy", "deputy"), description=__doc__)
+    catalog = clikit.Catalog(prog=current_program("deputy", "deputy"), examples={
+        "candidates": 'candidates "Which design meets the requirement?" --limit 3',
+        "record": ('record --question "Which design?" --claim "Use the direct call." '
+                   '--because "The user chose it." --options "Direct call; cache" --stakes "Local code" '
+                   '--session-ledger session.md'),
+        "assert": 'assert decisions/example a1 --why "The user confirmed this answer." --confirmed-by-user',
+    })
+    p = clikit.parser_class(catalog)(prog=catalog.prog, description=__doc__)
     p.add_argument("--deputy-root", dest="deputy_root", metavar="PATH",
-                   default=os.environ.get("LEDGER_DEPUTY_ROOT", "~/.memory-ledger/deputy"))
+                   default=os.environ.get("LEDGER_DEPUTY_ROOT", "~/.memory-ledger/deputy"),
+                   help="deputy ledger directory; must have no remote for writes")
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("candidates", help="print the matching deputy entries in full")
-    c.add_argument("question")
-    c.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    c.add_argument("question", help="judgment question to match against recorded decisions")
+    c.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="maximum candidate entries (default: 8)")
     rc = sub.add_parser("record", help="write a decision the user answered")
-    for flag in ("question", "claim", "because", "options", "stakes"):
-        rc.add_argument(f"--{flag}", required=True)
+    fields = {"question": "question the user answered", "claim": "user's selected answer",
+              "because": "user's reason", "options": "choices offered to the user", "stakes": "effect of this choice"}
+    for flag, meaning in fields.items():
+        rc.add_argument(f"--{flag}", required=True, help=meaning)
     rc.add_argument("--session-ledger", dest="session_ledger", required=True, metavar="PATH",
                     help="the session ledger file that must contain the answer text")
     rc.add_argument("--host", choices=("claude", "codex"),
@@ -234,10 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--session-id", dest="session_id", metavar="ID",
                     help="the host session id; the environment normally supplies it")
     a = sub.add_parser("assert", help="pin an answer at 1.00 on a user's ruling")
-    a.add_argument("slug")
-    a.add_argument("answer")
-    a.add_argument("--why", required=True)
-    a.add_argument("--confirmed-by-user", dest="confirmed", action="store_true")
+    a.add_argument("slug", help="recorded deputy question slug")
+    a.add_argument("answer", help="answer id, for example a1")
+    a.add_argument("--why", required=True, help="user's reason for pinning this answer")
+    a.add_argument("--confirmed-by-user", dest="confirmed", action="store_true", help="required after explicit user confirmation")
     return p
 
 

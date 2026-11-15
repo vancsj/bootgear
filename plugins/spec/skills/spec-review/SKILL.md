@@ -81,8 +81,15 @@ Each role reads them before finding, attacking, or cutting.
 Use the public converge capability with separate finder, refuter, and cutter roles.
 Use slate `<run-id>-spec-review-<n>` and directory `<session-dir>/converge` in an active run.
 Standalone, use `spec-review-<YYYYMMDD-HHMMSS>` and `$HOME/.bootgear/converge`.
-If the slate exists, resume through public status actions. Do not init it again.
+If the slate exists, resume through public role work. Do not init it again.
 Every later review visit uses a new slate and fresh roles, except the retained advisor listener.
+
+Have each role read `work` for its actor and explicit executing host.
+Give it the printed work package, definitions, evidence, and action inputs.
+Let it fill its own evidence and judgments, then submit through `act` or a direct public command.
+Refresh work after each state change or stale-action refusal.
+Use its waiting, complete, and handoff guidance. Do not assemble state-dependent briefs from separate status and angle reads.
+The orchestrator supplies the receiving role's host when it prepares a package.
 
 Supply the project root and these six lenses to init:
 
@@ -169,8 +176,10 @@ Return the handback to the caller.
 
 ## Judgment rules and safety
 
-Do not edit code or silently settle disputed intent.
-The main role writes only init. Finder, refuters, and cutter write their own events.
+Keep the reviewed code and primary artifacts read-only. Do not silently settle disputed intent.
+On the claim slate, the main role writes only init. Finder, refuters, and cutter write their own events.
+Roles may write their assigned workflow records and read or record memory-ledger entries.
+Keep every other write limit and each judging role's independence.
 Use authoritative intent for desired behaviour and code, tests, and contracts for current behaviour.
 Use the active settlement's source order for contested domain facts.
 Leave choices to the caller's resolve and debate path.

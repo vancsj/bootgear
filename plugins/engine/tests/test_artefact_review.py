@@ -479,10 +479,16 @@ class ArtefactProgressionTest(unittest.TestCase):
             for action in status['plan'][0]:
                 self.assertEqual(action['agent_role'],'r1')
                 fresh=action['batch']=='fresh-eye'
+                checks=[]
                 for angle_id in (['fixture-direct-calculation'] if fresh else action['angles']):
                     tell='The fixture contains a numerical total.' if fresh else attack_rows[angle_id]['tell']
-                    extra=['--last'] if fresh else []
-                    self.converge('attack','review-facts','--as','r1','--claim',claim,'--batch',str(action['batch']),'--angle',angle_id,'--tell',tell,'--outcome','clean','--evidence','20 + 30 = 50, and the supplied total is 70.','--searches','Read the total and both parts.','--positive-control','Present control occurs in the same line.',*extra)
+                    checks.append({'angle':angle_id,'tell':tell,'evidence':'20 + 30 = 50, and the supplied total is 70.','searches':'Read the total and both parts.','positive_control':'Present control occurs in the same line.'})
+                value={'slate':'review-facts','source_seq':len((self.root/'facts/review-facts.jsonl').read_text().splitlines()),'role':'r1','action':'clean','claim':claim,'batch':action['batch'],'checks':checks}
+                if fresh:
+                    value['last']=True
+                action_file=self.root/'clean-action.json'
+                action_file.write_text(json.dumps(value))
+                self.converge('clean','review-facts','--as','r1','--input',str(action_file))
         self.assertEqual(self.converge('status','review-facts')['phase'],'cutoff')
         self.converge('cutoff','review-facts')
         facts={'slate':'review-facts','directory':str(self.root/'facts'),'mappings':{'C1':{'claim':claim,'observation':row['observation'],'locator':row['locator'],'disposition':'kept'}}}

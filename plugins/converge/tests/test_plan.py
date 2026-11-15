@@ -60,13 +60,13 @@ def test_cut_rows_follow_rank_order_and_the_finder_answers(cv: Converge) -> None
 
 def test_attack_rows(cv: Converge) -> None:
     cv.ready(claims=2)
-    assert cv.attack("F001", BATCH_1[0], outcome="refuted") == []
+    assert cv.check("F001", BATCH_1[0], outcome="refuted") == []
     assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[1], claim="F001",
                      reason="no time window") == []
     assert _plan(cv) == [[_row("F001", "attack", "r1", 1, BATCH_1[2:]),
                           _row("F002", "attack", "r1", 1, BATCH_1)]]
     for angle in BATCH_1[2:]:
-        assert cv.attack("F001", angle) == []
+        assert cv.check("F001", angle) == []
     cv.batch_1("F002")
     assert _strip_rule(_plan(cv)) == [[_row("F001", "reply", "finder", 1),
                                        _fresh_row("F002", "r2", BATCH_1)]]
@@ -78,7 +78,7 @@ def test_attack_rows(cv: Converge) -> None:
 def test_fresh_eye_row_has_empty_angles_and_used_list(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye") == []
+    assert cv.check("F001", "retry timing", agent=R2, batch="fresh-eye") == []
     [[row]] = _plan(cv)
     assert row["angles"] == []
     assert row["used"] == [*BATCH_1, "retry timing"]

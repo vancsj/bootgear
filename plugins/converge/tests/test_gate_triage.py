@@ -49,7 +49,7 @@ def _slate(cv: Converge, *tiers: str) -> list[str]:
 
 
 def _survive(cv: Converge, cid: str) -> None:
-    assert cv.attack(cid, RERUN) == []
+    assert cv.check(cid, RERUN) == []
     cv.fresh_eye(cid)
 
 
@@ -109,7 +109,7 @@ def test_triage_gate_passes_a_reproduced_report(cv: Converge) -> None:
 def test_a_killed_claim_needs_no_row_or_tier(cv: Converge, tier: str) -> None:
     kept, killed = _slate(cv, "reproduced", tier)
     _survive(cv, kept)
-    assert cv.attack(killed, RERUN, outcome="refuted") == []
+    assert cv.check(killed, RERUN, outcome="refuted") == []
     cv.ok("reply", "s1", "--as", FINDER, "--claim", killed, "--batch", "1",
           "--stance", "decline")
     _cutoff(cv)
@@ -170,7 +170,7 @@ def test_missing_heading(cv: Converge, missing: str) -> None:
 
 def test_no_surviving_claim(cv: Converge) -> None:
     (cid,) = _slate(cv, "reproduced")
-    assert cv.attack(cid, RERUN, outcome="refuted") == []
+    assert cv.check(cid, RERUN, outcome="refuted") == []
     cv.ok("reply", "s1", "--as", FINDER, "--claim", cid, "--batch", "1", "--stance", "decline")
     _cutoff(cv)
     assert _gate(cv)[0].startswith("GATE ok s1 ")
@@ -181,7 +181,7 @@ def test_no_surviving_claim(cv: Converge) -> None:
 
 def test_unresolved_cause_passes_when_no_claim_survives(cv: Converge) -> None:
     (cid,) = _slate(cv, "reproduced")
-    assert cv.attack(cid, RERUN, outcome="refuted") == []
+    assert cv.check(cid, RERUN, outcome="refuted") == []
     cv.ok("reply", "s1", "--as", FINDER, "--claim", cid, "--batch", "1", "--stance", "decline")
     _cutoff(cv)
     report = _report(cv, [_row(cid)], cause="Status: unresolved")
@@ -270,7 +270,7 @@ def test_solutions_with_no_entry_is_refused(cv: Converge) -> None:
 
 def test_unresolved_cause_needs_a_report_row(cv: Converge) -> None:
     (cid,) = _slate(cv, "reproduced")
-    assert cv.attack(cid, RERUN, outcome="refuted") == []
+    assert cv.check(cid, RERUN, outcome="refuted") == []
     cv.ok("reply", "s1", "--as", FINDER, "--claim", cid, "--batch", "1", "--stance", "decline")
     _cutoff(cv)
     report = _report(cv, [], cause="Status: unresolved")
@@ -313,7 +313,7 @@ def test_a_code_spanned_cell_reads_its_plain_value(cv: Converge, column: str) ->
 def test_a_disputed_claim_fails_while_another_survives(cv: Converge) -> None:
     kept, disputed = _slate(cv, "reproduced", "reproduced")
     _survive(cv, kept)
-    assert cv.attack(disputed, RERUN, outcome="refuted") == []
+    assert cv.check(disputed, RERUN, outcome="refuted") == []
     reply = ("reply", "s1", "--as", FINDER, "--claim", disputed, "--batch", "1",
              "--stance", "rebut")
     cv.ok(*reply, "--evidence", "the re-run shows the quoted output")

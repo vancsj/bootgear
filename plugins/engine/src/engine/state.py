@@ -406,10 +406,11 @@ def _current_node_lookup(text: str, path: Path) -> tuple[dict, str, dict]:
 
 def current_node_view(text: str, path: Path) -> dict:
     """The run's current node, whether it is terminal, its reminder as data
-    and as text, and whether the ledger is closed."""
+    and as text, its valid destinations, and whether the ledger is closed."""
     _, current, node = _current_node_lookup(text, path)
     return {"current": current, "terminal": bool(node.get("terminal")),
             "reminder": _node_reminder_data(node), "text": _node_reminder_text(node),
+            "destinations": [] if node.get("terminal") else list(dict.fromkeys([*(node.get("next") or []), "failed"])),
             "closed": _heading_re("closed").search(text) is not None}
 
 
@@ -455,6 +456,9 @@ def cmd_current(args: argparse.Namespace) -> None:
     path = _ledger_path(args.run_id, args.dir)
     view = current_node_view(_read_text(path), path)
     lines, data, next_step = current_node_report(view, args.run_id, path)
+    data["destinations"] = view["destinations"]
+    if not view["terminal"]:
+        lines.append("destinations: " + ", ".join(view["destinations"]))
     prose = [f"STATE    current: {view['current']}", *lines]
     json_next = data.pop("next", None)
     emit(args.output_mode, data, prose,
@@ -466,6 +470,11 @@ def cmd_transition(args: argparse.Namespace) -> None:
     text = _read_text(path)
     _check_open(text, path)
     reason = _single_line(args.reason, "--reason")
+    force = args.force
+    if force:
+        _, problems = _parse_leave_args(args.leave_arg or [])
+        if problems:
+            sys.exit("invalid --leave-arg: " + "; ".join(problems))
     if any(item.split("=", 1)[0] == "task_folder" for item in (args.leave_arg or [])):
         sys.exit("task_folder is reserved; omit --leave-arg task_folder and use the run binding")
     settlement = yaml.safe_load(_section_body(text, "settlement"))
@@ -479,35 +488,44 @@ def cmd_transition(args: argparse.Namespace) -> None:
         task_folder = str(Path(task_folder).expanduser().resolve())
 
     nodes, current, current_node = _current_node_lookup(text, path)
-    if current_node.get("terminal"):
+    bypassed = []
+    if current_node.get("terminal") and not force:
         sys.exit(f"'{current}' is a terminal node and accepts no outgoing "
                  f"transition, `failed` included — the run already ended")
 
     dest = args.to
     if dest not in nodes:
         sys.exit(f"'{dest}' is not a node in this run's state_machine")
+    if current_node.get("terminal"):
+        bypassed.append("terminal-node")
 
     next_list = current_node.get("next") or []
     if dest != "failed" and dest not in next_list:
-        sys.exit(f"'{current}' has no transition to '{dest}' — legal "
-                 f"destinations from here are {next_list + ['failed']}; "
-                 f"'failed' is always legal regardless of `next:`")
+        if not force:
+            sys.exit(f"'{current}' has no transition to '{dest}' — legal "
+                     f"destinations from here are {next_list + ['failed']}; "
+                     f"'failed' is always legal regardless of `next:`")
+        bypassed.append("edge")
 
     max_visits = nodes[dest].get("max_visits") if isinstance(nodes[dest], dict) else None
     if isinstance(max_visits, int) and not isinstance(max_visits, bool):
         visits = _visit_count(text, dest)
         if visits >= max_visits:
-            sys.exit(f"'{dest}' has max_visits: {max_visits} and the run has "
-                     f"already entered it {visits} time(s) — refusing to enter "
-                     f"it again; 'failed' stays legal")
+            if not force:
+                sys.exit(f"'{dest}' has max_visits: {max_visits} and the run has "
+                         f"already entered it {visits} time(s) — refusing to enter "
+                         f"it again; 'failed' stays legal")
+            bypassed.append("visit-cap")
 
     reminder = current_node.get("reminder")
     leave = reminder.get("leave") if isinstance(reminder, dict) else None
     if leave and dest != "failed" and not args.confirm_leave:
-        sys.exit(f"'{current}' has a leave condition and cannot be left "
-                 f"without confirming it: {leave}\n"
-                 f"Pass --confirm-leave once this is actually true; "
-                 f"'--to failed' needs no confirmation")
+        if not force:
+            sys.exit(f"'{current}' has a leave condition and cannot be left "
+                     f"without confirming it: {leave}\n"
+                     f"Pass --confirm-leave once this is actually true; "
+                     f"'--to failed' needs no confirmation")
+        bypassed.append("leave-confirmation")
 
     log_line = f"- {_now()} {current} -> {dest} ({reason})"
     leave_check = reminder.get("leave_check") if isinstance(reminder, dict) else None
@@ -515,10 +533,16 @@ def cmd_transition(args: argparse.Namespace) -> None:
     exit_check = (exit_checks.get(dest)
                   if isinstance(exit_checks, dict) and dest != "failed" else None)
     refusal = None
-    if not leave_check and exit_check is None and args.leave_arg:
+    if not force and not leave_check and exit_check is None and args.leave_arg:
         sys.exit(f"'{current}' has no leave_check for exit '{dest}', so --leave-arg "
                  f"{', '.join(args.leave_arg)} matches no placeholder")
-    if leave_check and dest != "failed":
+    if force:
+        if leave_check and dest != "failed":
+            bypassed.append("leave-check")
+        elif exit_check is not None:
+            bypassed.append("exit-check")
+        log_line += f" [force requested={dest}; bypassed={','.join(bypassed) or 'none'}]"
+    elif leave_check and dest != "failed":
         try:
             argv = _run_leave_check(current, leave_check, args.leave_arg or [], task_folder)
         except LeaveRefused as refused:
@@ -564,6 +588,9 @@ def cmd_transition(args: argparse.Namespace) -> None:
 
     dest_node = nodes[dest]
     prose = [f"STATE    {current} -> {dest}"]
+    if force:
+        prose.append(f"force requested={args.to}; reason={reason}; "
+                     f"bypassed={','.join(bypassed) or 'none'}")
     reminder_text = _node_reminder_text(dest_node)
     if reminder_text:
         prose.append(reminder_text)
@@ -579,11 +606,15 @@ def cmd_transition(args: argparse.Namespace) -> None:
         prose.append(f"CONFIRM  {confirm}")
         next_step = _close_command(args.run_id, path, dest)
     data = {"from": current, "to": dest, "reminder": reminder_data, "confirm": confirm}
+    if force:
+        data.update(force=True, requested=args.to, reason=reason, bypassed=bypassed)
     if refusal is not None:
         data["refused"] = refusal
     if args.output_mode == "json" and next_step is None and reminder_data:
         # JSON has no `do:` line, so the reminder's step is its `next`.
         next_step = reminder_data["do"]
+    if force and next_step is None:
+        next_step = _ledger_command("state current", args.run_id, path)
     emit(args.output_mode, data, prose, next_step)
 
 
@@ -1047,10 +1078,11 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         help="move the run to a new state machine node")
     s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--to", required=True, metavar="NODE",
-                   help="the destination node — must be in the current "
-                        "node's `next:` list, or 'failed'")
+                   help="destination node; state current lists normal choices, state show lists all nodes for --force")
     s.add_argument("--reason", required=True,
                    help="one line stating why this move happens now")
+    s.add_argument("--force", action="store_true",
+                   help="bypass workflow gates with --reason; keep run, destination, and ledger validation")
     s.add_argument("--confirm-leave", action="store_true",
                    help="required to leave a node whose reminder has a "
                         "`leave` condition, except for 'failed'; bare flag, "

@@ -59,6 +59,9 @@ Use only the sub-tasks required by the request:
 
 ### Scaling to the change
 
+Name the target artifact and each permitted workflow record when briefing a read-only testing role.
+Permit memory-ledger lookup and record. Keep its other write limits and judging independence.
+
 For a small change, write a few cases and run the relevant tests.
 
 For a large or high-risk change, expand case coverage, run integration or end-to-end tests as well as unit tests, and triage every failure with its supporting evidence.

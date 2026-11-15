@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 
+from bootgear_cli.clikit import event_help
+
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "advisor" / "scripts" / "channel.py"
 REMINDER_EVENTS = {"PostToolUse", "UserPromptSubmit"}
 
@@ -42,6 +44,10 @@ def engine_run(channel, session: str) -> str | None:
 
 
 def main() -> None:
+    if event_help("advisor", "hook", "stdin JSON: session_id, hook_event_name, source, and optional agent_id. "
+                  "Events: SessionStart (source compact), PostToolUse, UserPromptSubmit, Stop.",
+                  {"session_id": "example-session", "hook_event_name": "UserPromptSubmit"}):
+        return
     payload = json.loads(sys.stdin.read())
     if not isinstance(payload, dict):
         return

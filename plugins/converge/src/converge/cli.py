@@ -27,6 +27,8 @@ from bootgear_cli.clikit import (
     dumps,
     emit,
     gear_command,
+    host,
+    leaf_commands,
     parser_class,
     refuse,
     render_refusal,
@@ -35,7 +37,7 @@ from bootgear_cli.clikit import (
 
 from . import angles as angles_mod
 from . import config as config_mod
-from . import ledger, model, protocol, render, seats
+from . import ledger, model, protocol, render, seats, work
 from .model import Slate
 
 EXIT_OK, EXIT_NO, EXIT_REFUSED = 0, 1, 2
@@ -55,8 +57,11 @@ EXAMPLES = {
     "angle-na": "angle-na <slate> --dir <dir> --as r1 --phase attack --claim F001 "
                 '--angle <angle> --reason "<why>"',
     "attack": "attack <slate> --dir <dir> --as r1 --claim F001 --batch 1 --angle <angle> "
-              '--tell "<tell>" --outcome clean --evidence "<evidence>" --searches "<searches>" '
+              '--tell "<tell>" --evidence "<evidence>" --searches "<searches>" '
               '--positive-control "<hit>"',
+    "clean": "clean <slate> --dir <dir> --as r1 --input <action.json>",
+    "work": "work <slate> --dir <dir> --as r1 --role-host claude --out <work-dir>",
+    "act": "act <slate> --dir <dir> --as r1 --input <action.json>",
     "reply": 'reply <slate> --dir <dir> --as finder --claim F001 --batch 1 --stance rebut '
              '--evidence "<new evidence>"',
     "verdict": "verdict <slate> --dir <dir> --as r1 --claim F001 --batch 1 --verdict agree",
@@ -147,12 +152,23 @@ def _write(args: argparse.Namespace, event: dict[str, Any], *, create: bool = Fa
             slate = ledger.read(_path(args), args.slate)
         except ledger.LedgerError:
             _refuse(exc.problems)
-        _refuse_next(args, "refused", exc.problems, _next_step(args, slate))
+        _refuse_next(args, "refused", exc.problems,
+                     getattr(args, "action_next", None) or _writer_next(args, slate))
 
 
 def _written(args: argparse.Namespace, data: dict[str, Any], line: str) -> None:
     """Print a written event's result line and the slate's next step."""
-    emit(args.output_mode, data, line, _next_step(args, _read(args)))
+    emit(args.output_mode, data, line,
+         getattr(args, "action_next", None) or _writer_next(args, _read(args)))
+
+
+def _writer_next(args: argparse.Namespace, slate: Slate) -> str:
+    actor = getattr(args, "agent", None)
+    if actor is None or actor == slate.events[0]["as"]:
+        return _next_step(args, slate)
+    return ("report the result to main; refresh your work: "
+            + _role_command(args, host() or "claude", "work")
+            + " --role-host " + (host() or "claude"))
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +179,7 @@ def _gap_hunt_open(slate: Slate) -> bool:
     """The gap hunt may still file: it is on, the slate has r2, and no escalate, cut or attack
     is written."""
     return (bool(slate.config["steps"]["gap_hunt"]) and slate.init_refuters == 2
-            and not any(e["event"] in ("escalate", "cut", "attack") for e in slate.events))
+            and not any(e["event"] in ("escalate", "cut", "clean", "attack") for e in slate.events))
 
 
 def _plan_text(slate: Slate) -> str:
@@ -187,9 +203,9 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
     gap_open = _gap_hunt_open(slate)
     if gap_open:
-        gap = _step(args, "file", "--as r2 --origin gap-hunt --lens <lens> --angle <angle>")
-        step = (f"gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
-                f"escalate, cut or attack; then {step}")
+        step = ("gap hunt: continue r2 with work and its explicit executing host; "
+                "r2 submits generated act actions, then reports completion to main; "
+                f"before the first escalate, cut or attack; then {step}")
     plan = protocol.batch_plan(slate)
     advisor_due = gap_open or any(row["agent_role"] == seats.ADVISOR_SEAT
                                  for row in (plan[0] if plan else []))
@@ -408,14 +424,15 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
                 (f"USER_REQUEST: You are seat {seat} ({', '.join(named)}) on converge slate "
                  f"{slate_id}. {brief.rstrip('.')}. <role brief for this turn>"),
                 "CONTEXT: <claims under test: id, text, loc, trigger; this turn's angles>",
-                (f"SCOPE: write events only with: {converge} <attack|reply|verdict|file|rebut|accept|escalate|angle-na> "
-                 f"{shlex.quote(slate_id)} "
-                 f"--dir {quoted_dir} --as {seat} ...; these commands append to "
-                 f"{shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}; if a write is denied, "
-                 f'run nothing else and reply "WRITE-DENIED {seat}: '
-                 f'<the error text>"; read any file; memory-ledger lookup and record are allowed; '
-                 f'change no other files; reply with every line '
-                 f"those commands print"),
+                ("SCOPE: Call cli:gear through your own host. "
+                 f"Run work {shlex.quote(slate_id)} --dir {quoted_dir} --as {seat} "
+                 "--role-host <your executing host>. "
+                 "Use that host in Gear's --host option. "
+                 "Fill a generated action and submit it through act. "
+                 f"Write only your events in {shlex.quote(str(abs_dir / f'{slate_id}.jsonl'))}, "
+                 "task action files, and memory-ledger entries. Read any source file. "
+                 f'If a write is denied, stop and reply "WRITE-DENIED {seat}: <the error text>". '
+                 "Reply with the command results. Preserve all other write limits."),
                 "Tests already ran:",
                 "- latest test: <recorded command>; result: <one recorded result line>",
                 "Required: main agent fills this part by hand before each send.",
@@ -644,15 +661,91 @@ def _batch_arg(value: str) -> int | str:
 
 def cmd_attack(args: argparse.Namespace) -> None:
     event = {"event": "attack", "claim": args.claim, "batch": args.batch, "angle": args.angle,
-             "tell": args.tell, "outcome": args.outcome, "evidence": args.evidence,
+             "tell": args.tell, "evidence": args.evidence,
              "searches": args.searches, "positive_control": args.positive_control}
     if args.last:
         event["last"] = True
     written = _write(args, event)
     _written(args, {"seq": written["seq"], "claim": args.claim, "batch": args.batch,
-                    "angle": args.angle, "outcome": args.outcome},
+                    "angle": args.angle, "outcome": "refuted"},
              f"ATTACK seq={written['seq']} {args.claim} batch={args.batch} angle={args.angle} "
-             f"outcome={args.outcome}")
+             "outcome=refuted")
+
+
+def _role_command(args: argparse.Namespace, role_host: str, command: str) -> str:
+    return (f"{gear_command('converge', 'converge', host=role_host)} {command} "
+            f"{shlex.quote(args.slate)} --dir {shlex.quote(str(args.dir.resolve()))} "
+            f"--as {shlex.quote(args.agent)}")
+
+
+def cmd_work(args: argparse.Namespace) -> None:
+    slate = _read(args)
+    try:
+        package = work.package(slate, args.agent, args.role_host, args.role)
+    except ledger.LedgerError as exc:
+        _refuse(exc.problems)
+    submit = _role_command(args, args.role_host, "act")
+    package["submit"] = submit + " --input <action.json>"
+    lines = [(f"WORK {args.agent} seat={package['seat']} phase={package['phase']} "
+              f"state={package['state']} seq={package['source_seq']}")]
+    for item in package["items"]:
+        lines.append("ITEM " + dumps(item))
+    for definition in package["definitions"]:
+        lines.append("ANGLE " + dumps(definition))
+    action_dir = None
+    if args.out is not None and package["actions"]:
+        args.out.mkdir(parents=True, exist_ok=True)
+        action_dir = Path(tempfile.mkdtemp(prefix=f"work-{package['source_seq']}-", dir=args.out))
+    for index, action in enumerate(package["actions"], start=1):
+        if action_dir is not None:
+            path = action_dir / f"{index:03d}-{action['input']['action']}.json"
+            path.write_text(json.dumps(action["input"], indent=2) + "\n")
+            value = action.pop("input")
+            action.update({key: value[key] for key in ("action", "claim", "batch", "when", "stance", "verdict")
+                           if key in value})
+            action["path"] = str(path)
+        lines.append("ACTION " + dumps(action))
+    if package["actions"]:
+        step = "choose an action, supply its evidence, then " + package["submit"]
+    elif package["seat"] == "main":
+        step = (f"{_step(args, 'render')}; then {_step(args, 'gate')}; "
+                f"then {_step(args, 'converged')}; hand back the result" if package["phase"] == "done"
+                else _next_step(args, slate))
+    else:
+        step = f"report {package['state']} to main; wait for assigned work"
+    package["next"] = step
+    if args.out is not None:
+        (args.out / "work.json").parent.mkdir(parents=True, exist_ok=True)
+        (args.out / "work.json").write_text(json.dumps(package, indent=2) + "\n")
+    emit(args.output_mode, package, lines, step)
+
+
+def cmd_action(args: argparse.Namespace) -> None:
+    args.action_next = ("refresh your work: " + _role_command(args, host() or "claude", "work")
+                        + " --role-host " + (host() or "claude"))
+    try:
+        text = sys.stdin.read() if args.input == "-" else caller_path(args.input).read_text()
+        value = json.loads(text)
+    except (OSError, json.JSONDecodeError) as exc:
+        _refuse_next(args, "invalid action", [str(exc)], args.action_next)
+    if not isinstance(value, dict):
+        _refuse_next(args, "invalid action", ["input must be one JSON object"], args.action_next)
+    if args.command == "clean" and value.get("action") != "clean":
+        _refuse_next(args, "invalid action", ["clean requires action=clean"], args.action_next)
+
+    def build(slate: Slate) -> dict[str, Any]:
+        event = work.event(slate, value, args.agent)
+        if event["event"] == "fix-check" and event.get("outcome") == "pass":
+            review_args = argparse.Namespace(**vars(args), review_slate=event["review_slate"])
+            problems, _ = _review_problems(review_args, slate)
+            if problems:
+                raise ledger.LedgerError(problems)
+        return event
+
+    written = _write(args, {"event": value.get("action")}, build=build)
+    data = {key: field for key, field in written.items() if key not in ("ts", "as")}
+    _written(args, data, f"{written['event'].upper()} seq={written['seq']} "
+             + str(written.get("claim", "")))
 
 
 def cmd_reply(args: argparse.Namespace) -> None:
@@ -1251,28 +1344,30 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
         p.set_defaults(func=func)
         return p
 
-    def config_args(p: argparse.ArgumentParser) -> None:
+    def config_args(p: argparse.ArgumentParser, *, root_help: str =
+                    "project directory for .bootgear/config layers; default is the caller directory") -> None:
         p.add_argument("--config", type=caller_path, help="task-layer converge.yaml")
-        p.add_argument("--project-root", type=caller_path, default=caller_cwd())
+        p.add_argument("--project-root", type=caller_path, default=caller_cwd(), help=root_help)
 
     p = command("init", cmd_init, write=True)
     p.add_argument("--lenses", default="")
     p.add_argument("--angles", nargs="*", type=caller_path, default=[])
     p.add_argument("--snapshot", action="store_true",
-                   help="pin a work-tree snapshot commit at refs/converge/<slate>")
+                   help="pin a work-tree snapshot commit at refs/converge/<slate>; requires --pass")
     p.add_argument("--pass", dest="review_pass", type=int, metavar="N",
-                   help="review pass number; N >= 2 lays cutoff.rereview.lenses over cutoff.lenses")
+                   help="review pass number; N >= 1; passes from 2 use cutoff.rereview.lenses over cutoff.lenses")
     p.add_argument("--since", metavar="PREV_SLATE",
-                   help="previous pass's slate; prints the git diff between the snapshots")
+                   help="previous slate with a snapshot; requires --snapshot and --pass equal to the previous pass + 1; prints their git diff")
     p.add_argument("--settlement", type=caller_path, metavar="FILE",
                    help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
     p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
                    help="refuter seats on the slate; 1 drops r2")
     p.add_argument("--defaults", type=caller_path, metavar="FILE",
                    help="caller-layer converge.yaml, below the user layer: a skill's cutoff tables")
-    config_args(p)
+    config_args(p, root_help="project directory for .bootgear/config layers and git refs/converge/<slate> snapshots")
 
     p = command("file", cmd_file, write=True)
+    p.description = "File a supported claim. Every claim requires lens and angle. origin=lens uses an init lens; gap-hunt belongs to R2."
     p.add_argument("--lens")
     p.add_argument("--angle")
     p.add_argument("--loc", required=True)
@@ -1289,6 +1384,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--rule")
 
     p = command("escalate", cmd_escalate, write=True)
+    p.description = "Record the escalation check. For no widening, omit both wider and evidence; still record the check."
     p.add_argument("--claim", required=True)
     p.add_argument("--wider")
     p.add_argument("--evidence")
@@ -1300,6 +1396,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="`none` if the find filed no claim, else the claim ids it filed, comma-separated")
 
     p = command("angle-na", cmd_angle_na, write=True)
+    p.description = "Record an absent tell. find requires lens; attack requires claim and a current table angle."
     p.add_argument("--phase", required=True)
     p.add_argument("--angle", required=True)
     p.add_argument("--reason", required=True)
@@ -1307,6 +1404,9 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--claim")
 
     p = command("cut", cmd_cut, write=True)
+    p.description = ("Rate the current cut. after requires difficulty. A matching choice policy requires choice. "
+                     "Artifact trivial/local also requires patch, callers=none, and migration=none. "
+                     "Implementation difficulty requires callers and migration. Read current work for the lens policy.")
     p.add_argument("--claim", required=True)
     p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
@@ -1324,19 +1424,45 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="whether the fix changes a signature, output format or config key")
     p.add_argument("--migration", metavar="{none,needed}",
                    help="whether the fix needs a data or interface migration")
-    p.add_argument("--evidence", action="append", default=[], metavar="ANGLE=TEXT")
-    p.add_argument("--choice")
+    p.add_argument("--evidence", action="append", default=[], metavar="ANGLE=TEXT",
+                   help="repeat ANGLE=TEXT for each applicable evaluate angle")
+    p.add_argument("--choice", help="decision options; required when choice_if matches or cheap policy requires a noncheap decision")
 
     p = command("attack", cmd_attack, write=True)
+    p.description = "Record one refuted angle. Use clean for checked angles that do not refute the claim."
     p.add_argument("--claim", required=True)
     p.add_argument("--batch", required=True, type=_batch_arg)
-    for flag in ("--angle", "--tell", "--outcome", "--evidence", "--searches",
+    for flag in ("--angle", "--tell", "--evidence", "--searches",
                  "--positive-control"):
         p.add_argument(flag, required=True)
     p.add_argument("--last", action="store_true",
                    help="close the fresh-eye batch with this attack")
 
+    for name in ("clean", "act"):
+        p = command(name, cmd_action, write=True)
+        p.formatter_class = argparse.RawDescriptionHelpFormatter
+        p.description = ("Submit a generated JSON action from work. Its envelope has slate, source_seq, role, and action. "
+                         "Clean also has claim, batch, and checks. "
+                         "Each check has angle, tell, evidence, searches, and positive_control. "
+                         "Use last=true only to finish a fresh-eye batch below its cap. "
+                         "Replace example context with current work and supply your own checked evidence.\n"
+                         'JSON example: {"slate":"s1","source_seq":1,"role":"r1","action":"clean",'
+                         '"claim":"F001","batch":1,"checks":[{"angle":"cited-but-unread",'
+                         '"tell":"claim cites a source","evidence":"a.py:1 defines the cited entry",'
+                         '"searches":"rg entry a.py","positive_control":"entry found at a.py:1"}]}')
+        p.add_argument("--input", required=True, metavar="FILE|-",
+                       help="one generated action object; - reads stdin; all checks validate before append")
+
+    p = command("work", cmd_work, write=True)
+    p.add_argument("--role-host", required=True, choices=("claude", "codex"),
+                   help="host that executes this role's commands; always explicit")
+    p.add_argument("--role", choices=seats.SEATS,
+                   help="seat for a custom agent id not yet present in the slate")
+    p.add_argument("--out", type=caller_path,
+                   help="optional: save work.json and separate editable actions in an assigned workflow directory outside the target artifact")
+
     p = command("reply", cmd_reply, write=True)
+    p.description = "Reply to the batch's refutation. rebut requires new evidence; decline carries no evidence or text."
     p.add_argument("--claim", required=True)
     p.add_argument("--batch", required=True, type=_batch_arg)
     p.add_argument("--stance", required=True)
@@ -1344,6 +1470,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--text", help="the clarified claim text, with stance rebut")
 
     p = command("verdict", cmd_verdict, write=True)
+    p.description = "Answer the finder's rebuttal. disagree requires evidence; agree does not require evidence."
     p.add_argument("--claim", required=True)
     p.add_argument("--batch", required=True, type=_batch_arg)
     p.add_argument("--verdict", required=True)
@@ -1369,7 +1496,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="the slate that re-reviewed only the patch; required with pass")
 
     p = command("status", cmd_status)
-    p.add_argument("--json", action="store_true")
+    p.add_argument("--json", action="store_true", help="print JSON")
     command("converged", cmd_converged)
     command("cutoff", cmd_cutoff)
     command("coverage", cmd_coverage)
@@ -1385,8 +1512,10 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     command("render", cmd_render)
 
     p = command("prune", cmd_prune, slate=False)
-    p.add_argument("slates", nargs="+", metavar="slate")
-    p.add_argument("--project-root", type=caller_path, default=caller_cwd())
+    p.add_argument("slates", nargs="+", metavar="slate",
+                   help="slate ids whose refs/converge/<slate> snapshot refs will be deleted")
+    p.add_argument("--project-root", type=caller_path, default=caller_cwd(),
+                   help="git repository that holds refs/converge/<slate> snapshot refs")
 
     p = command("angles", cmd_angles, slate=False)
     p.add_argument("--tag", choices=angles_mod.TAGS)
@@ -1397,6 +1526,46 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("action", choices=("validate", "resolve"))
     config_args(p)
     add_mode_flags(parser)
+    guidance = {
+        "slate": "saved slate id; lowercase letters, digits, dots, underscores, and hyphens",
+        "dir": "slate directory; default ~/.bootgear/converge; gate requires an absolute path",
+        "lenses": "comma-separated lens ids; at least one is required",
+        "angles": "YAML angle files; saved with effective built-in definitions during init",
+        "lens": "lens id; required for every claim and phase=find",
+        "angle": "saved angle id; fresh-eye attacks instead use a new printable one-line name",
+        "loc": "source location as path:line",
+        "claim": "claim text for file; saved claim id for other commands",
+        "trigger": "concrete input or action that reaches the claimed effect",
+        "origin": "lens for the finder; gap-hunt for R2 after find coverage",
+        "depends": "comma-separated earlier claim ids",
+        "rule": "report rule id from the effective cutoff policy",
+        "wider": "wider claim text; requires evidence; omit both for no widening",
+        "evidence": "observed output or source:line evidence",
+        "tell": "why this angle applies",
+        "searches": "searches actually performed",
+        "positive_control": "a known matching result from the search",
+        "phase": "find checks one lens; attack checks one claim's current table batch",
+        "reason": "one printable line explaining why the tell does not apply",
+        "when": "before the attack or after it",
+        "round": "positive cut round; work fills the current next round",
+        "impact": "effect supported by evaluate evidence",
+        "size": "affected user or record count class",
+        "reach": "which caller can reach the trigger",
+        "batch": "positive integer for a table batch, or fresh-eye",
+        "stance": "rebut needs new evidence; decline kills the claim",
+        "verdict": "agree ends the dispute; disagree requires evidence",
+        "last": "finish this fresh-eye batch below its cap; invalid for numeric batches",
+        "tag": "return definitions for this angle purpose",
+        "action": "validate checks configuration; resolve prints the effective layers",
+    }
+    enums = {"origin": model.ORIGIN, "tier": model.TIER, "phase": model.PHASE,
+             "when": protocol.WHEN, "stance": protocol.STANCE, "verdict": protocol.VERDICT}
+    for leaf in leaf_commands(parser).values():
+        for argument in leaf._actions:
+            if argument.help is None:
+                argument.help = guidance.get(argument.dest)
+            if argument.dest in enums:
+                argument.metavar = "{" + ",".join(enums[argument.dest]) + "}"
     return parser
 
 

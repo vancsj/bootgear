@@ -24,7 +24,7 @@ class RuntimeNotReady(Exception):
 
 class SetupParser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
-        self.exit(2, f"gear: {message}\nexample: {self.prog} --help\ncommands: setup, session-start\n")
+        self.exit(2, f"example: {self.prog} --help\ncommands: setup, session-start\ngear: {message}\n")
 
 
 def environment_path(cli_root: Path = CLI_ROOT) -> Path:
@@ -92,11 +92,14 @@ def prepared(cli_root: Path = CLI_ROOT) -> Iterator[Path]:
 def main() -> int:
     from bootgear_cli import clikit, dependencies
 
-    parser = SetupParser(prog=clikit.current_program("cli", "setup"), description=__doc__)
+    program = clikit.current_program("cli", "setup")
+    parser = SetupParser(prog=program, description=__doc__,
+                         epilog=f"example: {program} --plugin engine",
+                         formatter_class=argparse.RawDescriptionHelpFormatter)
     flags = parser.add_mutually_exclusive_group()
     flags.add_argument("--json", action="store_true")
     flags.add_argument("--prose", action="store_true")
-    parser.add_argument("--plugin", help="prepare the installed plugin's declared sibling dependencies")
+    parser.add_argument("--plugin", help="installed provider name from gear list; prepare its declared sibling dependencies")
     args = parser.parse_args()
     mode = clikit.resolve_mode(args.json, args.prose)
     try:

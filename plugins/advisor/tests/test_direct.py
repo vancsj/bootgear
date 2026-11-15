@@ -43,6 +43,7 @@ def test_direct_call_keeps_defaults_or_passes_only_requested_overrides(
         assert args[0] == "exec"
         assert "--ephemeral" in args
         assert args[args.index("-s") + 1] == "read-only"
+        assert "--dangerously-bypass-approvals-and-sandbox" not in args
         assert "--ignore-user-config" in args and "--ignore-rules" in args
         assert not Path(args[args.index("-o") + 1]).exists()
         assert ("-m" in args) == ("MODEL" in overrides)

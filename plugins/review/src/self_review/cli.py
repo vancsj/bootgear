@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, NoReturn, TextIO, TypeGuard
 
-from bootgear_cli.clikit import current_program, emit
+from bootgear_cli.clikit import Catalog, add_help_examples, current_program, emit
 
 PROGRAM = current_program("review", "self-review")
 STAGES = ("spec", "code")
@@ -428,16 +428,35 @@ def main(argv: list[str] | None = None) -> int:
     for command in COMMANDS:
         sub = commands.add_parser(command)
         if command == "check":
-            sub.add_argument("--kind", choices=WRITING_KINDS, required=True)
-            sub.add_argument("--files", nargs="+", required=True, metavar="FILE")
+            sub.add_argument("--kind", choices=WRITING_KINDS, required=True, help="procedure checks sentences; description checks skill metadata")
+            sub.add_argument("--files", nargs="+", required=True, metavar="FILE", help="UTF-8 files to check")
         else:
-            sub.add_argument("--task-folder", required=command != "settings", default=".")
-            sub.add_argument("--project-root", default=os.environ.get("GEAR_CALLER_CWD", os.getcwd()))
-            sub.add_argument("--stage", choices=STAGES, required=command in ("open", "configure", "pass"))
-            sub.add_argument("--input", help="One JSON file, or '-' for stdin")
+            sub.add_argument("--task-folder", required=command != "settings", default=".", help="fixed task folder containing the checkpoint record")
+            sub.add_argument("--project-root", default=os.environ.get("GEAR_CALLER_CWD", os.getcwd()), help="project root for configured source candidates")
+            sub.add_argument("--stage", choices=STAGES, required=command in ("open", "configure", "pass"), help="artifact stage; required for writes")
+            sub.add_argument("--input", help="JSON request file, or '-' for stdin; required fields are listed below")
+            if command in ("open", "configure"):
+                sub.epilog = (
+                    'Input JSON: {"candidates":[],"selections":[],"limit":2}.\n'
+                    "Candidate fields: name, origins (project-config, user-request, host-registration, caller-judgement).\n"
+                    "Selection fields: name, mode (invoke, absorb, neither), scope, coverage, confirmation {kind, ref}.\n"
+                    "Confirmation kind: user-message or user-confirmed-ledger-entry. A changed limit needs limit_confirmation.\n"
+                    "Renewing a closed checkpoint needs renewal; use settings for supported values."
+                )
+            elif command == "pass":
+                sub.epilog = ('Input JSON: {"expected_pass":1,"result":"clean","unresolved_refs":[]}.\n'
+                              "result: clean or found. expected_pass must equal the current count plus one.\n"
+                              "unresolved_refs lists references the caller still needs to resolve.")
         output = sub.add_mutually_exclusive_group()
         output.add_argument("--json", action="store_true")
         output.add_argument("--prose", action="store_true")
+    examples = {name: f"{name} --task-folder <folder> --stage spec" for name in COMMANDS}
+    examples.update(settings="settings --project-root <dir>",
+                    check="check --kind procedure --files <file>",
+                    open="open --task-folder <folder> --stage spec --input <request.json>",
+                    configure="configure --task-folder <folder> --stage spec --input <request.json>",
+                    **{"pass": "pass --task-folder <folder> --stage spec --input <request.json>"})
+    add_help_examples(parser, Catalog(prog=PROGRAM, examples=examples))
     args = parser.parse_args(argv)
     if args.command == "check":
         return writing_check(args)

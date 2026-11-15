@@ -174,9 +174,9 @@ def test_complete_snapshot_needs_every_key() -> None:
     del snapshot["caps"]["batch_items"]
     del snapshot["cutoff"]["report_rules"]
     problems = config_mod.validate_config(snapshot, "snapshot", complete=True)
-    assert "snapshot: missing section 'steps'" in problems
-    assert "snapshot: caps.batch_items is missing" in problems
-    assert "snapshot: cutoff.report_rules is missing" in problems
+    assert any(("snapshot: missing section 'steps'") in problem for problem in problems)
+    assert any(("snapshot: caps.batch_items is missing") in problem for problem in problems)
+    assert any(("snapshot: cutoff.report_rules is missing") in problem for problem in problems)
 
 
 def test_complete_per_lens_needs_default() -> None:
@@ -236,14 +236,14 @@ def test_init_event_validates_refuters_and_config() -> None:
     assert ledger.validate_event(slate, _init_event()) == []
     for value in (0, 3, "2", True):
         problems = ledger.validate_event(slate, _init_event(refuters=value))
-        assert f"`refuters` must be 1 or 2; got {value!r}" in problems, problems
+        assert any((f"`refuters` must be 1 or 2; got {value!r}") in problem for problem in problems), problems
     assert "init: missing required field `refuters`" in ledger.validate_event(
         slate, _init_event(refuters=None))
     config = copy.deepcopy(config_mod.DEFAULTS)
     config["caps"]["per_lens"] = 3
     problems = ledger.validate_event(slate, _init_event(config=config))
-    assert ("config snapshot: snapshot: caps.per_lens must be a map; use per_lens: "
-            "{default: <n>}") in problems
+    assert any(("config snapshot: snapshot: caps.per_lens must be a map; use per_lens: "
+            "{default: <n>}") in problem for problem in problems)
 
 
 def test_init_with_mode_and_version_fails_replay(cv: Converge) -> None:

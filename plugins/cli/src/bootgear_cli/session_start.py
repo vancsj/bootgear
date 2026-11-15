@@ -7,12 +7,15 @@ import os
 import subprocess
 import sys
 
-from bootgear_cli import hook_loader
+from bootgear_cli import clikit, hook_loader
 
 
 def main() -> int:
     """Query the host once and rewrite the session's entry. A query, store or payload
     failure prints nothing and exits 0."""
+    if clikit.event_help("cli", "session-start", "stdin JSON with session_id; Gear supplies the host.",
+                         {"session_id": "example-session", "hook_event_name": "SessionStart"}):
+        return 0
     with contextlib.suppress(OSError, ValueError, TypeError, RuntimeError, subprocess.TimeoutExpired):
         payload = json.loads(sys.stdin.buffer.read())
         host = os.environ.get("BOOTGEAR_HOST")

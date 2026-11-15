@@ -253,12 +253,21 @@ class Scratch(unittest.TestCase):
         return covered
 
     def _attack(self, slate, agent, batch, angle, *extra):
-        return self._converge("attack", slate, "--dir", str(self.ledgers), "--as", agent,
-                              "--claim", "F001", "--batch", batch, "--angle", angle,
-                              "--tell", "tell applies",
-                              "--outcome", "clean", "--evidence", "re-ran it: 1 failed",
-                              "--searches", "uv run pytest -q",
-                              "--positive-control", "the output names x", *extra)
+        action = {
+            "slate": slate,
+            "source_seq": len((self.ledgers / f"{slate}.jsonl").read_text().splitlines()),
+            "role": agent, "action": "clean", "claim": "F001",
+            "batch": batch if batch == "fresh-eye" else int(batch),
+            "checks": [{"angle": angle, "tell": "tell applies",
+                        "evidence": "re-ran it: 1 failed", "searches": "uv run pytest -q",
+                        "positive_control": "the output names x"}],
+        }
+        if "--last" in extra:
+            action["last"] = True
+        path = self.tmp / "clean-action.json"
+        path.write_text(json.dumps(action))
+        return self._converge("clean", slate, "--dir", str(self.ledgers), "--as", agent,
+                              "--input", str(path))
 
     def _report(self, rows=(), headings=("Cause", "Impact", "Confidence", "Next action",
                                              "Solutions")):
@@ -486,12 +495,22 @@ class GateChecks(Scratch):
                 self.assertEqual(status.returncode, 0, status.stderr)
                 self.assertNotIn("gap hunt", status.stdout)
                 self.assertIn("next: escalate: finder escalate F001", status.stdout)
+                work = self._converge("work", f"gap-{profile}", "--dir", str(self.ledgers),
+                                      "--as", "r2", "--role-host", HOST, "--json")
+                self.assertEqual(work.returncode, 0, work.stderr)
+                self.assertFalse(any(item["action"] == "gap-hunt"
+                                     for item in json.loads(work.stdout)["items"]))
         # Positive control: the same profile without its `steps` opens the gap hunt.
         without_steps = _load_yaml(TRIAGE_PROFILES["product"])
         without_steps.pop("steps", None)
         control = self.tmp / "cutoff-no-steps.yaml"
         control.write_text(yaml.safe_dump(without_steps))
-        self.assertIn("next: gap hunt: r2 files", self._filed_and_covered("gap-on", control).stdout)
+        self._filed_and_covered("gap-on", control)
+        work = self._converge("work", "gap-on", "--dir", str(self.ledgers),
+                              "--as", "r2", "--role-host", HOST, "--json")
+        self.assertEqual(work.returncode, 0, work.stderr)
+        self.assertTrue(any(item["action"] == "gap-hunt"
+                            for item in json.loads(work.stdout)["items"]))
 
     def test_triage_profiles_attack_a_claim_rated_outside_the_product_rule(self):
         ratings = (("cosmetic", "normal"), ("clarity", "unreachable"), ("cosmetic", "unreachable"))
@@ -590,7 +609,7 @@ class GateChecks(Scratch):
                 refuted = self._converge("attack", slate, "--dir", str(self.ledgers), "--as", "r1",
                                          "--claim", "F001", "--batch", "1",
                                          "--angle", "reproduction-rerun", "--tell", "tell applies",
-                                         "--outcome", "refuted", "--evidence", "re-ran it: passes",
+                                         "--evidence", "re-ran it: passes",
                                          "--searches", "uv run pytest -q",
                                          "--positive-control", "the output names x")
                 self.assertEqual(refuted.returncode, 0, refuted.stderr)

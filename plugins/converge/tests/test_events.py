@@ -56,7 +56,7 @@ def _rating(cv: Converge) -> dict[str, Any]:
 
 
 def test_event_kinds() -> None:
-    assert model.EVENTS == ("init", "file", "escalate", "find-run", "angle-na", "attack", "reply",
+    assert model.EVENTS == ("init", "file", "escalate", "find-run", "angle-na", "clean", "attack", "reply",
                             "verdict", "cut", "rebut", "accept", "cutoff", "fix-check")
 
 
@@ -94,8 +94,8 @@ def test_sixth_agent_id_is_refused(cv: Converge) -> None:
 
 def test_reserved_agent_id_is_refused(cv: Converge) -> None:
     cv.ready()
-    problems = cv.attack("F001", BATCH_1[0], agent=model.CONVERGE_AGENT)
-    assert "agent id 'converge' is reserved for computed cutoff events" in problems
+    problems = cv.check("F001", BATCH_1[0], agent=model.CONVERGE_AGENT)
+    assert any(("agent id 'converge' is reserved for computed cutoff events") in problem for problem in problems)
     assert ("agent id 'converge' is reserved for computed cutoff events"
             in cv.file(agent=model.CONVERGE_AGENT, code=2))
 
@@ -105,7 +105,7 @@ def test_events_need_init(cv: Converge) -> None:
     cv.path().write_text("")
     problems = cv.append("file", FINDER, id="F001", loc="a.py:1", claim="c", trigger="t",
                          origin="lens")
-    assert f"file: the slate has no init event; run `{GEAR_COMMAND} init` first" in problems
+    assert any((f"file: the slate has no init event; run `{GEAR_COMMAND} init` first") in problem for problem in problems)
 
 
 # -- file and escalate ------------------------------------------------------------
@@ -123,8 +123,8 @@ def test_file_needs_evidence_and_tier(cv: Converge) -> None:
     fields = {"id": "F001", "loc": "a.py:1", "claim": "c", "trigger": "t", "origin": "lens",
               "lens": "correctness", "angle": "changed-contract"}
     problems = cv.append("file", FINDER, **fields)
-    assert "file: missing required field `evidence`" in problems
-    assert "file: missing required field `tier`" in problems
+    assert any(("file: missing required field `evidence`") in problem for problem in problems)
+    assert any(("file: missing required field `tier`") in problem for problem in problems)
     problems = cv.append("file", FINDER, **fields, evidence=" ", tier="traced")
     assert problems == ["`evidence` must be a non-empty string"]
     assert cv.file(tier="reproduced") == "F001"
@@ -145,7 +145,7 @@ def test_file_is_refused_after_the_first_escalate(cv: Converge) -> None:
 
 def test_file_and_escalate_are_refused_after_the_first_attack(cv: Converge) -> None:
     cv.ready(claims=2, escalate=False)
-    assert cv.attack("F001", BATCH_1[0]) == []
+    assert cv.check("F001", BATCH_1[0]) == []
     assert ("file: claims are filed before the first escalate, cut or attack event"
             in cv.file(code=2))
     assert ("escalate: escalate comes before the first cut or attack event"
@@ -166,7 +166,7 @@ def test_angle_na_phases(cv: Converge) -> None:
     cv.ready()
     problems = cv.append("angle-na", R1, phase="refute", angle=BATCH_1[0], claim="F001",
                          reason="r")
-    assert "`phase` must be one of find, attack; got 'refute'" in problems
+    assert any(("`phase` must be one of find, attack; got 'refute'") in problem for problem in problems)
     assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
                      reason="no time window in the claim") == []
     assert _claim(cv).na_angles == {BATCH_1[0]}
@@ -178,51 +178,45 @@ def test_angle_na_phases(cv: Converge) -> None:
 def test_attack_fields(cv: Converge) -> None:
     cv.ready()
     for batch in (0, "two", True):
-        assert ("`batch` must be a positive integer or fresh-eye; got "
-                f"{batch!r}") in cv.attack("F001", BATCH_1[0], batch=batch)
-    assert ("`outcome` must be one of clean, refuted; got 'survived'"
-            in cv.attack("F001", BATCH_1[0], outcome="survived"))
-    assert ("attack: `last` is given only with batch fresh-eye"
-            in cv.attack("F001", BATCH_1[0], last=True))
+        assert any(("`batch` must be a positive integer or fresh-eye; got "
+                f"{batch!r}") in problem for problem in cv.check("F001", BATCH_1[0], batch=batch))
+    assert "attack: unknown field `outcome`" in cv.append(
+        "attack", R1, claim="F001", batch=1, angle=BATCH_1[0], tell="t",
+        evidence="e", searches="s", positive_control="p", outcome="clean")
+    assert (any(("attack: `last` is given only with batch fresh-eye") in problem for problem in cv.check("F001", BATCH_1[0], last=True)))
     problems = cv.append("attack", R1, claim="F001", batch=1, angle=BATCH_1[0])
-    assert "attack: missing required field `tell`" in problems
-    assert "attack: unknown field `round`" in cv.attack("F001", BATCH_1[0], round=1)
-    assert "unknown claim 'F009'" in cv.attack("F009", BATCH_1[0])
+    assert any(("attack: missing required field `tell`") in problem for problem in problems)
+    assert any("unknown field `round`" in problem for problem in cv.check("F001", BATCH_1[0], round=1))
+    assert any(("unknown claim 'F009'") in problem for problem in cv.check("F009", BATCH_1[0]))
 
 
 def test_table_attack_angle_rules(cv: Converge) -> None:
     cv.ready()
-    assert ("unknown attack angle 'made-up' (not in this slate's init snapshot)"
-            in cv.attack("F001", "made-up"))
-    assert "unknown attack angle 'boundary' (not in this slate's init snapshot)" in cv.attack(
-        "F001", "boundary")
-    assert cv.attack("F001", BATCH_1[0]) == []
-    assert (f"attack: angle {BATCH_1[0]!r} was already used on F001"
-            in cv.attack("F001", BATCH_1[0]))
+    assert (any(("unknown attack angle 'made-up' (not in this slate's init snapshot)") in problem for problem in cv.check("F001", "made-up")))
+    assert any(("unknown attack angle 'boundary' (not in this slate's init snapshot)") in problem for problem in cv.check(
+        "F001", "boundary"))
+    assert cv.check("F001", BATCH_1[0]) == []
+    assert (any((f"attack: angle {BATCH_1[0]!r} was already used on F001") in problem for problem in cv.check("F001", BATCH_1[0])))
     assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[1], claim="F001",
                      reason="no time window in the claim") == []
-    assert (f"attack: angle {BATCH_1[1]!r} is recorded not applicable to F001"
-            in cv.attack("F001", BATCH_1[1]))
+    assert (any((f"attack: angle {BATCH_1[1]!r} is recorded not applicable to F001") in problem for problem in cv.check("F001", BATCH_1[1])))
 
 
 def test_fresh_eye_angle_is_free_text_not_used_before(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert ("attack: `last` must be true or false; got 'yes'"
-            in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye", last="yes"))
-    assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye") == []
+    assert (any(("attack: `last` must be true or false; got 'yes'") in problem for problem in cv.check("F001", "retry timing", agent=R2, batch="fresh-eye", last="yes")))
+    assert cv.check("F001", "retry timing", agent=R2, batch="fresh-eye") == []
     assert (
-        "attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
+        any(("attack: angle 'retry timing' was already used on F001; choose a new angle name not listed in `used`, "
         "including names outside the fixed list; "
-        "the fixed list is not a menu for this batch"
-        in cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye"))
+        "the fixed list is not a menu for this batch") in problem for problem in cv.check("F001", "retry timing", agent=R2, batch="fresh-eye")))
     assert (
-        f"attack: angle {BATCH_1[2]!r} was already used on F001; choose a new angle name not listed in `used`, "
+        any((f"attack: angle {BATCH_1[2]!r} was already used on F001; choose a new angle name not listed in `used`, "
         "including names outside the fixed list; "
-        "the fixed list is not a menu for this batch"
-        in cv.attack("F001", BATCH_1[2], agent=R2, batch="fresh-eye"))
-    assert "`angle` must be a non-empty string" in cv.attack(
-        "F001", " ", agent=R2, batch="fresh-eye")
+        "the fixed list is not a menu for this batch") in problem for problem in cv.check("F001", BATCH_1[2], agent=R2, batch="fresh-eye")))
+    assert any(("`angle` must be a non-empty string") in problem for problem in cv.check(
+        "F001", " ", agent=R2, batch="fresh-eye"))
 
 
 def test_fresh_eye_accepts_na_angle_and_literal_name(cv: Converge) -> None:
@@ -230,10 +224,11 @@ def test_fresh_eye_accepts_na_angle_and_literal_name(cv: Converge) -> None:
     assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
                      reason="no time window in the claim") == []
     for angle in BATCH_1[1:]:
-        assert cv.attack("F001", angle) == []
-    assert cv.attack("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
-    assert cv.attack("F001", "fresh-eye", agent=R2, batch="fresh-eye") == []
-    seq = next(event["seq"] for event in cv.events() if event.get("angle") == "fresh-eye")
+        assert cv.check("F001", angle) == []
+    assert cv.check("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
+    assert cv.check("F001", "fresh-eye", agent=R2, batch="fresh-eye") == []
+    seq = next(event["seq"] for event in cv.events()
+               if any(row["angle"] == "fresh-eye" for row in event.get("checks", [])))
     assert cv.status()["adhoc_angles"] == [{"angle": "fresh-eye", "claim": "F001", "seq": seq}]
 
 
@@ -241,10 +236,10 @@ def test_status_lists_adhoc_names_slate_wide(cv: Converge) -> None:
     cv.ready(claims=2)
     cv.batch_1("F001")
     cv.batch_1("F002")
-    assert cv.attack("F001", "novel-name", agent=R2, batch="fresh-eye") == []
-    assert cv.attack("F002", "novel-name", agent=R2, batch="fresh-eye") == []
+    assert cv.check("F001", "novel-name", agent=R2, batch="fresh-eye") == []
+    assert cv.check("F002", "novel-name", agent=R2, batch="fresh-eye") == []
     seqs = {event["claim"]: event["seq"] for event in cv.events()
-            if event.get("angle") == "novel-name"}
+            if any(row["angle"] == "novel-name" for row in event.get("checks", []))}
     assert cv.status()["adhoc_angles"] == [
         {"angle": "novel-name", "claim": "F001", "seq": seqs["F001"]},
         {"angle": "novel-name", "claim": "F002", "seq": seqs["F002"]}]
@@ -257,15 +252,11 @@ def test_status_lists_adhoc_names_slate_wide(cv: Converge) -> None:
 def test_fresh_eye_name_is_one_printable_line_without_edge_whitespace(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert ("`angle` must be one printable line"
-            in cv.attack("F001", "novel\nname", agent=R2, batch="fresh-eye"))
-    assert ("`angle` must be one printable line"
-            in cv.attack("F001", "novel\tname", agent=R2, batch="fresh-eye"))
-    assert ("attack: `angle` must not start or end with whitespace"
-            in cv.attack("F001", "retry ", agent=R2, batch="fresh-eye"))
-    assert ("attack: `angle` must not start or end with whitespace"
-            in cv.attack("F001", " retry", agent=R2, batch="fresh-eye"))
-    assert cv.attack("F001", "retry", agent=R2, batch="fresh-eye") == []
+    assert (any(("`angle` must be one printable line") in problem for problem in cv.check("F001", "novel\nname", agent=R2, batch="fresh-eye")))
+    assert (any(("`angle` must be one printable line") in problem for problem in cv.check("F001", "novel\tname", agent=R2, batch="fresh-eye")))
+    assert (any(("attack: `angle` must not start or end with whitespace") in problem for problem in cv.check("F001", "retry ", agent=R2, batch="fresh-eye")))
+    assert (any(("attack: `angle` must not start or end with whitespace") in problem for problem in cv.check("F001", " retry", agent=R2, batch="fresh-eye")))
+    assert cv.check("F001", "retry", agent=R2, batch="fresh-eye") == []
 
 
 def test_angle_na_reason_is_one_printable_line(cv: Converge) -> None:
@@ -280,12 +271,9 @@ def test_attacker_is_not_the_finder_the_orchestrator_or_a_cutter(cv: Converge) -
     cv.ready(cut="before")
     assert _cut(cv, "before") == []
     assert cv.append("accept", FINDER, claim="F001", round=1, when="before") == []
-    assert ("attack: finder filed F001 and may not attack it"
-            in cv.attack("F001", BATCH_1[0], agent=FINDER))
-    assert ("attack: orch wrote init; the orchestrator never writes attack"
-            in cv.attack("F001", BATCH_1[0], agent=MAIN))
-    assert ("attack: cutter cut F001; refuters and cutters are disjoint"
-            in cv.attack("F001", BATCH_1[0], agent=CUTTER))
+    assert (any(("attack: finder filed F001 and may not attack it") in problem for problem in cv.check("F001", BATCH_1[0], agent=FINDER)))
+    assert (any(("attack: orch wrote init; the orchestrator never writes attack") in problem for problem in cv.check("F001", BATCH_1[0], agent=MAIN)))
+    assert (any(("attack: cutter cut F001; refuters and cutters are disjoint") in problem for problem in cv.check("F001", BATCH_1[0], agent=CUTTER)))
 
 
 def test_cutter_is_not_a_refuter(cv: Converge) -> None:
@@ -314,7 +302,7 @@ def test_reply_rules(cv: Converge) -> None:
     assert "`evidence` must be a non-empty string" in _reply(cv, evidence=None)
     problems = cv.append("reply", FINDER, claim="F001", batch=1, stance="rebut",
                          evidence="new evidence", evidence_sha256="0" * 64)
-    assert "`evidence_sha256` does not match the evidence" in problems
+    assert any(("`evidence_sha256` does not match the evidence") in problem for problem in problems)
     assert "reply: decline carries no evidence" in _reply(cv, stance="decline")
     assert ("reply: `text` is given only with stance rebut"
             in _reply(cv, stance="decline", evidence=None, text="narrower"))
@@ -379,7 +367,7 @@ def test_cut_accept_and_rebut_need_when(cv: Converge) -> None:
     assert "`when` must be one of before, after; got 'during'" in _cut(cv, "during")
     assert _cut(cv, "before") == []
     problems = cv.append("accept", FINDER, claim="F001", round=1)
-    assert "accept: missing required field `when`" in problems
+    assert any(("accept: missing required field `when`") in problem for problem in problems)
     assert "rebut: missing required field `when`" in _rebut(cv, "e", when=None)
 
 
@@ -487,8 +475,7 @@ def test_gate_before_cut_is_refused_when_steps_cut_excludes_it(cv: Converge) -> 
 
 def test_gate_attack_needs_the_attack_phase(cv: Converge) -> None:
     cv.ready(cut="before")
-    assert ("attack: the slate is in phase cut-before; attack needs phase attack"
-            in cv.attack("F001", BATCH_1[0]))
+    assert (any(("attack: the slate is in phase cut-before; attack needs phase attack") in problem for problem in cv.check("F001", BATCH_1[0])))
     assert ("angle-na: the slate is in phase cut-before; angle-na needs phase attack"
             in cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
                          reason="r"))

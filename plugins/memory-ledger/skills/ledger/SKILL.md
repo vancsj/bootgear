@@ -64,6 +64,7 @@ status message for `unconfigured` or `broken`, and no output for `cooldown` or
 
 ## Rules
 
+- Read-only roles may look up and record ledger entries. Keep their target artifacts and other write limits unchanged.
 - Append-only: correct an answer with a rival, never an edit.
 - The signatory is the AI session, never the human.
 - Ask the human before `assert`.

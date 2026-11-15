@@ -52,7 +52,7 @@ def test_render_after_cutoff(cv: Converge) -> None:
                          "cutoff: current")]
     sections = _sections(out)
     assert list(sections) == ["Artifact patches", "Findings", "Fix now", "Fixed", "Choices", "Follow-up", "Killed",
-                              "Coverage"]
+                              "Attack checks", "Coverage"]
     assert sections["Artifact patches"].splitlines() == [
         f"- F{i:03d}: artifact_patch_eligible=false" for i in range(1, 5)]
     assert sections["Findings"].splitlines() == [

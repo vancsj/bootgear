@@ -19,8 +19,7 @@ def test_refuter_records_a_not_applicable_angle(cv: Converge) -> None:
     claim = ledger.read(cv.path(), "s1").claims["F001"]
     assert claim.na_angles == {BATCH_1[0]}
     assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["fixed_remaining"]
-    assert (f"attack: angle {BATCH_1[0]!r} is recorded not applicable to F001"
-            in cv.attack("F001", BATCH_1[0], agent=R2))
+    assert (any((f"attack: angle {BATCH_1[0]!r} is recorded not applicable to F001") in problem for problem in cv.check("F001", BATCH_1[0], agent=R2)))
 
 
 def test_status_shows_na_reason_beside_fixed_angle(cv: Converge) -> None:
@@ -38,8 +37,8 @@ def test_status_shows_a_fresh_eye_attack_on_a_not_applicable_angle(cv: Converge)
     cv.ready()
     assert _na(cv, R1, BATCH_1[0], reason="no time window") == []
     for angle in BATCH_1[1:]:
-        assert cv.attack("F001", angle) == []
-    assert cv.attack("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
+        assert cv.check("F001", angle) == []
+    assert cv.check("F001", BATCH_1[0], agent=R2, batch="fresh-eye") == []
     claim = cv.status()["by_id"]["F001"]
     assert claim["fresh_eye"] == [BATCH_1[0]]
     [line] = [line for line in cv.ok("status", "s1").stdout.splitlines()
@@ -62,7 +61,7 @@ def test_roles_and_shape(cv: Converge) -> None:
                                                            lens="correctness")
     assert "unknown attack angle 'boundary' (not in this slate's init snapshot)" in _na(
         cv, R1, "boundary")
-    assert cv.attack("F001", BATCH_1[1]) == []
+    assert cv.check("F001", BATCH_1[1]) == []
     assert (f"angle-na: angle {BATCH_1[1]!r} was already used on F001"
             in _na(cv, R2, BATCH_1[1]))
     assert _na(cv, R1, BATCH_1[0]) == []
@@ -70,7 +69,7 @@ def test_roles_and_shape(cv: Converge) -> None:
             in _na(cv, R2, BATCH_1[0]))
     problems = cv.append("angle-na", FINDER, phase="find", angle="failure-path",
                          lens="correctness", reason="no I/O", claim="F001")
-    assert "angle-na: `claim` is only recorded for phase attack" in problems
+    assert any(("angle-na: `claim` is only recorded for phase attack") in problem for problem in problems)
 
 
 def test_angle_na_command_takes_a_claim(cv: Converge) -> None:

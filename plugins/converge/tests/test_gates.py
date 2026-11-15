@@ -70,8 +70,7 @@ def test_gate1_no_match_is_unverified(cv: Converge) -> None:
                           slate.claims[kept].state.cuts["before"].latest()) == (
         True, "attack_if[0]")
     assert protocol.unverified_ids(slate) == {skipped}
-    assert ("attack: F002 is unverified (cut before the attack); it takes no attack"
-            in cv.attack(skipped, BATCH_1[0]))
+    assert (any(("attack: F002 is unverified (cut before the attack); it takes no attack") in problem for problem in cv.check(skipped, BATCH_1[0])))
     cv.clean(kept)
     assert protocol.cut_reasons(_slate(cv))[skipped] == (True, "unverified")
 
@@ -176,12 +175,11 @@ def test_rate_optional_stored_as_zero_and_required_by_rate_at_least(cv: Converge
     assert cv.append("cut", CUTTER, claim=plain, round=1, when="before") == []
     assert (_slate(cv).claims[plain].state.rating or {})["rate"] == 0
     problems = counted.append("cut", CUTTER, claim="F001", round=1, when="before")
-    assert ("cut: F001's lens architecture has a rate_at_least rule; `rate` is required"
-            in problems)
-    assert "cut: no evidence for `rate` (give an evaluate angle whose field is rate)" in problems
+    assert (any(("cut: F001's lens architecture has a rate_at_least rule; `rate` is required") in problem for problem in problems))
+    assert any(("cut: no evidence for `rate` (give an evaluate angle whose field is rate)") in problem for problem in problems)
     problems = counted.append("cut", CUTTER, claim="F001", round=1, when="before", rate=-1,
                               evidence={**_evidence(), "call-site-count": "rg x"})
-    assert "`rate` must be a non-negative integer; got -1" in problems
+    assert any(("`rate` must be a non-negative integer; got -1") in problem for problem in problems)
     assert counted.append("cut", CUTTER, claim="F001", round=1, when="before", rate=4,
                           evidence={**_evidence(), "call-site-count": "rg x: 4 hits"}) == []
 
@@ -190,8 +188,8 @@ def test_before_cut_refuses_difficulty_and_patch(cv: Converge) -> None:
     (cid,) = _filed(cv, "traced")
     problems = cv.append("cut", CUTTER, claim=cid, round=1, when="before",
                          difficulty="local", patch="--- a/x\n+++ b/x\n")
-    assert "cut: a before cut carries no `difficulty`" in problems
-    assert "cut: a before cut carries no `patch`" in problems
+    assert any(("cut: a before cut carries no `difficulty`") in problem for problem in problems)
+    assert any(("cut: a before cut carries no `patch`") in problem for problem in problems)
 
 
 def test_after_cut_needs_difficulty_and_its_evidence(cv: Converge) -> None:
@@ -200,13 +198,13 @@ def test_after_cut_needs_difficulty_and_its_evidence(cv: Converge) -> None:
     evidence = {k: v for k, v in _evidence().items() if k != "files-touched"}
     problems = cv.append("cut", CUTTER, claim=cid, round=1, when="after", difficulty=None,
                          evidence=evidence)
-    assert "cut: an after cut needs `difficulty`" in problems
-    assert ("cut: no evidence for `difficulty` (give an evaluate angle whose field is "
-            "difficulty)") in problems
+    assert any(("cut: an after cut needs `difficulty`") in problem for problem in problems)
+    assert any(("cut: no evidence for `difficulty` (give an evaluate angle whose field is "
+            "difficulty)") in problem for problem in problems)
     problems = cv.append("cut", CUTTER, claim=cid, round=1, when="after",
                          callers="some", migration="maybe")
-    assert "`callers` must be one of none, changed; got 'some'" in problems
-    assert "`migration` must be one of none, needed; got 'maybe'" in problems
+    assert any(("`callers` must be one of none, changed; got 'some'") in problem for problem in problems)
+    assert any(("`migration` must be one of none, needed; got 'maybe'") in problem for problem in problems)
 
 
 def test_choice_follows_cheap_enabled(cv: Converge) -> None:

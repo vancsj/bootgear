@@ -123,7 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "by default, the deputy ledger only when named")
 
     r = sub.add_parser("resolve", help="claim text → existing entry or minted slug")
-    r.add_argument("text")
+    r.add_argument("text", help="question or claim to find in the configured ledgers")
     r.add_argument("--stale-after", dest="stale_after", type=int, metavar="DAYS",
                    help="flag answers not touched in this many days. Marks, never hides: "
                         "a candidate withheld for being old is one a session cannot see it "
@@ -158,14 +158,15 @@ def build_parser() -> argparse.ArgumentParser:
         signer_arg(p_)
 
     n = sub.add_parser("new", help="seed an entry, carrying the author's own ✓")
-    n.add_argument("slug")
-    for flag in ("q", "claim", "because"):
-        n.add_argument(f"--{flag}", required=True)
+    n.add_argument("slug", help="entry path, for example tech/example")
+    for flag, meaning in {"q": "question this entry settles", "claim": "answer to that question",
+                          "because": "reason supported by the evidence"}.items():
+        n.add_argument(f"--{flag}", required=True, help=meaning)
     n.add_argument("--evidence", required=True, action="append", metavar="CHECK",
                    help="a single check you can execute. Repeatable: give it once per "
                         "check rather than chaining with ; — a chain exits 0 on a partial "
                         "run, so a failure in the middle reads as success")
-    n.add_argument("--alt-terms", dest="alt_terms")
+    n.add_argument("--alt-terms", dest="alt_terms", help="other terms for the same question")
     n.add_argument("--anyway", action="store_true",
                    help="seed despite a near-identical existing question (read it first)")
     n.add_argument("--shared", action="store_true",
@@ -180,9 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
     authoring_args(n)
 
     v = sub.add_parser("rival", help="add a contradicting answer to an existing entry")
-    v.add_argument("slug")
-    for flag in ("claim", "because"):
-        v.add_argument(f"--{flag}", required=True)
+    v.add_argument("slug", help="entry path, for example tech/example")
+    for flag, meaning in {"claim": "rival answer to the same question", "because": "reason for this rival answer"}.items():
+        v.add_argument(f"--{flag}", required=True, help=meaning)
     v.add_argument("--evidence", required=True, action="append", metavar="CHECK",
                    help="a single check you can execute; repeatable")
     v.add_argument("--keep-evidence", dest="keep_evidence", action="append", metavar="aN",
@@ -193,10 +194,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
     sh = sub.add_parser("show", help="print one entry: answers, conf, evidence, sigs, debate")
-    sh.add_argument("slug")
+    sh.add_argument("slug", help="entry path, for example tech/example")
     only_arg(sh)
     sh.add_argument("--data", action="store_true",
-                    help="the answers as data: claim, conf, votes, evidence")
+                    help="the answers as data: claim, conf, votes, evidence; cannot combine with --all-sigs")
     sh.add_argument("--stale-after", dest="stale_after", type=int, metavar="DAYS",
                     help="flag answers not touched in this many days")
     sh.add_argument("--all-sigs", dest="all_sigs", action="store_true",
@@ -208,19 +209,19 @@ def build_parser() -> argparse.ArgumentParser:
     only_arg(ls)
 
     rf = sub.add_parser("refute", help="answer a standing signature with a contradicting run")
-    rf.add_argument("slug")
-    rf.add_argument("answer")
+    rf.add_argument("slug", help="entry path, for example tech/example")
+    rf.add_argument("answer", help="answer id within the entry, for example a1")
     rf.add_argument("sig", help="the signer id being answered")
     rf.add_argument("--output", required=True, help="the output that contradicts theirs")
     signer_arg(rf)
 
     h = sub.add_parser("hash", help="print h= for an answer")
-    h.add_argument("slug")
-    h.add_argument("answer")
+    h.add_argument("slug", help="entry path, for example tech/example")
+    h.add_argument("answer", help="answer id within the entry, for example a1")
 
     s = sub.add_parser("sign", help="record your ✓/✗, or correct the one you already cast")
-    s.add_argument("slug")
-    s.add_argument("answer")
+    s.add_argument("slug", help="entry path, for example tech/example")
+    s.add_argument("answer", help="answer id within the entry, for example a1")
     s.add_argument("--fail", action="store_true", help="record ✗ and open a debate file")
     s.add_argument("--output", help="the failing output to record in the debate file")
     only_arg(s)
@@ -228,12 +229,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="signer id (default: this session, from the environment)")
 
     li = sub.add_parser("lint", help="recompute conf, report drift/voids/orphans")
-    li.add_argument("--fix", action="store_true")
+    li.add_argument("--fix", action="store_true", help="write recomputed confidence and signature status")
     only_arg(li)
 
     pr = sub.add_parser("promote", help="re-scope a landed branch claim onto mainline")
-    pr.add_argument("slug")
-    pr.add_argument("answer")
+    pr.add_argument("slug", help="entry path, for example tech/example")
+    pr.add_argument("answer", help="answer id within the entry, for example a1")
     # No default here: resolving the mainline runs git, and doing that at parse
     # time would cost every subcommand a subprocess. `cmd_promote` asks the repo
     # it is standing in, and says so if the repo cannot answer.
@@ -248,8 +249,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     vt = sub.add_parser("vote", help="add checks to the recorded answer that has this claim on "
                                      "a similar question; exits 1 with NO-VOTE when none does")
-    vt.add_argument("--question", required=True)
-    vt.add_argument("--claim", required=True)
+    vt.add_argument("--question", required=True, help="question to match against existing entries")
+    vt.add_argument("--claim", required=True, help="exact recorded answer to support with new checks")
     only_arg(vt)
     vt.add_argument("--evidence", required=True, action="append", metavar="CHECK",
                     help="a check you can execute; repeatable")
@@ -257,8 +258,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="append a check that hardcodes a personal path anyway")
     ae = sub.add_parser("add-evidence",
                         help="append a check to an existing answer; voids no signature")
-    ae.add_argument("slug")
-    ae.add_argument("answer")
+    ae.add_argument("slug", help="entry path, for example tech/example")
+    ae.add_argument("answer", help="answer id within the entry, for example a1")
     only_arg(ae)
     ae.add_argument("--evidence", required=True, action="append", metavar="CHECK",
                     help="a check you can execute; repeatable. Append only — there is no "
@@ -268,9 +269,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     at = sub.add_parser("assert", help="pin an answer at 1.00 on a human's ruling, for a "
                                        "question no check can settle")
-    at.add_argument("slug")
-    at.add_argument("answer")
-    at.add_argument("--why", help="what settles it — a decision, an intent, a system that no "
+    at.add_argument("slug", help="entry path, for example tech/example")
+    at.add_argument("answer", help="answer id within the entry, for example a1")
+    at.add_argument("--why", help="required unless --clear; what settles it — a decision, an intent, a system that no "
                                   "longer exists to be queried. Recorded in the entry")
     only_arg(at)
     at.add_argument("--by", metavar="NAME",
@@ -281,8 +282,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="lift the assertion and hand the header back to the tally")
 
     sr = sub.add_parser("set-repo", help="name the checkout an existing answer's checks run in")
-    sr.add_argument("slug")
-    sr.add_argument("answer")
+    sr.add_argument("slug", help="entry path, for example tech/example")
+    sr.add_argument("answer", help="answer id within the entry, for example a1")
     sr.add_argument("repo", help="the repo name (for example widgets); on the shared ledger "
                                  "a name, never a machine path")
     sr.add_argument("--force", action="store_true",

@@ -32,7 +32,8 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "escalate": ("claim",),
     "find-run": ("lens", "angle", "tell", "searches", "positive_control", "result"),
     "angle-na": ("phase", "angle", "reason"),
-    "attack": ("claim", "batch", "angle", "tell", "outcome", "evidence", "searches",
+    "clean": ("claim", "batch", "checks"),
+    "attack": ("claim", "batch", "angle", "tell", "evidence", "searches",
                "positive_control"),
     "reply": ("claim", "batch", "stance"),
     "verdict": ("claim", "batch", "verdict"),
@@ -48,6 +49,7 @@ OPTIONAL: dict[str, tuple[str, ...]] = {
     "escalate": ("wider", "evidence"),
     "find-run": (),
     "angle-na": ("lens", "claim"),
+    "clean": ("last",),
     "attack": ("last",),
     "reply": ("evidence", "evidence_sha256", "text"),
     "verdict": ("evidence",),
@@ -165,7 +167,7 @@ def roles(slate: Slate, claim: Claim, agent: Any, kind: str, problems: list[str]
         problems.append(f"{kind}: {agent} filed {claim.id} and may not {kind} it")
     if agent == slate.events[0]["as"]:
         problems.append(f"{kind}: {agent} wrote init; the orchestrator never writes {kind}")
-    if kind in ("attack", "verdict") and agent in state.cutters:
+    if kind in ("clean", "attack", "verdict") and agent in state.cutters:
         problems.append(f"{kind}: {agent} cut {claim.id}; refuters and cutters are disjoint")
     if kind == "cut" and agent in state.refuters:
         problems.append(f"cut: {agent} attacked {claim.id}; refuters and cutters are disjoint")
@@ -370,6 +372,24 @@ def read(path: Path, slate_id: str) -> Slate:
     return slate
 
 
+def _file_duplicate(slate: Slate, event: dict[str, Any]) -> list[str]:
+    """Refuse unchanged content from the same actor on a new file append."""
+    if event["event"] != "file":
+        return []
+
+    def content(row: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in {"depends": [], **row}.items()
+                if key not in (*ENVELOPE, "id")}
+
+    value = content(event)
+    for prior in slate.events:
+        if (prior["event"] == "file" and prior["as"] == event["as"]
+                and content(prior) == value):
+            return [(f"file: unchanged content already filed as {prior['id']} at seq={prior['seq']}; "
+                     "keep that claim; refresh work before filing distinct content")]
+    return []
+
+
 def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = False,
            build: Any = None) -> dict[str, Any]:
     """Lock, replay, validate, append one line, fsync. Returns the written event.
@@ -398,6 +418,8 @@ def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = F
                 event.update(build(slate))
             event = {"seq": len(slate.events) + 1, "ts": now(), **event}
             problems = validate_event(slate, event)
+            if not problems:
+                problems.extend(_file_duplicate(slate, event))
             if problems:
                 raise LedgerError(problems)
             line = json.dumps(event, sort_keys=False, ensure_ascii=False) + "\n"

@@ -41,7 +41,7 @@ def _step(cv: Converge, step: str, batch: Any = 1, cid: str = "F001", refuter: s
 def _batch_2(cv: Converge, refuted: bool = False) -> None:
     for index, angle in enumerate(BATCH_2):
         outcome = "refuted" if refuted and index == 0 else "clean"
-        assert cv.attack("F001", angle, batch=2, outcome=outcome) == []
+        assert cv.check("F001", angle, batch=2, outcome=outcome) == []
 
 
 def test_clean_batch_is_done_and_leaves_the_status(cv: Converge) -> None:
@@ -72,7 +72,7 @@ def test_round_trip(cv: Converge, steps: tuple[str, ...], batch_state: str, stat
 def test_the_fresh_eye_batch_takes_the_same_round_trip(cv: Converge) -> None:
     cv.ready()
     cv.batch_1()
-    assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye", outcome="refuted",
+    assert cv.check("F001", "retry timing", agent=R2, batch="fresh-eye", outcome="refuted",
                      last=True) == []
     assert _state(cv, "fresh-eye") == ("awaiting-reply-1", "survived")
     _step(cv, "rebut", "fresh-eye")
@@ -114,5 +114,5 @@ def test_disputed_claim_is_killed_by_a_later_decline(cv: Converge) -> None:
     _batch_2(cv, refuted=True)
     _step(cv, "decline", 2)
     assert _state(cv, 2) == ("killed", "killed")
-    assert "F001 is killed; it accepts nothing" in cv.attack("F001", "retry timing", agent=R2,
-                                                            batch="fresh-eye")
+    assert any(("F001 is killed; it accepts nothing") in problem for problem in cv.check("F001", "retry timing", agent=R2,
+                                                            batch="fresh-eye"))

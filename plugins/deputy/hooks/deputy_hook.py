@@ -167,6 +167,12 @@ def main(host: str | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from bootgear_cli.clikit import event_help
+
+    if event_help("deputy", "hook", "Host event JSON on stdin: session_id, cwd, hook_event_name, and optional agent_id. "
+                  "--host accepts claude or codex; Gear normally supplies it.",
+                  {"session_id": "00000000-0000-4000-8000-000000000001", "hook_event_name": "UserPromptSubmit", "cwd": "."}):
+        raise SystemExit(0)
     parser = HookParser(description=__doc__)
     parser.add_argument("--host", choices=("claude", "codex"), default=os.environ.get("BOOTGEAR_HOST", "claude"))
     sys.exit(main(parser.parse_args().host))

@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn, TypeGuard
 
-from bootgear_cli.clikit import current_program
+from bootgear_cli.clikit import Catalog, add_help_examples, current_program
 from bootgear_cli.gear import resolve_command
 
 PROGRAM = current_program("spec", "spec-feedback")
@@ -297,17 +297,23 @@ def _parser() -> Parser:
     for name, function in (("settings", cmd_settings), ("intake", cmd_intake), ("gate", cmd_gate)):
         sub = subs.add_parser(name, allow_abbrev=False)
         sub.set_defaults(function=function)
-        sub.add_argument("--task-folder", required=name != "settings")
+        sub.add_argument("--task-folder", required=name != "settings", help="fixed task folder; contains requirements.md and optional design.md")
         output = sub.add_mutually_exclusive_group()
         output.add_argument("--json", action="store_true")
         output.add_argument("--prose", action="store_true")
         if name != "settings":
-            sub.add_argument("--observations", required=True)
+            sub.add_argument("--observations", required=True, help="JSON file: observations array with id and nonempty evidence_paths for each observation")
         if name == "intake":
-            sub.add_argument("--destination", required=True, choices=("spec", "spec-review"))
+            sub.add_argument("--destination", required=True, choices=("spec", "spec-review"), help="feedback destination permitted by the current machine")
         if name == "gate":
-            for flag in ("--slate", "--converge-dir", "--checks"):
-                sub.add_argument(flag, required=True)
+            sub.add_argument("--slate", required=True, help="current independent review slate id")
+            sub.add_argument("--converge-dir", required=True, help="directory containing the public review slate")
+            sub.add_argument("--checks", required=True, help="JSON file with slate and checks; each check has id, state, evidence_refs, disposition, claim_ids")
+            sub.epilog = ("Check state: checked or unassessed. checked requires evidence_refs and disposition.\n"
+                          "Evidence paths must name existing files. Every observation needs a current independent check.")
+    add_help_examples(parser, Catalog(prog=PROGRAM, examples={
+        name: example.removeprefix(PROGRAM + " ") for name, example in EXAMPLES.items()
+    }))
     return parser
 
 

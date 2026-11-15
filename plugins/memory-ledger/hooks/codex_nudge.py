@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+from bootgear_cli.clikit import event_help
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from ledgerlib.identity import validate_codex_session_id
@@ -13,6 +15,9 @@ from ledgerlib.nudge import NudgeEvent, evaluate
 
 
 def main() -> None:
+    if event_help("memory-ledger", "codex-hook", "Codex event JSON on stdin: UUID session_id, hook_event_name, tool_name, and tool_input.",
+                  {"session_id": "00000000-0000-4000-8000-000000000001", "hook_event_name": "PostToolUse", "tool_name": "exec_command", "tool_input": {"cmd": "rg symbol source.py"}}):
+        return
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):

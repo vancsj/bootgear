@@ -24,7 +24,7 @@ RESULT = ("fix-now", "fixed", "finding", "follow-up", "killed")
 # The phases an `angle-na` event is recorded in.
 PHASE = ("find", "attack")
 ORIGIN = ("lens", "gap-hunt")
-EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "attack", "reply", "verdict", "cut",
+EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "clean", "attack", "reply", "verdict", "cut",
           "rebut", "accept", "cutoff", "fix-check")
 
 # Every cut rates these; `rate` is an integer `>= 0`. An after cut also rates `AFTER_FIELDS`.

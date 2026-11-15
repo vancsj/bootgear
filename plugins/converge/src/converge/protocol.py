@@ -24,7 +24,6 @@ FRESH_EYE_RULE = ("choose a new angle name not listed in `used`, including names
                   "the fixed list is not a menu for this batch. "
                   "For example, use `retry after timeout`.")
 WHEN = ("before", "after")
-ATTACK_OUTCOME = ("clean", "refuted")
 STANCE = ("rebut", "decline")
 VERDICT = ("agree", "disagree")
 # Status ratchet, worst last; `unverified` is outside it.
@@ -185,7 +184,7 @@ def role_agents(slate: Slate) -> dict[str, str]:
     """The agent id seen first in each refuter role (`r1`, `r2`)."""
     agents: dict[str, str] = {}
     for event in slate.events:
-        if event["event"] == "attack" or (event["event"] == "angle-na" and "claim" in event):
+        if event["event"] in ("clean", "attack") or (event["event"] == "angle-na" and "claim" in event):
             agents.setdefault(_attack_role(slate, event), event["as"])
     return agents
 
@@ -389,7 +388,7 @@ def cut_flags(slate: Slate) -> dict[str, bool]:
 def validate_event(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     """Every problem with appending `event`, a kind other than init, to `slate`."""
     {"file": _validate_file, "escalate": _validate_escalate, "find-run": _validate_find_run,
-     "angle-na": _validate_angle_na, "attack": _validate_attack, "reply": _validate_reply,
+     "angle-na": _validate_angle_na, "clean": _validate_clean, "attack": _validate_attack, "reply": _validate_reply,
      "verdict": _validate_verdict, "cut": _validate_cut, "accept": _validate_accept,
      "rebut": _validate_rebut, "cutoff": ledger.validate_cutoff,
      "fix-check": _validate_fix_check,
@@ -404,7 +403,7 @@ def _needed_phase(event: dict[str, Any]) -> str | None:
     if kind in ("cut", "accept", "rebut"):
         when = event.get("when")
         return f"cut-{when}" if when in WHEN else None
-    if kind in ("attack", "reply", "verdict") or (kind == "angle-na"
+    if kind in ("clean", "attack", "reply", "verdict") or (kind == "angle-na"
                                                   and event.get("phase") == "attack"):
         return "attack"
     return None
@@ -443,7 +442,7 @@ def _cut_item(slate: Slate, claim: Claim, event: dict[str, Any], problems: list[
         problems.append(f"{kind}: {claim.id} {when} cut is {state}; it takes no more {kind}")
 
 
-ITEM_STATES = {"attack": ("open",), "angle-na": ("open",),
+ITEM_STATES = {"clean": ("open",), "attack": ("open",), "angle-na": ("open",),
                "reply": ("awaiting-reply-1", "awaiting-reply-2"),
                "verdict": ("awaiting-verdict",)}
 
@@ -540,7 +539,7 @@ def _rebut_evidence(event: dict[str, Any], problems: list[str]) -> str | None:
 
 
 def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
-    if _written(slate, ("escalate", "cut", "attack")):
+    if _written(slate, ("escalate", "cut", "clean", "attack")):
         problems.append("file: claims are filed before the first escalate, cut or attack event")
     expected = model.claim_id(len(slate.claims) + 1)
     if event.get("id") != expected:
@@ -576,7 +575,7 @@ def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
 
 def _validate_escalate(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     """The finder widens its claim, or confirms it, once, before any cut or attack."""
-    if _written(slate, ("cut", "attack")):
+    if _written(slate, ("cut", "clean", "attack")):
         problems.append("escalate: escalate comes before the first cut or attack event")
     agent = event.get("as")
     claim = ledger.known_claim(slate, event, problems)
@@ -647,7 +646,6 @@ def _validate_attack(slate: Slate, event: dict[str, Any], problems: list[str]) -
     agent = event.get("as")
     claim = ledger.known_claim(slate, event, problems)
     batch = _batch(event, problems)
-    ledger.enum(event, "outcome", ATTACK_OUTCOME, problems)
     for key in ("tell", "evidence", "searches", "positive_control"):
         ledger.nonempty(event, key, problems)
     if "last" in event:
@@ -679,6 +677,45 @@ def _validate_attack(slate: Slate, event: dict[str, Any], problems: list[str]) -
         problems.append(message)
     elif batch != FRESH_EYE and angle in claim.na_angles:
         problems.append(f"attack: angle {angle!r} is recorded not applicable to {claim.id}")
+
+
+CHECK_FIELDS = ("angle", "tell", "evidence", "searches", "positive_control")
+
+
+def _validate_clean(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
+    rows = event.get("checks")
+    if not isinstance(rows, list) or not rows:
+        problems.append("clean: `checks` must be a non-empty list")
+        return
+    claim = ledger.known_claim(slate, event, problems)
+    batch = event.get("batch")
+    if claim is not None and batch == FRESH_EYE:
+        used = len(claim.state.attacks.get(FRESH_EYE, []))
+        cap = slate.cap("angles_per_claim")
+        if used + len(rows) > cap:
+            problems.append(f"clean: {used} prior checks plus {len(rows)} checks exceed "
+                            f"the fresh-eye cap {cap}")
+    seen: set[str] = set()
+    for index, row in enumerate(rows):
+        prefix = f"clean: checks[{index}]"
+        if not isinstance(row, dict):
+            problems.append(f"{prefix}: must be an object")
+            continue
+        for key in sorted(set(row) - set(CHECK_FIELDS)):
+            problems.append(f"{prefix}: unknown field `{key}`")
+        angle = row.get("angle")
+        if isinstance(angle, str):
+            if angle in seen:
+                problems.append(f"{prefix}: duplicate angle {angle!r}")
+            seen.add(angle)
+        check = {"event": "attack", "as": event.get("as"), "claim": event.get("claim"),
+                 "batch": batch, **{key: row.get(key) for key in CHECK_FIELDS}}
+        if "last" in event:
+            check["last"] = event["last"]
+        found: list[str] = []
+        _validate_attack(slate, check, found)
+        _gate(slate, check, found)
+        problems.extend(f"{prefix}: {message}" for message in found)
 
 
 def _validate_reply(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -1014,10 +1051,16 @@ def _apply_claim_event(claim: Claim, event: dict[str, Any]) -> None:
         claim.escalation = event
         if "wider" in event:
             claim.text = event["wider"]
-    elif kind == "attack":
-        state.attacks.setdefault(event["batch"], []).append(event)
+    elif kind in ("clean", "attack"):
+        rows = event["checks"] if kind == "clean" else [{}]
+        for index, row in enumerate(rows):
+            check = {key: value for key, value in event.items() if key not in ("checks", "last")}
+            check.update(row, outcome="clean" if kind == "clean" else "refuted")
+            if index == len(rows) - 1 and "last" in event:
+                check["last"] = event["last"]
+            state.attacks.setdefault(event["batch"], []).append(check)
+            claim.used_angles.add(check["angle"])
         state.refuters.add(event["as"])
-        claim.used_angles.add(event["angle"])
     elif kind == "reply":
         replies = state.replies.setdefault(event["batch"], [])
         replies.append(event)

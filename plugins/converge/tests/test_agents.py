@@ -22,10 +22,10 @@ def test_fifth_agent_allowed_sixth_refused(cv: Converge) -> None:
 
 def test_custom_cap_three(cv: Converge) -> None:
     cv.ready(agents=3)
-    assert cv.attack("F001", BATCH_1[0], agent=R1) == []
-    problems = cv.attack("F001", BATCH_1[1], agent=R2)
+    assert cv.check("F001", BATCH_1[0], agent=R1) == []
+    problems = cv.check("F001", BATCH_1[1], agent=R2)
     assert any("r2 would be agent 4 on this slate; caps.agents is 3" in p for p in problems)
-    assert cv.attack("F001", BATCH_1[1], agent=R1) == []
+    assert cv.check("F001", BATCH_1[1], agent=R1) == []
 
 
 def _cut(cv: Converge, cid: str, when: str, rnd: int, impact: str) -> None:
@@ -55,13 +55,13 @@ def test_full_depth_allocation_with_gap_hunt(cv: Converge) -> None:
     cv.accept(lens_claim, 1, FINDER, "before")
     cv.accept(gap, 1, R2, "before")
     for angle in BATCH_1:
-        cv.attack_cli(lens_claim, angle)
-    assert "r2 filed F002 and may not attack it" in cv.attack_cli(
+        cv.check_cli(lens_claim, angle)
+    assert "r2 filed F002 and may not attack it" in cv.check_cli(
         gap, BATCH_1[0], agent=R2, code=2).stderr
     for angle in BATCH_1:
-        cv.attack_cli(gap, angle)
-    cv.attack_cli(lens_claim, "retry timing", "--last", agent=R2, batch="fresh-eye")
-    cv.attack_cli(gap, "retry timing", "--last", agent=R1, batch="fresh-eye")
+        cv.check_cli(gap, angle)
+    cv.check_cli(lens_claim, "retry timing", "--last", agent=R2, batch="fresh-eye")
+    cv.check_cli(gap, "retry timing", "--last", agent=R1, batch="fresh-eye")
     _cut(cv, lens_claim, "after", 1, "wrong-output")
     _cut(cv, gap, "after", 1, "data-loss")
     cv.accept(lens_claim, 1, FINDER)
@@ -83,8 +83,8 @@ def test_quick_depth_shape(cv: Converge) -> None:
     _cut(cv, cid, "before", 1, "wrong-output")
     cv.accept(cid, 1, FINDER, "before")
     for angle in BATCH_1:
-        cv.attack_cli(cid, angle)
-    cv.attack_cli(cid, "retry timing", "--last", agent=R1, batch="fresh-eye")
+        cv.check_cli(cid, angle)
+    cv.check_cli(cid, "retry timing", "--last", agent=R1, batch="fresh-eye")
     _cut(cv, cid, "after", 1, "wrong-output")
     cv.accept(cid, 1, FINDER)
     _gate_ok(cv)

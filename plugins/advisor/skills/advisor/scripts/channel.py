@@ -1092,7 +1092,8 @@ def list_channels(args: argparse.Namespace) -> None:
 
 
 def add_channel(parser: argparse.ArgumentParser, required: bool = True) -> None:
-    parser.add_argument("--channel", required=required)
+    parser.add_argument("--channel", required=required,
+                        help="paired mailbox number, at least four digits; register can allocate one")
 
 
 def add_root(parser: argparse.ArgumentParser) -> None:
@@ -1105,13 +1106,14 @@ def add_output(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = RefusingParser(description=__doc__)
+    program = current_program("advisor", "channel")
+    parser = RefusingParser(prog=program, description=__doc__)
     add_root(parser)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     register_parser = subparsers.add_parser("register")
     add_channel(register_parser, required=False)
-    register_parser.add_argument("--role", required=True)
+    register_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat to register")
     add_session(register_parser, required=True)
     add_output(register_parser)
     register_parser.set_defaults(handler=register)
@@ -1123,39 +1125,39 @@ def build_parser() -> argparse.ArgumentParser:
 
     send_parser = subparsers.add_parser("send")
     add_channel(send_parser)
-    send_parser.add_argument("--from", dest="sender", required=True)
-    send_parser.add_argument("--to", dest="recipient", required=True)
-    send_parser.add_argument("--kind", required=True)
-    send_parser.add_argument("--parent-id")
-    send_parser.add_argument("--body-file", required=True)
+    send_parser.add_argument("--from", dest="sender", required=True, metavar="{asker,listener}", help="sending seat")
+    send_parser.add_argument("--to", dest="recipient", required=True, metavar="{asker,listener}", help="receiving seat; must differ from --from")
+    send_parser.add_argument("--kind", required=True, metavar="{request,response,stop}", help="message kind")
+    send_parser.add_argument("--parent-id", help="request message id from receive; required for a response. It must name a request from --to to --from")
+    send_parser.add_argument("--body-file", required=True, help="UTF-8 message file; '-' reads stdin")
     send_parser.add_argument("--cap", type=int, default=None, help=f"pending-message cap, default {DEFAULT_PENDING_CAP}")
     add_output(send_parser)
     send_parser.set_defaults(handler=send)
 
     receive_parser = subparsers.add_parser("receive")
     add_channel(receive_parser)
-    receive_parser.add_argument("--for", dest="recipient", required=True)
-    receive_parser.add_argument("--timeout", type=float, default=300.0)
-    receive_parser.add_argument("--poll", type=float, default=0.5)
+    receive_parser.add_argument("--for", dest="recipient", required=True, metavar="{asker,listener}", help="seat receiving the next message")
+    receive_parser.add_argument("--timeout", type=float, default=300.0, help="maximum wait in seconds (default: 300)")
+    receive_parser.add_argument("--poll", type=float, default=0.5, help="poll interval in seconds (default: 0.5)")
     add_output(receive_parser)
     receive_parser.set_defaults(handler=receive)
 
     fetch_parser = subparsers.add_parser("fetch")
     add_channel(fetch_parser)
-    fetch_parser.add_argument("--message-id", required=True)
+    fetch_parser.add_argument("--message-id", required=True, help="message id returned by receive; prints the full body")
     add_output(fetch_parser)
     fetch_parser.set_defaults(handler=fetch)
 
     state_parser = subparsers.add_parser("state")
     add_channel(state_parser)
-    state_parser.add_argument("--role", required=True)
-    state_parser.add_argument("--value", required=True)
+    state_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat whose state changes")
+    state_parser.add_argument("--value", required=True, metavar="{waiting,busy,closed}", help="new seat state")
     add_output(state_parser)
     state_parser.set_defaults(handler=state)
 
     close_parser = subparsers.add_parser("close")
     add_channel(close_parser)
-    close_parser.add_argument("--role", required=True)
+    close_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat closing the channel")
     close_parser.add_argument("--if-peer-stale", dest="if_peer_stale", action="store_true",
                               help="close only if the peer is not live and nothing unread waits for --role")
     add_output(close_parser)
@@ -1163,15 +1165,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     heartbeat_parser = subparsers.add_parser("heartbeat")
     add_channel(heartbeat_parser)
-    heartbeat_parser.add_argument("--role", required=True)
+    heartbeat_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat whose liveness is maintained")
     add_session(heartbeat_parser, required=True)
-    heartbeat_parser.add_argument("--interval", type=float, default=HEARTBEAT_INTERVAL_SECONDS)
-    heartbeat_parser.add_argument("--max-age", dest="max_age", type=float, default=HEARTBEAT_MAX_AGE_SECONDS)
+    heartbeat_parser.add_argument("--interval", type=float, default=HEARTBEAT_INTERVAL_SECONDS, help="seconds between heartbeat writes (default: 3)")
+    heartbeat_parser.add_argument("--max-age", dest="max_age", type=float, default=HEARTBEAT_MAX_AGE_SECONDS, help="stop after this many seconds (default: 6180)")
     add_output(heartbeat_parser)
     heartbeat_parser.set_defaults(handler=heartbeat)
 
     list_parser = subparsers.add_parser("list")
-    list_parser.add_argument("--live-for", dest="live_for", default=None)
+    list_parser.add_argument("--live-for", dest="live_for", default=None, metavar="{asker,listener}", help="list live peers available to this seat")
     add_session(list_parser)
     list_parser.add_argument("--wait", type=float, default=None, help="seconds to wait for a live peer")
     add_output(list_parser)
@@ -1187,6 +1189,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_output(whoami_parser)
     whoami_parser.set_defaults(handler=whoami)
 
+    clikit.add_help_examples(parser, clikit.Catalog(prog=program, examples=EXAMPLES))
     return parser
 
 

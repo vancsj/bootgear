@@ -140,6 +140,32 @@ class CallerPathTest(unittest.TestCase):
 
 
 class ParserWiringTest(unittest.TestCase):
+    def test_related_bad_values_are_grouped_before_dispatch(self):
+        catalog = clikit.Catalog(prog="tool", examples={"check": "check --role r1 --kind clean"})
+        parser = clikit.parser_class(catalog)(prog="tool")
+        leaf = parser.add_subparsers(dest="command", required=True).add_parser("check")
+        leaf.add_argument("--role", choices=("r1", "r2"), required=True)
+        leaf.add_argument("--kind", choices=("clean", "refuted"), required=True)
+        dispatch = mock.Mock()
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error), self.assertRaises(SystemExit):
+            clikit.run(parser, catalog, lambda a: a.command,
+                       ["check", "--role", "finder", "--kind", "agree"], dispatch)
+        dispatch.assert_not_called()
+        self.assertIn("finder", error.getvalue())
+        self.assertIn("agree", error.getvalue())
+
+    def test_leaf_help_includes_its_runnable_example(self):
+        result = _Run(["a", "one", "--help"], _noop)
+        self.assertEqual(result.code, 0)
+        self.assertIn("example: tool a one <name> --flag x", result.out)
+        self.assertIn("{x,y}", result.out)
+
+    def test_group_help_uses_a_matching_leaf_example(self):
+        result = _Run(["a", "--help"], _noop)
+        self.assertEqual(result.code, 0)
+        self.assertIn("example: tool a one <name> --flag x", result.out)
+
     def test_leaf_commands_walks_nested_subparsers(self):
         self.assertEqual(set(clikit.leaf_commands(_parser())), set(EXAMPLES))
 
@@ -156,6 +182,17 @@ class ParserWiringTest(unittest.TestCase):
 
 
 class RefusalRenderingTest(unittest.TestCase):
+    def test_short_alternative_list_prefers_the_same_command_group(self):
+        examples = {f"other c{index}": f"other c{index}" for index in range(8)}
+        examples.update({"state transition": "state transition --to done", "state current": "state current"})
+        catalog = clikit.Catalog(prog="tool", examples=examples)
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            clikit.render_refusal(catalog, "state transition", clikit.Refusal("bad destination"), "json")
+        alternatives = json.loads(error.getvalue())["error"]["commands"]
+        self.assertEqual(alternatives[0], "state current")
+        self.assertLessEqual(len(alternatives), 5)
+
     def test_parse_error_prose(self):
         result = _Run(["a", "one", "n"], _noop, {clikit.ENV_MODE: "prose"})
         self.assertEqual(result.code, 2)
@@ -187,16 +224,16 @@ class RefusalRenderingTest(unittest.TestCase):
         self.assertEqual(error["command"], "a two")
         self.assertEqual(error["message"], "tool: error: unrecognized arguments: --nope")
 
-    def test_non_leaf_command_has_no_example(self):
+    def test_non_leaf_command_has_a_matching_example(self):
         prose = _Run(["a"], _noop, {clikit.ENV_MODE: "prose"})
         self.assertEqual(prose.code, 2)
         self.assertTrue(prose.err.splitlines()[-1].startswith("tool a: error: "))
-        self.assertNotIn("example:", prose.err)
+        self.assertIn("example: tool a one <name> --flag x", prose.err)
         self.assertIn("commands: a one, a two, b", prose.err)
         self.assertIn("  tool a one <name> --flag x", prose.err)
         error = _Run(["a"], _noop, {clikit.ENV_MODE: "json"}).err_json()
         self.assertEqual(error["command"], "a")
-        self.assertIsNone(error["example"])
+        self.assertEqual(error["example"], "tool a one <name> --flag x")
         self.assertEqual(error["commands"], ["a one", "a two", "b"])
 
     def test_sys_exit_str_prose_and_json(self):

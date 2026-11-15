@@ -13,16 +13,15 @@ def test_finder_cannot_cut_own_claim(cv: Converge) -> None:
 
 def test_orchestrator_never_attacks_or_cuts(cv: Converge) -> None:
     cv.ready(cut="before")
-    assert ("attack: orch wrote init; the orchestrator never writes attack"
-            in cv.attack("F001", BATCH_1[0], agent=MAIN))
+    assert (any(("attack: orch wrote init; the orchestrator never writes attack") in problem for problem in cv.check("F001", BATCH_1[0], agent=MAIN)))
     err = cv.cut("F001", 1, MAIN, when="before", code=2).stderr
     assert "the orchestrator never writes cut" in err
 
 
 def test_same_refuter_may_attack_different_claims(cv: Converge) -> None:
     cv.ready(claims=2)
-    assert cv.attack("F001", BATCH_1[0], agent=R1) == []
-    assert cv.attack("F002", BATCH_1[0], agent=R1) == []
+    assert cv.check("F001", BATCH_1[0], agent=R1) == []
+    assert cv.check("F002", BATCH_1[0], agent=R1) == []
 
 
 def test_refuter_of_one_claim_may_cut_another(cv: Converge) -> None:
@@ -41,5 +40,5 @@ def test_gap_hunt_finder_may_not_attack_its_claim(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "none", "escalate": False}})
     cv.cover()
     gap = cv.file(agent=R2, lens="gap-hunt", origin="gap-hunt", claim="ticket asks for retries")
-    assert "attack: r2 filed F001 and may not attack it" in cv.attack(gap, BATCH_1[0], agent=R2)
-    assert cv.attack(gap, BATCH_1[0], agent=R1) == []
+    assert any(("attack: r2 filed F001 and may not attack it") in problem for problem in cv.check(gap, BATCH_1[0], agent=R2))
+    assert cv.check(gap, BATCH_1[0], agent=R1) == []

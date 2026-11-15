@@ -159,8 +159,10 @@ Use the depth label passed by the caller, else `full`:
 
 This slate is one task: never use more than these agents on it, and reuse
 each one across rounds. The cap counts this slate only; a later debate on its
-choices has its own budget. F covers every find angle of every lens; angles
-per claim per round come from the `status --json` `plan`.
+choices has its own budget. F covers every find angle of every lens.
+Each role gets its current claims, definitions, evidence, and actions from public `work`.
+Require its actor and explicit executing host. Use the printed package paths when saving work.
+The orchestrator supplies the receiving role's host for delegated package preparation.
 
 Each lens's scope and finder brief is in
 [references/lenses.md](references/lenses.md).
@@ -242,10 +244,12 @@ refuters (R1, R2) and the gap hunt of sub-task 4; at `quick`, one refuter (R1)
 and no gap hunt. The find comes first, then sub-task 4, then converge's
 escalate, cut and attack steps.
 
-Spawn one finder, F, for every lens from sub-task 1. Give it one brief listing
-every lens with its scope and brief from `references/lenses.md` and that
-lens's find angles from the angle files of sub-task 2, plus the actual diff
-(not only commit messages or the PR description) and the linked ticket if any.
+Spawn one finder, F, for every lens from sub-task 1.
+Give it each lens's scope from `references/lenses.md`, the actual diff, and any linked ticket.
+Use generated role work for the saved angles and event context.
+Have each role fill its own evidence and judgments in the printed action inputs.
+Submit through `act` or a direct public command. Refresh work after changes or stale-action refusals.
+Follow its waiting, complete, and handoff guidance.
 
 Name `.bootgear/config/principles.md`, the host user-principles file and each
 standard file in `.bootgear/config/` as context files for F, R1, R2 and C, each
@@ -354,6 +358,12 @@ Standalone, one iteration runs sub-tasks 1–5, applies what the mode permits,
 and re-reviews the result with a new slate, until one outcome applies.
 
 ## Rules
+
+### Role scope
+
+Keep the reviewed artifact read-only during independent judging.
+Roles may write their assigned workflow records and read or record memory-ledger entries.
+Keep other write limits and judging independence. Never supply author private analysis to judging roles.
 
 ### Acceptance
 

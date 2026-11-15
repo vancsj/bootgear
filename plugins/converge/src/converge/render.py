@@ -69,6 +69,19 @@ def _killed_lines(slate: Slate) -> list[str]:
     return lines
 
 
+def _check_lines(slate: Slate) -> list[str]:
+    lines = ["## Attack checks", ""]
+    found = False
+    for claim in slate.claims.values():
+        for batch, checks in claim.state.attacks.items():
+            for check in checks:
+                found = True
+                lines.append(f"- {claim.id} batch={batch} seq={check['seq']} "
+                             f"actor={check['as']} angle={_cell(check['angle'])} "
+                             f"outcome={check['outcome']}: {_cell(check['evidence'])}")
+    return lines if found else [*lines, "None."]
+
+
 def claim_inputs(slate: Slate) -> list[dict[str, Any]]:
     """Each claim's filed trigger, evidence and tier, in filing order."""
     return [{"id": c.id, "trigger": c.trigger, "evidence": c.evidence, "tier": c.tier,
@@ -170,5 +183,6 @@ def render(slate: Slate) -> str:
               for r in choices] or ["None."]
     lines += ["", "## Follow-up", "", *_table(follow_up, with_cut=False)]
     lines += ["", "## Killed", "", *(_killed_lines(slate) or ["None."])]
+    lines += [""] + _check_lines(slate)
     lines += [""] + _coverage_lines(slate)
     return "\n".join(lines) + "\n"

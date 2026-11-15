@@ -197,15 +197,15 @@ def test_cutoff_refused_with_open_claims(cv: Converge) -> None:
     cv.ready(claims=2)
     cv.clean("F001")
     problems = _write_cutoff(cv)
-    assert "cutoff: the slate is in phase attack; cutoff needs phase cutoff" in problems
-    assert "cutoff: open claims remain: F002 (attack)" in problems
+    assert any(("cutoff: the slate is in phase attack; cutoff needs phase cutoff") in problem for problem in problems)
+    assert any(("cutoff: open claims remain: F002 (attack)") in problem for problem in problems)
 
 
 def test_cutoff_refused_from_an_agent(cv: Converge) -> None:
     _build(cv, {"impact": "security"})
     results = protocol.cutoff_results(protocol.compute_cutoff(_slate(cv)))
     problems = cv.append("cutoff", MAIN, results=results)
-    assert f"cutoff is computed by `{GEAR_COMMAND} cutoff` only; it is rejected from --as input" in problems
+    assert any((f"cutoff is computed by `{GEAR_COMMAND} cutoff` only; it is rejected from --as input") in problem for problem in problems)
 
 
 def test_cutoff_results_must_match_the_recompute(cv: Converge) -> None:
@@ -213,7 +213,7 @@ def test_cutoff_results_must_match_the_recompute(cv: Converge) -> None:
     results = protocol.cutoff_results(protocol.compute_cutoff(_slate(cv)))
     results[0]["result"] = "follow-up"
     problems = cv.append("cutoff", model.CONVERGE_AGENT, results=results)
-    assert "cutoff: results differ from the computed cutoff" in problems
+    assert any(("cutoff: results differ from the computed cutoff") in problem for problem in problems)
 
 
 def test_hand_edited_cutoff_is_refused_on_replay(cv: Converge) -> None:

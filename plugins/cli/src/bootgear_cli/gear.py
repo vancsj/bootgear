@@ -41,7 +41,7 @@ class GearError(Exception):
 class GearParser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         example = shlex.join([str(CLI_ROOT / "bin" / "gear"), "--help"])
-        self.exit(2, f"gear: {message}\nexample: {example}\ncommands: list, doctor, reconcile, event, <plugin> <command>\n")
+        self.exit(2, f"example: {example}\ncommands: list, doctor, reconcile, event, <plugin> <command>\ngear: {message}\n")
 
 
 @dataclass(frozen=True)
@@ -449,7 +449,8 @@ def _reconcile_for_route(root: Path, *, refresh: bool = False) -> Reconciliation
 
 def main(argv: Sequence[str] | None = None) -> int:
     os.environ.pop("BOOTGEAR_PROG", None)
-    parser = GearParser(prog="gear", description=__doc__)
+    parser = GearParser(prog="gear", description=__doc__,
+                        epilog="commands: list, doctor, reconcile, event, <plugin> <command>; example: gear list")
     parser.add_argument("--host", choices=("claude", "codex"),
                         help="the calling host; default: $BOOTGEAR_HOST, else the host of the session environment")
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="bootgear repository root")
@@ -466,6 +467,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     route = args.route
     root = args.root
     try:
+        if route and route[0] in BUILT_IN_COMMANDS and any(value in {"-h", "--help"} for value in route[1:]):
+            prefix = [str(CLI_ROOT / "bin" / "gear")]
+            if chosen_host := clikit.host(args.host):
+                prefix.extend(["--host", chosen_host])
+            command = route[0]
+            suffix = " <event>" if command == "event" else " [--json|--prose]"
+            meanings = {
+                "list": "List registered provider commands.",
+                "doctor": "Show the selected root and available providers.",
+                "reconcile": "Refresh the installed host plugin inventory and report provider commands.",
+                "event": "Read host event JSON from stdin and run the registered event handlers.",
+            }
+            call = shlex.join([*prefix, command])
+            example = (f"printf '%s\\n' '{{\"session_id\":\"00000000-0000-4000-8000-000000000001\",\"hook_event_name\":\"SessionStart\",\"cwd\":\".\",\"source\":\"startup\"}}' | {call} SessionStart"
+                       if command == "event" else call)
+            print(f"usage: {call}{suffix}\n\n{meanings[command]}\nexample: {example}")
+            return 0
         root = args.root.resolve()
         caller_cwd = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
         # An installed Gear needs host plugins, except for a `cli` route, which loads from CLI_ROOT.
@@ -484,6 +502,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise GearError("--json and --prose are mutually exclusive")
             mode = "json" if json_flag else "prose" if prose_flag else mode
             route = [value for value in route if value not in {"--json", "--prose"}]
+            if route[0] != "event" and len(route) != 1:
+                raise GearError(f"{route[0]} accepts only --json or --prose; use --root before the command")
         elif args.json or args.prose:
             os.environ["BOOTGEAR_OUTPUT"] = "json" if args.json else "prose"
         if route[0] == "list":
@@ -514,7 +534,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                              refresh=lambda: _reconcile_for_route(root, refresh=True),
                              caller_cwd=caller_cwd)
     except GearError as exc:
-        print(f"gear: {exc}", file=sys.stderr)
         from bootgear_cli.clikit import gear_command
 
         provider = plugins.get(route[0]) if route else None
@@ -525,6 +544,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             example = shlex.join([str(CLI_ROOT / "bin" / "gear"), "--help"])
         print(f"example: {example}", file=sys.stderr)
         print("commands: list, doctor, reconcile, event, <plugin> <command>", file=sys.stderr)
+        print(f"gear: {exc}", file=sys.stderr)
         return 2
 
 

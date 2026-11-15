@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from bootgear_cli.clikit import host
+from bootgear_cli.clikit import event_help, host
 
 HOST = host() or "claude"
 _ROOT_ENV = "PLUGIN_ROOT" if HOST == "codex" else "CLAUDE_PLUGIN_ROOT"
@@ -28,4 +28,9 @@ if str(_source) not in sys.path:
 from engine.host_adapter import run
 
 if __name__ == "__main__":
+    if event_help("engine", "adapter", "Host event JSON on stdin: session_id, hook_event_name, cwd, and event-specific fields. "
+                  "--handler: session_recall, state_nudge, stop_reminder, compaction_observe. --matcher-pattern selects the event matcher.",
+                  {"session_id": "00000000-0000-4000-8000-000000000001", "hook_event_name": "SessionStart", "source": "startup", "cwd": "."},
+                  "--handler session_recall --matcher-pattern startup"):
+        raise SystemExit(0)
     raise SystemExit(run(HOST, sys.argv[1:]))

@@ -41,8 +41,8 @@ def _review(cv: Converge, slate: str, *, finding: bool = False, cutoff: bool = T
     cv.cover(slate=slate)
     if finding:
         for angle in BATCH_1:
-            assert cv.attack("F001", angle, slate=slate) == []
-        assert cv.attack("F001", "retry timing", agent=R2, batch="fresh-eye", last=True,
+            assert cv.check("F001", angle, slate=slate) == []
+        assert cv.check("F001", "retry timing", agent=R2, batch="fresh-eye", last=True,
                          slate=slate) == []
     if cutoff:
         cv.ok("cutoff", slate)

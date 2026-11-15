@@ -15,6 +15,7 @@ from conftest import (
     FILE_EVIDENCE,
     FINDER,
     GEAR_COMMAND,
+    HOST,
     MAIN,
     R1,
     R2,
@@ -33,13 +34,18 @@ def _plan(cv: Converge) -> str:
     return _cmd(cv, "status s1 --dir {dir} --json")
 
 
+def _role_next(cv: Converge, actor: str, *, structured: bool = False) -> str:
+    prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
+    return "next: " + prefix + _cmd(cv, f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
+
+
 def _lines(cv: Converge, *args: str, code: int = 0) -> list[str]:
     return cv.ok(*args, code=code).stdout.splitlines()
 
 
 def _attack(cv: Converge, angle: str, *extra: str, agent: str = R1, batch: Any = 1,
             outcome: str = "clean", code: int = 0) -> Any:
-    return cv.attack_cli("F001", angle, *extra, agent=agent, batch=batch, outcome=outcome,
+    return cv.check_cli("F001", angle, *extra, agent=agent, batch=batch, outcome=outcome,
                          code=code)
 
 
@@ -78,39 +84,36 @@ def _to_attack(cv: Converge) -> None:
 
 def test_find_commands_print_the_finder_step(cv: Converge) -> None:
     cv.init(config=TASK)
-    find = "next: continue the finder with the missing angles, then " + _cmd(
-        cv, "coverage s1 --dir {dir}")
     out = _lines(cv, "file", "s1", "--as", FINDER, "--lens", "correctness",
                  "--angle", "changed-contract", "--origin", "lens", "--loc", "a.py:1",
                  "--claim", "c", "--trigger", "t", *FILE_ARGS)
-    assert out == ["FILED F001", find]
+    assert out == ["FILED F001", _role_next(cv, FINDER, structured=False)]
     out = _lines(cv, "find-run", "s1", "--as", FINDER, "--lens", "correctness",
                  "--angle", "changed-contract", "--tell", "t", "--searches", "s",
                  "--positive-control", "p", "--result", "F001")
-    assert out == ["FIND-RUN seq=3 lens=correctness angle=changed-contract", find]
+    assert out == ["FIND-RUN seq=3 lens=correctness angle=changed-contract", _role_next(cv, FINDER, structured=False)]
     out = _lines(cv, "angle-na", "s1", "--as", FINDER, "--phase", "find",
                  "--angle", "failure-path", "--lens", "correctness", "--reason", "no I/O")
-    assert out == ["ANGLE-NA seq=4 phase=find angle=failure-path", find]
+    assert out == ["ANGLE-NA seq=4 phase=find angle=failure-path", _role_next(cv, FINDER, structured=False)]
 
 
 def test_escalate_and_cut_before_print_the_plan_step(cv: Converge) -> None:
     cv.init(config=TASK)
     cv.file()
-    cv.file()
+    cv.file(claim="another supported claim")
     cv.cover()
     out = _lines(cv, "escalate", "s1", "--as", FINDER, "--claim", "F001")
-    assert out[1] == f"next: escalate: finder escalate F002; plan: {_plan(cv)}"
+    assert out[1] == _role_next(cv, FINDER, structured=False)
     out = _lines(cv, "escalate", "s1", "--as", FINDER, "--claim", "F002")
     assert out[0].endswith(" F002 wider=no")
-    assert out[1] == f"next: cut-before: cutter cut-before F001, F002; plan: {_plan(cv)}"
+    assert out[1] == _role_next(cv, FINDER, structured=False)
     out = _cut(cv, "F001", "before", "wrong-output")
     assert out == [f"CUT seq={_seq(out)} F001 when=before round=1",
-                   (f"next: cut-before: finder accept F001; cutter cut-before F002; "
-                   f"plan: {_plan(cv)}")]
+                   (_role_next(cv, CUTTER, structured=False))]
     out = _lines(cv, "rebut", "s1", "--as", FINDER, "--claim", "F001", "--when", "before",
                  "--evidence", "prod shows every call")
     assert out == [f"REBUT seq={_seq(out)} F001 when=before",
-                   f"next: cut-before: cutter cut-before F001, F002; plan: {_plan(cv)}"]
+                   _role_next(cv, FINDER, structured=False)]
 
 
 def test_cut_before_leads_to_the_attack(cv: Converge) -> None:
@@ -121,7 +124,7 @@ def test_cut_before_leads_to_the_attack(cv: Converge) -> None:
     _cut(cv, "F001", "before", "wrong-output")
     out = _accept(cv, "F001", "before")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=before round=1",
-                   f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
+                   _role_next(cv, FINDER, structured=False)]
 
 
 # -- attack, reply, verdict ---------------------------------------------------------
@@ -131,34 +134,33 @@ def test_attack_reply_verdict_walk_the_dispute(cv: Converge) -> None:
     _to_attack(cv)
     out = _attack(cv, BATCH_1[0], outcome="refuted").stdout.splitlines()
     assert out == [f"ATTACK seq={_seq(out)} F001 batch=1 angle={BATCH_1[0]} outcome=refuted",
-                   f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
+                   _role_next(cv, R1, structured=False)]
     for angle in BATCH_1[1:4]:
         _attack(cv, angle)
     out = _lines(cv, "angle-na", "s1", "--as", R1, "--phase", "attack", "--claim", "F001",
                  "--angle", BATCH_1[4], "--reason", "no default in the diff")
-    assert out[1] == f"next: attack: finder reply F001 batch 1; plan: {_plan(cv)}"
+    assert out[1] == _role_next(cv, R1, structured=False)
     out = _lines(cv, "reply", "s1", "--as", FINDER, "--claim", "F001", "--batch", "1",
                  "--stance", "rebut", "--evidence", "the caller in b.py:4 passes None",
                  "--text", "None from b.py:4 crashes the parser")
     assert out == [f"REPLY seq={_seq(out)} F001 batch=1 stance=rebut",
-                   f"next: attack: r1 verdict F001 batch 1; plan: {_plan(cv)}"]
+                   _role_next(cv, FINDER, structured=False)]
     out = _lines(cv, "verdict", "s1", "--as", R1, "--claim", "F001", "--batch", "1",
                  "--verdict", "agree")
     assert out == [f"VERDICT seq={_seq(out)} F001 batch=1 verdict=agree",
-                   f"next: attack: r2 attack F001 batch fresh-eye; plan: {_plan(cv)}"]
+                   _role_next(cv, R1, structured=False)]
     out = _attack(cv, "retry timing", "--last", agent=R2, batch="fresh-eye").stdout.splitlines()
-    assert out == [(f"ATTACK seq={_seq(out)} F001 batch=fresh-eye angle=retry timing "
-                   f"outcome=clean"),
-                   f"next: cut-after: cutter cut-after F001; plan: {_plan(cv)}"]
+    assert out == [(f"CLEAN seq={_seq(out)} F001"),
+                   _role_next(cv, R2, structured=True)]
     assert cv.status()["by_id"]["F001"]["claim"] == "None from b.py:4 crashes the parser"
 
 
 def test_attack_reply_verdict_refusals_print_the_next_step(cv: Converge) -> None:
     _to_attack(cv)
     err = _attack(cv, BATCH_1[0], agent=FINDER, code=2).stderr.splitlines()
-    assert err[0] == f"example: {GEAR_COMMAND} {_example('attack')}"
-    assert err[-3:] == ["converge: refused:", "  - attack: finder filed F001 and may not attack it",
-                        f"next: attack: r1 attack F001 batch 1; plan: {_plan(cv)}"]
+    assert err[0] == f"example: {GEAR_COMMAND} {_example('clean')}"
+    assert any("finder filed F001 and may not attack it" in line for line in err)
+    assert err[-1] == _role_next(cv, FINDER, structured=True)
     err = _attack(cv, BATCH_1[0], batch=2, code=2).stderr
     assert "attack: F001's open batch is 1 (open); got batch 2" in err
     for angle in BATCH_1:
@@ -167,7 +169,7 @@ def test_attack_reply_verdict_refusals_print_the_next_step(cv: Converge) -> None
                 "--verdict", "agree", code=2).stderr.splitlines()
     assert ("  - verdict: F001 batch 1 is awaiting-reply-1; verdict needs awaiting-verdict"
             in err)
-    assert err[-1] == f"next: attack: finder reply F001 batch 1; plan: {_plan(cv)}"
+    assert err[-1] == _role_next(cv, R1, structured=False)
     err = cv.ok("reply", "s1", "--as", FINDER, "--claim", "F001", "--batch", "1",
                 "--stance", "rebut", code=2).stderr
     assert "`evidence` must be a non-empty string" in err
@@ -188,7 +190,7 @@ def test_decline_kills_the_claim(cv: Converge) -> None:
     out = _lines(cv, "reply", "s1", "--as", FINDER, "--claim", "F001", "--batch", "1",
                  "--stance", "decline")
     assert out == [f"REPLY seq={_seq(out)} F001 batch=1 stance=decline",
-                   "next: " + _cmd(cv, "cutoff s1 --dir {dir}")]
+                   _role_next(cv, FINDER, structured=False)]
     claim = cv.status()["by_id"]["F001"]
     assert (claim["status"], claim["cut"], claim["batch"], claim["batch_state"]) == (
         "killed", "no", None, None)
@@ -263,10 +265,10 @@ def test_status_names_the_gap_hunt_until_the_first_escalate(cv: Converge) -> Non
     cv.init(config={**TASK, "steps": {"cut": "both", "gap_hunt": True, "escalate": True}})
     cv.file()
     cv.cover()
-    gap = _cmd(cv, "file s1 --dir {dir} --as r2 --origin gap-hunt --lens <lens> --angle <angle>")
     assert _lines(cv, "status", "s1")[-1] == (
-        f"next: gap hunt: r2 files the claims the lenses missed ({gap} ...) before the first "
-        f"escalate, cut or attack; then escalate: finder escalate F001; plan: {_plan(cv)}")
+        "next: gap hunt: continue r2 with work and its explicit executing host; "
+        "r2 submits generated act actions, then reports completion to main; "
+        f"before the first escalate, cut or attack; then escalate: finder escalate F001; plan: {_plan(cv)}")
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
     assert _lines(cv, "status", "s1")[-1] == (
         f"next: cut-before: cutter cut-before F001; plan: {_plan(cv)}")
@@ -295,13 +297,12 @@ def test_gap_hunt_files_only_between_coverage_and_the_first_escalate(cv: Converg
     err = cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries", code=2)
     assert "file: gap-hunt claims are filed after find coverage is complete" in err
     assert err.splitlines()[-1] == (
-        "next: continue the finder with the missing angles, then "
-        + _cmd(cv, "coverage s1 --dir {dir}"))
+        _role_next(cv, R2, structured=False))
     cv.cover()
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
     err = cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries", code=2)
     assert "file: claims are filed before the first escalate, cut or attack event" in err
-    assert err.splitlines()[-1] == f"next: cut-before: cutter cut-before F001; plan: {_plan(cv)}"
+    assert err.splitlines()[-1] == _role_next(cv, R2, structured=False)
 
 
 def test_one_refuter_slate_has_no_gap_hunt(cv: Converge) -> None:
@@ -330,7 +331,7 @@ def test_cut_after_accept_names_the_cutoff(cv: Converge) -> None:
     _to_cutoff(cv)
     out = _accept(cv, "F001", "after")
     assert out == [f"ACCEPT seq={_seq(out)} F001 when=after round=1",
-                   "next: " + _cmd(cv, "cutoff s1 --dir {dir}")]
+                   _role_next(cv, FINDER, structured=False)]
 
 
 def test_cutoff_gate_render_converged(cv: Converge) -> None:
@@ -374,7 +375,7 @@ def test_converged_lists_the_disputed_findings(cv: Converge) -> None:
           "--verdict", "disagree", "--evidence", "b.py:4 is dead code")
     out = _lines(cv, "reply", "s1", "--as", FINDER, "--claim", "F001", "--batch", "1",
                  "--stance", "rebut", "--evidence", "the router reaches b.py:4")
-    assert out[1] == f"next: attack: r2 attack F001 batch fresh-eye; plan: {_plan(cv)}"
+    assert out[1] == _role_next(cv, FINDER, structured=False)
     assert _lines(cv, "converged", "s1", code=1) == [
         "OPEN phase=attack claims=1", "F001 open in attack",
         f"next: attack: r2 attack F001 batch fresh-eye; plan: {_plan(cv)}"]
