@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^AskUserQuestion$",
+        "hooks": [{
+          "type": "command",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/gear\" --host claude adapter --handler question_boundary --matcher-pattern '^AskUserQuestion$'",
+          "onFailure": "block",
+          "statusMessage": "Checking Engine question cutoff"
+        }]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|clear|compact",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib
 import json
 import os
@@ -49,12 +50,15 @@ class ResolveCommandTests(unittest.TestCase):
 
 
 class HookManifestPopulationTests(unittest.TestCase):
-    def test_no_plugin_declares_a_pre_tool_use_hook(self) -> None:
+    def test_only_engine_declares_a_pre_tool_use_hook(self) -> None:
         manifests = sorted(REPO.glob("plugins/*/hooks/*.json"))
         self.assertTrue(manifests)
         declaring = [str(path.relative_to(REPO)) for path in manifests
                      if "PreToolUse" in json.loads(path.read_text(encoding="utf-8")).get("hooks", {})]
-        self.assertEqual(declaring, [])
+        self.assertEqual(set(declaring), {
+            "plugins/engine/hooks/codex-hooks.json",
+            "plugins/engine/hooks/hooks.json",
+        })
 
 
 class GearIntegrationTests(unittest.TestCase):
@@ -339,15 +343,28 @@ class GearIntegrationTests(unittest.TestCase):
     def _query_count(self, host: str) -> int:
         return query_count(self.queries, host)
 
-    def test_native_hook_loaders_match_the_shared_template(self) -> None:
+    def test_native_hook_loaders_share_the_common_template_surface(self) -> None:
         loaders = sorted(str(path.parent.parent.relative_to(REPO)) for path in
                          list(REPO.glob("plugins/*/hooks/gear.py")))
         self.assertEqual(loaders, list(LOADER_PLUGINS))
         launcher = (REPO / "plugins" / "engine" / "hooks" / "gear").read_bytes()
+        template = HOOK_TEMPLATE.read_bytes()
+
+        def shared_nodes(source: bytes) -> list[str]:
+            tree = ast.parse(source)
+            return [ast.dump(node, include_attributes=False) for node in tree.body
+                    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    or node.name not in {"_remind", "main"}]
+
         for plugin in LOADER_PLUGINS:
             with self.subTest(plugin=plugin):
                 hooks = REPO / plugin / "hooks"
-                self.assertEqual((hooks / "gear.py").read_bytes(), HOOK_TEMPLATE.read_bytes())
+                source = (hooks / "gear.py").read_bytes()
+                if plugin == "plugins/engine":
+                    self.assertEqual(shared_nodes(source), shared_nodes(template))
+                    self.assertIn(b'"permissionDecision": "deny"', source)
+                else:
+                    self.assertEqual(source, template)
                 self.assertEqual((hooks / "gear").read_bytes(), launcher)
                 self.assertEqual(stat.S_IMODE((hooks / "gear").stat().st_mode), 0o755)
 
@@ -535,6 +552,19 @@ class GearIntegrationTests(unittest.TestCase):
                 self.assertIn("The shared CLI plugin is missing", output["additionalContext"])
                 self.assertIn("Invoke cli:setup", output["additionalContext"])
 
+    def test_native_question_hooks_deny_when_the_shared_cli_is_missing(self) -> None:
+        payload = b'{"hook_event_name":"PreToolUse"}'
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                root = self._hook_provider(host)
+                result = self._run_hook(host, root, payload)
+
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                output = json.loads(result.stdout)["hookSpecificOutput"]
+                self.assertEqual(output["hookEventName"], "PreToolUse")
+                self.assertEqual(output["permissionDecision"], "deny")
+                self.assertIn("The shared CLI plugin is missing", output["permissionDecisionReason"])
+
     def test_native_hooks_report_missing_runtime_and_offer_setup(self) -> None:
         payload = b'{"hook_event_name":"PreToolUse","event":"runtime"}'
         for host in ("claude", "codex"):
@@ -547,8 +577,9 @@ class GearIntegrationTests(unittest.TestCase):
                 guidance = json.loads(result.stdout)
                 output = guidance["hookSpecificOutput"]
                 self.assertEqual(output["hookEventName"], "PreToolUse")
-                self.assertIn("Shared runtime is missing", output["additionalContext"])
-                self.assertIn("Invoke cli:setup", output["additionalContext"])
+                self.assertEqual(output["permissionDecision"], "deny")
+                self.assertIn("Shared runtime is missing", output["permissionDecisionReason"])
+                self.assertIn("Invoke cli:setup", output["permissionDecisionReason"])
 
     def test_native_hooks_forward_event_output_and_exit_status(self) -> None:
         payload = b'{"hook_event_name":"SessionStart","event":"forward"}'

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bootgear_cli import runtime
 from gear_commands import CONVERGE, TASK
 from gear_commands import command as gear_command
 
@@ -62,6 +63,10 @@ class ClaudePackageContractTest(unittest.TestCase):
                 (folder / "profile.yaml").write_text(f"source: {host}\n")
             explicit = root / "explicit.yaml"
             explicit.write_text("source: explicit\n")
+            data = root / "data"
+            runtimes = data / "bootgear" / "runtimes"
+            runtimes.parent.mkdir(parents=True)
+            runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
             for host in ("claude", "codex"):
                 for override in (False, True):
                     with self.subTest(host=host, override=override):
@@ -70,7 +75,8 @@ class ClaudePackageContractTest(unittest.TestCase):
                         if override:
                             args.extend(("--user-config", str(explicit)))
                         result = subprocess.run(
-                            args, env={**os.environ, "HOME": str(root), "BOOTGEAR_HOST": host},
+                            args, env={**os.environ, "HOME": str(root), "XDG_DATA_HOME": str(data),
+                                       "BOOTGEAR_HOST": host},
                             capture_output=True, text=True, check=True,
                         )
                         self.assertEqual(json.loads(result.stdout)["effective"]["source"],
@@ -433,6 +439,10 @@ class ClaudePackageContractTest(unittest.TestCase):
 
     def test_session_recall_runs_on_startup_clear_and_compact(self):
         hooks = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())["hooks"]
+        question_hook = hooks["PreToolUse"][0]
+        self.assertEqual(question_hook["matcher"], "^AskUserQuestion$")
+        self.assertEqual(question_hook["hooks"][0]["onFailure"], "block")
+        self.assertIn("--handler question_boundary", question_hook["hooks"][0]["command"])
         self.assertEqual(
             [(entry["matcher"], [h["command"] for h in entry["hooks"]])
              for entry in hooks["SessionStart"]],

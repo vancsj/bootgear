@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli import runtime
 from gear_commands import HOST, display
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
@@ -79,11 +80,15 @@ print(json.dumps({"leaves": sorted(leaf_commands(parser)),
 def _env(**extra):
     env = {k: v for k, v in os.environ.items()
            if k not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "GEAR_CALLER_CWD",
-                        "VIRTUAL_ENV")}
+                        "VIRTUAL_ENV", "BOOTGEAR_TEST_HOME", "BOOTGEAR_TEST_DATA")}
     paths = [str(PLUGIN_DIR / "src"), str(REPOSITORY_ROOT / "plugins" / "cli" / "src")]
     if env.get("PYTHONPATH"):
         paths.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(paths)
+    if os.environ.get("BOOTGEAR_TEST_HOME"):
+        env["HOME"] = os.environ["BOOTGEAR_TEST_HOME"]
+    if os.environ.get("BOOTGEAR_TEST_DATA"):
+        env["XDG_DATA_HOME"] = os.environ["BOOTGEAR_TEST_DATA"]
     env.update(extra)
     return env
 
@@ -96,6 +101,24 @@ class CliOutputTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="engine-cli-output-"))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.data = self.tmp / "data"
+        runtimes = self.data / "bootgear" / "runtimes"
+        runtimes.parent.mkdir(parents=True)
+        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
+        for name, value in (("BOOTGEAR_TEST_HOME", str(self.home)),
+                            ("BOOTGEAR_TEST_DATA", str(self.data))):
+            previous = os.environ.get(name)
+            os.environ[name] = value
+
+            def restore(key=name, old=previous):
+                if old is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old
+
+            self.addCleanup(restore)
         self.session_dir = self.tmp / "session"
         self.run_id = "out-run"
         settlement = self.tmp / "settlement.txt"

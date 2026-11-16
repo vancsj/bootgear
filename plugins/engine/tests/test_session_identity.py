@@ -1,4 +1,5 @@
 """Session ID defaults and next-command paths for the Engine CLI."""
+import json
 import os
 import shutil
 import subprocess
@@ -6,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bootgear_cli import clikit
+from bootgear_cli import clikit, runtime
 from gear_commands import HOST
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
@@ -32,6 +33,10 @@ class SessionIdentityTest(unittest.TestCase):
         self.project.mkdir()
         self.home = self.tmp / "home"
         self.home.mkdir()
+        self.data = self.tmp / "data"
+        runtimes = self.data / "bootgear" / "runtimes"
+        runtimes.parent.mkdir(parents=True)
+        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.default_dir = self.home / ".bootgear" / "session"
         self.custom_dir = self.tmp / "custom-session"
         self.settlement_file = self.tmp / "settlement.txt"
@@ -42,7 +47,8 @@ class SessionIdentityTest(unittest.TestCase):
                if key not in ("BOOTGEAR_OUTPUT", "BOOTGEAR_PROG", "BOOTGEAR_SESSION_ID",
                               "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "GEAR_CALLER_CWD",
                               "VIRTUAL_ENV")}
-        env.update({"BOOTGEAR_OUTPUT": "prose", "HOME": str(self.home)})
+        env.update({"BOOTGEAR_OUTPUT": "prose", "HOME": str(self.home),
+                    "XDG_DATA_HOME": str(self.data)})
         env.update(extra)
         return env
 
@@ -61,6 +67,34 @@ class SessionIdentityTest(unittest.TestCase):
 
     def _read(self, *args, **env):
         return self._task("session", "read", *args, "--prose", **env)
+
+    def test_custom_session_dir_is_registered_for_runtime_hooks(self):
+        self._init("custom-run")
+
+        registration = self.default_dir / ".active" / "custom-run.json"
+        self.assertEqual(json.loads(registration.read_text()),
+                         {"session_dir": str(self.custom_dir.resolve())})
+
+    def test_custom_session_path_registration_is_removed_when_closed(self):
+        self._init("custom-run")
+        registration = self.default_dir / ".active" / "custom-run.json"
+        transitioned = self._task("state", "transition", "custom-run", "--dir",
+                                  str(self.custom_dir), "--to", "failed", "--reason", "test")
+        self.assertEqual(transitioned.returncode, 0, transitioned.stderr)
+        closed = self._task("session", "close", "custom-run", "--dir", str(self.custom_dir),
+                            "--outcome", "failed", "--reason", "test")
+        self.assertEqual(closed.returncode, 0, closed.stderr)
+        self.assertFalse(registration.exists())
+
+    def test_arm_canonical_record_writes_only_kind_and_phase(self):
+        self._init("canonical-run")
+
+        result = self._task("session", "arm-canonical-record", "canonical-run", "--dir",
+                            str(self.custom_dir), "--phase", "clarify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        marker = self.custom_dir / ".canonical-run.question_state"
+        self.assertEqual(json.loads(marker.read_text()),
+                         {"kind": "canonical_record", "phase": "clarify"})
 
     def test_explicit_positional_id_wins_over_both_environment_ids(self):
         self._init("explicit-id")

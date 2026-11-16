@@ -24,12 +24,18 @@ os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
 os.environ["BOOTGEAR_HOST"] = "claude"
 
 import deputy
-from bootgear_cli import clikit
+from bootgear_cli import clikit, runtime
 
 SESSION_VARIABLES = ("BOOTGEAR_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID")
 QUESTION = "Should new scripts run with uv?"
 CLAIM = "Scripts run with uv run --script"
 WHY = "uv pins dependencies per script"
+FIXED_BECAUSE = "The user confirmed this canonical decision."
+
+
+def engine_line(question: str, claim: str) -> str:
+    return (f"- 2026-11-15 00:00 [solo] Canonical question: {question} | "
+            f"Canonical decision: {claim}\n")
 
 
 def git_root(path: Path) -> Path:
@@ -56,10 +62,9 @@ class DeputyTest(unittest.TestCase):
     def record(self, claim: str = CLAIM, question: str = QUESTION,
                session: str = "session.md") -> tuple[int, str, str]:
         session_file = self.base / session
-        session_file.write_text(f"decision: {claim}\n", encoding="utf-8")
+        session_file.write_text(engine_line(question, claim), encoding="utf-8")
         return self.run_deputy("record", "--question", question, "--claim", claim,
-                               "--because", WHY, "--options", "uv or pip", "--stakes", "low",
-                               "--session-ledger", str(session_file))
+                               "--session-ledger", str(session_file), "--confirmed-by-user")
 
     def test_identical_answer_from_a_new_session_adds_a_vote(self) -> None:
         self.assertEqual(self.record(session="first.md")[0], 0)
@@ -137,13 +142,12 @@ class DeputyTest(unittest.TestCase):
             with unittest.mock.patch.object(deputy, "record", return_value=0) as record:
                 code = deputy.main([
                     "--deputy-root", "relative-deputy", "record",
-                    "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
-                    "--options", "uv or pip", "--stakes", "low",
-                    "--session-ledger", "sessions/run.md",
+                    "--question", QUESTION, "--claim", CLAIM,
+                    "--session-ledger", "sessions/run.md", "--confirmed-by-user",
                 ])
                 self.assertEqual(code, 0)
                 self.assertEqual(record.call_args.args[0], expected_root)
-                self.assertEqual(record.call_args.args[6], expected_session)
+                self.assertEqual(record.call_args.args[3], expected_session)
 
     def test_candidates_prints_the_matching_entry_in_full(self) -> None:
         self.assertEqual(self.record()[0], 0)
@@ -151,8 +155,10 @@ class DeputyTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("CANDIDATE decisions/", out)
         self.assertIn(CLAIM, out)
-        self.assertIn(WHY, out)
-        self.assertIn("Context: options uv or pip; stakes low.", out)
+        self.assertIn(FIXED_BECAUSE, out)
+        self.assertNotIn(WHY, out)
+        self.assertNotIn("options", out)
+        self.assertNotIn("stakes", out)
 
     def test_identical_answer_writes_nothing(self) -> None:
         self.assertEqual(self.record()[0], 0)
@@ -161,12 +167,48 @@ class DeputyTest(unittest.TestCase):
         self.assertIn("UNCHANGED", out)
         self.assertEqual(len(list(self.root.rglob("*.md"))), 1)
 
+    def test_retry_after_sign_failure_finishes_sign_and_save(self) -> None:
+        session = self.base / "session.md"
+        session.write_text(engine_line(QUESTION, CLAIM), encoding="utf-8")
+        votes = 0
+        signs = 0
+        saves = 0
+
+        def ledger(_root: Path, *args: str, signer: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
+            nonlocal votes, signs, saves
+            command = args[0]
+            if command == "vote":
+                votes += 1
+                output = ("VOTED decisions/canonical a1 n=1" if votes == 1
+                          else "UNCHANGED decisions/canonical a1")
+                return subprocess.CompletedProcess(args, 0, output, "")
+            if command == "sign":
+                signs += 1
+                return subprocess.CompletedProcess(args, 1 if signs == 1 else 0,
+                                                    "sign failed" if signs == 1 else "SIGNED", "")
+            if command == "save":
+                saves += 1
+                return subprocess.CompletedProcess(args, 0, "SAVED", "")
+            self.fail(f"unexpected ledger command: {command}")
+
+        with unittest.mock.patch.object(deputy, "ledger", side_effect=ledger):
+            with redirect_stderr(io.StringIO()):
+                first = deputy.record(self.root, QUESTION, CLAIM, session, True)
+            with redirect_stdout(io.StringIO()):
+                retry = deputy.record(self.root, QUESTION, CLAIM, session, True)
+
+        self.assertEqual(first, 1)
+        self.assertEqual(retry, 0)
+        self.assertEqual(votes, 2)
+        self.assertEqual(signs, 2)
+        self.assertEqual(saves, 1)
+
     def test_repeat_answer_in_the_same_session_adds_a_vote(self) -> None:
         self.assertEqual(self.record()[0], 0)
         session = self.base / "session.md"
-        session.write_text(f"decision: {CLAIM}\ndecision: {CLAIM}\n", encoding="utf-8")
-        argv = ["record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
-                "--options", "uv or pip", "--stakes", "low", "--session-ledger", str(session)]
+        session.write_text(engine_line(QUESTION, CLAIM) * 2, encoding="utf-8")
+        argv = ["record", "--question", QUESTION, "--claim", CLAIM,
+                "--session-ledger", str(session), "--confirmed-by-user"]
         code, out, err = self.run_deputy(*argv)
         self.assertEqual(code, 0, err)
         self.assertIn("VOTED decisions/", out)
@@ -179,10 +221,76 @@ class DeputyTest(unittest.TestCase):
         session = self.base / "session.md"
         session.write_text("decision: something else\n", encoding="utf-8")
         code, _, err = self.run_deputy("record", "--question", QUESTION, "--claim", CLAIM,
-                                       "--because", WHY, "--options", "uv or pip",
-                                       "--stakes", "low", "--session-ledger", str(session))
+                                       "--session-ledger", str(session), "--confirmed-by-user")
         self.assertEqual(code, 2)
-        self.assertIn("does not contain the answer", err)
+        self.assertIn("does not contain the canonical record", err)
+        self.assertEqual(list(self.root.rglob("*.md")), [])
+
+    def test_record_refuses_a_line_with_only_the_decision_substring(self) -> None:
+        session = self.base / "session.md"
+        session.write_text(
+            f"- 2026-11-15 00:00 [solo] Unrelated text mentions {CLAIM}\n", encoding="utf-8")
+        code, _, err = self.run_deputy(
+            "record", "--question", QUESTION, "--claim", CLAIM,
+            "--session-ledger", str(session), "--confirmed-by-user")
+        self.assertEqual(code, 2)
+        self.assertIn("does not contain the canonical record", err)
+        self.assertEqual(list(self.root.rglob("*.md")), [])
+
+    def test_stored_evidence_requires_the_exact_engine_summary(self) -> None:
+        session = self.base / "session.md"
+        session.write_text(engine_line(QUESTION, CLAIM), encoding="utf-8")
+        evidence_commands: list[str] = []
+
+        def ledger(_root: Path, *args: str, signer: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
+            command = args[0]
+            if command == "vote":
+                evidence_commands.append(args[args.index("--evidence") + 1])
+                return subprocess.CompletedProcess(args, 0, "VOTED decisions/canonical a1 n=1", "")
+            if command == "sign":
+                return subprocess.CompletedProcess(args, 0, "SIGNED", "")
+            if command == "save":
+                return subprocess.CompletedProcess(args, 0, "SAVED", "")
+            self.fail(f"unexpected ledger command: {command}")
+
+        with unittest.mock.patch.object(deputy, "ledger", side_effect=ledger), \
+                redirect_stdout(io.StringIO()):
+            code = deputy.record(self.root, QUESTION, CLAIM, session, True)
+        self.assertEqual(code, 0)
+        evidence = evidence_commands[0]
+
+        matching = subprocess.run(evidence, shell=True, capture_output=True, text=True, check=False)
+        self.assertEqual(matching.returncode, 0, matching.stderr)
+
+        summary = f"Canonical question: {QUESTION} | Canonical decision: {CLAIM}"
+        session.write_text(
+            f"- 2026-11-15 00:00 [solo] Unrelated prefix {summary} suffix\n", encoding="utf-8")
+        partial = subprocess.run(evidence, shell=True, capture_output=True, text=True, check=False)
+        self.assertNotEqual(partial.returncode, 0, partial.stdout + partial.stderr)
+
+    def test_record_refuses_without_user_confirmation(self) -> None:
+        session = self.base / "session.md"
+        session.write_text(engine_line(QUESTION, CLAIM), encoding="utf-8")
+        code, _, err = self.run_deputy(
+            "record", "--question", QUESTION, "--claim", CLAIM, "--session-ledger", str(session))
+        self.assertEqual(code, 2)
+        self.assertIn("example: record --question", err)
+        self.assertIn("commands: candidates, record, assert", err)
+        self.assertIn("REFUSED", err)
+        self.assertEqual(list(self.root.rglob("*.md")), [])
+
+    def test_record_rejects_legacy_context_flags(self) -> None:
+        session = self.base / "session.md"
+        session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err), self.assertRaises(SystemExit) as exit_call:
+            deputy.main([
+                "--deputy-root", str(self.root), "record", "--question", QUESTION,
+                "--claim", CLAIM, "--session-ledger", str(session), "--confirmed-by-user",
+                "--because", WHY, "--options", "uv or pip", "--stakes", "low",
+            ])
+        self.assertEqual(exit_call.exception.code, 2)
+        self.assertIn("unrecognized arguments", err.getvalue())
         self.assertEqual(list(self.root.rglob("*.md")), [])
 
     def test_different_answer_to_the_same_question_adds_a_rival_to_the_entry(self) -> None:
@@ -247,10 +355,9 @@ class DeputyTest(unittest.TestCase):
 
     def record_as(self, session_id: str, claim: str = CLAIM) -> tuple[int, str, str]:
         session = self.base / f"session-{session_id}.md"
-        session.write_text(f"decision: {claim}\n", encoding="utf-8")
-        return self.run_deputy("record", "--question", QUESTION, "--claim", claim, "--because", WHY,
-                               "--options", "uv or pip", "--stakes", "low",
-                               "--session-ledger", str(session), "--host", "codex",
+        session.write_text(engine_line(QUESTION, claim), encoding="utf-8")
+        return self.run_deputy("record", "--question", QUESTION, "--claim", claim,
+                               "--session-ledger", str(session), "--confirmed-by-user", "--host", "codex",
                                "--session-id", session_id)
 
     def test_a_vote_from_another_session_signs_the_answer(self) -> None:
@@ -273,15 +380,16 @@ class DeputyTest(unittest.TestCase):
     def record_in_environment(self, env: dict[str, str], *extra: str) -> tuple[int, str, str, list]:
         """Record with only `env` as the session context; return the ledger calls too."""
         session = self.base / "session.md"
-        session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
+        session.write_text(engine_line(QUESTION, CLAIM), encoding="utf-8")
         with unittest.mock.patch.dict(os.environ), \
                 unittest.mock.patch.object(deputy, "ledger", side_effect=deputy.ledger) as spy:
             for name in ("BOOTGEAR_HOST", *SESSION_VARIABLES):
                 os.environ.pop(name, None)
             os.environ.update(env)
             code, out, err = self.run_deputy(
-                "record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
-                "--options", "uv or pip", "--stakes", "low", "--session-ledger", str(session),
+                "record", "--question", QUESTION, "--claim", CLAIM,
+                "--session-ledger", str(session),
+                "--confirmed-by-user",
                 *extra)
         return code, out, err, spy.call_args_list
 
@@ -347,7 +455,10 @@ class StandardsTest(unittest.TestCase):
                 self.assertTrue(self.problems(question=question))
 
     def test_a_pronoun_in_the_answer_is_refused(self) -> None:
-        self.assertTrue(self.problems(claim="I run scripts with uv"))
+        for claim in ("I run scripts with uv", "We run scripts with uv",
+                      "She runs scripts with uv", "They run scripts with uv"):
+            with self.subTest(claim=claim):
+                self.assertTrue(self.problems(claim=claim))
 
     def test_options_in_the_question_are_refused(self) -> None:
         for question in ("Should scripts run with uv or pip?", "Should scripts run with (a) uv?",
@@ -384,14 +495,19 @@ class InstalledCopyTest(unittest.TestCase):
         self.root = git_root(self.base / "deputy-root")
         self.home = self.base / "home"
         self.home.mkdir()
+        self.data = self.base / "data"
+        runtimes = self.data / "bootgear" / "runtimes"
+        runtimes.parent.mkdir(parents=True)
+        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.session = self.base / "session.md"
-        self.session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
+        self.session.write_text(engine_line(QUESTION, CLAIM), encoding="utf-8")
         env = {key: value for key, value in os.environ.items()
                if key not in ("BOOTGEAR_HOST", "BOOTGEAR_PROG", "GEAR_PLUGIN", "VIRTUAL_ENV")}
         paths = [str(REPO / "plugins" / "cli" / "src")]
         if env.get("PYTHONPATH"):
             paths.append(env["PYTHONPATH"])
-        self.env = {**env, "HOME": str(self.home), "PYTHONPATH": os.pathsep.join(paths),
+        self.env = {**env, "HOME": str(self.home), "XDG_DATA_HOME": str(self.data),
+                    "PYTHONPATH": os.pathsep.join(paths),
                     "BOOTGEAR_HOST": "claude", "GEAR_PLUGIN": "deputy"}
 
     def tearDown(self) -> None:
@@ -402,9 +518,8 @@ class InstalledCopyTest(unittest.TestCase):
                               capture_output=True, text=True, check=False, env=self.env, timeout=60)
 
     def record_argv(self, *extra: str) -> list[str]:
-        return ["record", "--question", QUESTION, "--claim", CLAIM, "--because", WHY,
-                "--options", "uv or pip", "--stakes", "low", "--session-ledger",
-                str(self.session), *extra]
+        return ["record", "--question", QUESTION, "--claim", CLAIM, "--session-ledger",
+                str(self.session), "--confirmed-by-user", *extra]
 
     def test_copy_routes_queries_to_the_registered_ledger(self) -> None:
         result = self.run_copy("candidates", QUESTION)

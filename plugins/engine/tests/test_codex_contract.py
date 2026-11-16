@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import yaml
+from bootgear_cli import runtime
 from gear_commands import GEAR
 from gear_commands import command as gear_command
 from gear_commands import display as shared_display
@@ -78,6 +79,10 @@ class CodexPackageContractTest(unittest.TestCase):
                 (folder / "profile.yaml").write_text(f"source: {host}\n")
             explicit = root / "explicit.yaml"
             explicit.write_text("source: explicit\n")
+            data = root / "data"
+            runtimes = data / "bootgear" / "runtimes"
+            runtimes.parent.mkdir(parents=True)
+            runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
             for host in ("claude", "codex"):
                 for override in (False, True):
                     with self.subTest(host=host, override=override):
@@ -86,7 +91,8 @@ class CodexPackageContractTest(unittest.TestCase):
                         if override:
                             args.extend(("--user-config", str(explicit)))
                         result = subprocess.run(
-                            args, env={**os.environ, "HOME": str(root), "BOOTGEAR_HOST": host},
+                            args, env={**os.environ, "HOME": str(root), "XDG_DATA_HOME": str(data),
+                                       "BOOTGEAR_HOST": host},
                             capture_output=True, text=True, check=True,
                         )
                         self.assertEqual(json.loads(result.stdout)["effective"]["source"],
@@ -99,7 +105,9 @@ class CodexPackageContractTest(unittest.TestCase):
         self.assertEqual(manifest["hooks"], "./hooks/codex-hooks.json")
 
         hooks = json.loads(HOOKS.read_text())["hooks"]
-        self.assertNotIn("PreToolUse", hooks)
+        pre_tool_use = hooks["PreToolUse"][0]
+        self.assertEqual(pre_tool_use["matcher"], "^request_user_input$")
+        self.assertIn("--handler question_boundary", pre_tool_use["hooks"][0]["command"])
         session_start = hooks["SessionStart"][0]
         self.assertEqual(session_start["matcher"], "^(startup|resume|clear|compact|fork)$")
         self.assertIn('"${PLUGIN_ROOT}/hooks/gear" --host codex adapter',

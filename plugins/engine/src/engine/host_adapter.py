@@ -149,6 +149,10 @@ class Intent:
         return cls("continue", content=reason, reason=reason, effect=effect)
 
     @classmethod
+    def deny(cls, reason: str, effect: Any = None) -> Intent:
+        return cls("deny", content=reason, reason=reason, effect=effect)
+
+    @classmethod
     def error_intent(cls, error: AdapterError) -> Intent:
         return cls("error", reason=error.message, error=error)
 
@@ -521,6 +525,16 @@ def render(intent: Intent, event: Event) -> AdapterOutput:
 
     if intent.kind == "error":
         error = intent.error or AdapterError("adapter_error", intent.reason or "adapter error")
+        if event.hook_event_name == "PreToolUse":
+            body = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": error.message,
+                }
+            }
+            return AdapterOutput(stdout=json.dumps(body, separators=(",", ":")) + "\n",
+                                 kind="deny")
         return AdapterOutput(
             stderr=_bounded_text(f"engine hook adapter: {error.code}: {error.message}\n", MAX_ERROR_BYTES),
             kind="error",
@@ -537,6 +551,26 @@ def render(intent: Intent, event: Event) -> AdapterOutput:
         )
     if intent.kind == "observe":
         return AdapterOutput(kind="observe")
+    if intent.kind == "deny":
+        if event.hook_event_name != "PreToolUse":
+            error = AdapterError(
+                "unsupported_capability", "deny is supported only for PreToolUse"
+            )
+            return AdapterOutput(
+                stderr=_bounded_text(
+                    f"engine hook adapter: {error.code}: {error.message}\n", MAX_ERROR_BYTES
+                ),
+                kind="error",
+            )
+        body = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": intent.reason or intent.content or "Blocked by Engine policy.",
+            }
+        }
+        return AdapterOutput(stdout=json.dumps(body, separators=(",", ":")) + "\n",
+                             kind="deny")
     if intent.kind == "add_context":
         content = intent.content or ""
         body = {

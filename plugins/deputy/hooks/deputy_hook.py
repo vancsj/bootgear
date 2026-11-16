@@ -24,9 +24,10 @@ import yaml
 ASK = ("deputy: before you ask the user a work question, call `deputy:ask` with the question, its options "
        "and its stakes. Ask the user only if it returns `escalate`. Never send a production change, outward "
        "send, irreversible action, goal sign-off or permitted mutations to the deputy.")
-RECORD = ("deputy: if `deputy:ask` returned `escalate` for the question the user just answered, and the answer "
-          "is written in a session ledger file, call `deputy:record` with the question, the answer, the reason, "
-          "the options and the stakes. Without a session ledger file, do not call it.")
+RECORD = ("deputy: after the user answers an escalation, derive one canonical question and one canonical decision. "
+          "Show both values and the fixed Because sentence; wait for explicit confirmation before writing. "
+          "Then write the summary to Engine with `--mode solo --summary`, and call `deputy:record` with "
+          "`--confirmed-by-user`. Do not store the raw reply, options, or stakes.")
 QUESTION_TOOLS = ("AskUserQuestion", "request_user_input", "request_user_input_async")
 DEFAULTS = {"tool_calls": 10, "cooldown_seconds": 300}
 

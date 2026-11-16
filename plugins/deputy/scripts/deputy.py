@@ -40,10 +40,19 @@ def ledger(deputy_root: Path, *args: str, signer: tuple[str, ...] = ()) -> subpr
                           capture_output=True, text=True, check=False)
 
 
-PRONOUN = re.compile(r"\b(i|me|my|mine|you|your|yours|it|its|itself)\b", re.IGNORECASE)
+PRONOUN = re.compile(
+    r"\b(i|me|my|mine|you|your|yours|it|its|itself|we|she|they)\b",
+    re.IGNORECASE,
+)
 OPTION = re.compile(r"\bor\b|\beither\b|\([a-z0-9]\)|\b[a-z0-9]\)|\b[a-z0-9]:\s", re.IGNORECASE)
 BARE_ANSWER = re.compile(r"\(?[a-z]\)?\.?|\d+\.?", re.IGNORECASE)
 MAX_WORDS = 20
+ENGINE_SOLO_LINE = re.compile(
+    r"^- \d{4}-\d{2}-\d{2} \d{2}:\d{2} \[solo\] (?P<summary>.*)$")
+RECORD_EXAMPLE = (
+    'record --question "Which design?" --claim "Use the direct call." '
+    '--session-ledger session.md --confirmed-by-user'
+)
 
 
 def sentences(text: str) -> list[str]:
@@ -121,8 +130,14 @@ def session_id_from_environment(explicit: str | None, host: str | None = None) -
     return clikit.session_id(explicit, host=host)
 
 
-def record(deputy_root: Path, question: str, claim: str, because: str, options: str,
-           stakes: str, session_ledger: Path, host: str = "claude", session_id: str | None = None) -> int:
+def record(deputy_root: Path, question: str, claim: str, session_ledger: Path,
+           confirmed: bool, host: str = "claude", session_id: str | None = None) -> int:
+    if not confirmed:
+        print(f"example: {RECORD_EXAMPLE}", file=sys.stderr)
+        print("commands: candidates, record, assert", file=sys.stderr)
+        print("REFUSED record requires --confirmed-by-user", file=sys.stderr)
+        return 2
+    because = "The user confirmed this canonical decision."
     if problems := entry_problems(question, claim, because):
         print("REFUSED " + "; ".join(problems), file=sys.stderr)
         return 2
@@ -138,18 +153,22 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     if problem := refuse_remote(deputy_root):
         print(f"REFUSED {problem}", file=sys.stderr)
         return 2
-    # The check counts occurrences of the answer in the session ledger and requires at
-    # least as many as there are now. A second answer in the same session raises the
-    # count, so its check text differs and memory-ledger takes it as another vote.
-    # The answer and the path are quoted, so the answer text never reaches the shell as code.
+    # Match the complete Engine entry and verify the same match in the stored Evidence check.
     text = session_ledger.read_text(encoding="utf-8") if session_ledger.is_file() else ""
-    count = sum(1 for line in text.splitlines() if claim in line)
+    summary = f"Canonical question: {question} | Canonical decision: {claim}"
+    count = sum(
+        1 for line in text.splitlines()
+        if (match := ENGINE_SOLO_LINE.fullmatch(line)) and match.group("summary") == summary
+    )
     if count == 0:
-        print(f"REFUSED the session ledger {session_ledger} does not contain the answer",
+        print(f"REFUSED the session ledger {session_ledger} does not contain the canonical record",
               file=sys.stderr)
         return 2
-    evidence = (f'test "$(grep -cF -- {shlex.quote(claim)} {shlex.quote(str(session_ledger))})"'
-                f" -ge {count}")
+    evidence = (
+        "test \"$(sed -nE 's/^- [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} "
+        "\\[solo\\] (.*)$/\\1/p' "
+        f"{shlex.quote(str(session_ledger))} | grep -Fxc -- {shlex.quote(summary)})\" -ge {count}"
+    )
     # memory-ledger adds the check as a vote when a similar question has this claim.
     r = ledger(deputy_root, "vote", "--question", question, "--claim", claim,
                "--evidence", evidence, "--only", "deputy", signer=signer)
@@ -159,20 +178,18 @@ def record(deputy_root: Path, question: str, claim: str, because: str, options: 
     if r.returncode == 0:
         outcome = [line for line in r.stdout.splitlines()
                    if line.startswith(("VOTED ", "UNCHANGED "))][-1]
-        if outcome.startswith("VOTED "):
-            # The signature makes this session an independent signer. `sign` does not run the
-            # Evidence pointer, so a session ledger that is gone does not block it.
-            _, slug, aid, *_ = outcome.split()
-            r = ledger(deputy_root, "sign", slug, aid, "--only", "deputy", *sign_as, signer=signer)
-            if r.returncode != 0:
-                print(r.stdout + r.stderr, file=sys.stderr)
-                return r.returncode
-            return save(deputy_root, outcome, signer)
-        print(outcome)
-        return 0
+        _, slug, aid, *_ = outcome.split()
+        r = ledger(deputy_root, "sign", slug, aid, "--only", "deputy", *sign_as, signer=signer)
+        already_signed = (outcome.startswith("UNCHANGED ")
+                          and " already signed " in r.stderr
+                          and " — nothing to correct" in r.stderr)
+        if r.returncode != 0 and not already_signed:
+            print(r.stdout + r.stderr, file=sys.stderr)
+            return r.returncode
+        return save(deputy_root, outcome, signer)
     existing = [line.split()[1] for line in r.stdout.splitlines()
                 if line.startswith("SAME-QUESTION ")]
-    because_line = f"{because}. Context: options {options}; stakes {stakes}."
+    because_line = because
     if existing:
         # The same question with another answer is a rival on its entry, not a new entry.
         target = existing[0]
@@ -219,9 +236,7 @@ def assert_(deputy_root: Path, slug: str, answer: str, why: str, confirmed: bool
 def build_parser() -> argparse.ArgumentParser:
     catalog = clikit.Catalog(prog=current_program("deputy", "deputy"), examples={
         "candidates": 'candidates "Which design meets the requirement?" --limit 3',
-        "record": ('record --question "Which design?" --claim "Use the direct call." '
-                   '--because "The user chose it." --options "Direct call; cache" --stakes "Local code" '
-                   '--session-ledger session.md'),
+        "record": RECORD_EXAMPLE,
         "assert": 'assert decisions/example a1 --why "The user confirmed this answer." --confirmed-by-user',
     })
     p = clikit.parser_class(catalog)(prog=catalog.prog, description=__doc__)
@@ -233,12 +248,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("question", help="judgment question to match against recorded decisions")
     c.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="maximum candidate entries (default: 8)")
     rc = sub.add_parser("record", help="write a decision the user answered")
-    fields = {"question": "question the user answered", "claim": "user's selected answer",
-              "because": "user's reason", "options": "choices offered to the user", "stakes": "effect of this choice"}
-    for flag, meaning in fields.items():
-        rc.add_argument(f"--{flag}", required=True, help=meaning)
+    rc.add_argument("--question", required=True)
+    rc.add_argument("--claim", required=True)
     rc.add_argument("--session-ledger", dest="session_ledger", required=True, metavar="PATH",
-                    help="the session ledger file that must contain the answer text")
+                    help="the Engine session ledger that must contain the exact canonical record")
+    rc.add_argument("--confirmed-by-user", dest="confirmed", action="store_true",
+                    help="the main agent saw the user's confirmation reply")
     rc.add_argument("--host", choices=("claude", "codex"),
                     help="the host that signs the ledger calls")
     rc.add_argument("--session-id", dest="session_id", metavar="ID",
@@ -258,8 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "candidates":
             return candidates(root, args.question, args.limit)
         if args.cmd == "record":
-            return record(root, args.question, args.claim, args.because, args.options,
-                          args.stakes, caller_path(args.session_ledger),
+            return record(root, args.question, args.claim, caller_path(args.session_ledger),
+                          args.confirmed,
                           clikit.host(args.host) or "claude", args.session_id)
         return assert_(root, args.slug, args.answer, args.why, args.confirmed)
     except LedgerMissing:

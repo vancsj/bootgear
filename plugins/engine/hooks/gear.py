@@ -195,10 +195,19 @@ def _remind(payload: bytes, detail: str) -> int:
         event = json.loads(payload).get("hook_event_name", "SessionStart")
     except (ValueError, AttributeError):
         event = "SessionStart"
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": event,
-        "additionalContext": f"Gear setup required: {detail} Invoke cli:setup, then retry.",
-    }}))
+    message = f"Gear setup required: {detail} Invoke cli:setup, then retry."
+    if event == "PreToolUse":
+        output = {"hookSpecificOutput": {
+            "hookEventName": event,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": message,
+        }}
+    else:
+        output = {"hookSpecificOutput": {
+            "hookEventName": event,
+            "additionalContext": message,
+        }}
+    print(json.dumps(output))
     return 0
 
 
@@ -223,6 +232,16 @@ def main() -> int:
         )
         if result.returncode == 2 and b"Shared runtime" in result.stderr:
             return _remind(payload, result.stderr.decode(errors="replace").strip())
+        if result.returncode != 0:
+            try:
+                event = json.loads(payload).get("hook_event_name")
+            except (ValueError, AttributeError):
+                event = None
+            if event == "PreToolUse":
+                detail = (result.stderr or result.stdout).decode(errors="replace").strip()
+                if not detail:
+                    detail = f"Engine hook exited with status {result.returncode}"
+                return _remind(payload, f"Engine could not enforce the question cutoff: {detail}")
         sys.stdout.buffer.write(result.stdout)
         sys.stderr.buffer.write(result.stderr)
         return result.returncode

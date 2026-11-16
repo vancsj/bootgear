@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from bootgear_cli import runtime
 from gear_commands import HOST, display
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
@@ -51,25 +52,33 @@ SETTLEMENT = valid_settlement(MACHINE)
 
 class StateNudgeHookTest(unittest.TestCase):
     def setUp(self):
-        self.session_dir = Path(tempfile.mkdtemp(prefix="state-nudge-hook-test-"))
-        self.addCleanup(shutil.rmtree, self.session_dir, ignore_errors=True)
+        self.tmp = Path(tempfile.mkdtemp(prefix="state-nudge-hook-test-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.data = self.tmp / "data"
+        runtimes = self.data / "bootgear" / "runtimes"
+        runtimes.parent.mkdir(parents=True)
+        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
+        self.session_dir = self.home / ".bootgear" / "session"
+        self.session_dir.mkdir(parents=True)
         settlement_file = self.session_dir / "settlement.txt"
         settlement_file.write_text(SETTLEMENT)
         self.run_id = "test-run"
+        env = {**os.environ, "HOME": str(self.home), "XDG_DATA_HOME": str(self.data)}
         subprocess.run(
             [*TASK_COMMAND, "session", "init", self.run_id,
              "--settlement-file", str(settlement_file), "--dir", str(self.session_dir)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, env=env,
         )
         self.marker_path = self.session_dir / f".{self.run_id}.state_nudge_state"
-        self.home = self.session_dir / "home"
-        self.home.mkdir()
 
     def _hook_env(self, home: Path | None = None) -> dict:
         env = os.environ.copy()
         env["BOOTGEAR_HOST"] = HOST
         env.setdefault("UV_CACHE_DIR", str(Path.home() / ".cache" / "uv"))
         env["HOME"] = str(home or self.home)
+        env["XDG_DATA_HOME"] = str(self.data)
         return env
 
     def _hook_argv(self):

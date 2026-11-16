@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^request_user_input$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/hooks/gear\" --host codex adapter --handler question_boundary --matcher-pattern '^request_user_input$'",
+            "statusMessage": "Checking Engine question cutoff"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

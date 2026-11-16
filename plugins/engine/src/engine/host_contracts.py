@@ -15,7 +15,7 @@ HOST_CLAUDE: Final = "claude"
 HOST_CODEX: Final = "codex"
 SUPPORTED_HOSTS: Final = frozenset({HOST_CLAUDE, HOST_CODEX})
 SUPPORTED_EVENTS: Final = frozenset(
-    {"SessionStart", "Stop", "PostToolUse", "PreCompact", "PostCompact"}
+    {"SessionStart", "Stop", "PreToolUse", "PostToolUse", "PreCompact", "PostCompact"}
 )
 
 
@@ -136,6 +136,18 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
                 ("stop_reminder",),
                 frozenset({"observe", "add_context"}),
             ),
+            "PreToolUse": _contract(
+                host,
+                "PreToolUse",
+                "^AskUserQuestion$",
+                "tool_name",
+                _COMMON_REQUIRED + _required("tool_name") + _required("tool_input", kind="json"),
+                _COMMON_OPTIONAL
+                + _optional("tool_use_id", "agent_id", "agent_type")
+                + _optional(*_NULLABLE_TEXT, nullable=True),
+                ("question_boundary",),
+                frozenset({"observe", "deny"}),
+            ),
             "PostToolUse": _contract(
                 host,
                 "PostToolUse",
@@ -197,6 +209,18 @@ def _host_contracts(host: str) -> dict[str, EventContract]:
                 + _optional("permission_mode", nullable=True),
                 ("stop_reminder",),
                 frozenset({"observe", "add_context", "continue"}),
+            ),
+            "PreToolUse": _contract(
+                host,
+                "PreToolUse",
+                "^request_user_input$",
+                "tool_name",
+                _COMMON_REQUIRED
+                + _required("turn_id", "tool_name", "tool_use_id")
+                + _required("tool_input", kind="json"),
+                _optional(*_NULLABLE_TEXT, nullable=True) + _optional("agent_id", "agent_type"),
+                ("question_boundary",),
+                frozenset({"observe", "deny"}),
             ),
             "PostToolUse": _contract(
                 host,

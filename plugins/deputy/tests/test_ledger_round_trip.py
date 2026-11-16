@@ -36,14 +36,13 @@ class RoundTripTest(unittest.TestCase):
         self.root.mkdir()
         subprocess.run(["git", "-C", str(self.root), "init", "-q"], check=True)
         session = Path(self._tmp.name) / "session.md"
-        session.write_text(f"decision: {CLAIM}\n", encoding="utf-8")
+        summary = f"Canonical question: {QUESTION} | Canonical decision: {CLAIM}"
+        session.write_text(f"- 2026-11-15 12:00 [solo] {summary}\n", encoding="utf-8")
         out = io.StringIO()
         with redirect_stdout(out):
             code = deputy.main(["--deputy-root", str(self.root), "record",
                                 "--question", QUESTION, "--claim", CLAIM,
-                                "--because", "uv pins dependencies per script",
-                                "--options", "uv or pip", "--stakes", "low",
-                                "--session-ledger", str(session)])
+                                "--session-ledger", str(session), "--confirmed-by-user"])
         self.assertEqual(code, 0)
 
     def tearDown(self) -> None:

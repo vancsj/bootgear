@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 
 import yaml
+from bootgear_cli import runtime
 from gear_commands import CONVERGE as CONVERGE_COMMAND
 from gear_commands import HOST
 from gear_commands import TASK as TASK_COMMAND
@@ -129,7 +130,7 @@ def _uv_dirs() -> dict[str, str]:
 UV_DIRS = _uv_dirs()
 
 
-def _env(home: Path | None = None) -> dict[str, str]:
+def _env(home: Path | None = None, data: Path | None = None) -> dict[str, str]:
     """This host's wrapper environment: prose output, this host's root, no caller or other host."""
     env = {key: value for key, value in os.environ.items() if key not in SCRUBBED}
     env["BOOTGEAR_OUTPUT"] = "prose"
@@ -137,6 +138,8 @@ def _env(home: Path | None = None) -> dict[str, str]:
     if home is not None:
         env.update(UV_DIRS)
         env["HOME"] = str(home)
+    if data is not None:
+        env["XDG_DATA_HOME"] = str(data)
     return env
 
 
@@ -165,6 +168,10 @@ class Scratch(unittest.TestCase):
         self.project.mkdir()
         self.home = self.tmp / "home"
         self.home.mkdir()
+        self.data = self.tmp / "data"
+        runtimes = self.data / "bootgear" / "runtimes"
+        runtimes.parent.mkdir(parents=True)
+        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.session_dir = self.tmp / "session"
         self.ledgers = self.tmp / "ledgers"
         self.ledgers.mkdir()
@@ -172,11 +179,11 @@ class Scratch(unittest.TestCase):
 
     def _task(self, *args):
         return subprocess.run([*TASK_COMMAND, *args], capture_output=True, text=True,
-                              check=False, cwd=self.project, env=_env())
+                              check=False, cwd=self.project, env=_env(self.home, self.data))
 
     def _converge(self, *args):
         return subprocess.run([*CONVERGE_COMMAND, *args], capture_output=True, text=True,
-                              check=False, cwd=self.project, env=_env(self.home))
+                              check=False, cwd=self.project, env=_env(self.home, self.data))
 
     # -- settlements and ledgers -------------------------------------------------------
 
@@ -282,7 +289,7 @@ class Scratch(unittest.TestCase):
 
     def _move(self, run_id, dest, *extra):
         """`task state transition`, with this host's converge first on PATH for leave checks."""
-        env = _env(self.home)
+        env = _env(self.home, self.data)
         return subprocess.run([*TASK_COMMAND, "state", "transition", run_id, "--dir",
                                str(self.session_dir), "--to", dest, "--reason", f"to {dest}",
                                "--confirm-leave", *extra, "--prose"],

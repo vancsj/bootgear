@@ -25,7 +25,8 @@ Outcomes, handed back to the caller:
 1. Call `cli:gear`, then run `<gear> --host <host> deputy deputy candidates "<question>"`. Pass the question as one quoted argument.
 2. If the output is `ESCALATE deputy-root-absent`, return `escalate` with that reason. If the output is `ESCALATE memory-ledger-not-found`, return `escalate` with reason `memory-ledger-not-found`.
 3. If the output is `NO-CANDIDATES`, return `escalate` with reason `no-matching-entries`.
-4. Read each `CANDIDATE` block in full. Each has a slug, its question, its answer, its `Because:` context and reason, and whether it is an assertion (`asserted`) or a decision.
+4. Read each `CANDIDATE` block in full. Each has a slug, question, answer, `Because:` context, and reason.
+   It also names the entry type: `asserted` or decision.
 5. For each candidate, mark it:
    - **agreeing**: it supports one option;
    - **conflicting**: it supports a different option;
@@ -33,11 +34,15 @@ Outcomes, handed back to the caller:
    Judge by meaning, not by matching words.
 6. Check the rules, in order:
    - **Assertion.** If an assertion covers the question, return `answered` at confidence `1.00` with that assertion's slug, at any stakes. Do not weigh decisions against it.
-   - **Decisions, well-confirmed.** Answer only when the agreeing answer has memory-ledger band `well-confirmed`, and no conflicting answer has a band at least as high. Confidence is that answer's `conf` value. Otherwise return `escalate`.
+   - **Decisions, well-confirmed.** Answer only when the agreeing answer has memory-ledger band `well-confirmed`, with no equally or more confirmed conflict. Confidence is that answer's `conf` value. Otherwise return `escalate`.
    - **Decisions, below well-confirmed.** Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
 7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
-8. Return `answered` with: the answer, the confidence, `source: assertion` or `source: votes`, the cited agreeing slugs, the conflicting slugs if any, and one line of reasoning.
-9. After the user answers an escalation, and only when the answer is written in a session ledger file, call the `record` skill with the question, the user's answer, the reason, the options and the stakes shown to the user. Without a session ledger file, do not call it. Do not treat the user's answer as an assertion.
+8. Return the answer, confidence, source, and cited slugs. Also return one line of reasoning.
+   Set `source` to `assertion` or `votes`. Include agreeing slugs and any conflicting slugs.
+9. After the user answers an escalation, call the `record` skill in this conversation.
+   Use the reply, options, and stakes only to derive canonical wording.
+   Show the full record and fixed Because sentence. Write only after the user confirms.
+   Do not store the raw reply or treat it as an assertion.
 
 ## Rules
 
