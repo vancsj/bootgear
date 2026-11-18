@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
 SESSION_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
@@ -110,6 +112,21 @@ def _codex_inventory() -> object:
     return {"installed": installed, "available": []}
 
 
+@contextlib.contextmanager
+def _inventory_lock(path: Path) -> Iterator[None]:
+    lock_path = path.parent.parent / ".locks" / path.parent.name / f"{path.stem}.lock"
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock = lock_path.open("a+b")
+    except OSError:
+        # Inventory queries still work when the optional cache is unwritable.
+        yield
+        return
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def host_inventory(host: str, session: str | None, *, refresh: bool = False) -> tuple[object, bool]:
     """The host's installed plugin data, and True when it came from the session store.
 
@@ -122,11 +139,16 @@ def host_inventory(host: str, session: str | None, *, refresh: bool = False) -> 
         found, inventory = _read_entry(path)
         if found:
             return inventory, True
-    inventory = (_codex_inventory() if host == "codex"
-                 else _query_inventory([host, "plugin", "list", "--json"]))
-    if path is not None:
-        _write_entry(path, inventory)
-    return inventory, False
+    with _inventory_lock(path) if path is not None else contextlib.nullcontext():
+        if path is not None and not refresh:
+            found, inventory = _read_entry(path)
+            if found:
+                return inventory, True
+        inventory = (_codex_inventory() if host == "codex"
+                     else _query_inventory([host, "plugin", "list", "--json"]))
+        if path is not None:
+            _write_entry(path, inventory)
+        return inventory, False
 
 
 def codex_cache_root(record: dict) -> Path | None:

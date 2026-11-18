@@ -10,12 +10,11 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
-
-import tomllib
 
 PLUGIN = Path(__file__).resolve().parents[1]
 HOOK = PLUGIN / "hooks" / "deputy_hook.py"
