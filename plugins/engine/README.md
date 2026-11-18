@@ -148,7 +148,7 @@ Four hooks keep a long run on track, each reading the active ledger by session i
 | session start | on startup, clear and compaction (Codex: startup, resume, clear, fork and compaction), while a run is open: the run's `goal`, merged principles and the project's standard files with their rule IDs; run `recall` after a compaction. Codex always adds the session id |
 | stop | run `recall` before ending a turn while a run is open |
 | state nudge | transition when the current node has had no transition for 5 minutes |
-| question boundary | after the cutoff, allow one marked canonical-record confirmation and block other user-input tool calls |
+| question boundary | block user-input tool calls after the cutoff |
 
 A custom `--dir` is registered at session init. Hooks use that ledger path until session close. Codex exposes `request_user_input` in Plan mode, or in Default mode when `default_mode_request_user_input` is enabled.
 Detail:
@@ -174,7 +174,7 @@ so they are listed by skill name rather than as a command to type.
 Call `cli:gear` and use its returned absolute path to run `engine task` commands:
 
 ```
-<gear> --host <host> engine task session init|validate|read|recall|record-decision|arm-canonical-record|next-question-id|update-todo|record-pitch|write-ticket|close
+<gear> --host <host> engine task session init|validate|read|recall|record-decision|next-question-id|update-todo|record-pitch|write-ticket|close
 <gear> --host <host> engine task session write-ticket --dir <session-dir> --body-file <file>
                writes the run's ticket body; the only writer of ticket_path
 <gear> --host <host> engine task state transition|current|amend|show|validate|diagram

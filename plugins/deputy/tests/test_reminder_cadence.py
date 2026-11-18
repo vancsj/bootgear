@@ -78,11 +78,6 @@ class ReminderCadenceTests(unittest.TestCase):
     def assert_record_only(self, text: str) -> None:
         self.assertIn("`deputy:record`", text)
         self.assertNotIn(load_hook().ASK, text)
-        for phrase in ("canonical question", "canonical decision", "fixed Because sentence",
-                       "explicit confirmation", "--mode solo --summary", "--confirmed-by-user"):
-            with self.subTest(phrase=phrase):
-                self.assertIn(phrase, text)
-        self.assertIn("Do not store the raw reply", text)
 
     def test_first_ask_is_on_the_tenth_observed_completion(self) -> None:
         for host in ("claude", "codex"):

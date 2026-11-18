@@ -310,20 +310,20 @@ class QuestionBoundaryTest(unittest.TestCase):
         self.addCleanup(session_paths.unregister_session_path, self.session_id,
                         self.custom_dir, self.default_dir)
 
-    def _event(self, host, tool_input, *, canonical=False):
+    def _event(self, host, *, record_prompt=False):
         tool_name, matcher = ("AskUserQuestion", "^AskUserQuestion$") if host == "claude" else (
             "request_user_input", "^request_user_input$")
         questions = [{
-            "header": "Record" if canonical else "Question",
-            "question": "Confirm the canonical record shown above?"
-            if canonical else "Should scripts run with uv?",
+            "header": "Record" if record_prompt else "Question",
+            "question": ("Confirm the canonical record shown above?" if record_prompt
+                         else "Should scripts run with uv?"),
             "options": [
                 {"label": "Confirm (Recommended)", "description": "Write this record."},
                 {"label": "Correct", "description": "Show a new preview."},
             ],
         }]
         if host == "codex":
-            questions[0]["id"] = "canonical_record" if canonical else "question"
+            questions[0]["id"] = "question"
         payload = {
             "session_id": self.session_id,
             "cwd": str(self.tmp),
@@ -351,73 +351,35 @@ class QuestionBoundaryTest(unittest.TestCase):
             handler_kind=event.handler_kind,
         )
 
-    def test_canonical_preview_uses_one_question_then_blocks_the_next(self):
-        with patch.object(Path, "home", return_value=self.home):
-            for host in ("claude", "codex"):
-                with self.subTest(host=host):
-                    marker = self.custom_dir / f".{self.session_id}.question_state"
-                    marker.write_text(json.dumps({"kind": "canonical_record", "phase": "execute"}),
-                                      encoding="utf-8")
-                    context = self._context(self._event(host, {}, canonical=False))
-                    ordinary = host_adapter.dispatch_and_apply(
-                        self._event(host, {}, canonical=False), context)
-                    self.assertEqual(ordinary.kind, "deny")
-                    self.assertFalse(marker.exists())
-
-                    canonical_event = self._event(host, {}, canonical=True)
-                    without_marker = host_adapter.dispatch_and_apply(
-                        canonical_event, self._context(canonical_event))
-                    self.assertEqual(without_marker.kind, "deny")
-
-                    marker.write_text(
-                        json.dumps({"kind": "canonical_record", "phase": "execute"}),
-                        encoding="utf-8",
-                    )
-                    allowed = host_adapter.dispatch_and_apply(
-                        canonical_event, self._context(canonical_event))
-                    self.assertEqual(allowed.kind, "observe")
-                    self.assertFalse(marker.exists())
-
-                    repeated = host_adapter.dispatch_and_apply(
-                        canonical_event, self._context(canonical_event))
-                    self.assertEqual(repeated.kind, "deny")
-
-                    marker.write_text(
-                        json.dumps({"kind": "canonical_record", "phase": "execute"}),
-                        encoding="utf-8",
-                    )
-                    rearmed = host_adapter.dispatch_and_apply(
-                        canonical_event, self._context(canonical_event))
-                    self.assertEqual(rearmed.kind, "observe")
-                    self.assertFalse(marker.exists())
-
-    def test_phase_mismatch_consumes_the_marker_and_denies(self):
-        event = self._event("codex", {}, canonical=True)
-        marker = self.custom_dir / f".{self.session_id}.question_state"
-        marker.write_text(json.dumps({"kind": "canonical_record", "phase": "clarify"}),
-                          encoding="utf-8")
-
-        with patch.object(Path, "home", return_value=self.home):
-            intent = host_adapter.dispatch_and_apply(event, self._context(event))
-
-        self.assertEqual(host_adapter.render(intent, event).kind, "deny")
-        self.assertFalse(marker.exists())
-
-    def test_malformed_marker_fails_closed_on_both_hosts(self):
-        marker = self.custom_dir / f".{self.session_id}.question_state"
-        marker.write_text(
-            json.dumps({"kind": "canonical_record", "phase": "execute", "answer": "raw"}),
-            encoding="utf-8",
-        )
-
+    def test_question_after_cutoff_is_denied_on_both_hosts(self):
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                event = self._event(host, {}, canonical=True)
+                event = self._event(host)
                 with patch.object(Path, "home", return_value=self.home):
                     intent = host_adapter.dispatch_and_apply(event, self._context(event))
                 self.assertEqual(host_adapter.render(intent, event).kind, "deny")
 
-        self.assertTrue(marker.exists())
+    def test_previous_record_exception_cannot_allow_questions_on_either_host(self):
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                marker = self.custom_dir / f".{self.session_id}.question_state"
+                marker.write_text('{"kind":"canonical_record","phase":"execute"}', encoding="utf-8")
+
+                event = self._event(host, record_prompt=True)
+                with patch.object(Path, "home", return_value=self.home):
+                    intent = host_adapter.dispatch_and_apply(event, self._context(event))
+
+                self.assertEqual(host_adapter.render(intent, event).kind, "deny")
+
+    def test_question_before_cutoff_is_allowed_on_both_hosts(self):
+        session_paths.unregister_session_path(self.session_id, self.custom_dir, self.default_dir)
+        self.ledger.unlink()
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                event = self._event(host, record_prompt=True)
+                with patch.object(Path, "home", return_value=self.home):
+                    intent = host_adapter.dispatch_and_apply(event, self._context(event))
+                self.assertEqual(intent.kind, "observe")
 
     def test_question_without_an_active_run_is_allowed_on_both_hosts(self):
         self.ledger.write_text(
@@ -427,14 +389,14 @@ class QuestionBoundaryTest(unittest.TestCase):
 
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                event = self._event(host, {}, canonical=False)
+                event = self._event(host)
                 with patch.object(Path, "home", return_value=self.home):
                     intent = host_adapter.dispatch_and_apply(event, self._context(event))
                 self.assertEqual(intent.kind, "observe")
 
     def test_missing_registered_ledger_fails_closed(self):
         self.ledger.unlink()
-        event = self._event("codex", {}, canonical=True)
+        event = self._event("codex")
 
         with patch.object(Path, "home", return_value=self.home):
             intent = host_adapter.dispatch_and_apply(event, self._context(event))

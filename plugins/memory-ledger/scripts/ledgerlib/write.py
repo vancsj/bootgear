@@ -39,6 +39,7 @@ from .model import (
     band,
     confidence,
     git_user,
+    is_confirmed_preference,
     local_today,
     mainline_ref,
     on_mainline,
@@ -191,6 +192,8 @@ def cmd_assert(args, root):
     counted = a.counted_confidence()
 
     if args.clear:
+        if is_confirmed_preference(a):
+            sys.exit("REFUSED use a confirmed Deputy replacement for an evidence-free assertion")
         if not a.asserted:
             sys.exit(f"{e.slug} {a.aid} is not asserted — nothing to clear")
         if a.asserted_line:

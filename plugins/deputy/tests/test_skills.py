@@ -29,46 +29,6 @@ class SkillTests(unittest.TestCase):
     def test_ask_escalates_without_memory_ledger(self) -> None:
         self.assertIn("memory-ledger-not-found", section(self.text("ask"), "## Procedure"))
 
-    def test_record_lists_its_outcomes_with_inputs(self) -> None:
-        inputs = section(self.text("record"), "## Inputs and outcomes")
-        for outcome in ("VOTED", "UNCHANGED", "NEW", "REFUSED"):
-            with self.subTest(outcome=outcome):
-                self.assertIn(f"`{outcome}", inputs)
-        refused = next(line for line in inputs.splitlines() if "`REFUSED" in line)
-        self.assertIn("memory-ledger", refused)
-
-    def test_record_lists_the_rival_outcome(self) -> None:
-        self.assertIn("`RIVAL", section(self.text("record"), "## Inputs and outcomes"))
-
-    def test_record_previews_and_confirms_canonical_values_before_writing(self) -> None:
-        procedure = section(self.text("record"), "## Procedure")
-        for required in (
-            "Confirm the canonical record shown above?",
-            "Canonical question:",
-            "Canonical decision:",
-            "session arm-canonical-record",
-            "AskUserQuestion",
-            "request_user_input",
-            "The user confirmed this canonical decision.",
-            "--confirmed-by-user",
-            "--mode solo",
-            "--summary",
-            "Arm the one-use marker again",
-            "retry only Deputy",
-            "Do not append the Engine summary again",
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, procedure)
-        self.assertNotIn("--because", procedure)
-        self.assertNotIn("--options", procedure)
-        self.assertNotIn("--stakes", procedure)
-
-    def test_record_skill_forbids_storing_the_raw_reply(self) -> None:
-        rules = section(self.text("record"), "## Rules")
-        self.assertIn("Do not store the user's raw reply", rules)
-        self.assertIn("reason, options, or stakes", rules)
-        self.assertIn("existing resolution path", rules)
-
     def test_ask_answers_only_at_the_well_confirmed_band(self) -> None:
         procedure = section(self.text("ask"), "## Procedure")
         self.assertNotIn("at least 3 votes", procedure)

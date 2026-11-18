@@ -409,6 +409,18 @@ def asserted_line(who: str, why: str) -> str:
     return f"Asserted: {who} {local_today()} — {why}"
 
 
+DEPUTY_CONFIRMATION = "The user confirmed this canonical decision."
+DEPUTY_BECAUSE = f"Because: {DEPUTY_CONFIRMATION}"
+
+
+def is_confirmed_preference(answer: Answer) -> bool:
+    return (
+        answer.asserted and answer.conf == 1.00 and not answer.evidences
+        and answer.because == DEPUTY_BECAUSE and not answer.sigs
+        and bool(answer.asserted_line and answer.asserted_line.endswith(f" — {DEPUTY_CONFIRMATION}"))
+    )
+
+
 def git_user() -> str | None:
     """The human's name, for an `Asserted:` line.
 

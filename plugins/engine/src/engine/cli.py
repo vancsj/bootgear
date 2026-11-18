@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unified engine command line.
 
-    task session init|validate|read|recall|record-decision|update-todo|next-question-id|arm-canonical-record|
+    task session init|validate|read|recall|record-decision|update-todo|next-question-id|
                  record-pitch|close|write-ticket ...
     task state   transition|current|amend|show|validate|diagram ...
 
@@ -29,8 +29,6 @@ EXAMPLES = {
     "session validate": "session validate --dir <session-dir>",
     "session read": "session read --dir <session-dir> --section state",
     "session recall": "session recall --dir <session-dir>",
-    "session arm-canonical-record": ("session arm-canonical-record --dir <session-dir> "
-                                     "--phase execute"),
     "session record-decision": ('session record-decision --dir <session-dir> '
                                 '--mode solo --summary "<decision>"'),
     "session update-todo": ('session update-todo --dir <session-dir> '

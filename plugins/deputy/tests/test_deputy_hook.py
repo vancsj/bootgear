@@ -57,14 +57,6 @@ class ReminderTests(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertIsNone(self.hook.reminder({"hook_event_name": "PostToolUse", "tool_name": tool}))
 
-    def test_record_reminder_requires_preview_and_confirmation(self) -> None:
-        for phrase in ("canonical question", "canonical decision", "fixed Because sentence",
-                       "explicit confirmation", "--confirmed-by-user", "--mode solo", "--summary"):
-            with self.subTest(phrase=phrase):
-                self.assertIn(phrase, self.hook.RECORD)
-        self.assertNotIn("session ledger file", self.hook.RECORD)
-        self.assertIn("Do not store the raw reply", self.hook.RECORD)
-
 
 class HookTests(unittest.TestCase):
     def setUp(self) -> None:

@@ -6,7 +6,6 @@ only the candidate list is checked.
 from __future__ import annotations
 
 import io
-import os
 import re
 import subprocess
 import sys
@@ -17,9 +16,6 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN / "scripts"))
-# Subprocess ledger calls sign with this Claude id when the host did not set one, also in a Codex shell.
-os.environ.setdefault("CLAUDE_CODE_SESSION_ID", "deputy-test-session")
-os.environ["BOOTGEAR_HOST"] = "claude"
 
 import deputy
 
@@ -35,14 +31,11 @@ class RoundTripTest(unittest.TestCase):
         self.root = Path(self._tmp.name) / "deputy"
         self.root.mkdir()
         subprocess.run(["git", "-C", str(self.root), "init", "-q"], check=True)
-        session = Path(self._tmp.name) / "session.md"
-        summary = f"Canonical question: {QUESTION} | Canonical decision: {CLAIM}"
-        session.write_text(f"- 2026-11-15 12:00 [solo] {summary}\n", encoding="utf-8")
         out = io.StringIO()
         with redirect_stdout(out):
             code = deputy.main(["--deputy-root", str(self.root), "record",
                                 "--question", QUESTION, "--claim", CLAIM,
-                                "--session-ledger", str(session), "--confirmed-by-user"])
+                                "--confirmed-by-user"])
         self.assertEqual(code, 0)
 
     def tearDown(self) -> None:

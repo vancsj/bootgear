@@ -1,68 +1,43 @@
 ---
 name: record
-description: Record a confirmed canonical decision after the deputy escalates a question.
+description: Save a standing decision when the user confirms it for future cases.
 ---
-
-Record one confirmed canonical decision from a deputy escalation.
 
 ## Inputs and outcomes
 
-Inputs:
+Inputs: the decision to save and the reason it might apply to future cases.
 
-- The question that the user saw.
-- The user's reply in this conversation. Use it only to derive canonical wording.
-- The options, stakes, and context. Use them only to derive the decision.
-- The active Engine session directory.
-
-Outcomes, reported to the caller:
-
-- `VOTED <slug> n=<count>`: a similar question already has this decision. One vote was added.
-- `UNCHANGED <slug>`: this session already supports this decision. Nothing changed.
-- `RIVAL <slug>`: a different decision was added as a rival. Its votes start at zero.
-- `NEW <slug>`: no entry exists for this question. A new entry was written.
-- `REFUSED`: no confirmation, remote Deputy root, no Engine summary, no memory-ledger, no session id, failed QA, or failed write.
-  Report the CLI message and stop.
+Return `ASSERTED <slug> <answer>` after a successful save or `REFUSED` with the CLI diagnostic.
+If the caller does not allow a confirmation question, defer the save.
 
 ## Procedure
 
-1. Call `cli:gear`. Read the current Engine phase with `engine task state current --dir "<engine-session-dir>"`.
-2. Derive one clear, general question and one decision from the escalation and context. Do not guess.
-3. Build this summary: `Canonical question: <question> | Canonical decision: <decision>`.
-4. Build the fixed Because sentence: `The user confirmed this canonical decision.`
-5. Show the question, decision, and Because sentence to the user before either write.
-6. Arm the one-use Engine marker for the current phase. Use `clarify` only when that is the current phase; otherwise use `execute`.
-   The marker stores only its kind and phase.
+1. Call `cli:gear`. Use `<gear> --host <host> deputy deputy index` to read all saved questions.
+   If the lookup fails, report the diagnostic and defer the save.
+2. Identify the same decision and scope by meaning. Open likely entries with `candidates "<slug>" --limit 1`.
+3. Draft one canonical question with its scope and one decision. Use the saved wording when it fits.
+4. Show the question, decision, and fixed confirmation sentence.
+   Use `The user confirmed this canonical decision.`.
+   If replacing an assertion, also show the current answer and ask the user to approve the replacement.
+5. Ask for explicit confirmation with the host's normal question tool when the caller permits it.
+   If the tool is unavailable, ask for confirmation in the conversation when the caller permits it.
+   If the user corrects the preview, show the corrected wording before asking again.
+6. Write once after confirmation.
 
-   `<gear> --host <host> engine task session arm-canonical-record --dir "<engine-session-dir>" --phase <clarify|execute>`
+   `<gear> --host <host> deputy deputy record --question "<question>" --claim "<decision>" --confirmed-by-user`
 
-7. Ask one question with header `Record` and prompt `Confirm the canonical record shown above?`.
-   On Claude, use `AskUserQuestion`. On Codex, use `request_user_input`.
-   Use options `Confirm (Recommended)` and `Correct`.
-8. If the user rejects or corrects the preview, write nothing. Derive corrected wording. Arm the one-use marker again for the current phase. Preview it before asking again.
-9. If the user confirms, record the same summary in Engine:
-
-   `<gear> --host <host> engine task session record-decision --mode solo --summary "<summary>" --dir "<engine-session-dir>"`
-
-   Then run:
-
-   `<gear> --host <host> deputy deputy record --question "<question>" --claim "<decision>" --session-ledger "<engine-session-file>" --confirmed-by-user`
-
-   Pass each free-text value as its own quoted argument. Report Deputy's outcome line.
-10. If Deputy fails after Engine succeeds, retry only Deputy. Do not append the Engine summary again.
+   Add `--entry "<slug>"` when reusing a question.
+   For a confirmed replacement, add `--replace "<answer-id>" --previous-claim "<current-answer>"`.
+   If the commit fails after the file is written, report the diagnostic. Retry the same confirmed command.
 
 ## Rules
 
-- The main agent reads the user's confirmation in this conversation.
-- The CLI does not capture or validate the user's reply.
+- Save only decisions that the user explicitly approves for future cases.
 - Do not store the user's raw reply, reason, options, or stakes.
-- The CLI writes the fixed Because sentence and checks the full Engine summary.
-- If one decision is unclear, write nothing and return to the existing resolution path.
-- Never record an assertion. Assertions use `deputy.py assert` after user confirmation.
+- If scope or the target is unclear, defer the save.
+- Read `references/qa-standards.md` for the question and answer rules.
 
 ## Host mechanics
 
-Call `cli:gear`. Replace `<gear>` with its absolute path and `<host>` with `claude` or `codex`.
-The command reads the session id from the host environment.
-The standards file is `references/qa-standards.md` in this plugin.
-If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`.
-On Codex, run `codex plugin add cli@bootgear`.
+Use the absolute path from `cli:gear`. Use `claude` or `codex` as `<host>`.
+If `cli:gear` is missing, install `cli@bootgear` through the host.

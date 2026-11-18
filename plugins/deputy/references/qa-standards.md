@@ -4,7 +4,7 @@
 
 - The deputy store holds decisions only.
 - A fact goes to the memory ledger, not to the deputy store.
-- A decision is kept when one general question states it.
+- Save a standing decision when one question states the decision and its scope.
 - Votes show whether a decision recurs. Do not drop a decision because it has one vote.
 
 ## Question
@@ -25,7 +25,7 @@
 - Keep each sentence to 20 words or fewer.
 - Do not write a bare letter or number, such as `A` or `2`.
 - A different answer to the same question is a rival. It takes the next id on the same entry.
-- Do not put a scope in an answer. Ask a second question for each scope.
+- State the scope in the question. Use a separate question for each scope.
 
 ## Votes and reasons
 
@@ -34,7 +34,7 @@
 - A combined file can add a vote to each question it answers.
 - Give the reason as one sentence with one clause.
 - Do not use a semicolon in the reason.
-- Give the session check as the evidence line.
+- A confirmed assertion uses the fixed confirmation sentence. Legacy votes use session evidence.
 
 ## Excluded from general votes
 

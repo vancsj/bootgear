@@ -15,6 +15,7 @@ from .constants import (
     REGROUP_MIN_FOLDER,
 )
 from .model import (
+    is_confirmed_preference,
     local_today,
     machine_path,
     mainline_ref,
@@ -198,7 +199,7 @@ def lint_one(fix: bool, lg: Ledger, context=None) -> int:
                       f"the shared ledger takes a repo name; run `set-repo` with the name "
                       f"(`--force` keeps the path)")
                 problems += 1
-            if a.hash is None:
+            if a.hash is None and not (lg.kind == "deputy" and is_confirmed_preference(a)):
                 print(f"NO-EVIDENCE {e.slug} {a.aid} — unverifiable, cannot be signed")
                 problems += 1
                 continue

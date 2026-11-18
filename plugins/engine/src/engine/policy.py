@@ -203,8 +203,6 @@ def _apply_marker(update: MarkerUpdate, *, locked_path: Path | None = None) -> N
 
 
 def _event_marker(event: Event, context: HostContext) -> Path | None:
-    if event.handler_kind == "question_boundary" and event.hook_event_name == "PreToolUse":
-        return _marker_path(context, "question_state")
     if (
         event.host == "codex"
         and event.handler_kind == "session_recall"
@@ -610,37 +608,6 @@ def _state_nudge(event: Event, context: HostContext) -> Intent:
     return Intent.add_context(text, update)
 
 
-def _engine_phase(text: str) -> str:
-    state = re.search(r"(?ms)^## state\s*\n(.*?)(?=^## |\Z)", text)
-    current = (re.search(r"(?m)^current: (\S+)\s*$", state.group(1))
-               if state is not None else None)
-    if current is None:
-        raise AdapterError("invalid_session_state", "active Engine ledger has no current state")
-    return "clarify" if current.group(1) == "clarify" else "execute"
-
-
-def _canonical_record_question(tool_input: Any) -> bool:
-    if not isinstance(tool_input, dict):
-        return False
-    questions = tool_input.get("questions")
-    if not isinstance(questions, list) or len(questions) != 1:
-        return False
-    question = questions[0]
-    if not isinstance(question, dict):
-        return False
-    if question.get("header") != "Record":
-        return False
-    if question.get("question") != "Confirm the canonical record shown above?":
-        return False
-    if question.get("multiSelect") is True:
-        return False
-    options = question.get("options")
-    if not isinstance(options, list) or len(options) != 2:
-        return False
-    labels = [option.get("label") if isinstance(option, dict) else None for option in options]
-    return labels == ["Confirm (Recommended)", "Correct"]
-
-
 def _question_boundary(event: Event, context: HostContext) -> Intent:
     path = _ledger_path(context)
     if not path.is_file():
@@ -658,23 +625,7 @@ def _question_boundary(event: Event, context: HostContext) -> Intent:
     if not isinstance(autonomy, dict) or autonomy.get("no_further_questions") is not True:
         return Intent.observe()
 
-    marker_path = _marker_path(context, "question_state")
-    marker = _read_json(marker_path, None)
-    if marker is None:
-        return Intent.deny(
-            "Engine blocks user questions after clarify; arm a canonical-record confirmation first"
-        )
-    if (not isinstance(marker, dict) or set(marker) != {"kind", "phase"}
-            or marker.get("kind") != "canonical_record"
-            or marker.get("phase") not in {"clarify", "execute"}):
-        raise AdapterError("invalid_question_marker", "canonical-record marker has an invalid structure")
-
-    effect = MarkerUpdate(marker_path, None)
-    if marker["phase"] != _engine_phase(text):
-        return Intent.deny("canonical-record marker does not match the active Engine phase", effect)
-    if not _canonical_record_question(event.payload.get("tool_input")):
-        return Intent.deny("only the canonical-record confirmation question is allowed", effect)
-    return Intent.observe(effect)
+    return Intent.deny("Engine blocks user questions after clarify")
 
 
 def _compaction_observe(event: Event, context: HostContext) -> Intent:

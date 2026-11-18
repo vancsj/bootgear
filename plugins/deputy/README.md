@@ -5,16 +5,16 @@
 
 `deputy` answers a judgement question the way you would, from your recorded decisions and
 pinned assertions. It cites every entry it uses. When it cannot settle the question, it
-returns `escalate`, and the AI asks you. After your reply, the AI derives one canonical question
-and decision. It shows the record and waits for your confirmation. Only confirmed canonical
-wording goes into Engine and Deputy. The writers do not store your original reply.
+returns `escalate`, and the AI asks you. When you choose to save a decision for future cases, the agent shows its canonical question and answer.
+Once you confirm, Deputy saves the scoped decision locally as an assertion at confidence 1.00.
+The agent compares existing questions first and reuses a matching entry.
 
 The plugin has two skills:
 
 | Skill | What it does |
 |---|---|
 | `deputy:ask` (Codex: `$deputy:ask`) | answers a question from recorded decisions and assertions, or escalates |
-| `deputy:record` (Codex: `$deputy:record`) | records a confirmed canonical decision after an escalation |
+| `deputy:record` (Codex: `$deputy:record`) | saves an explicitly confirmed standing decision |
 
 The decisions live in a separate memory-ledger root, `~/.memory-ledger/deputy`. The
 `LEDGER_DEPUTY_ROOT` variable overrides the path.
@@ -27,7 +27,7 @@ The hooks add reminders to the main agent's context. Subagents receive none.
 
 | Event | Reminder |
 |---|---|
-| `UserPromptSubmit`, on both hosts | RECORD: preview an escalated decision and wait for confirmation before either write. |
+| `UserPromptSubmit`, on both hosts | RECORD: preview a standing decision and wait for confirmation before saving. |
 | `PostToolUse`, on both hosts | Count one hook-visible completion toward ASK. Question-tool returns also emit RECORD immediately. |
 | `PostToolUseFailure`, on Claude Code | Count the failed completion toward ASK. A failed question call does not emit RECORD. |
 

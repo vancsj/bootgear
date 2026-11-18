@@ -24,30 +24,33 @@ Outcomes, handed back to the caller:
 
 1. Call `cli:gear`, then run `<gear> --host <host> deputy deputy candidates "<question>"`. Pass the question as one quoted argument.
 2. If the output is `ESCALATE deputy-root-absent`, return `escalate` with that reason. If the output is `ESCALATE memory-ledger-not-found`, return `escalate` with reason `memory-ledger-not-found`.
-3. If the output is `NO-CANDIDATES`, return `escalate` with reason `no-matching-entries`.
-4. Read each `CANDIDATE` block in full. Each has a slug, question, answer, `Because:` context, and reason.
-   It also names the entry type: `asserted` or decision.
+3. Treat `NO-CANDIDATES` as an empty ranked search.
+4. Run `<gear> --host <host> deputy deputy index --asserted` even when the ranked search has no matches.
+   If the index fails, return `escalate` with its diagnostic.
+   Read the ranked candidates and every potentially applicable assertion in the index.
+   Use `candidates "<slug>" --limit 1` to open each additional entry and verify its slug.
+   Read entries with unclear relevance. If scope remains unclear or a relevant entry cannot be read, escalate.
 5. For each candidate, mark it:
    - **agreeing**: it supports one option;
    - **conflicting**: it supports a different option;
    - **unrelated**: it does not answer this question.
    Judge by meaning, not by matching words.
-6. Check the rules, in order:
-   - **Assertion.** If an assertion covers the question, return `answered` at confidence `1.00` with that assertion's slug, at any stakes. Do not weigh decisions against it.
+6. If there are no applicable entries, return `escalate` with `no-matching-entries`. Then apply these rules:
+   - **Assertion.** If applicable assertions conflict, return `escalate` with their slugs.
+     When applicable assertions agree, return `answered` at confidence `1.00`. Cite the applicable slugs.
    - **Decisions, well-confirmed.** Answer only when the agreeing answer has memory-ledger band `well-confirmed`, with no equally or more confirmed conflict. Confidence is that answer's `conf` value. Otherwise return `escalate`.
    - **Decisions, below well-confirmed.** Return `escalate`, and list the agreeing and conflicting slugs as the basis for the debate.
-7. Cite only slugs that appear in the `CANDIDATE` list. A slug outside it makes the answer invalid: return `escalate`.
+7. Cite slugs only from the `CANDIDATE` blocks read in this invocation, including opened index entries.
+   Return the candidate slugs so the caller can check the citations.
 8. Return the answer, confidence, source, and cited slugs. Also return one line of reasoning.
    Set `source` to `assertion` or `votes`. Include agreeing slugs and any conflicting slugs.
-9. After the user answers an escalation, call the `record` skill in this conversation.
-   Use the reply, options, and stakes only to derive canonical wording.
-   Show the full record and fixed Because sentence. Write only after the user confirms.
-   Do not store the raw reply or treat it as an assertion.
+9. Apply the user's answer to the current case. Offer **Save for future cases** when the decision can recur.
+   Call the record skill if the user opts in and the caller allows a confirmation question.
 
 ## Rules
 
 - Never answer a hard-gate action.
-- Never write an assertion. Only `deputy.py assert`, after the user confirms in the conversation, pins one.
+- Use the record skill to save an explicitly confirmed standing decision.
 - The deputy's own past answers do not count as agreeing cases.
 - Each entry follows the Q&A standards in `references/qa-standards.md`. Read that file when an entry's shape is unclear.
 

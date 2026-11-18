@@ -86,16 +86,6 @@ class SessionIdentityTest(unittest.TestCase):
         self.assertEqual(closed.returncode, 0, closed.stderr)
         self.assertFalse(registration.exists())
 
-    def test_arm_canonical_record_writes_only_kind_and_phase(self):
-        self._init("canonical-run")
-
-        result = self._task("session", "arm-canonical-record", "canonical-run", "--dir",
-                            str(self.custom_dir), "--phase", "clarify")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        marker = self.custom_dir / ".canonical-run.question_state"
-        self.assertEqual(json.loads(marker.read_text()),
-                         {"kind": "canonical_record", "phase": "clarify"})
-
     def test_explicit_positional_id_wins_over_both_environment_ids(self):
         self._init("explicit-id")
         self._init("shared-id")

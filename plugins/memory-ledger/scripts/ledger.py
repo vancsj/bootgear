@@ -44,6 +44,7 @@ from ledgerlib.context import InvocationContext
 from ledgerlib.doctor import cmd_doctor
 from ledgerlib.gitops import cmd_save
 from ledgerlib.lint import cmd_lint
+from ledgerlib.preference import cmd_deputy_index, cmd_deputy_preference
 from ledgerlib.read import cmd_list, cmd_resolve, cmd_resolve_roots, cmd_show
 from ledgerlib.rules import cmd_rules
 from ledgerlib.selftest import cmd_selftest
@@ -63,6 +64,8 @@ from ledgerlib.write import (
 # The argv after Gear that a refusal prints as the runnable shape of a
 # command; a test parses every one with the real parser.
 EXAMPLES = {
+    "deputy-index": "deputy-index --asserted",
+    "deputy-preference": 'deputy-preference --question "<question>" --claim "<decision>" --confirmed-by-user',
     "resolve": 'resolve "<question>"',
     "new": 'new <folder>/<slug> --q "<question>" --claim "<claim>" --because "<why>" '
            '--evidence "<check>" --local',
@@ -203,6 +206,19 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("--all-sigs", dest="all_sigs", action="store_true",
                     help="print every signature, newest first, not every ✗ and the newest few ✓")
 
+    index = sub.add_parser("deputy-index", help="print local Deputy entry IDs and questions as TSV")
+    index.add_argument("--asserted", action="store_true", help="show entries with an active assertion")
+    index.set_defaults(only="deputy")
+
+    preference = sub.add_parser("deputy-preference", help="save a confirmed assertion in the local Deputy ledger")
+    preference.set_defaults(only="deputy")
+    preference.add_argument("--question", required=True, help="confirmed question with its scope")
+    preference.add_argument("--claim", required=True, help="confirmed decision")
+    preference.add_argument("--entry", help="existing entry ID to reuse")
+    preference.add_argument("--replace", help="current assertion ID to replace; requires --entry and --previous-claim")
+    preference.add_argument("--previous-claim", help="exact current answer shown in the confirmed replacement")
+    preference.add_argument("--confirmed-by-user", action="store_true", help="required after the user confirms the preview")
+
     ls = sub.add_parser("list", help="every answer, one line each, computed live")
     ls.add_argument("--filter", help="only slugs/questions containing this text")
     ls.add_argument("--all", action="store_true", help="include _about entries")
@@ -341,7 +357,8 @@ def _dispatch(args) -> int:
                                 only=getattr(args, "only", None), context=args.context,
                                 deputy_override=args.deputy_root,
                                 with_deputy=getattr(args, "deputy", False))
-    fn = {"resolve": cmd_resolve, "new": cmd_new, "rival": cmd_rival, "hash": cmd_hash,
+    fn = {"deputy-index": cmd_deputy_index, "deputy-preference": cmd_deputy_preference,
+          "resolve": cmd_resolve, "new": cmd_new, "rival": cmd_rival, "hash": cmd_hash,
           "show": cmd_show, "list": cmd_list,
           "sign": cmd_sign, "refute": cmd_refute, "promote": cmd_promote, "lint": cmd_lint,
           "save": cmd_save, "audit": cmd_audit, "set-repo": cmd_set_repo,

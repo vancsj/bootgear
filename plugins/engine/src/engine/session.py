@@ -1716,31 +1716,6 @@ def cmd_update_todo(args: argparse.Namespace) -> None:
     emit(args.output_mode, {"todo": todo_text, "status": label}, f"TODO     {label}")
 
 
-def cmd_arm_canonical_record(args: argparse.Namespace) -> None:
-    """Arm one typed canonical-record question after the no-question cutoff."""
-    path = _ledger_path(args.run_id, args.dir)
-    text = _read_text(path)
-    _check_open(text, path)
-    settlement = _section_body(text, "settlement")
-    data = yaml.safe_load(settlement)
-    autonomy = data.get("autonomy") if isinstance(data, dict) else None
-    if not isinstance(autonomy, dict) or autonomy.get("no_further_questions") is not True:
-        sys.exit("canonical-record question requires no_further_questions: true")
-    current = _state_fields(_section_body(text, "state"))["current"]
-    phase = "clarify" if current == "clarify" else "execute"
-    if args.phase != phase:
-        sys.exit(f"canonical-record phase mismatch: current phase is {phase}")
-    marker = path.parent / f".{args.run_id}.question_state"
-    if marker.exists():
-        sys.exit(f"canonical-record question is already armed for {args.run_id}")
-    _write_atomic(marker, json.dumps(
-        {"kind": "canonical_record", "phase": args.phase}, separators=(",", ":")
-    ))
-    emit(args.output_mode, {"kind": "canonical_record", "phase": args.phase},
-         f"ARMED    canonical_record phase={args.phase}",
-         "Show the canonical preview, then call the host question tool once.")
-
-
 def cmd_record_pitch(args: argparse.Namespace) -> None:
     path = _ledger_path(args.run_id, args.dir, text_operand=True)
     text = _read_text_ledger(path, args.run_id)
@@ -1789,11 +1764,6 @@ def cmd_close(args: argparse.Namespace) -> None:
     if args.reason:
         closing += f" — {_single_line(args.reason, '--reason')}"
     _write_atomic(path, text.rstrip("\n") + "\n" + closing + "\n")
-    try:
-        (path.parent / f".{args.run_id}.question_state").unlink(missing_ok=True)
-    except OSError as exc:
-        print(f"WARNING could not remove the canonical-record question marker: {exc}",
-              file=sys.stderr)
     try:
         session_paths.unregister_session_path(args.run_id, path.parent, DEFAULT_DIR)
     except OSError as exc:
@@ -1945,13 +1915,6 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
                         "id (e.g. 'q1') — use to resume one debate without "
                         "scanning the whole decisions section")
     s.set_defaults(func=_run_id_command(cmd_read))
-
-    s = sub.add_parser("arm-canonical-record", parents=[dir_parent],
-                       help="arm one confirmed canonical-record question after cutoff")
-    s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
-    s.add_argument("--phase", choices=["clarify", "execute"], required=True,
-                   help="the Engine phase that will ask the canonical-record question")
-    s.set_defaults(func=_run_id_command(cmd_arm_canonical_record))
 
     s = sub.add_parser("recall", parents=[dir_parent],
                         help="print settlement, full decisions, open todos, state, "
