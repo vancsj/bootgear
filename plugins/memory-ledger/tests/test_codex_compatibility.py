@@ -6,12 +6,14 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parents[1]
 LEDGER = PLUGIN / "scripts" / "ledger.py"
+CLAUDE_HOOK = PLUGIN / "hooks" / "nudge.py"
 CODEX_HOOK = PLUGIN / "hooks" / "codex_nudge.py"
 REPOSITORY = PLUGIN.parents[1]
 GEAR = REPOSITORY / "plugins" / "cli" / "bin" / "gear"
@@ -293,7 +295,58 @@ class CodexCompatibilityTests(unittest.TestCase):
         warnings = json.loads(self.run_direct("doctor", "--json").stdout)["warnings"]
         self.assertTrue(warnings)
 
-    def test_codex_hook_translates_nudge_cooldown_and_reset(self) -> None:
+    def test_resolve_starts_and_renews_cooldown_on_both_hosts(self) -> None:
+        for host, hook in (("claude", CLAUDE_HOOK), ("codex", CODEX_HOOK)):
+            with self.subTest(host=host):
+                session = f"{host}-lookup-session"
+                payload = {"session_id": session, "cwd": str(self.caller),
+                           "hook_event_name": "PostToolUse", "tool_name": "Read"}
+                lookup = ("--host", host, "--session-id", session, "resolve",
+                          "A question with no matches", "--data")
+                result = self.run_direct(*lookup)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIsNone(json.loads(result.stdout)["exact"])
+                self.assertEqual(json.loads(result.stdout)["candidates"], [])
+                self.assertEqual(self.run_hook(hook, payload).stdout, "")
+
+                marker = self.home / ".memory-ledger" / ".nudge-state" / f"{session}.last"
+                early = time.time() - 250
+                os.utime(marker, (early, early))
+                self.assertEqual(self.run_direct(*lookup).returncode, 0)
+                self.assertGreater(marker.stat().st_mtime, early)
+                self.assertEqual(self.run_hook(hook, payload).stdout, "")
+
+                other = self.run_hook(hook, {**payload, "session_id": f"{session}-other"})
+                self.assertIn("additionalContext", json.loads(other.stdout)["hookSpecificOutput"])
+                expired = time.time() - 301
+                os.utime(marker, (expired, expired))
+                resumed = self.run_hook(hook, payload)
+                self.assertIn("additionalContext", json.loads(resumed.stdout)["hookSpecificOutput"])
+
+    def test_failed_resolve_leaves_session_eligible_on_both_hosts(self) -> None:
+        for host, hook in (("claude", CLAUDE_HOOK), ("codex", CODEX_HOOK)):
+            with self.subTest(host=host):
+                session = f"{host}-failed-lookup"
+                result = self.run_direct("--host", host, "--session-id", session, "resolve",
+                                         "A question", "--in", "missing-folder")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("no such folder", result.stderr)
+                reply = self.run_hook(hook, {"session_id": session, "cwd": str(self.caller),
+                                             "hook_event_name": "PostToolUse"})
+                self.assertIn("additionalContext", json.loads(reply.stdout)["hookSpecificOutput"])
+
+    def test_resolve_preserves_result_when_marker_storage_is_unavailable(self) -> None:
+        marker_dir = self.home / ".memory-ledger" / ".nudge-state"
+        marker_dir.parent.mkdir()
+        marker_dir.touch()
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                result = self.run_direct("--host", host, "--session-id", f"{host}-blocked-marker",
+                                         "resolve", "A question with no matches", "--data")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIsNone(json.loads(result.stdout)["exact"])
+
+    def test_codex_hook_suppresses_second_reminder(self) -> None:
         payload = {
             "session_id": "hook-session-full-1234",
             "cwd": str(self.caller),
@@ -309,32 +362,16 @@ class CodexCompatibilityTests(unittest.TestCase):
         second = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Bash"})
         self.assertEqual(second.stdout, "")
 
-        used = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Bash",
-                                          "tool_input": {"command": GEAR_COMMAND + " show x"}})
-        self.assertEqual(used.stdout, "")
-        marker = (self.home / ".memory-ledger" / ".nudge-state"
-                  / "hook-session-full-1234.last")
-        self.assertEqual(json.loads(marker.read_text())["event"], "ledger-used")
-
-        after_reset = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Read"})
-        self.assertIn("additionalContext", json.loads(after_reset.stdout)["hookSpecificOutput"])
-
-    def test_codex_hook_counts_the_wrapper_as_ledger_use(self) -> None:
+    def test_codex_hook_does_not_guess_what_wrapped_tool_text_ran(self) -> None:
         payload = {
             "session_id": "hook-session-wrapper-1234",
             "cwd": str(self.caller),
             "hook_event_name": "PostToolUse",
-            "tool_name": "Write",
-            "tool_input": {"file_path": "x.py"},
+            "tool_name": "exec_command",
+            "tool_input": {"cmd": GEAR_COMMAND + " resolve x"},
         }
-        self.assertIn("additionalContext",
-                      json.loads(self.run_hook(CODEX_HOOK, payload).stdout)["hookSpecificOutput"])
-        used = self.run_hook(CODEX_HOOK, {**payload, "tool_name": "Bash",
-                                          "tool_input": {"command": GEAR_COMMAND + " show x"}})
-        self.assertEqual(used.stdout, "")
-        marker = (self.home / ".memory-ledger" / ".nudge-state"
-                  / "hook-session-wrapper-1234.last")
-        self.assertEqual(json.loads(marker.read_text())["event"], "ledger-used")
+        result = json.loads(self.run_hook(CODEX_HOOK, payload).stdout)
+        self.assertIn("additionalContext", result["hookSpecificOutput"])
 
     def test_gear_is_executable_and_prints_prose_on_a_pipe(self) -> None:
         self.assertTrue(os.access(GEAR, os.X_OK))

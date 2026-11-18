@@ -141,12 +141,11 @@ ledger has no remote or carries unportable evidence paths.
 
 ## Nudge hook
 
-A `PostToolUse` hook fires on every tool call and `ledgerlib.nudge.evaluate` decides. If
-capability status is not `configured`, it emits `memory-ledger: <status>`. A Gear command
-for `memory-ledger ledger`, or the `ledger` skill, records `ledger-used` silently. Any
-other call emits one fixed, never-escalating reminder to check and record in the ledger,
-unless a nudge fired in the last 300 s; a ledger use clears that cooldown. State is per
-session in `~/.memory-ledger/.nudge-state/<session>.last`, under a `flock`.
+A successful `resolve` starts the 300-second reminder cooldown for its session.
+Each `PostToolUse` hook checks capability status and then the time of the latest lookup or reminder.
+It emits `memory-ledger: <status>` for an unconfigured or broken ledger.
+For a configured ledger it emits a reminder when the cooldown has elapsed.
+Both writers use a lock on the session marker in `~/.memory-ledger/.nudge-state/`.
 
 ## Host differences
 

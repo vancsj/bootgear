@@ -44,6 +44,7 @@ from ledgerlib.context import InvocationContext
 from ledgerlib.doctor import cmd_doctor
 from ledgerlib.gitops import cmd_save
 from ledgerlib.lint import cmd_lint
+from ledgerlib.nudge import record_lookup
 from ledgerlib.preference import cmd_deputy_index, cmd_deputy_preference
 from ledgerlib.read import cmd_list, cmd_resolve, cmd_resolve_roots, cmd_show
 from ledgerlib.rules import cmd_rules
@@ -372,6 +373,8 @@ def _dispatch(args) -> int:
     else:
         root = args.ledgers[0].root
     code = fn(args, root) or 0
+    if code == 0 and args.cmd == "resolve":
+        record_lookup(args.context.session_id)
     if code == 0 and args.cmd in SAVE_NEXT:
         print(f"next: {CATALOG.command('save')}")
     return code

@@ -1,46 +1,39 @@
 ---
 name: ledger
-description: Append-only ledger of settled questions, rival answers, and the evidence check behind each — signed per AI session so consensus accumulates across runs, split across a shared team ledger and a machine-local one. Use when looking up whether something was already settled, recording a durable finding about the codebase or business, or verifying and contesting an existing entry. Not general note-taking.
+description: Look up, record, and verify durable questions and answers. Use for settled facts, reusable findings, rival answers, or capability checks.
 ---
 
-## When to use, inputs and handback
+## Inputs and handback
 
-Use this skill when a question may already be settled, when recording a durable
-finding, or when verifying or contesting an existing entry.
+Take a question, claim, entry to verify or contest, or a capability or hook-event request.
+Return one result to the caller.
 
-Inputs: a question or claim, an entry to verify or contest, or a capability-status
-or hook-event request.
+- Settled answer used — slug, answer id, claim, confidence, and this session's verdict.
+- Verdict — `pass`, `fail` with the command output, or `not-run`.
+- No settled answer — say so. Include the minted slug if you wrote an entry.
+- Contested answer — slug and rival answer id.
+- Capability check — one status token. Hook event — the host envelope only.
 
-Hand back to the caller:
+## Procedure
 
-- settled answer used → its slug, answer id `aN`, claim, `conf`, and this
-  session's verdict (`pass`, `fail` with the output it printed, or `not-run`);
-- no settled answer → say so, with the minted slug if you wrote a new entry;
-- answer contested → the slug and the rival's answer id;
-- capability status → one status token (see "Capability status");
-- hook event → the host envelope only (see "Capability status").
+### Look up and verify
 
-## Workflow
+1. Get the absolute Gear path from `cli:gear`. Resolve the question before reading or writing an entry.
+2. If the question matches, run `show`. Run every Evidence line and one broader check before relying on the answer.
+3. Sign your result. Use `sign --fail --output` for a failing check, or `refute` to contest a signature.
+   Use `rival` when the claim is narrower than its checks.
 
-resolve → same-question hit: `show`, run every `Evidence:` line plus one
-zoom-out check → `sign`, `sign --fail --output`, or `refute`; a claim narrower
-than its checks → `rival` → no hit or a different question: read both ledgers'
-`rules`, choose a ledger → `new` (with `--alt-terms`) → `save` → hand back.
+### Write and save
 
-1. Call `cli:gear` and use its returned absolute path for each ledger command.
-2. Use the common command forms below. Run `<command> --help` when a form is
-   not listed or when the CLI output does not settle the syntax. Read
-   `references/mechanics.md` before a write command or when a flag, path, or
-   output shape needs checking.
-3. Resolve the question before reading or writing an entry.
-4. Read the selected answer and run every listed evidence check before using it.
-5. Read each ledger's rules (`rules`), then choose shared, local or deputy storage from
-   the question's lasting scope; read every open ledger before writing to one.
-6. Add a rival instead of editing an answer, evidence line, or signature bytes.
-7. Sign the verified result with the current AI session.
-8. `save` in the same working stretch, then hand back.
+1. Check that a later task can use the answer and rerun its checks. Keep task-only Q&As out of the ledger.
+2. Check all open ledgers and read their rules. Choose shared, local, or deputy storage for the lasting scope.
+3. Use the existing entry for a matching question. Otherwise use `new` with `--alt-terms`.
+4. Sign the verified result with the current AI session. Run `save` in the same working stretch.
 
-### Common commands
+Read `references/judgement.md` for ledger choice, matches, evidence, and signature disputes.
+Read `references/mechanics.md` before a write or when a flag, path, or output shape needs checking.
+
+### Commands
 
 ```text
 <gear> --host <host> memory-ledger ledger resolve "<question or claim>"
@@ -50,40 +43,29 @@ than its checks → `rival` → no hit or a different question: read both ledger
 <gear> --host <host> memory-ledger ledger resolve-roots --json
 ```
 
-Read `references/judgement.md` when choosing a ledger, interpreting a match,
-writing a check, verifying a signature, or resolving disagreement.
+Use command help when a form is absent or output leaves the syntax unclear.
 
 ### Capability status
 
-For capability status, run `doctor --json` and return its compact `status`:
-`configured`, `unconfigured`, or `broken`. A host skill or hook that is absent
-or untrusted is `missing`; do not report `cooldown` or `ledger-used` as missing.
-For a hook event, return only the host envelope: a reminder for `nudged`, a
-status message for `unconfigured` or `broken`, and no output for `cooldown` or
-`ledger-used`.
+Return the status from `doctor --json`, namely `configured`, `unconfigured`, or `broken`.
+For a missing or untrusted host hook or skill, return `missing`.
+For hook events, emit a reminder for `nudged` and a status message for `unconfigured` or `broken`.
+Emit nothing during `cooldown`.
 
 ## Rules
 
-- Read-only roles may look up and record ledger entries. Keep their target artifacts and other write limits unchanged.
-- Append-only: correct an answer with a rival, never an edit.
-- The signatory is the AI session, never the human.
-- Ask the human before `assert`.
-- Never put secrets or erasable data in a ledger.
-- Not general note-taking: an entry is a settled question with re-runnable checks.
+Use a rival to correct an answer. Keep its existing answer, checks, and signatures intact.
+Ask the user before `assert`. Keep secrets and erasable data out.
+Read-only roles may look up and record entries within their other write limits.
 
 ## Fallbacks
 
-- Anything off → `doctor` first.
-- Roots missing or unset → tell the user to run the memory-ledger setup skill.
-- Session identity missing, malformed or conflicting → the write is refused. Report the refusal to the user and stop.
+Run `doctor` first when a command fails. If roots are missing, tell the user to run the memory-ledger setup skill.
+If missing, malformed, or conflicting session identity blocks a write, report the refusal and stop.
+If `cli:gear` is missing, use `/plugin install cli@bootgear` on Claude or `codex plugin add cli@bootgear` on Codex.
 
 ## Host mechanics
 
-Use the absolute path returned by `cli:gear` as `<gear>`.
-Run `<gear> --host <host> memory-ledger ledger <command> [arguments]`.
-Use `claude` or `codex` as `<host>`, based on the current host.
-If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-
-Gear sets the host from `--host`. The CLI reads the session id from the environment.
-`--session-id`, placed before the subcommand, overrides it; the environment normally supplies it.
-Codex signers are `codex:<full-session-id>`; `--as`, when given, must match.
+Use `claude` or `codex` for `<host>`. Gear sets the host and reads session identity from the environment.
+The optional `--session-id` before the subcommand overrides it.
+A Codex signer is `codex:<full-session-id>`. If supplied, `--as` must match.

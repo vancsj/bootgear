@@ -59,17 +59,10 @@ class NudgeHookTest(unittest.TestCase):
         out = self._run("Bash", {"command": "ls"})
         self.assertEqual(out, {})
 
-    def test_ledger_invocation_resets_without_nudging(self):
+    def test_command_text_without_a_lookup_still_nudges(self):
         out = self._run("Bash", {"command": "gear memory-ledger ledger resolve q"})
-        self.assertEqual(out, {})
-        self.assertEqual(self._marker()["event"], "ledger-used")
-
-    def test_quoted_ledger_path_counts_as_invocation(self):
-        out = self._run("Bash", {
-            "command": 'python3 "/x/plugins/cli/bin/gear" --host codex memory-ledger ledger resolve q',
-        })
-        self.assertEqual(out, {})
-        self.assertEqual(self._marker()["event"], "ledger-used")
+        self.assertIn("additionalContext", out["hookSpecificOutput"])
+        self.assertEqual(self._marker()["event"], "nudged")
 
     def test_direct_ledger_script_does_not_count_as_a_gear_invocation(self):
         self._run("Bash", {"command": 'python3 "/x/scripts/ledger.py" resolve q'})
