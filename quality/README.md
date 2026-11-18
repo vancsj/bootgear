@@ -6,9 +6,9 @@ Run the locked quality gate from the repository root:
 uv run --project quality --locked python quality/check.py
 ```
 
-It runs the skill cross-reference check, the content check, Ruff,
-BasedPyright, and every plugin's test tree. Engine, Converge, spec, and review
-suites each run with `BOOTGEAR_TEST_HOST=claude` and `BOOTGEAR_TEST_HOST=codex`.
+It runs the content check, Ruff, BasedPyright, and every plugin's test tree.
+The Engine, Converge, spec, and review suites each run with
+`BOOTGEAR_TEST_HOST=claude` and `BOOTGEAR_TEST_HOST=codex`.
 Native adapter cases retain their distinct host contracts.
 
 The content check (`check_content.py`) rejects home-directory and scratchpad

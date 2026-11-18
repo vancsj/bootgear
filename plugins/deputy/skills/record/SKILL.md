@@ -18,7 +18,7 @@ Take the decision and its scope. Return one outcome to the caller.
 2. Get Gear from `cli:gear`. Read saved questions with `<gear> --host <host> deputy deputy index`.
    Compare scope and meaning. Open matches with `candidates "<slug>" --limit 1`.
 3. Draft one scoped question and one decision. Reuse matching wording.
-   Check `references/qa-standards.md` before the preview.
+   Check [the QA standards](../../references/qa-standards.md) before the preview.
 4. Show the question, decision, and fixed sentence `The user confirmed this canonical decision.`
    Confirm that the rule applies to future cases.
    For a replacement, show the current answer and request approval.

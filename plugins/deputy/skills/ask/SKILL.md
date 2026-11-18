@@ -35,7 +35,7 @@ Return one outcome to the caller.
 
 Hard gates include production changes, outward sends, irreversible actions, goal sign-off, and permitted mutations.
 Count the user's decisions only. The deputy's past answers add no support.
-Read `references/qa-standards.md` if an entry's shape is unclear.
+Read [the QA standards](../../references/qa-standards.md) if an entry's shape is unclear.
 
 ## Fallbacks
 

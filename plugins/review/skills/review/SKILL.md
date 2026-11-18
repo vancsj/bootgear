@@ -205,9 +205,7 @@ unsure; enable none when the sources give no stack information. For a
 re-review (a pass `<n>` ≥ 2, or a standalone review on a new slate after an
 iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
 that file is missing, select anew. Write the enabled pack file names, one per
-line, to `<converge-dir>/<slate>.packs` (an empty file when none). In an
-active run, record
-`<gear> --host <host> engine task session record-decision --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"`.
+line, to `<converge-dir>/<slate>.packs` (an empty file when none).
 If `init` refuses with a duplicate angle id that names a pack, remove that
 pack from `--angles` and from the `.packs` file, and run `init` again.
 
@@ -223,6 +221,13 @@ change under review. Right after `init` succeeds, record the slate so
 
 ```text
 <gear> --host <host> engine task session record-decision --mode solo --summary "review slate <slate> snapshot=<sha>"
+```
+
+After a successful `init` in an active run, record the final pack list from
+`<converge-dir>/<slate>.packs`:
+
+```text
+<gear> --host <host> engine task session record-decision --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"
 ```
 
 If `init` refuses a `--since` check, keep `--pass <n>` and stop: have

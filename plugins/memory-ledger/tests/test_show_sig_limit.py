@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bootgear_cli.clikit import gear_command
+
 PLUGIN = Path(__file__).resolve().parents[1]
 LEDGER = PLUGIN / "scripts" / "ledger.py"
 sys.path.insert(0, str(PLUGIN / "scripts"))
@@ -88,8 +90,12 @@ class ShowSigLimitTest(unittest.TestCase):
         for session in oldest:
             self.assertFalse(any(f" {who_of(session)} " in ln for ln in yes), r.stdout)
         self.assertIn(who_of(VOTERS[-1]), yes[0])  # newest first
-        self.assertIn(f"… {TOTAL_YES - SHOW_MAX_YES_SIGS} older ✓ not shown", r.stdout)
-        self.assertIn(f"show {SLUG} --all-sigs", r.stdout)
+        prog = os.environ.get("BOOTGEAR_PROG") or gear_command("memory-ledger", "ledger", host="claude")
+        hidden = TOTAL_YES - SHOW_MAX_YES_SIGS
+        self.assertEqual(
+            r.stdout.splitlines()[-1:],
+            [f"    … {hidden} older ✓ not shown — `{prog} show {SLUG} --all-sigs`"],
+        )
 
     def test_all_sigs_prints_every_signature(self) -> None:
         r = self.ledger("show", SLUG, "--all-sigs")
@@ -169,6 +175,7 @@ class ShowSigLimitTest(unittest.TestCase):
         r = self.ledger("show", SLUG, "--data", "--all-sigs")
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("--all-sigs", r.stderr)
+        self.assertEqual(r.stdout, "")
 
 
 if __name__ == "__main__":

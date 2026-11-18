@@ -190,9 +190,13 @@ class CodexCompatibilityTests(unittest.TestCase):
         self.assertEqual(len(yes), SHOW_MAX_YES_SIGS, capped.stdout)
         self.assertEqual(len(no), 1, capped.stdout)
         self.assertIn(voters[-1].split("-")[0], yes[0])
-        for hidden in [author, *voters][:total_yes - SHOW_MAX_YES_SIGS]:
-            self.assertFalse(any(hidden.split("-")[0] in ln for ln in yes), capped.stdout)
-        self.assertIn(f"… {total_yes - SHOW_MAX_YES_SIGS} older ✓ not shown", capped.stdout)
+        hidden_count = total_yes - SHOW_MAX_YES_SIGS
+        for session in [author, *voters][:hidden_count]:
+            self.assertFalse(any(session.split("-")[0] in ln for ln in yes), capped.stdout)
+        self.assertEqual(
+            capped.stdout.splitlines()[-1:],
+            [f"    … {hidden_count} older ✓ not shown — `{GEAR_COMMAND} show {slug} --all-sigs`"],
+        )
         self.assertIn(f"{total_yes}✓/1✗", capped.stdout)
 
         everything = self.run_wrapper("--host", "codex", "--session-id", author,
@@ -360,6 +364,7 @@ class CodexCompatibilityTests(unittest.TestCase):
                     refused = self.run_direct(*context, "show", slug, "--data", "--all-sigs")
                     self.assertNotEqual(refused.returncode, 0)
                     self.assertIn("show --data has no signature list", refused.stderr)
+                    self.assertEqual(refused.stdout, "")
                     self.assertEqual((marker.read_bytes(), marker.stat().st_mtime_ns), previous_marker)
 
     def test_failed_resolve_leaves_session_eligible_on_both_hosts(self) -> None:
