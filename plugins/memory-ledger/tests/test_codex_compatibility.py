@@ -323,6 +323,45 @@ class CodexCompatibilityTests(unittest.TestCase):
                 resumed = self.run_hook(hook, payload)
                 self.assertIn("additionalContext", json.loads(resumed.stdout)["hookSpecificOutput"])
 
+    def test_show_starts_and_renews_cooldown_on_both_hosts(self) -> None:
+        slug = "tech/show-cooldown"
+        created = self.run_direct(
+            "--host", "codex", "--session-id", "show-fixture-author",
+            "new", slug, "--shared", "--q", "When do reminders resume?",
+            "--claim", "Reminders resume after the cooldown.",
+            "--because", "A lookup starts the cooldown.", "--evidence", "true",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        for host, hook in (("claude", CLAUDE_HOOK), ("codex", CODEX_HOOK)):
+            for renew in (False, True):
+                with self.subTest(host=host, renew=renew):
+                    session = f"{host}-show-{'renewal' if renew else 'standalone'}"
+                    context = ("--host", host, "--session-id", session)
+                    payload = {"session_id": session, "cwd": str(self.caller),
+                               "hook_event_name": "PostToolUse", "tool_name": "Read"}
+                    marker = self.home / ".memory-ledger" / ".nudge-state" / f"{session}.last"
+                    if renew:
+                        resolved = self.run_direct(*context, "resolve", slug, "--data")
+                        self.assertEqual(resolved.returncode, 0, resolved.stderr)
+                        earlier = time.time() - 250
+                        os.utime(marker, (earlier, earlier))
+
+                    result = self.run_direct(*context, "show", slug, "--data")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout)["slug"], slug)
+                    if renew:
+                        self.assertGreater(marker.stat().st_mtime, earlier)
+                    reply = self.run_hook(hook, payload)
+                    self.assertEqual(reply.returncode, 0, reply.stderr)
+                    self.assertEqual(reply.stdout, "")
+
+                    previous_marker = (marker.read_bytes(), marker.stat().st_mtime_ns)
+                    refused = self.run_direct(*context, "show", slug, "--data", "--all-sigs")
+                    self.assertNotEqual(refused.returncode, 0)
+                    self.assertIn("show --data has no signature list", refused.stderr)
+                    self.assertEqual((marker.read_bytes(), marker.stat().st_mtime_ns), previous_marker)
+
     def test_failed_resolve_leaves_session_eligible_on_both_hosts(self) -> None:
         for host, hook in (("claude", CLAUDE_HOOK), ("codex", CODEX_HOOK)):
             with self.subTest(host=host):

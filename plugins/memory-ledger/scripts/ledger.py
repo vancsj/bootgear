@@ -373,7 +373,7 @@ def _dispatch(args) -> int:
     else:
         root = args.ledgers[0].root
     code = fn(args, root) or 0
-    if code == 0 and args.cmd == "resolve":
+    if code == 0 and args.cmd in {"resolve", "show"}:
         record_lookup(args.context.session_id)
     if code == 0 and args.cmd in SAVE_NEXT:
         print(f"next: {CATALOG.command('save')}")

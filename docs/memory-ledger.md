@@ -141,11 +141,10 @@ ledger has no remote or carries unportable evidence paths.
 
 ## Nudge hook
 
-A successful `resolve` starts the 300-second reminder cooldown for its session.
-Each `PostToolUse` hook checks capability status and then the time of the latest lookup or reminder.
-It emits `memory-ledger: <status>` for an unconfigured or broken ledger.
-For a configured ledger it emits a reminder when the cooldown has elapsed.
-Both writers use a lock on the session marker in `~/.memory-ledger/.nudge-state/`.
+Each successful `resolve` or `show` starts or renews its session's 300-second reminder cooldown.
+Each `PostToolUse` hook emits `memory-ledger: <status>` for an unconfigured or broken ledger.
+For a configured ledger, it emits a reminder once the cooldown since the last lookup or reminder ends.
+Lookups and reminders update the locked session marker in `~/.memory-ledger/.nudge-state/`.
 
 ## Host differences
 
