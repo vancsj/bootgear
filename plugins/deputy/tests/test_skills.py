@@ -8,7 +8,7 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1]
 SKILLS = {name: PLUGIN / "skills" / name / "SKILL.md" for name in ("ask", "record")}
 STANDARDS = PLUGIN / "references" / "qa-standards.md"
-HEADINGS = ["## Inputs and outcomes", "## Procedure", "## Rules", "## Host mechanics"]
+HEADINGS = ["## Inputs and outcomes", "## Procedure", "## Rules", "## Fallbacks", "## Host mechanics"]
 
 
 def section(text: str, heading: str) -> str:
@@ -27,7 +27,7 @@ class SkillTests(unittest.TestCase):
                 self.assertEqual(re.findall(r"(?m)^## .*$", self.text(name)), HEADINGS)
 
     def test_ask_escalates_without_memory_ledger(self) -> None:
-        self.assertIn("memory-ledger-not-found", section(self.text("ask"), "## Procedure"))
+        self.assertIn("memory-ledger-not-found", section(self.text("ask"), "## Fallbacks"))
 
     def test_ask_answers_only_at_the_well_confirmed_band(self) -> None:
         procedure = section(self.text("ask"), "## Procedure")

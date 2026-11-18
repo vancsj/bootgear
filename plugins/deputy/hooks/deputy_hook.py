@@ -24,7 +24,8 @@ import yaml
 ASK = ("deputy: before you ask the user a work question, call `deputy:ask` with the question, its options "
        "and its stakes. Ask the user only if it returns `escalate`. Never send a production change, outward "
        "send, irreversible action, goal sign-off or permitted mutations to the deputy.")
-RECORD = ("deputy: when the user opts to save a decision for future cases, use `deputy:record`. "
+RECORD = ("deputy: keep one-off decisions in the active Engine run, if present. "
+          "When the user opts to save a decision for future cases, use `deputy:record`. "
           "Compare existing questions, preview the canonical decision, and wait for explicit confirmation. "
           "Then save once with `--confirmed-by-user`.")
 QUESTION_TOOLS = ("AskUserQuestion", "request_user_input", "request_user_input_async")

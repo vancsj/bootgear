@@ -5,7 +5,8 @@
 
 `deputy` answers a judgement question the way you would, from your recorded decisions and
 pinned assertions. It cites every entry it uses. When it cannot settle the question, it
-returns `escalate`, and the AI asks you. When you choose to save a decision for future cases, the agent shows its canonical question and answer.
+returns `escalate`, and the AI asks you. One-off decisions stay in the active Engine run, if present.
+When you choose to save a decision for future cases, the agent shows its canonical question and answer.
 Once you confirm, Deputy saves the scoped decision locally as an assertion at confidence 1.00.
 The agent compares existing questions first and reuses a matching entry.
 

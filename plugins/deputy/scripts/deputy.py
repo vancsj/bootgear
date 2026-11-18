@@ -40,6 +40,19 @@ PRONOUN = re.compile(
 )
 OPTION = re.compile(r"\bor\b|\beither\b|\([a-z0-9]\)|\b[a-z0-9]\)|\b[a-z0-9]:\s", re.IGNORECASE)
 BARE_ANSWER = re.compile(r"\(?[a-z]\)?\.?|\d+\.?", re.IGNORECASE)
+RUN_SUBJECT = r"(?:run|session|task|slate|review|branch|worktree|PR|pull request|ticket)"
+RUN_SCOPE = re.compile(
+    rf"\bthis\s+{RUN_SUBJECT}\b"
+    r"|(?<!\w)#\d+\b"
+    r"|\b(?:pull request|PR|ticket|tangent|issue|finding|visit|pass)\s+\d+\b"
+    r"|\b(?:fix|feature|hotfix|cleanup)/[\w.-]+",
+    re.IGNORECASE,
+)
+QUESTION_SCOPE = re.compile(
+    rf"\bcurrent\s+{RUN_SUBJECT}\b"
+    r"|\b\d{4}-\d{2}-\d{2}\b",
+    re.IGNORECASE,
+)
 MAX_WORDS = 20
 CONFIRMATION = "The user confirmed this canonical decision."
 RECORD_EXAMPLE = (
@@ -59,6 +72,8 @@ def entry_problems(question: str, claim: str, because: str, *, check_question: b
             problems.append(f"the {label} is empty")
         elif len(text.splitlines()) != 1 or text.strip() != text:
             problems.append(f"the {label} must be one line without surrounding whitespace")
+        if RUN_SCOPE.search(text) or (label == "question" and QUESTION_SCOPE.search(text)):
+            problems.append(f"the {label} uses run-specific scope")
         if label == "question" and not check_question:
             continue
         if PRONOUN.search(text):

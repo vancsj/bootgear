@@ -76,6 +76,45 @@ def test_confirmed_decision_is_saved_once_without_session_or_evidence(deputy):
     assert QUESTION in index.stdout
 
 
+@pytest.mark.parametrize(("question", "claim"), [
+    ("Which base branch should PR #1245 use?", "Use the release branch."),
+    ("Which base branch should this pull request use?", "Use the release branch."),
+    ("Should checks continue for this ticket?", "Continue the checks."),
+    ("Should tangent 59 continue past 03:55?", "Continue the checks."),
+    ("Should the current session stop at 03:55?", "Stop at 03:55."),
+    ("Should the current session stop at 03:55 UTC?", "Stop at 03:55 UTC."),
+    ("Should the current session continue past 03:55?", "Continue the checks."),
+    ("Should the current session stop now?", "Stop the checks."),
+    (QUESTION, "Use fix/current-ticket."),
+])
+def test_refuses_run_specific_preferences(deputy, question, claim):
+    root, call, _ = deputy
+
+    result = call("record", "--question", question, "--claim", claim, "--confirmed-by-user")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "run-specific scope" in result.stderr
+    assert not list(root.rglob("*.md"))
+
+
+@pytest.mark.parametrize(("question", "claim"), [
+    ("Which date should legacy records use by default?", "Use 1970-01-01."),
+    ("When should scheduled backups stop?", "Stop at 17:00 each weekday."),
+    ("When should contributors update ticket status?", "Update the current ticket before handing off."),
+    ("When should Engine stop after repeated check failures?", "Stop the current run after two failed checks."),
+])
+def test_accepts_recurring_preferences(deputy, question, claim):
+    root, call, _ = deputy
+    args = ("record", "--question", question, "--claim", claim, "--confirmed-by-user")
+
+    result = call(*args)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ASSERTED" in result.stdout
+    assert call(*args).returncode == 0
+    assert git(root, "rev-list", "--count", "HEAD") == "1"
+
+
 def test_changing_a_preference_requires_the_current_assertion_id(deputy):
     root, call, _ = deputy
     initial = record(call)

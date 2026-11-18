@@ -1,43 +1,47 @@
 ---
 name: record
-description: Save a standing decision when the user confirms it for future cases.
+description: Save an explicitly confirmed standing decision. Use when a decision can apply to future cases.
 ---
 
 ## Inputs and outcomes
 
-Inputs: the decision to save and the reason it might apply to future cases.
+Take the decision and its scope. Return one outcome to the caller.
 
-Return `ASSERTED <slug> <answer>` after a successful save or `REFUSED` with the CLI diagnostic.
-If the caller does not allow a confirmation question, defer the save.
+- `run-only` for a one-off.
+- `ASSERTED <slug> <answer-id>` after a successful save.
+- `REFUSED` with the CLI diagnostic.
+- Defer if the scope or target is unclear, or confirmation is unavailable.
 
 ## Procedure
 
-1. Call `cli:gear`. Use `<gear> --host <host> deputy deputy index` to read all saved questions.
-   If the lookup fails, report the diagnostic and defer the save.
-2. Identify the same decision and scope by meaning. Open likely entries with `candidates "<slug>" --limit 1`.
-3. Draft one canonical question with its scope and one decision. Use the saved wording when it fits.
-4. Show the question, decision, and fixed confirmation sentence.
-   Use `The user confirmed this canonical decision.`.
-   If replacing an assertion, also show the current answer and ask the user to approve the replacement.
-5. Ask for explicit confirmation with the host's normal question tool when the caller permits it.
-   If the tool is unavailable, ask for confirmation in the conversation when the caller permits it.
-   If the user corrects the preview, show the corrected wording before asking again.
-6. Write once after confirmation.
+1. For a one-off, write a solo decision in the active Engine run, if present. Return `run-only`.
+2. Get Gear from `cli:gear`. Read saved questions with `<gear> --host <host> deputy deputy index`.
+   Compare scope and meaning. Open matches with `candidates "<slug>" --limit 1`.
+3. Draft one scoped question and one decision. Reuse matching wording.
+   Check `references/qa-standards.md` before the preview.
+4. Show the question, decision, and fixed sentence `The user confirmed this canonical decision.`
+   Confirm that the rule applies to future cases.
+   For a replacement, show the current answer and request approval.
+5. Ask with the host question tool when the caller permits it.
+   On correction, check scope and preview the new wording.
+6. Save once after explicit confirmation.
 
    `<gear> --host <host> deputy deputy record --question "<question>" --claim "<decision>" --confirmed-by-user`
 
-   Add `--entry "<slug>"` when reusing a question.
+   Reuse a question with `--entry "<slug>"`.
    For a confirmed replacement, add `--replace "<answer-id>" --previous-claim "<current-answer>"`.
-   If the commit fails after the file is written, report the diagnostic. Retry the same confirmed command.
 
 ## Rules
 
-- Save only decisions that the user explicitly approves for future cases.
-- Do not store the user's raw reply, reason, options, or stakes.
-- If scope or the target is unclear, defer the save.
-- Read `references/qa-standards.md` for the question and answer rules.
+Keep the raw reply, reason, options, and stakes out of the record.
+
+## Fallbacks
+
+If the lookup fails, report the diagnostic and defer.
+If the question tool is missing, ask in conversation when the caller permits it.
+If the write succeeds but the commit fails, report the diagnostic and retry the same confirmed command.
+If `cli:gear` is missing, install `cli@bootgear` through the host.
 
 ## Host mechanics
 
-Use the absolute path from `cli:gear`. Use `claude` or `codex` as `<host>`.
-If `cli:gear` is missing, install `cli@bootgear` through the host.
+Use the absolute path from `cli:gear` and host `claude` or `codex`.
