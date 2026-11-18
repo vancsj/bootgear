@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from converge import ledger
+from test_clean import checks, clean
+
 from conftest import (
     BATCH_1,
     CUT_EVIDENCE_MAP,
@@ -17,8 +20,6 @@ from conftest import (
     R2,
     Converge,
 )
-from converge import ledger
-from test_clean import checks, clean
 
 
 def work(cv: Converge, actor: str = R1, host: str = "claude", **extra: str) -> dict[str, Any]:

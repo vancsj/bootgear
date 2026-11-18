@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from conftest import BATCH_1, DISABLED, FINDER, R1, R2, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, DISABLED, FINDER, R1, R2, Converge
 
 # Two table batches: BATCH_1, then BATCH_2.
 BATCH_2 = tuple(DISABLED[:5])

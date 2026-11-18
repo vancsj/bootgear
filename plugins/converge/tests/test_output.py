@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
 from conftest import (
     BATCH_1,
     CUT_EVIDENCE,

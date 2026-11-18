@@ -1,8 +1,9 @@
 """Angle tables: built-in rows, caller files, config files/disable, validation."""
 from __future__ import annotations
 
-from conftest import PLUGIN_DIR, Converge
 from converge import model
+
+from conftest import PLUGIN_DIR, Converge
 
 ATTACK = {"cited-but-unread", "point-in-time", "provenance", "reachability", "absent-vs-default",
           "downstream-consumer", "inverse-reading", "carve-out", "boundary", "dependents",

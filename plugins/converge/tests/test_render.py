@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 
-from conftest import BATCH_1, CHOICE, FINDER, R1, Converge
 from converge import ledger
+
+from conftest import BATCH_1, CHOICE, FINDER, R1, Converge
 
 FINDINGS = ("| rank | claim | lens | loc | text | impact | size | reach | rate | "
             "difficulty | status | cut | reason |")

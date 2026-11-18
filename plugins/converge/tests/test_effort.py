@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import BATCH_1, CUTTER, FINDER, R1, Converge
 from converge import config as config_mod
 from converge import effort, ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, FINDER, R1, Converge
 
 GLOBS = config_mod.DEFAULTS["cutoff"]["cheap"]["test_globs"]
 

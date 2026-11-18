@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
 
 
 def _slate(cv: Converge) -> model.Slate:

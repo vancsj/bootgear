@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from conftest import BATCH_1, CUTTER, DISABLED, FINDER, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, Converge
 
 KEPT = {"impact": "wrong-output", "reach": "normal"}   # default attack_if[0], report_if[0]
 BELOW = {"impact": "cosmetic", "reach": "normal"}       # no default rule matches

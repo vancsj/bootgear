@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import BATCH_1, CUTTER, DISABLED, FINDER, MAIN, Converge
 from converge import config as config_mod
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, MAIN, Converge
 
 UNREACHABLE = {"impact": "cosmetic", "reach": "unreachable"}
 PATCH = ("diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n"

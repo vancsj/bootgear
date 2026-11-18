@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R2, Converge
 from converge import ledger, model, protocol
 from test_effort import cheap, patch
+
+from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R2, Converge
 
 CHECKS = "pytest and quality/check.py pass"
 

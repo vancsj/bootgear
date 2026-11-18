@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import GEAR, GEAR_COMMAND, HOST, PLUGIN_DIR, Converge
 from converge import ledger, model
+
+from conftest import GEAR, GEAR_COMMAND, HOST, PLUGIN_DIR, Converge
 
 ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
 FULL_SEATS = {"main": "native_subagent", "finder": "native_subagent", "r1": "native_subagent",

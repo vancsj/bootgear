@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import Converge
 from converge import ledger
+
+from conftest import Converge
 
 
 def test_direct_file_refuses_same_actor_content_across_prior_events(cv: Converge) -> None:

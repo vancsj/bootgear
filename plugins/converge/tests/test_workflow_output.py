@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from conftest import GEAR_COMMAND, HOST, gear_args
 
 CONVERGE_COMMAND = gear_args()

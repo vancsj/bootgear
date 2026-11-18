@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import BATCH_1, CUTTER, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 
 
 def _reply(cv: Converge, cid: str = "F001", stance: str = "rebut", batch: Any = 1,

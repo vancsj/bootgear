@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from conftest import CUTTER, FINDER, MAIN, R2, Converge
 from converge import ledger, protocol
+
+from conftest import CUTTER, FINDER, MAIN, R2, Converge
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 REVIEW_CUTOFF = (Path(__file__).resolve().parents[3]

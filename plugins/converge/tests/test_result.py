@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, DISABLED, FINDER, GEAR_COMMAND, MAIN, R1, R2, Converge
 
 
 def _slate(cv: Converge) -> model.Slate:

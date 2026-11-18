@@ -1,8 +1,9 @@
 """`escalate`: the finder's one chance to widen a claim before it is cut or attacked."""
 from __future__ import annotations
 
-from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, Converge
 from converge import ledger, protocol
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, Converge
 
 WIDER = {"wider": "every caller passing None loses the row", "evidence": "api.py:40 passes None"}
 

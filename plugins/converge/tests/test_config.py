@@ -6,9 +6,10 @@ import copy
 import json
 from typing import Any
 
-from conftest import HOST, MAIN, Converge
 from converge import config as config_mod
 from converge import ledger, model
+
+from conftest import HOST, MAIN, Converge
 
 DEFAULT_CAPS = {"cut_rounds": 5, "per_lens": {"default": 50}, "agents": 5,
                 "angles_per_claim": 5, "batch_items": 30}

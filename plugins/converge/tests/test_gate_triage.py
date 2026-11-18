@@ -11,8 +11,9 @@ import shlex
 from pathlib import Path
 
 import pytest
-from conftest import BATCH_1, DISABLED, FIND_ANGLES, FINDER, GEAR_COMMAND, R1, Converge
 from converge import cli
+
+from conftest import BATCH_1, DISABLED, FIND_ANGLES, FINDER, GEAR_COMMAND, R1, Converge
 
 RERUN = "reproduction-rerun"
 TRIAGE_ANGLES = FIND_ANGLES + f"""\

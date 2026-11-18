@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import subprocess
 
-from conftest import GEAR_COMMAND, Converge
 from converge import config as config_mod
+
+from conftest import GEAR_COMMAND, Converge
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 STRICT = [{"impact": ["security"]}]

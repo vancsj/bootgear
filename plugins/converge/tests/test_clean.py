@@ -5,8 +5,9 @@ import json
 from typing import Any
 
 import pytest
-from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
 from converge import ledger, protocol
+
+from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
 
 
 def checks(*angles: str) -> list[dict[str, str]]:

@@ -1,8 +1,9 @@
 """Not-applicable attack angles on one claim: a refuter records them in the attack phase."""
 from __future__ import annotations
 
-from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
 from converge import ledger
+
+from conftest import BATCH_1, CUTTER, FINDER, MAIN, R1, R2, Converge
 
 
 def _na(cv: Converge, agent: str, angle: str, claim: str | None = "F001", **extra: str

@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
 from converge import ledger, model, protocol
+
+from conftest import BATCH_1, CUTTER, DISABLED, FINDER, R1, R2, Converge
 
 BATCH_2 = tuple(DISABLED[:5])
 TWO_BATCHES = {"angles": {"disable": DISABLED[5:]}}
