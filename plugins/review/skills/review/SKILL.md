@@ -5,92 +5,38 @@ description: Review a diff, branch, or PR for correctness, architecture, securit
 
 In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
 
-Review a change and apply accepted feedback.
-
 ## Inputs and outcomes
 
-Inputs: the diff, branch, or PR under review; the linked ticket, if any; the
-depth label `quick` or `full`. In an active run, also `<engine-root>`,
-`<session-dir>`, the sub-task label, and `review_fix_mode`. The run id comes
-from the environment.
-Authoring callers also supply authoring context, the fixed task folder and any current self-review checkpoint reference.
+Take the diff, branch or PR, any linked ticket, and depth (`quick` or `full`).
+Engine callers also supply `<engine-root>`, `<session-dir>`, sub-task label and `review_fix_mode`.
+Authoring callers supply authoring context, the fixed task folder and any current self-review checkpoint.
 
-Hand back to the caller (`execute` in an active run, the user standalone)
-each iteration's slate id, converge dir and `converge render` output:
-findings in rank order with their status, `fix-now` claims with their patches
-(`<gear> --host <host> <converge-plugin> converge render --json` `fix_now`) and any `fix-check` recorded on them,
-`choice` claims, follow-up claims with their status, and killed claims with
-their evidence. When the default implementation selects packs, also hand back
-the angle packs enabled for the slate, each with the reason, or, when none is
-enabled, that none is, with the reason. A re-review that reads its packs from
-the previous slate's `.packs` file hands them back marked as carried from the
-previous slate. Return follow-up claims in the handback; do not record them.
+For every iteration, give `execute` or the standalone user the slate ID, Converge directory and render.
+Include ranked findings with status, choices, follow-ups with status, killed claims with evidence, and `fix-now` patches with any `fix-checks`.
+Report the enabled angle packs and reason, including none, or mark them as carried from the previous slate.
+Return follow-ups to the caller for recording. State the ending outcome and iteration count.
 
-A new review ends with exactly one outcome:
+- **`handoff`** — the current Engine node has a `fix` edge and the mode permits a fix or requires a revert. Return the claim IDs marked `apply` or `revert`, including when the only applicable claims are `fix-now`.
+- **`comment_only`** — the current Engine node has no `fix` edge. Report every finding and `fix-now` claim as a comment, regardless of mode.
+- **`clean`** — the re-review or Engine single-pass render has no findings, `fix-now` claims, or follow-ups.
+- **`below_cutoff`** — only follow-ups remain.
+- **`blocked`** — author checking is incomplete, source selection awaits confirmation, or a required role or find coverage is missing. Also use for a disputed finding or blocked Converge handback. Use when a finding or `fix-now` claim lacks acceptance, a decided choice, or mutation permission it needs.
+- **`no_progress`** — the same unchanged claim returns after a fix attempt without new evidence.
+- **`iteration_cap`** — live claims remain at the configured cap and no other outcome applies. Default cap is 5.
 
-- **`handoff`:** In an active run, the current node has a `fix` edge (`machine.nodes[current].next` includes `fix`) and the
-  mode would apply at least one claim, or revert a patch whose `fix-check`
-  failed; this holds for a render whose only claims to apply are `fix-now`
-  claims. The `fix` node takes over. Return the fix list: the ids of those
-  claims, each marked `apply` or `revert`.
-- **`comment_only`:** In an active run, the current node has no `fix` edge (`machine.nodes[current].next` lacks `fix`).
-  Every finding and `fix-now` claim is reported and none is applied, whatever
-  `review_fix_mode` says.
-- **`clean`:** A re-review's render, or an active run's single-pass render,
-  has no finding, no `fix-now` claim and no follow-up.
-- **`below_cutoff`:** The render has no finding, no `fix-now` claim and at
-  least one follow-up.
-- **`blocked`:** Required author checking is incomplete or unavailable, a source selection needs confirmation, a role or find coverage is missing, a finding has status
-  `disputed`, a finding or `fix-now` claim needs a mutation outside the mode's
-  permission — an unaccepted claim under `accepted_only`, an undecided
-  `choice`, or a mutation outside `permitted_mutations` — or the `converge`
-  skill handed back `blocked`.
-- **`no_progress`:** The loop again finds the same unchanged claim after
-  trying to fix it, with no new information.
-- **`iteration_cap`:** The configured iteration cap is reached with live
-  claims remaining and none of the other outcomes applies. The default cap is
-  `5`, unless project configuration sets another value.
+With a `fix` edge and an empty fix list, use the render's `clean`, `below_cutoff`, or `blocked` result.
+Only the caller judges whether the broader goal is complete.
 
-In an active run where the current node has a `fix` edge and the fix list is
-empty, the outcome is the one the render gives: `clean`, `below_cutoff`, or
-`blocked`. Standalone, `fix-now` claims are reported with the findings and
-none is applied.
+For apply-only requests, return one disposition per in-scope comment and omit the loop outcome:
 
-Report claims from every iteration, not only the final iteration. State the
-ending outcome and iteration count. `execute` uses these fields to update its
-todos and determine whether the broader task is complete. This skill does not
-decide whether that broader task is complete.
-
-When applying feedback, account for every in-scope comment:
-
-- **`applied`:** The change was made, verification (the affected suite, or
-  whatever check applies — a lint, a type-check, a build) passed, and the
-  result reported.
-- **`accepted but not applied`:** Acceptance was clear, but a verification
-  failure or conflict blocked the change. Name the blocker.
-- **`rejected or won't-fix`:** No action was taken. State the reason from the
-  thread.
-- **`unclear`:** Acceptance or intent could not be determined. Name the
-  ambiguity so the caller can resolve it.
-
-An apply-only request (start at sub-task 6) hands back only this per-comment
-accounting; it has no loop outcome. For `handoff`, return the fix list (claim
-ids) in place of the applied-feedback accounting; nothing was applied. For
-`comment_only`, report every finding as a comment, with none applied.
+- **`applied`** — changed and verified. Include the result.
+- **`accepted but not applied`** — name the conflict or failed verification.
+- **`rejected or won't-fix`** — give the reason from the thread.
+- **`unclear`** — state the unresolved acceptance or intent.
 
 ## Workflow
 
-For authoring paths, complete the author checkpoint below before delegating a new independent review.
-Pure review of another author's change does not require the reviewer to act as its author.
-
-1. Check for an override; delegate if one applies.
-2. An apply-only request runs sub-task 6, then reports.
-3. A new review runs sub-task 1 (depth), 2 (start the slate), 3 (find
-   through `converge`), 4 (gap hunt, `full` only), then converge's escalate,
-   cut and attack steps, and 5 (cutoff, render, route choices).
-4. In an active run, end with `handoff`, `comment_only`, or the render's
-   outcome. Standalone, apply what the fix mode permits, re-review on a new
-   slate, and repeat until one outcome applies.
+Complete the author checkpoint when applicable, then check for a review override. For apply-only requests, start at step 6. For a new review, choose depth and start a slate. Run Converge with the required briefs and gap hunt, then report cutoff and disposition. Re-review on a new slate after permitted fixes.
 
 ## Author checkpoint
 
@@ -110,44 +56,13 @@ A completed cap leaves deeper issues open. The caller retains them until explici
 
 ## Check for an override first
 
-1. If an active `engine` run exists, read its settlement through the engine
-   session interface. Use the exact `<session-dir>` that `execute` supplied.
+In an Engine run, use the session interface with the supplied directory. Check the latest valid `review_override` and `review_fix_mode` amendments in the full decisions. Use the effective override as a skill name or pick the exact caller-supplied depth label from its mapping. With no match, use the default below. Standalone, use a registered project review skill when it fits.
 
-   Then scan the active run's full decisions for `AMENDMENT review_override` or
-   `AMENDMENT review_fix_mode`; the latest valid value wins over the field read
-   above.
-
-   Find `review_override`. It is either:
-
-   - a skill name; or
-   - a mapping from sub-task label to skill name.
-
-   For a mapping, use the exact depth label passed by `execute`. Do not infer
-   the label from the diff. If the active run has no matching override, use this
-   skill's default. Do not search again.
-
-2. Without an active run, check whether the current project has a registered
-   review skill that fits the task. Delegate to it when one exists.
-
-3. Otherwise, use the default implementation below.
-
-Before invoking an override, hand-fill the test part from sub-task 3 and pass it in the existing invocation context.
-Require the override to include that part and its instructions in every new or continued role brief.
-Keep memory-ledger lookup and record allowed, including for read-only roles.
-
-When delegating from an active run, pass the host engine root and
-`<session-dir>` using the active run's handoff contract. The delegated skill
-must return the fields defined in `Inputs and outcomes`.
+Pass the hand-filled test brief from step 3 to the override. Require it in every new or continued role brief. Allow memory-ledger lookup and record for read-only roles. Pass the Engine root and session directory when active. Require the same handback fields.
 
 ## Default implementation
 
-"Apply the accepted comments on this PR" starts at sub-task 6 and skips
-sub-tasks 1–5. It does not start a new review. A new review of a diff or
-branch starts at sub-task 1 and continues under `Iterate to closure`.
-
-Run every `converge` action below with the same `<converge-dir>`. The CLI owns
-the accepted event shape and prints the fixed next action after each state
-change.
+Use the same `<converge-dir>` for every action on the slate.
 
 ### 1. Depth
 
@@ -157,12 +72,7 @@ Use the depth label passed by the caller, else `full`:
 - `full`: lenses `correctness,security,architecture,tests,simplicity,contract,consistency`;
   agents main, F, R1, R2, C; gap hunt by R2.
 
-This slate is one task: never use more than these agents on it, and reuse
-each one across rounds. The cap counts this slate only; a later debate on its
-choices has its own budget. F covers every find angle of every lens.
-Each role gets its current claims, definitions, evidence, and actions from public `work`.
-Require its actor and explicit executing host. Use the printed package paths when saving work.
-The orchestrator supplies the receiving role's host for delegated package preparation.
+Reuse each seat and stay within the depth's role budget. A later debate has its own budget. The finder covers every find angle of each lens.
 
 Each lens's scope and finder brief is in
 [references/lenses.md](references/lenses.md).
@@ -177,47 +87,16 @@ Choose the slate id and the converge dir:
 - Standalone: slate `review-<UTC timestamp as YYYYMMDD-HHMMSS>`; converge dir
   `$HOME/.bootgear/converge` as an absolute path.
 
-Initialize the slate through the public `converge` command with the selected
-depth, lenses, angle files, and project root. The angle files are
-[references/find-angles.yaml](references/find-angles.yaml) for every depth;
-for each lens in the depth, its `references/angles-<lens>.yaml` when that file
-exists ([references/angles-security.yaml](references/angles-security.yaml),
-[references/angles-tests.yaml](references/angles-tests.yaml),
-[references/angles-simplicity.yaml](references/angles-simplicity.yaml),
-[references/angles-consistency.yaml](references/angles-consistency.yaml));
-[references/design-patterns.yaml](references/design-patterns.yaml) and
-[references/evaluate-angles.yaml](references/evaluate-angles.yaml) when the
-`architecture` lens is in the depth; and each angle pack enabled below. Pass
-the absolute path of [references/cutoff.yaml](references/cutoff.yaml), the
-per-lens cutoff policy, as `--defaults` to `init`.
+Use Converge `init` with the depth's lenses and project root. Include [references/find-angles.yaml](references/find-angles.yaml) and each selected lens's `references/angles-<lens>.yaml` when present. For architecture, also include [references/design-patterns.yaml](references/design-patterns.yaml) and [references/evaluate-angles.yaml](references/evaluate-angles.yaml). Pass the absolute path of [references/cutoff.yaml](references/cutoff.yaml) as `--defaults`. For `quick`, set `--refuters 1`.
 
-Select the angle packs before `init`. Each `references/pack-*.yaml`
-([references/pack-web.yaml](references/pack-web.yaml),
-[references/pack-typed-oop.yaml](references/pack-typed-oop.yaml),
-[references/pack-concurrency-db.yaml](references/pack-concurrency-db.yaml),
-[references/pack-test-tooling.yaml](references/pack-test-tooling.yaml)) opens
-with one line `# use when: <project property>`. Read that line of every pack and
-enable the pack when the project has the property, judging from project-wide
-sources only: the host's project instruction file (`CLAUDE.md` or
-`AGENTS.md`), the project docs, and the build and manifest files at the
-project root. Never use the diff or the changed-file list. Enable a pack when
-unsure; enable none when the sources give no stack information. For a
-re-review (a pass `<n>` ≥ 2, or a standalone review on a new slate after an
-iteration), read the packs from `<converge-dir>/<previous slate>.packs`; when
-that file is missing, select anew. Write the enabled pack file names, one per
-line, to `<converge-dir>/<slate>.packs` (an empty file when none).
-If `init` refuses with a duplicate angle id that names a pack, remove that
-pack from `--angles` and from the `.packs` file, and run `init` again.
+Read every `# use when:` in the [web](references/pack-web.yaml), [typed OOP](references/pack-typed-oop.yaml), [concurrency and DB](references/pack-concurrency-db.yaml), and [test tooling](references/pack-test-tooling.yaml) packs. Select from project instructions, docs and root build files or manifests. Exclude the diff and changed-file list. Enable a pack when unsure. If those sources give no stack information, enable none. For a re-review, reuse the previous slate's `.packs` list when present. Save one enabled file name per line in `<converge-dir>/<slate>.packs`, or an empty file. Include the packs in `init`. On a duplicate angle ID naming a pack, remove it from the list and the command, then retry.
 
 In an active run, write the settlement with
 `<gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml`
-and add `--settlement <that file>` to `init`. At `quick`, add `--refuters 1`.
+and supply it with `--settlement`.
 
 In an active run, add `--snapshot --pass <n>` to `init`; for `<n>` ≥ 2, also
-add `--since <run-id>-review-<n-1>`. Also add `--project-root <repo root>` to
-`init`, where `<repo root>` is the top level of the work tree holding the
-change under review. Right after `init` succeeds, record the slate so
-`execute` prunes its snapshot however the review ends:
+add `--since <run-id>-review-<n-1>`. Use the root of the worktree holding the change. Right after `init`, record the slate for snapshot cleanup:
 
 ```text
 <gear> --host <host> engine task session record-decision --mode solo --summary "review slate <slate> snapshot=<sha>"
@@ -230,12 +109,7 @@ After a successful `init` in an active run, record the final pack list from
 <gear> --host <host> engine task session record-decision --mode solo --summary "review angle packs <slate>: <names or none>; <reason>"
 ```
 
-If `init` refuses a `--since` check, keep `--pass <n>` and stop: have
-`execute` run `resolve` for the baseline this pass reviews against, with the
-scope source that a re-review reviews only the change since the previous
-pass's snapshot. `init` carries no other baseline, so the decision is one of:
-rerun `init` without `--since`, reviewing the full change as a recorded
-widening; or stop the review `blocked`. Record that decision, then act on it.
+On a `--since` refusal, keep the pass number and pause. Ask `execute` to resolve the re-review baseline against the rule that it covers changes since the previous snapshot. Record the decision. Rerun without `--since` only after approval to widen to the full change. Otherwise return `blocked`.
 
 If the project has `.bootgear/config/review-standard.md`, first write
 `<converge-dir>/<slate>.yaml` containing
@@ -244,22 +118,9 @@ and add `--config <converge-dir>/<slate>.yaml` to `init`.
 
 ### 3. Find, escalate, cut, attack
 
-Run the `converge` skill on the slate with the depth's agents: at `full`, two
-refuters (R1, R2) and the gap hunt of sub-task 4; at `quick`, one refuter (R1)
-and no gap hunt. The find comes first, then sub-task 4, then converge's
-escalate, cut and attack steps.
+Hand the slate to `converge`. Use its public `work` and `act` flow for role routing, actions, and stale-work recovery. Supply the role's actor and executing host when preparing its work. Give the finder the selected lens scopes, actual diff and linked ticket. Run full review's gap hunt after find coverage, before escalation and cutting.
 
-Spawn one finder, F, for every lens from sub-task 1.
-Give it each lens's scope from `references/lenses.md`, the actual diff, and any linked ticket.
-Use generated role work for the saved angles and event context.
-Have each role fill its own evidence and judgments in the printed action inputs.
-Submit through `act` or a direct public command. Refresh work after changes or stale-action refusals.
-Follow its waiting, complete, and handoff guidance.
-
-Name `.bootgear/config/principles.md`, the host user-principles file and each
-standard file in `.bootgear/config/` as context files for F, R1, R2 and C, each
-when present. In an active run, add the `principles` text of the settlement.
-Each role reads the files before it files, attacks or cuts.
+Give each role the host user-principles file, project principles and standards in `.bootgear/config/`, and the Engine settlement principles when active. Require it to read applicable files before acting.
 
 Before each new or continued finder brief, the main agent fills this required part by hand:
 
@@ -277,11 +138,7 @@ The role can probe behaviour those commands did not cover.
 Allow memory-ledger lookup and record, including for read-only roles.
 Scope other write limits to preserve these operations.
 
-For `<n>` ≥ 2, also give F the `git diff` command `init` printed and the
-previous slate's `converge render` output as settled context. A claim outside
-that diff is in scope only when the diff changes that code's behaviour. When
-the previous pass's `fix` node applied `fix-now` patches, this pass is their
-one-round re-review: tell F to report only problems those patches introduce.
+For pass 2 or later, give F the diff command from `init` and the previous render. Claims outside the diff need a behavior change caused by it. After a `fix-now` patch, restrict this one-round re-review to problems those patches introduce.
 
 If the project has `.bootgear/config/review-standard.md`, give F its rules and
 have it tag each claim that breaks one with `--rule R###`.
@@ -290,10 +147,7 @@ cut; converge's cutoff decides whether every other claim is cut.
 
 ### 4. Gap hunt
 
-`full` only; `quick` has no gap hunt. Right after find coverage, before any
-claim is escalated or cut, continue R2 as the gap-hunt finder, filing its
-claims with `--as r2` and `origin: gap-hunt`; they go through the same
-`converge` steps as the lens claims, with R1 attacking them. Brief R2 with:
+Brief the full review's gap hunter with:
 
 - the current `converge render` output;
 - the diff and the linked ticket;
@@ -303,10 +157,7 @@ claims with `--as r2` and `origin: gap-hunt`; they go through the same
 
 ### 5. Cutoff, render and choices
 
-Run the fixed cutoff action printed by the CLI once `converge status`
-reports `phase: cutoff`, so it is the slate's latest state-changing event.
-Report the render's findings, follow-ups and killed claims, each follow-up
-labelled with its status.
+Follow Converge's printed cutoff and render actions. Use the current render for disposition.
 
 Route every finding carrying a `choice` (a follow-up keeps its `choice` in
 the follow-up list):
@@ -325,16 +176,14 @@ When the previous pass's `fix` node applied `fix-now` patches, record a
 slate's cutoff:
 
 ```text
-<gear> --host <host> <converge-plugin> converge fix-check <previous slate> --dir <converge-dir> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <slate>
+<gear> --host <host> converge converge fix-check <previous slate> --dir <converge-dir> --as main --claim <id> --outcome pass|fail --evidence "<checks run and their result>" --review-slate <slate>
 ```
 
 Record `pass` only when the `fix` node's tests and checks passed and this
 slate holds no finding; otherwise record `fail`, and the claim goes in the fix
 list marked `revert`. Then rerun `converge cutoff` on the previous slate.
 
-In an active run, record the slate, the converge dir and the `snapshot=<sha>`
-that `init` printed. Keep the slate and converge directory in the handback.
-Use the selected exit's public check for leave arguments:
+In an active run, record the slate, directory, snapshot and counts. Supply leave arguments from the selected exit's public check.
 
 ```text
 <gear> --host <host> engine task session record-decision --mode solo --summary "review slate <slate> converge_dir=<converge-dir> snapshot=<sha> <render counts>"
@@ -350,17 +199,7 @@ select for the affected code and report the result.
 
 ## Iterate to closure
 
-A new review loops through converge, permitted fixes, and re-review. A direct
-standalone review uses `accepted_only` unless the caller explicitly selects
-another mode. In an active run, use `review_fix_mode` from the run manifest.
-
-In an active run, read the machine in force through the public engine state
-interface before applying any claim. The fix mode then only selects the fix
-list; end the iteration after sub-task 5 with the outcome from `Inputs and
-outcomes`.
-
-Standalone, one iteration runs sub-tasks 1–5, applies what the mode permits,
-and re-reviews the result with a new slate, until one outcome applies.
+Engine runs read the machine in force and effective fix mode, then return from step 5. Standalone defaults to `accepted_only`, applies accepted feedback and re-reviews on a new slate until one outcome applies. Report standalone `fix-now` claims without applying their patches.
 
 ## Rules
 
@@ -387,11 +226,7 @@ These do not count as acceptance:
 
 Treat unclear acceptance as `unclear`. Do not apply the comment.
 
-A finding with status `survived` is real, not accepted — acceptance means
-someone outside this review wants it fixed. Under
-`review_fix_mode: accepted_only`, a `survived` finding still needs that explicit
-outside signal. The exception is
-`review_fix_mode: auto_within_permitted_mutations`, defined below.
+A `survived` finding still needs acceptance from outside this review.
 
 If acceptance or intent is unclear, report the ambiguity. Do not choose an
 interpretation. In an active `engine` run, the caller decides whether
@@ -420,9 +255,7 @@ applies the patches and runs the tests and checks; the next review pass is
 their re-review and records `fix-check` (sub-task 5). After a failed
 `fix-check`, the `fix` node reverts that claim's patch.
 
-Without an active run there is no settlement and no `permitted_mutations` to
-stay within — a standalone caller selecting this mode gets `accepted_only`
-behavior instead: report every claim, apply none.
+If a standalone caller selects automatic mode, report every claim and apply none. An apply-only request still follows the per-comment acceptance rules.
 
 ## Fallbacks
 
@@ -434,29 +267,8 @@ unavailable), stop and report `blocked`, naming the missing role. Claims start
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
-
-### Claude Code
-
-Use `claude` for `<host>`.
-Use `converge` for `<converge-plugin>`.
-`<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
-- Run converge commands as `<gear> --host claude converge converge <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-
-### Codex
-
-Use `codex` for `<host>`.
-Use `converge` for `<converge-plugin>`.
-`<run-id>` is the value of `$CODEX_SESSION_ID`.
-
-Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
-Run converge commands as `<gear> --host codex converge converge <command> [arguments]`.
-If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `review` as the next step.
-Resume after setup verifies the required plugins.
+Call `cli:gear` for the absolute path. Use `claude` on Claude Code and `codex` on Codex.
+Run `<gear> --host <host> engine task <command>` and `<gear> --host <host> converge converge <command>`.
+Take the run id from `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` on the corresponding host.
+If `cli:gear` is missing, install `cli@bootgear` through the host.
+On Codex, if a required sibling skill is missing, report `cli:setup` with target `review`. Resume after setup verifies the plugins.

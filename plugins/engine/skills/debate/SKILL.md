@@ -12,40 +12,16 @@ Read `session_dir` from the settlement unconditionally. Pass every free-text
 value as its own argument to the public session interface. The CLI owns the
 exact command syntax and refusal shape.
 
-## Direct calls
+Before recording anything, classify the dispute. Send a fact that code, evidence, or a check can settle to `converge`. Return `inconclusive` for a factual question with no source that can settle it. Debate choices only.
 
-Read `debate_admission` from the run manifest.
+Require an unsettled `resolve` result or an admitted direct call. For a direct call, require all of the following:
 
-Allow direct calls only from skills named in `debate_admission`; a missing or
-empty list allows none.
+- The manifest's `debate_admission` names the caller.
+- A plain decision and at least two conflicting live alternatives.
+- The caller checked its sources of truth and settled principles without deciding.
+- The choice passes `debate_threshold` for reversibility and impact.
 
-Before accepting a direct call, confirm:
-
-- the calling skill is in `debate_admission`
-- the decision is stated plainly
-- at least two live alternatives are already in conflict
-- the calling skill checked its own `source_of_truth` and settled `principles`
-- those sources did not decide the issue
-- the decision passes `debate_threshold` based on reversibility and impact
-
-Refuse a call that fails any check. Do not call `record-decision`. Tell the
-calling skill which check failed and route it through the public `resolve`
-skill.
-
-For an accepted call, use the same brief, rounds, and recording. Require the
-calling skill to assemble the full brief.
-
-## Intake
-
-Before getting a question id, classify the disputed point:
-
-- If reading code, running a check, or re-running a memory-ledger entry's
-  evidence can settle it, it is a factual dispute. Refuse it without calling
-  `record-decision`, as "Direct calls" refusals do, and hand it back to the
-  caller for the `converge` skill.
-- If it is a fact no source can settle, report it to the caller as
-  `inconclusive`. Do not debate it.
-- Otherwise it is a choice. Continue.
+Otherwise refuse the direct call and name the failed check. Never record a refusal. Require the admitted caller to assemble the full brief.
 
 ## Handback
 
@@ -56,6 +32,7 @@ of these outcomes:
   direct call that failed a check (names the failed check; the caller routes
   through `resolve`). Nothing is recorded.
 - **`inconclusive`** — a fact no source can settle. Nothing is debated.
+- **Deputy assertion** — the asserted answer and its cited slugs on an admitted direct call. No parties are dispatched.
 - **A closed question** — the question ID, the closing outcome
   (`unanimous_convergence`, `consented_stop`, `round_cap`, or
   `degraded_convergence`), the decided answer (the main agent's decision for
@@ -74,26 +51,7 @@ one outcome → hand back.
 
 ## Before debating
 
-Confirm that `resolve` ran and did not decide. Accept direct calls only when
-`debate_admission` allows them and the "Direct calls" checks pass.
-
-Call `recall --section settlement` and read:
-
-- `debate_roster`
-- `debate_parties`
-- `debate_round_cap`
-- `convergence_policy`
-- `consented_stop_allowed`
-- `debate_admission`
-- `debate_party_config` — use this settlement snapshot; do not re-read configuration layers.
-- `source_of_truth`
-- `debate_threshold`
-- `task_type`
-- `goal`
-- `principles`
-
-Scan the full decisions section for `AMENDMENT` entries; the latest valid
-amendment wins for the next round.
+Call `recall` for the effective settlement and full decisions. Read the roster, custom parties, round cap, convergence and consent policy, and admission. Read the sources of truth, threshold, task type, goal, and principles. Use the settled `debate_party_config` snapshot.
 
 Brief every party, in round 0 and every later round, with:
 
@@ -115,37 +73,13 @@ When `resolve` supplied `deputy_slugs`, include them in the brief as the user's 
 
 When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it), pass its cited slugs the same way. If its `source` is `assertion`, hand that answer back to the caller without dispatching parties. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
 
-## Question id
+## Open and scope the question
 
-Before round 1, ask the public session interface for a stable question ID.
+Resume the open question found by `recall`. Otherwise run `session next-question-id` and use its printed round-0 submission. On refusal for an open question, resume the named debate.
 
-Resume an existing debate with its question ID from the session ledger.
-If `next-question-id` refuses because a prior question lacks a closing entry,
-resume that question instead of starting another.
+In round 0, each enabled party independently states its topic, scope, principles, and cutoff understanding. Record a real position or an absence marker for each party. Discuss once, with each party agreeing, refining, or refuting named points. The main agent synthesizes the scope and preserves unresolved caveats. Unanimity is optional. An all-marker scoping round takes the `debate-degraded` path instead of `scope-settled`.
 
-## Round 0: scoping
-
-Round 0 settles topic, scope, principles, and cutoff threshold. No round 1+
-entry is accepted before a `scope-settled` close, and that close cannot be the
-question's first entry.
-
-Each party independently states its own understanding, recorded as
-`round 0, party '<role>': ...`. Then discuss and reconcile as an ordinary
-round 2+ response: agree, refine, or refute named points.
-
-Every roster party records a real round-0 entry or an
-`UNAVAILABLE`/`NO-RESPONSE` marker (see "Unavailable party"); at least one
-real entry is required. An all-marker round 0 routes to `debate-degraded`,
-not `scope-settled`.
-
-After one discussion pass, the main agent closes round 0 with a synthesis;
-unanimity is not required, and `scope_settled:` does not claim full
-agreement. Carry unresolved points forward as named caveats; do not extend
-round 0.
-
-Record the close through the public session interface with mode
-`scope-settled`, the question ID, and a one-line summary naming topic, scope,
-principles, cutoff, and preserved dissent.
+Submit the round-0 synthesis using the closing format below. Then use Gear's printed round-1 submission.
 
 ## Parties
 
@@ -174,12 +108,7 @@ party's latest recorded position by agreeing, refining, or refuting named
 points. Record positions as they arrive, preserve earlier positions, and do
 not restate unchanged positions.
 
-At each round start:
-
-1. Recall `--section settlement`.
-2. Scan the decisions section for `AMENDMENT` entries.
-3. Apply the current settlement and amendment state.
-4. Brief every party from that recalled state.
+At each round start, use `recall` for the effective settlement and brief every party from that checkpoint.
 
 Apply amendments to `debate_roster` and `debate_parties` from the next round;
 do not restart or invalidate recorded rounds. Continue already-listed parties
@@ -216,8 +145,7 @@ recorded response or unavailability marker. Do not add a round-start marker.
 
 ## Recording
 
-Record each round through the public session interface with this debate's
-question ID and a one-line party position.
+Use the opening submissions Gear prints as templates. For later positions, use `session record-decision` in `debate` mode with the question ID and a one-line summary of the form `round N, party '<role>': <position>`.
 
 For a closing outcome, omit the `round N` prefix and record one of the public
 outcomes: `unanimous_convergence`, `consented_stop`, `round_cap`, or
@@ -229,11 +157,9 @@ Close only with these mode/prefix combinations:
 - `--mode debate`: `unanimous_convergence:`
 - `--mode debate-capped`: `consented_stop:` or `round_cap:`
 - `--mode debate-degraded`: `degraded_convergence:`
-- `--mode scope-settled`: `scope_settled:` (closes round 0 only, see
-  "Round 0: scoping")
+- `--mode scope-settled`: `scope_settled:` followed by topic, scope, principles, cutoff and dissent. Close round 0 only, after at least one real position.
 
-Record at most one `debate-capped` or `debate-degraded` closing entry. Use
-exactly one `debate-capped` outcome: `consented_stop` or `round_cap`.
+Close each question once. Use the judgment and recovery rules below to choose the outcome and prepare the closing submission.
 
 ## Ending a round
 
@@ -274,9 +200,6 @@ round N, party '<role>': angles: <id>,<id>; goal: kept; <position or response in
 Record `unanimous_convergence` only if that round changes nothing: no party
 changes its position and no new objection is raised. Otherwise continue with
 ordinary rounds.
-
-Use `--mode debate-capped` with a `round_cap:` summary when "Stuck round"
-breaks a debate before the cap.
 
 A genuine tie is neither `unanimous_convergence` nor `consented_stop`.
 Continue to `round_cap` unless every party explicitly votes `CUT`.
@@ -427,6 +350,11 @@ assessment, and confirm the one-round retry.
 For a high-stakes `round_cap:` close, name the gap and confirm the stakes
 assessment. Do not claim that a retry occurred.
 
+## Fallbacks
+
+Treat unavailable dispatches under the retry and closing rules above.
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine`. Resume after setup verifies the required plugins.
+
 ## Host mechanics
 
 Read only the subsection for the current host. Skip the other host subsection.
@@ -473,6 +401,3 @@ Use `codex` for `<host>`.
   It is also unavailable when its `advisor` call fails, times out, or finds no live listener.
   A missing `advisor` skill also makes it unavailable. Never fall back to the other
   channel or another mechanism.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
-Resume after setup verifies the required plugins.

@@ -1,132 +1,72 @@
 # Ledger judgement
 
-## What the tool refuses
+## Choose a ledger
 
-- Editing an answer body or its `aN` id. There is no `amend`.
-- A claim over 40 words, unless `--force`.
-- A re-`sign` that would change nothing — same verdict, same depth. Correcting your own vote is allowed; refreshing its date alone is not.
-- `refute` against your own signature — `sign` again instead.
-- Signing an answer with no `Because:` or `Evidence:` — there is no hash to sign.
-- A `new` whose question scores `0.85` or above against an existing one, unless `--anyway`.
-- Removing or editing a committed `Evidence:` line — `lint` reports `EVIDENCE-REWRITTEN`. Checks are append-only; `add-evidence` adds one, and to *replace* one, write a rival with `--keep-evidence`.
-- Promoting a branch answer whose check names the branch outright — write a `rival` instead.
-- An `assert` with no `--why`, or on an answer already asserted — `--clear` first.
+Read each open ledger's `WHAT-BELONGS.txt` with `ledger rules`. Its rules take precedence over these defaults.
 
-## Which ledger
+- Use shared for durable codebase, product, business, and third-party facts teammates can verify. Use local for machine-specific facts and reusable snapshots of moving state.
+- Prefer claims tied to mainline, a locked dependency, an applied migration, or a closed date window. A live vendor setting, PR status, or open-ended production count can drift. Keep task-only work state with the task.
+- Treat claims about missing work under active development as perishable. A documented design decision can make such a claim durable.
+- Date the claim rather than the question. When a tally has a reusable method, put the method in shared and the measured count in local.
+- Choose the destination yourself. Ask the user about uncertain placement or entries about people. Follow the CLI's confirmation guidance before publishing an append-only shared entry.
+- Read every open ledger when judging a match. Narrow with `--only` only for a deliberate scoped read.
+- For portability audits, use `audit` to find machine-bound evidence and `audit --json` to inspect all answers with checks. Ask whether a teammate could run each check on their machine and get the same result.
 
-Each ledger's `WHAT-BELONGS.txt` (`<gear> --host <host> memory-ledger ledger rules`) is the authority on what it holds; the points below are the defaults it starts from and lose to it.
+## Judge the match
 
-1. **Shared holds what stays true; local holds what drifts.** Shared: anything a teammate could re-check about the codebase, the product, the business, a third-party contract. Local: true of this machine only — shell profile, tool config, scratch paths, locally-bound services — or true but perishable — a count, a cohort size, a snapshot of moving state. Never an open-ended count in shared.
-2. **The test is whether the claim pins to a ref**: mainline code, a locked dependency version, an applied migration, a *closed* date window. Production counts, PR and branch status, a runtime flag, an issue tracker pin to nothing.
-3. **A locked dependency version pins; a vendor's live state does not.**
-4. **Three shapes rot fastest:**
-   - in-flight work state (which PRs are open, what a branch holds, what blocks what);
-   - "not yet" negatives under active development — a negative following from a *design decision* is durable, one meaning "nobody has done it" is a countdown;
-   - open-ended production counts.
-5. **Date the claim, never the question** — "as of 2026-09-02, …".
-6. **Prefer the question that outlives the number.** Where a tally has a reusable method inside it, the method is the shared entry and the number is the local one.
-7. **Judge the destination yourself and write.** A codebase, product or business fact goes to shared without ceremony. Ask the human only when you cannot place it — it reads general but leans on this machine, or it is about a person. Shared is append-only and published under their name.
-8. **Read every open ledger even when you write to one.** `--only` narrows and is never the default: a read covering one ledger lets you mint a question the other already answers.
-9. **Which ledger an entry belongs in has no heuristic.** `audit` asserts one thing only — an `Evidence:` line naming an absolute or `~`-relative path other than a tool cache or system directory. `audit --json` dumps every answer that has a check, skipping `_about` entries, and you ask of each: could someone else, on their own machine, run this and get the same answer?
+1. Resolve before reading or writing. Read each candidate and compare its question with yours. In `(n/m terms)`, check which of your `m` terms its `n` matches actually cover. Check any `UNKNOWN` terms for a missing distinction.
+2. Read a matching entry with `show`. Verify and sign it, or add a rival if it needs a correction.
+3. If the question differs, use the resolver's `MINT` leaf. Choose the folder from its `_about` scope. Never invent a slug.
+4. Use `--in <folder>` only with an explicit scope. A guessed folder can hide an existing answer.
+5. Read the entry named in a near-duplicate refusal before considering `new --anyway`.
 
-## Retrieving
+## Write the claim
 
-1. **Read `(n/m terms)` before acting on a score** — `n` is how many of your query's terms *that entry* matched, `m` how many you asked. `1.00 (2/5 terms)` and `1.00 (5/5 terms)` are not the same claim. The separate `UNKNOWN` line names the terms no entry contains at all.
-2. **A fuzzy hit is a decision, not an answer**: same question → run its checks and sign or rival; different question → take the `MINT` slug.
-3. **Pass `--in <folder>` only deliberately, and never infer it from the question** — a wrong guess searches a folder that cannot hold the answer.
-4. **Never invent a slug the resolver did not emit.** Read with `show`, or `list` for the whole ledger.
+- Give each answer one falsifiable claim in at most 40 words. Use a separate entry for each independent question.
+- Add `--alt-terms` for phrases someone would search for without knowing the entry exists. Include symbols, error text, and alternate phrasings. Describe the question instead of the answer.
+- Name the slug for its question. Keep committed answers, answer IDs, and evidence intact. Add a check with `add-evidence`; use a rival to replace a check or correct a claim.
+- For `OVERSIZE` or `REGROUP`, propose a folder split. On approval, use `git mv` and update each slug heading before saving.
+- Keep secrets and erasable data out of the ledger. Record only questions with answers another session can check.
 
-## Writing an entry
+## Write the evidence
 
-1. **Run the resolver first.** `new` runs it for you and prints the closest questions; read the entry it names before overriding with `--anyway`.
-2. **One falsifiable sentence per claim.** A single ✓/✗ cannot express "first half wrong, second half right"; seven findings are seven entries.
-3. **Correct a wrong claim by adding a rival**, never by editing.
-4. **Spend real effort on `--alt-terms`** — it is the anti-duplicate mechanism: the phrasings someone would type not knowing this entry exists, including symbol names, error text, and the question backwards.
-5. **Keep claim vocabulary out of `alt_terms`.** Only the question is searched; making content findable there stops the resolver answering "has this been asked?".
-6. **Name a slug for its question, not its answer.** Negation words are stopwords, so `no-nested-transactions` reduces to `nested-transactions`.
-7. **Choose the folder yourself** — `MINT` gives the leaf only. Read the folder's `_about.md`.
-8. **`OVERSIZE` and `REGROUP` have no `--fix`.** Propose the split, then `git mv` and fix each `# <slug>` header.
-9. **Never put secrets or erasable data in a ledger.** History is append-only.
-10. **This is not general note-taking.** A ledger entry is a settled question whose answers each carry a check another session can re-run.
+1. Give a repeatable check for the clause that drives the decision. Split independent checks across repeated `--evidence` flags. Avoid `;` chaining, which can hide a failed step. If checks must share a shell command, use failure-propagating chaining such as `&&`. Use `cd <repo> &&` or `git -C <repo>` when a command needs that checkout.
+2. Prefer repo-relative paths. Use `--repo <name>` to identify a different checkout. A conventional tool cache can use its standard path. Avoid personal home paths.
+3. Prefer discovery over a fixed path or input. Guard live-state checks so a missing dependency or unreadable source fails visibly. Use `git grep -E` for alternatives.
+4. Include the ref in a branch claim's check, such as `git grep … origin/<branch> …`. A pass on a different checkout does not verify that branch.
+5. Cover the full claim. A partial check can pass while its omitted clause is false.
 
-```
-<gear> --host <host> memory-ledger ledger new tech/stack/package-manager --shared --q "…" --claim "…" --because "…" --evidence "…"
-<gear> --host <host> memory-ledger ledger rival <slug> --claim "…" --because "…" --evidence "…"        # appends the next aN
-<gear> --host <host> memory-ledger ledger new <folder>/_about --local --q "What belongs here?" …       # new folder, same commit
-```
+Check what the observation actually proves:
 
-## Writing a check
+| Check | What to verify next |
+| --- | --- |
+| Search returns no match | Try alternate spellings, dynamic names, configuration, and call sites. Run a positive control. |
+| Search returns a match | Check that the code is reachable and that a fixture, comment, or disabled flag does not explain the hit. |
+| Search is path-scoped | Widen it to the tree and any sibling service that deploys the same code. |
+| Query returns a count | Check population boundaries, inner joins, soft deletes, and the date window. |
+| Definition or annotation | Check the effective runtime value after overrides and profiles. |
+| Documentation or vendor page | Check current behavior when the claim is about runtime. |
+| Silent exit zero | Make the check fail once before trusting a pass. |
 
-1. **Write it for the repo the question is about, without naming it.** Whoever asks next is already working there.
-2. **Prefer a check that *discovers* its subject over one that names it**, and guard a check needing live state so it exits loudly. Silence reads as refutation.
-3. **Cover the clause that carries the decision.** A two-part claim checked on one half passes, and the untested half gains a corroboration nothing looked at.
-4. **Never chain checks with `;`** — a chain exits 0 on a partial run, so a failure in the middle reads as success. Repeat `--evidence` instead.
-5. **Anchor any `;`-chained line** with `cd <repo> &&` or `git -C <repo>`: with the failing part anywhere but last, the chain exits 0.
-6. **Never hardcode a path into a home directory**; use a repo-relative path, or `--repo <name>` to name the checkout. A tool's conventional directory, such as a package manager's cache (`~/.gradle/`, `~/.m2/`, `~/.npm/`), is the exception: it has the same shape on every machine with that tool. `/Users/someone/…` fails for everyone else and is tallied as a refutation; `~/<checkout>` assumes every checkout sits in the same place.
-7. **Use `-E` with `git grep`.** Basic regex makes `'fun a|fun b'` match nothing and exit 1 — indistinguishable from a proven absence.
-8. **A branch claim's check must name the ref** (`git grep … origin/<branch> …`), or a session on mainline records a `✗` that is only a ref mismatch.
+## Verify and sign
 
-## Verifying, on every retrieve you act on
+1. Read the answer before every use. Run every current `Evidence:` line. Run connector checks with the tool they name.
+2. Name an observation that would be false if the claim were wrong. Run that broader check. Add it if a later agent can reuse it. Write a rival if the claim proves narrower than the checks suggest.
+3. Use `sign` for a pass. For a failure, use `sign --fail --output` with the real output. Use `refute --output` to contest another session's signature. Correct your own verdict by rerunning the checks and signing again.
+4. Sign under the current AI session, including when an earlier session wrote the seed. A subagent sharing your session reports its evidence to you; sign once. Never sign as the user or invent an identity. The CLI records a verdict after you run the checks.
+5. Read `e=N` as the number of checks available when a signature was cast. Rerun added checks before re-signing. Judge broken checks from the evidence and write a rival when needed.
+6. Save each verified result in the same working stretch.
 
-1. Read the answer you intend to use.
-2. Run **every** one of its `Evidence:` lines with your tools — a signature covers all of them. A connector check runs with the tool it names, not a shell.
-3. **Zoom out — cover broader than the checks.** Name the observation that would be false if the claim were wrong, and run that.
-4. Record the verdict:
-   - pass → `<gear> --host <host> memory-ledger ledger sign <slug> a1`
-   - fail → `<gear> --host <host> memory-ledger ledger sign <slug> a1 --fail --output "<what it actually printed>"`
-   - contradicting a standing signature → `<gear> --host <host> memory-ledger ledger refute <slug> a1 <their-id> --output "<yours>"`
-5. **Leave the zoom-out behind.** If the broader check is worth re-running, `add-evidence` it — that voids no signature. A claim that turned out narrower than its checks suggested still needs a rival.
-6. Commit in the ledger in the same working stretch. No batching.
+## Judge confidence and conflicts
 
-### Checks that under-determine their claim
+Use confidence and signatures as leads. Rerun the checks before relying on any answer. A failing signature alone cannot settle the claim. It can come from the wrong branch, a missing build, or unavailable network. `refute` adds an opposing vote and preserves the original. For `SPLIT` evidence, write a rival with a check that distinguishes the conditions that produced the split.
 
-Each asserts something narrower than the claim above it.
+An asserted answer records a human ruling. Use `assert` only when a check cannot decide the question, as with intent or a standing decision. Ask the user first. Supply their reason with `--why`; use `--clear` before replacing a ruling. Keep contrary signatures visible and use the CLI to change the assertion.
 
-1. **A grep that matches nothing.** Asserts the pattern is absent, not the thing. Check other spellings, a dynamically built name, config rather than code, the call site rather than the definition.
-2. **A grep that matches something.** Asserts a string exists, not that it runs. Check whether the hit is reachable at all — dead code, a test fixture, a comment, a branch behind a disabled flag.
-3. **A path-scoped search** (`-- <dir>`, one module, one repo). Asserts about that path only. Widen to the whole tree, then to sibling services that deploy the same thing.
-4. **A count.** Asserts what the query returned, not that the query captured the population. Check what it silently excludes — an inner join, soft deletes, a status filter, an open-ended window.
-5. **A definition read.** A default, a config key, an annotation asserts what is *declared*. Check the effective value: overrides, profiles, environment, anything set at startup.
-6. **A doc or vendor page.** Asserts what the page says, not what the system does. Check the runtime.
-7. **A check that exits 0 with no output.** Cannot tell "passed" from "matched nothing" from "never ran". Make it fail once, deliberately, before trusting a pass.
+When answers disagree:
 
-### Signing
-
-1. **The signatory is the AI session, never the human** — `sign` takes it from the host session (see SKILL.md "Host mechanics"). Never type a name, sign as the user, or invent members: one human across a hundred sessions is one vote.
-2. **A subagent is not a second session.** It inherits its parent's session id and framing, so report the delegated verdict up and let the parent sign once. Never `--as` a made-up id.
-3. **Changed your mind, or ran checks added after you signed?** Run them yourself, then `sign` again — it rewrites *your own* line in place: verdict, `e=`, date, and any recorded output. Still one session, one vote, so `conf` moves only if your verdict flipped. It refuses a re-sign that would change nothing, and refuses outright if your recorded output has drifted away from your signature. **`sign` never runs the checks for you** — it records your verdict, so a re-sign claims you re-ran the current set, and `e=` is the number of checks that existed, never proof any of them passed. `refute` is for other sessions' signatures and is barred against your own.
-4. **Do sign an earlier session's seed.**
-5. **`refute` casts an opposing vote; it never strikes one.** The other vote stands and the tally decides.
-6. **Pass `--output` on any `✗`**, with what the run actually printed. It is the only thing that lets the next session tell a real refutation from a wrong branch or a missing build.
-7. **Read `e=N` as verification depth.** An early signer never saw the checks appended later.
-8. **A present but broken check is not refused.** That call is yours, and it is worth a rival.
-
-## Reading confidence
-
-1. **`conf` is an indicator, never a gate.** Nothing is hidden at any level; the checks decide.
-2. **A `✗` is a vote, never a veto.** A lone bad run — wrong branch, missing build, no network — must not erase a well-corroborated answer.
-3. **A `SPLIT`** (✓ and ✗ on one body) **is a finding about the check, not the claim.** Answer it with a rival whose check names what the split turned on, not with an edit.
-4. **`1.00` is a human's ruling, never a tally.** Counted confidence stops at `0.99` however many sessions agree. A `conf 1.00 · asserted` header carries an `Asserted:` line saying who ruled and what settles it, and `show` still prints what the signatures count beside it.
-
-## Asserting
-
-`assert` pins an answer at `1.00` on a human's ruling; `--clear` hands it back to the tally. Command syntax: `references/mechanics.md`.
-
-1. **Only for a question no check can settle** — an intent, a decision, a system that no longer exists to be queried. Current behaviour has a check, and the check decides.
-2. **It is the human's ruling, not yours.** Ask before asserting. `--by` defaults to `git config user.name`.
-3. **A pin is not a veto.** Signatures keep accumulating underneath it, and `lint` reports `ASSERTED-CONTESTED` for as long as a `✗` stands.
-4. **Never hand-edit a header to 1.00.** `lint` reports `ASSERT-UNRECORDED` for one carrying no `Asserted:` line.
-
-## When answers disagree
-
-An answer that contradicts, narrows or corrects an existing one is a **rival**, written with
-`rival` like any other. `rival` prints the existing answers and their checks before it writes.
-
-1. **State the difference in the claim itself**, citing the answer it argues with by id — `a1 counts only the first of three paths`.
-2. **It starts at `0.30 unconfirmed`, inheriting no votes**, and the answer it corrects keeps what it earned.
-3. **Carry forward the checks you still agree with** via `--keep-evidence a1`, but expect new signatures — a check re-homed onto a different claim is a different assertion.
-4. **There is no `Superseded-by:` and no ordering between answers.** Which answer is right is a judgement the reader makes by running the checks.
-5. **Promote when `lint` reports `REF-LANDED`**; the new mainline answer earns its own votes.
-   For `REF-GONE`, check the stored `Ref:` and `Repo:`. Verify whether the work landed or was abandoned.
-   If it landed, add a verified mainline answer. Drop the entry only after you confirm abandonment.
-6. **Invert a proven-false answer with the two commands, never a header.** `sign <slug> aN --fail --output "<what it printed>"` records the disproof under the original; `rival` adds the flipped claim carrying the proof as its own `Evidence:`. The flipped answer starts at `0.30` and earns its votes like any other.
+- Write a rival that names the answer ID and states the difference in its claim.
+- Carry still-valid checks with `--keep-evidence <answer-id>`. The rival earns its own signatures; the original and its signatures stay intact.
+- Use the checks to decide which answer applies. Keep all applicable answers visible.
+- On `REF-LANDED`, promote a verified mainline answer. If a check names the old branch, use a rival with a mainline check. For `REF-GONE`, check the stored ref and repo. Confirm whether the work landed or was abandoned before dropping any entry.
+- For a proven false answer, record the failing check output under the original with `sign --fail --output`. Use `rival` to add the corrected claim and its proof.

@@ -5,15 +5,11 @@ description: Settle task type, approach, source-of-truth order, debate threshold
 
 In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
 
-Run at the start of every engine run, before `execute`. Input: the user's request, directly or through `start`.
+Start with the user's original request, directly or through `start`. The run id comes from the environment.
 
-Outcomes:
-
-- **Goal confirmed** — `init` writes the settlement (required fields in `## Writing the settlement`). Clarify hands the run to `execute` with `<engine-root>` and `<session-dir>`. The run id comes from the environment.
-- **Goal edited or declined** — stay in `clarify` and redraft until the user confirms.
-- **Ledger already exists** — `init` refuses; follow `## Recovery`.
-- **`<gear> --host <host> engine task state validate` fails after the fallback** — follow `## Recovery`.
-- **Settlement fails validation** — `init` refuses and writes no ledger; follow `## Recovery`.
+- **Confirmed** — write the settlement once and hand `execute` the confirmed goal, machine, permissions, `<engine-root>` and absolute `<session-dir>`.
+- **Edited or declined** — stay in clarify and redraft for confirmation.
+- **Existing ledger, invalid machine or refused settlement** — follow Recovery. An invalid new settlement writes no ledger.
 
 ## Checkpoint mode
 
@@ -31,15 +27,15 @@ This mode never initializes a run, restarts advisors, or grants mutation permiss
 
 ## Workflow
 
-Read the project principles and standards → investigate the request → settle items 1–10 (state machine validated and diagrammed) → draft `goal` → show `goal`, the diagram, the `leave_check` and `exit_checks` lists, `advisor_roles`, the seat mapping, startup choice, approved launcher, and existing advisor pairings → on confirmation, `init` the settlement → hand off to `execute` with `<engine-root>` and `<session-dir>`.
+Read applicable rules, assess the request, settle items 1–10, and validate the resolved machine. Show the goal, diagram, node reminders, gate commands, advisor roles, seats, startup choice, launcher and existing pairings. Get explicit confirmation before initialization and handoff.
 
 ## What to settle
 
 Ask items in the order that fits the conversation. Use answers already implied by the conversation. Do not force a questionnaire.
 
-Before item 1, read the host user-principles file, if present, and `.bootgear/config/principles.md`, `.bootgear/config/review-standard.md` and `.bootgear/config/test-standard.md` from the project root, each when present. Use them to draft the goal and to settle the items that follow.
+Before item 1, read the host user-principles file and `principles.md`, `review-standard.md`, and `test-standard.md` under the project's `.bootgear/config/`, when present. Apply them to the settlement and goal.
 
-Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` skill with the question, its options and its stakes. If `deputy` is not installed, record `no-deputy:not-installed` and ask the user. On `answered`, use the answer and keep its cited slugs for `init`. On `escalate`, ask the user. Item 7 (permitted mutations) and the goal sign-off are never sent to the deputy, and production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it.
+For work questions in items 1–5 and 8–10, give `deputy:ask` the question, options and stakes. On `answered`, use the answer and retain its slugs. On `escalate`, ask the user. If deputy is missing, record `no-deputy:not-installed` and ask the user. Keep production changes, outward sends, irreversible actions, goal sign-off and permitted mutations with the user.
 
 1. **Request assessment** — investigate the request before settling task type or anything else; do not accept the first framing uncritically. Inspect the ticket/request text, the relevant implementation path, and existing tests or validation for related behavior. Record as settlement field `request_assessment`:
    - observed scope and affected surfaces
@@ -49,28 +45,17 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
 
    Scale investigation depth to the request: a shallow pass is enough for trivial, bounded work, but state explicitly why deeper investigation wasn't needed rather than skipping the field.
 
-   This is separate from state-machine resolution (item 3). Do not conflate the two fields or skip one because the other was done.
-
-   Later nodes reassess scope only for newly discovered node-level work, recorded as a decision/amendment; do not repeat the full assessment at every node.
+   Store the assessment as a nonempty string, separate from `state_machine`. Later nodes record reassessment only for newly discovered scope.
 
 2. **Task type** — record exactly one of the six values:
    - `ticket-writing` — an issue body, with no design.
    - `ticket-to-pr` — implement a ticket.
    - `triage` — one reported problem.
-   - `change-review` — a change already made.
+   - `change-review` — correctness review of a change already made.
    - `design-doc` — requirements and design, with no task list.
-   - `artefact-review` — independently assess supplied output against a configurable quality rubric.
+   - `artefact-review` — assess the quality of supplied output, including drafts, against a configurable rubric.
 
-   Show the node reminders of each machine before the type pick.
-
-   Use `artefact-review` for quality review of supplied output. Use `change-review` for correctness review of code changes.
-   `design-doc` writes requirements and design; it does not review supplied drafts.
-
-   Pick `task_type` by matching the request to the machine descriptions and node reminders. Do not record another spelling or a paraphrase.
-
-   If two types fit, ask the user which one. Do not choose silently.
-
-   If none fits, tell the user, choose the closest value, and record the mismatch.
+   Show node reminders before choosing. Use the exact value whose description and reminders match. Ask the user when two fit. If none fits, tell the user, choose the closest and record the mismatch.
 
    If `task_type` is `triage`, settle `triage_cutoff`: `one-user` only when the request says the target is a single user, a single-user install or a single customer; otherwise `product`.
 
@@ -98,8 +83,8 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement. Do not write settlement without a validated `state_machine`.
 
 4. **Approach and principles are distinct:**
-   - **approach** — record concrete workflow steps such as read the ticket, implement, and open a PR.
-   - **principles** — record high-level constraints across the run, such as no scope creep, prefer simplicity over cleverness, and never touch production data. Merge them with the project and user principles before execution.
+   - **approach** — record concrete workflow steps as a nonempty string.
+   - **principles** — record constraints across the run as a nonempty string. Merge them with project and user principles before execution.
 
 5. **Source of truth, per domain — set separate authorities.** Settle at least:
    - scope and outcome — use the ticket, issue, or user's stated intent by default
@@ -155,13 +140,13 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - `debate_roster` — record every stable party ID that `debate` may invoke. Include built-ins (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) and custom IDs. Do not add duplicates. Always include `main-agent`.
    - `debate_party_config` — record the resolved party configuration snapshot. `debate` uses this field and does not re-read configuration layers.
    - `debate_admission` — record whether skills other than `execute`/`resolve` may call `debate` directly, and record which ones. Record absent or empty for no direct calls. Allow only `resolve`'s escalation path to reach `debate` when direct calls are absent.
-   - `review_fix_mode` — set to `accepted_only` by default to restrict `review` to externally accepted feedback, or set to `auto_within_permitted_mutations` to allow `review`'s iterate-to-closure loop to apply findings automatically within `permitted_mutations` from item 7.
+   - `review_fix_mode` — default to `accepted_only` for externally accepted feedback. Use `auto_within_permitted_mutations` to authorize automatic `fix-now` patches within item 7's permissions.
 
    Record what this run may call. Do not record a prediction of what it will call.
 
 10. **Advisor roles, seats, and startup** — settle the advisor's roles and channel startup timing.
    - Check the required CLI and `advisor` skill availability without starting or pairing a listener.
-     Use `## Host mechanics` to identify uses that need a listener. Report actual availability errors.
+     Check the host's listener requirements below and report actual availability errors.
    - Resolve `converge-seats` without a task file: `<gear> --host <host> engine task config resolve --name converge-seats --project-root <project-root> --json`.
      Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when `r2` is `native_subagent`.
      Ask which roles the advisor takes: `independent-reviewer`, `adversarial-reviewer`, `refuter`, or `gap-hunter`.
@@ -193,44 +178,25 @@ Before each work question in items 1–5, 8, 9 and 10, call the `deputy:ask` ski
    - While a channel exists, run its heartbeat task's printed `next` at once when that task ends.
      Keep the 720-second restart grace.
 
-## Drafting `goal`
+## Draft and confirm the goal
 
-After settlement, draft `goal` as a short, high-level prompt. Do not write a spec or task breakdown. State:
+State the task and constraints in one or two sentences. Give a concrete success condition. State the task-specific failure that leaves no path to completion. Treat a stall as open work. Allow edits and require explicit confirmation. Store `goal` as a mapping with text values `succeeded` and `failed`.
 
-- what the task is and its constraints, in one or two sentences
-- **succeeded when** — the concrete condition that means done
-- **failed when** — the task-specific condition that makes the task undoable; do not use a generic placeholder such as "the platform can't do X" or "the bug can't be reproduced at all"
+## Write the settlement
 
-Store `goal` in the settlement as a mapping with the keys `succeeded` and `failed`, each a text value. Do not store it as prose.
+After confirmation, write items 1–10 and the goal into the settlement input. Include every task-specific field the selected type requires. Keep `state_machine` as the validated block scalar and let Gear set `session_dir`.
 
-Classify a stall as not failure. Define failure as having no path to completion remaining.
+```text
+<gear> --host <host> engine task session init --settlement-file <file>
+```
 
-Show the draft. Get explicit confirmation before handing off to `execute`. Allow edits before confirmation.
-
-## Writing the settlement
-
-After confirmation:
-
-1. Call `init` with the settlement body. `<run-id>` is this session's id (see Host mechanics). `init` reads it from the environment. Pass `--dir` only when this run needs a non-default ledger location. Omit `--dir` for the default:
-   ```
-   <gear> --host <host> engine task session init --settlement-file <file>
-   ```
-
-   When `init` refuses because a ledger already exists at this path, or because the settlement fails validation, follow `## Recovery`.
-
-2. Let `init` resolve `--dir` (default `~/.bootgear/session`) to an absolute path and write `session_dir: <that path>` into the settlement as it stores it. Replace any `session_dir:` line already in `<file>` with the resolved path. `init` prints `INIT <ledger-file>`, the ledger file inside that directory. Do not compute or pre-populate `session_dir` before this call. Discard whatever `session_dir` value the caller supplied. Do not resolve the path with a separate command.
-
-3. After `init`, take `<session-dir>` as the directory containing the `INIT <ledger-file>` path. Pass `<engine-root>` and `<session-dir>` explicitly when starting `execute`.
-
-Include at least: `task_type`, `triage_cutoff` when `task_type` is `triage`, `work_dir` when `task_type` is `design-doc`, `task_folder` for `ticket-to-pr` or `change-review`, `request_assessment`, `state_machine`, `approach`, `principles`, per-domain `source_of_truth`, `debate_threshold`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, custom `debate_parties` as `{id, label, prompt, mechanism}`, resolved `debate_party_config`, `spec_override`/`test_override`/`review_override`, the run manifest (`spec_skill`/`test_skill`/`review_skill`, optional `spec_review_skill`/`spec_review_override`, `debate_roster`, `debate_admission`, `review_fix_mode`), `debate_mode` when applicable, `advisor_roles` and `converge_seats`, `autonomy`, `goal`, and `session_dir`. Let `init` write `session_dir`; do not pre-populate it.
-
-Pass `<session-dir>` in context at every handoff, unconditionally, until the first post-compaction `recall` succeeds. Pass it from `clarify` to `execute`. Require `execute` to pass it on every `recall`/`resolve`/`debate`/`spec`/`test`/`review` call it makes for this run, every time.
+On refusal, use Recovery. On success, use the directory of the printed `INIT <ledger-file>` as `<session-dir>`. Pass it and `<engine-root>` to `execute`. Preserve the directory on every active-run handoff, including `recall`, `resolve`, `debate`, `spec`, `test`, and `review`.
 
 ## Rules
 
-- Ask routine work questions only during initial clarify. Use checkpoint mode only for required model or source-selection confirmation. Record settled items in the session ledger. Do not ask again after recording a settled item. Set `no_further_questions: true` after `goal` confirmation.
-- After `init`, record each deputy-answered item in the run ledger as a `solo` decision that names its cited slugs (`<gear> --host <host> engine task session record-decision … --mode solo`). Do not write it to the deputy ledger. Only the user's own answers go to `deputy:record`.
-- Write the settlement only once. Do not revise it in `execute`. When the user amends a settled item mid-run, record the new requirement, changed restriction, or different goal condition as an explicit decision in the ledger's `decisions` section. Do not use a `clarify` update path.
+- Ask routine work questions only during initial clarify. Record settled answers and reuse them. Use checkpoint mode only for model or source-selection confirmation.
+- After `init`, record each deputy answer in the run as a `solo` decision citing its slugs. Only the user's own confirmed standing decisions go to `deputy:record`.
+- Record any mid-run user amendment as an explicit session decision. Keep the original settlement intact.
 
 ## Recovery
 
@@ -241,34 +207,10 @@ Pass `<session-dir>` in context at every handoff, unconditionally, until the fir
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
+Call `cli:gear` for the absolute Gear path. Run `<gear> --host <host> engine task <command>`.
+Both hosts support `native_subagent` and `advisor`. The handoff's `<engine-root>` is the installed Engine plugin root.
 
-### Claude Code
+- **Claude Code (`claude`)** — Gear reads `CLAUDE_CODE_SESSION_ID`. If needed, install `cli@bootgear` through the plugin interface. Only refuter and gap hunter use a listener. Debate uses direct `codex exec` when `command -v codex` succeeds.
+- **Codex (`codex`)** — Gear reads `CODEX_SESSION_ID`. If needed, install with `codex plugin add cli@bootgear`. Refuter or gap hunter shares one listener use. Debate needs a separate listener. If the `advisor` skill is missing, tell the user and record no advisor role.
 
-Use `claude` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-- Supply `<plugin-dir>` as `<engine-root>` in the handoff to `execute`.
-- `<run-id>` is the value of `$CLAUDE_CODE_SESSION_ID`.
-- A host-supported debate party mechanism is `native_subagent` or `advisor`.
-- Item 10: only `refuter` and `gap-hunter` need the paired listener.
-  Debate roles use direct `codex exec` calls. They are available when `command -v codex` succeeds.
-
-### Codex
-
-Use `codex` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
-- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Supply `<plugin-root>` as `<engine-root>` in the handoff to `execute`.
-- `<run-id>` is the value of `$CODEX_SESSION_ID`.
-- A host-supported debate party mechanism is `native_subagent` or `advisor`.
-- Item 10: `refuter`/`gap-hunter` and debate roles each need their own listener.
-  Naming both kinds pairs two listeners.
-- If the `advisor` skill is missing, tell the user and record no advisor role.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
-Resume after setup verifies the required plugins.
+If a required sibling skill is missing, stop and report `cli:setup` with target `engine`. Resume after setup verifies the required plugins.

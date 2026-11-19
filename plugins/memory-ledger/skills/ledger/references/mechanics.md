@@ -1,117 +1,47 @@
 # Ledger mechanics
 
-## Commands
+Get the absolute Gear path from `cli:gear`. Use `claude` or `codex` as `<host>`.
+Use help for commands, flags, and current examples:
 
-```
-Call `cli:gear` and set `<gear>` to its returned absolute path.
-Use `claude` or `codex` as `<host>`, based on the current host.
-
-<gear> --host <host> memory-ledger ledger resolve "<claim or question>" [--in <folder>] [--all] [--data] [--only shared|local|deputy]
-<gear> --host <host> memory-ledger ledger show <slug> [--data | --all-sigs]    # answers, conf, evidence, sigs (every ✗, newest 5 ✓ by file position, newest first; --all-sigs for all), recorded output; --data as JSON, refuses --all-sigs
-<gear> --host <host> memory-ledger ledger list [--filter <text>] [--all] [--only …]
-<gear> --host <host> memory-ledger ledger new <slug> (--shared|--local) --q --claim --because --evidence [--evidence …] [--ref <branch>] [--alt-terms]
-<gear> --host <host> memory-ledger ledger rival <slug> --claim --because --evidence [--evidence …] [--keep-evidence aN] [--ref <branch>]
-<gear> --host <host> memory-ledger ledger add-evidence <slug> <aN> --evidence "…"   # append a check
-<gear> --host <host> memory-ledger ledger vote --question "…" --claim "…" --evidence "…" [--only deputy]   # add checks to the answer with that claim on a similar question; exit 1 with NO-VOTE when none
-<gear> --host <host> memory-ledger ledger promote <slug> <aN> [--to <ref>]     # branch claim → mainline, as a NEW answer
-<gear> --host <host> memory-ledger ledger set-repo <slug> <aN> <repo>          # name the checkout its checks run in
-<gear> --host <host> memory-ledger ledger sign <slug> <aN> [--fail --output "<failing output>"]
-<gear> --host <host> memory-ledger ledger refute <slug> <aN> <signer-id> --output "<your contradicting run>"
-<gear> --host <host> memory-ledger ledger assert <slug> <aN> --why "<what settles it>" [--by NAME] | --clear
-<gear> --host <host> memory-ledger ledger hash <slug> <aN>                     # h= for an answer as it stands
-<gear> --host <host> memory-ledger ledger lint [--fix] [--only …]              # drift, voided sigs, folder shape, collisions
-<gear> --host <host> memory-ledger ledger save [-m "…"] [--no-push] [--only …] # lint --fix, then one commit per ledger
-<gear> --host <host> memory-ledger ledger audit [--json] [--filter <text>]     # Evidence lines naming an absolute or ~ path, tool caches and system dirs excepted
-<gear> --host <host> memory-ledger ledger doctor                               # python, git, config, both roots
-<gear> --host <host> memory-ledger ledger rules [--init] [--only …]            # each ledger's WHAT-BELONGS.txt; --init seeds a missing one
-<gear> --host <host> memory-ledger ledger resolve-roots [--json]               # where each ledger is, and whether it exists yet
-<gear> --host <host> memory-ledger ledger doctor --json                         # structured configured/unconfigured/broken status
-<gear> --host <host> memory-ledger ledger selftest                             # pin the conf/hash constants
+```text
+<gear> --host <host> memory-ledger ledger --help
+<gear> --host <host> memory-ledger ledger <command> --help
 ```
 
-- Identity, hashes and confidence are computed, never eyeballed. `show` computes `conf` live and marks signatures voided by a later edit; never hand-edit `conf` or `checked`, `lint --fix` recomputes them.
-- `sign` computes `h=`, writes your sig line, recomputes `conf`, and on `--fail` records the output beneath your signature as a `>` block. It records your verdict; it does not check the claim. Called again by a session that already signed, it **rewrites that session's own line** — verdict, `e=`, date — and takes any stale `>` block with it, rather than appending a second vote.
-- `new`, `rival` and `add-evidence` run each `Evidence:` line you pass and report on each, never refusing on the result. `new` and `rival` also record your own `✓ … (author)`, excluded from `conf`.
-- `assert` pins an answer at `1.00` on a human's ruling and writes an `Asserted:` line naming who and why; `--clear` lifts it. The line is outside `h=`, so neither voids a signature.
-- `promote` adds an answer scoped to the repo's mainline — from `origin/HEAD`, overridable by `ref:` / `$LEDGER_REF` / `--to` — and leaves the branch answer and its signatures intact.
-- A connector check is written `<Tool>: <what to ask it>`. It is not run and not judged, so name the tool and its inputs in full.
-- `resolve`, `list`, `lint`, `audit` and `save` take `--only shared|local|deputy`. The deputy root is opened only when named (`--only deputy`, or `new --deputy`). Slug-addressed commands — `show`, `hash`, `sign`, `refute`, `promote`, `rival`, `set-repo`, `add-evidence`, `assert` — look the slug up across the opened ledgers; `--only` narrows the lookup. `resolve --all` prints every match with no score-gap cut and no folder limits. `resolve --data` and `show --data` return the matches and the answers as JSON; `--json` keeps the prose envelope.
-- `new` with no ledger flag, while more than one ledger is open, is refused. Pass exactly one of `--shared`, `--local` or `--deputy`. A kind whose root is not open is refused, never filed in another ledger.
-- `new` requires `--shared` or `--local`; there is no default.
-- `doctor` first when anything is off.
-- Output mode: prose is the default for every stdout sink; `--json` or `--prose` on any command overrides, followed by `BOOTGEAR_OUTPUT=json|prose` when no flag is present. `--json` on `doctor`, `audit` and `resolve-roots` keeps its own shape and exit codes. Refusals follow the selected mode and name the command's example and the other commands.
+## Select a ledger
 
-## Git
+Use `resolve-roots --json` to see the effective roots and `rules` to read their charters.
+Run `doctor` first on errors. If roots are missing, tell the user to run the memory-ledger setup skill.
 
-`save` for all git here; never run git by hand.
+Search shared and local by default. For a deputy entry, carry `--only deputy` on each supported lookup, write and save. Check subcommand help for support. Add the selector if a printed next command omits it.
 
-- It runs `lint --fix`, stages every entry, commits, and pushes if a remote exists. `-m` overrides the message, `--no-push` commits only.
-- One commit per ledger, never one spanning both; a failure in one does not skip the other. `--only` saves one.
-- Direct push only — no branches, no PRs, no force-push. On a rejected push it rebases and retries once, then leaves the commit safe locally.
-- Never commit `.ledger-cache.json`.
-
-## Roots
-
-- Each ledger is a git repo. `resolve-roots` prints where yours are; missing or unset → tell the user to run the memory-ledger setup skill.
-- Defaults: `~/.memory-ledger/shared` and `~/.memory-ledger/local`.
-- Roots come from, each beating the last: `--root` / `--local-root` → `$LEDGER_ROOT` / `$LEDGER_LOCAL_ROOT` → `memory.root` / `memory.local_root` in the config file → the defaults. Relative paths resolve from the caller context, including `GEAR_CALLER_CWD` on the gear route.
-- Gear sets the host from `--host`. The CLI reads the session id from the environment. `--session-id`, placed before the subcommand, overrides it; the environment normally supplies it. Codex signers use `codex:<full-session-id>`; `--as`, when supplied, must match. Invalid or missing Codex identity is rejected before a write.
-- The config file is the first that exists: `./.memory-ledger/config.yaml` → `./.bootgear/config.yaml` → `~/.memory-ledger/config.yaml` → `~/.bootgear/config.yaml`.
-- Shared has a remote and reaches the team; local never does.
-- The two must be separate repos; the tool refuses if both roots resolve to one path.
-
-## Layout
-
-```
-<ledger root>/business/ tech/ process/
-  └── <slug>.md                 # entry: Q + answers + sig lines + recorded output
-  └── _about.md                 # what belongs in this folder — an entry like any other
-  WHAT-BELONGS.txt              # what belongs in this ledger; `save` commits it
+```text
+<gear> --host <host> memory-ledger ledger resolve "<question>" --only deputy
+<gear> --host <host> memory-ledger ledger show <slug> --only deputy --data
+<gear> --host <host> memory-ledger ledger save --only deputy
 ```
 
-- Never rename `WHAT-BELONGS.txt` to `.md`: every `*.md` under the root is read as an entry. `rules --init` seeds the plugin's default and never overwrites an existing file.
+Pass exactly one of `--shared`, `--local`, or `--deputy` to `new` for an explicit destination. A missing root is a refusal. Do not retry by writing to a different ledger. Use the deputy recording workflow for confirmed standing user decisions.
 
-- Every directory has an `_about.md`, written in the commit that creates the folder: `Q: What belongs here?`, competing visions as rival answers. A local and a shared `tech/_about` are not a collision.
-- Never create `_meta/`.
-- One slug, one home. A slug in both ledgers is an error, not a first-match: the lookup refuses and `lint` reports `TWO-HOMES`.
-- `OVERSIZE` fires past 50 direct entries; `REGROUP` from 25 up to the cap, where three or more entries share a word. Both advisory, no `--fix`.
+Use `rules --init` only to seed a missing `WHAT-BELONGS.txt`. Keep that extension.
+Create each folder's `_about` entry in the same commit as its first entry. Use the question `What belongs here?` and rivals for competing scopes. Do not create `_meta/`. Keep one home per slug. Resolve collisions explicitly. Use full slugs in links such as `[[tech/<folder>/<slug>]]`.
 
-## Entry format
+## Record and verify
 
-```markdown
-# tech/stack/package-manager
-Q: Which package manager does this repo use?
+Use Gear for entries, checks, votes, and assertions. Keep committed answers and checks intact. Add a check or write a rival when a check needs replacement. Never edit confidence, checked dates, or signatures by hand.
 
-## a1 · pnpm for all installs              conf 0.63 · checked 2026-03-05
-Because: workspaces performance; ~10x smaller installs than npm.
-Evidence: cat pnpm-workspace.yaml
-    ✓ bob   2026-03-02  h=7f3a92  e=1
-    ✓ alice 2026-03-04  h=7f3a92  e=1
-    ✗ carol 2026-03-05  h=7f3a92  e=2
-    > cat: pnpm-workspace.yaml: No such file or directory
+`new`, `rival`, and `add-evidence` report shell check results without requiring them to pass. Read the output before trusting an entry. Write connector checks as `<Tool>: <what to ask it>` with the complete input. Run those checks yourself with the named tool. Run every check before `sign`; signing records the verdict only.
+
+```text
+<gear> --host <host> memory-ledger ledger sign <slug> <answer-id> --fail --output "<actual output>"
 ```
 
-One question, one or more answers. Each answer: claim + `Because:` + one or more `Evidence:` +
-optional `Repo:` + optional `Ref:` + sig lines, each with its recorded output beneath it.
+Gear takes signer identity from the host environment. If explicitly needed, place `--session-id` before the subcommand. A Codex signer is `codex:<full-session-id>`; any supplied `--as` must match. Stop on an identity refusal.
 
-- `h=` covers claim + `Because:` + `Ref:`. Editing any of those voids every signature on that answer; `Evidence:` and `Repo:` are outside it. `lint` reports voided sigs, and restoring the bytes restores them.
-- `e=N` is how many checks the answer carried when that signature was cast. `show` marks a shallower one `[ran 1 of 3 checks]`.
-- Link entries as `[[tech/<folder>/<slug>]]` — the full slug, anywhere in a claim or `Because:` line.
-- `Ref:` is for a code-scoped claim only, and is the branch name, never a SHA — a name survives rebases. `new`/`rival` fill `Repo:` in from the current checkout whenever `--ref` is given; set it later with `set-repo`, never by hand. Without a `Repo:` the ref resolves in whatever repo the reader stands in, and when it resolves nowhere `lint` says `REF-UNSCOPED` and declines to advise deletion.
-- A shared `Repo:` is a repo name (`widgets`, `acme/widgets`), never a machine path (`/…`, `~…`, `C:\…`, `file:`, `..`, spaces): `new`, `rival` and `set-repo` refuse one without `--force`, and `lint` reports it as `REPO-PATH`.
-- `conf`: `<0.45` unconfirmed · `0.45–0.75` confirmed · `>0.75` well-confirmed. Anchors: author alone `0.30` · one independent ✓ `0.61` · two `0.79` · 2✓+1✗ `0.63` · 6✓+1✗ `0.78`. Counted confidence caps at `0.99`; `1.00` is only ever `asserted`.
-- `Asserted: <who> <date> — <why>` records a human's ruling. Outside `h=`, like `Evidence:` and `Repo:`.
+Use a branch name for a branch-scoped `--ref`. Use a portable repo name for shared evidence. Set or correct its repository through `set-repo`. Use `promote` for a verified mainline answer when its checks can run on mainline. If a check names the old branch, write a rival with a new check.
 
-## Resolver output
+For structured match or answer data, use `resolve --data` or `show --data`. For the command envelope use `--json`. Use `show --all-sigs` when the default view omits relevant signatures.
 
-Run it identically for read and write. It produces identity; you paste it verbatim.
+## Save the result
 
-```
-<gear> --host <host> memory-ledger ledger resolve "which package manager do we install with"
-```
-
-Order: `EXACT` (slug hit, following any `USE:` redirect) → `UNKNOWN` (query terms in no entry) →
-`FOLDER` blocks of candidates, the top one's answers inline → `MINT`. An `EXACT` hit stops there
-and prints nothing else; otherwise `MINT` prints even alongside candidates. The candidate list is
-cut at the largest score gap and always keeps at least two. `--all` prints every match with no
-score-gap cut and no folder limits; use it when a caller must see the full set.
+Run `save` in the same working stretch. It stages entries, commits per ledger, and pushes where a remote exists. Use `--no-push` for local commits when publishing is outside the task's permission. Follow its output on a push refusal and preserve the local commit. Use `save` for Git operations except an approved folder split. Do not use branches, PRs, force-push, or commit `.ledger-cache.json`.
