@@ -209,6 +209,28 @@ class SelfReviewTest(unittest.TestCase):
                     self.assertEqual([(item["line"], item["words"]) for item in report["findings"]],
                                      [(5, 21)])
 
+    def test_writing_checkbox_same_line_fence_is_prose_and_keeps_following_paragraph(self):
+        sample = ("Run the service and inspect each new setting before you send the check result "
+                  "to the team on the shared system for this task.")
+        following = ("Read the guide and check each setting before you start the service "
+                     "on the shared test system for this task today.")
+        source = self.writing_file(f"- [ ] ```text\n  {sample}\n  ```\n\n{following}\n")
+        report = self.writing_check([source], expected=1)
+        self.assertEqual(len(report["findings"]), 2)
+        self.assertIn(sample, report["findings"][0]["text"])
+        self.assertEqual((report["findings"][1]["line"], report["findings"][1]["text"]), (5, following))
+
+    def test_writing_checkbox_separate_fence_excludes_code_and_keeps_following_prose(self):
+        sample = ("Run the service and inspect each new setting before you send the check result "
+                  "to the team on the shared system for this task.")
+        following = ("Read the guide and check each setting before you start the service "
+                     "on the shared test system for this task today.")
+        for indent, after in (("  ", f"  {following}"), ("      ", following)):
+            source = self.writing_file(f"- [ ] Read the report.\n\n{indent}```text\n\n"
+                                       f"{indent}{sample}\n\n{indent}```\n\n{after}\n")
+            report = self.writing_check([source], expected=1)
+            self.assertEqual([(item["line"], item["text"]) for item in report["findings"]], [(9, following)])
+
     def test_writing_inline_code_at_list_start_keeps_following_prose(self):
         sentence = ("Read the guide and check each setting before you start the service "
                     "on the shared test system for this task today.")

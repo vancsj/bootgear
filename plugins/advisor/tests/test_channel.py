@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import io
 import json
 import os
 import shlex
@@ -13,6 +14,7 @@ import threading
 import time
 import unittest
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -2015,6 +2017,59 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertIn("--root", fetch)
         self.assertEqual(fetch[fetch.index("--root") + 1], str(caller / "mbox"))
 
+    def _receive_with_poll_clock(self, channel: str, recipient: str,
+                                 after_poll: Callable[[], None] | None = None
+                                 ) -> tuple[dict, float, int | str | None]:
+        elapsed = 0.0
+
+        def poll(seconds: float) -> None:
+            nonlocal elapsed
+            elapsed += seconds
+            if after_poll is not None and elapsed == 1:
+                after_poll()
+
+        args = channel_module.build_parser().parse_args([
+            "--root", str(self.root), "receive", "--channel", channel, "--for", recipient,
+            "--timeout", "5", "--poll", "1", "--json",
+        ])
+        clock = mock.Mock(wraps=time, monotonic=lambda: elapsed, sleep=poll)
+        stdout = io.StringIO()
+        with mock.patch.object(channel_module, "time", clock), mock.patch("sys.stdout", stdout):
+            try:
+                channel_module.receive(args)
+            except SystemExit as exit_status:
+                return json.loads(stdout.getvalue()), elapsed, exit_status.code
+        return json.loads(stdout.getvalue()), elapsed, 0
+
+    def test_receive_returns_on_the_poll_that_sees_a_stale_peer(self) -> None:
+        def expire_listener() -> None:
+            age_seat(self.root, "listener", 600, self.channel)
+
+        output, elapsed, status = self._receive_with_poll_clock(self.channel, "asker", expire_listener)
+        self.assertEqual(elapsed, 1)
+        self.assertEqual(status, 1)
+        self.assertEqual(output["new_since_call"], 0)
+        self.assertIs(output["peer_live"], False)
+        self.assertIn("peer heartbeat stale; tell the user instead of waiting again", output["note"])
+
+    def test_receive_waits_through_restart_grace_and_before_peer_registration(self) -> None:
+        age_seat(self.root, "listener", 600, self.channel)
+        record_path = channel_json(self.root, self.channel)
+        record = json.loads(record_path.read_text())
+        record["listener_restart_until"] = time.time() + channel_module.RESTART_GRACE_SECONDS / 2
+        rewrite_record(self.root, json.dumps(record), self.channel)
+        registered = run(self.root, "register", "--role", "listener", "--session", "s2")
+        unpaired = json.loads(registered.stdout)["channel"]
+
+        for channel, recipient, peer_live in ((self.channel, "asker", True), (unpaired, "listener", None)):
+            with self.subTest(peer_live=peer_live):
+                output, elapsed, status = self._receive_with_poll_clock(channel, recipient)
+                self.assertEqual(elapsed, 5)
+                self.assertEqual(status, 1)
+                self.assertIs(output["peer_live"], peer_live)
+                guidance = "keep waiting" if peer_live else "a request can come at any time"
+                self.assertIn(guidance, output["note"])
+
     def test_stale_peer_without_message_says_tell_the_user_and_omits_next(self) -> None:
         age_seat(self.root, "listener", 600, self.channel)
         result = self._receive()
@@ -2029,9 +2084,10 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
     def test_stale_peer_with_new_message_still_points_at_fetch(self) -> None:
         message_id = self._send_to_asker()
         age_seat(self.root, "listener", 600, self.channel)
-        result = self._receive()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        output = json.loads(result.stdout)
+        output, elapsed, status = self._receive_with_poll_clock(self.channel, "asker")
+        self.assertEqual(elapsed, 0)
+        self.assertEqual(status, 0)
+        self.assertEqual(output["new_since_call"], 1)
         self.assertIs(output["peer_live"], False)
         self.assertIn(f"fetch --channel {self.channel} --message-id {message_id}", output["next"])
 

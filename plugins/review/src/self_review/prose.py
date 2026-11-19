@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 LIMITS = {"procedure": 20, "description": 25}
-LIST_ITEM = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)$")
+LIST_ITEM = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+(.*)$")
+TASK_MARKER = re.compile(r"^\[[ xX]\]\s+")
 FENCE = re.compile(r"^\s{0,3}(`{3,}(?!`)(?=[^`]*$)|~{3,})")
 TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
 INLINE_CODE = re.compile(r"(`+)(.+?)\1", re.DOTALL)
@@ -66,6 +67,8 @@ def _blocks(source: str) -> Iterator[Prose]:
         if list_indent and line.strip() and not line.startswith(" " * list_indent) and not continues_paragraph:
             list_indent = 0
             fence = ""
+        if list_indent and not fence and not parts and line.startswith(" " * (list_indent + 4)):
+            continue
         if item and not fence:
             list_indent = item.start(1)
             content = item[1]
@@ -91,7 +94,8 @@ def _blocks(source: str) -> Iterator[Prose]:
             for cell in _cells(line):
                 yield _joined([(cell, index + 1)])
         elif line.strip():
-            parts.append(((item[1] if item else line).strip(), index + 1))
+            prose = TASK_MARKER.sub("", content, count=1) if item else line
+            parts.append((prose.strip(), index + 1))
         table = bool(is_table or rule)
     if parts:
         yield _joined(parts)

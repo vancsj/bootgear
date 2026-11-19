@@ -89,8 +89,11 @@ class CodexSessionRecallAdapterTest(unittest.TestCase):
     def _write_standards(self):
         config = self.cwd / ".bootgear" / "config"
         (config / "review-standard.md").write_text(
+            "    ```text\n    Literal code example.\n    ```\n\n"
             "# review-standard\n\nseverities: [must, should]\ncutoff: must\n\n"
             "## R001 [must]\nFirst review rule.\n\n## R002 [should]\nSecond review rule.\n"
+            "\n```md\n## R003 [must]\nExample rule.\n```\n"
+            "\n<!--\n## R004 [must]\nCommented rule.\n-->\n"
         )
         (config / "test-standard.md").write_text(
             "# test-standard\n\nseverities: [must, should]\ncutoff: must\n\n"

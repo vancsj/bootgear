@@ -132,7 +132,10 @@ while :; do
 done
 ```
 
-This loop is for Claude Code only. Codex CLI does not loop: it makes one `receive` call per poll. On exit 0, fetch and answer the message, then run `receive` again. On exit 1, run `receive` again. Never run `receive` again while a message is still unread.
+On Claude Code, use this loop. On Codex CLI, make one `receive` call per poll.
+On exit 0, fetch and answer the message, then start the next poll.
+On exit 1, follow the stale-peer and retry rules in step 4.
+Fetch all unread messages before you call `receive` again.
 
 `close --if-peer-stale` closes only while `<peer>` is still not live and no unread message waits for `<mine>`; otherwise it refuses (`peer_live` or `unread_message`, exit 2), the channel stays open, and the loop keeps listening.
 

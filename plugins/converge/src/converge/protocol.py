@@ -108,7 +108,7 @@ def batch_complete(slate: Slate, claim: Claim, batch: int | str) -> bool:
                 or any(e.get("last") is True for e in attacks))
     assert isinstance(batch, int)
     attacked = {e["angle"] for e in attacks}
-    return all(a in attacked or a in claim.na_angles for a in table_batches(slate)[batch - 1])
+    return all(a in attacked or a in claim.na_reasons for a in table_batches(slate)[batch - 1])
 
 
 def batch_state(slate: Slate, claim: Claim, batch: int | str) -> str:
@@ -143,7 +143,7 @@ def next_batch(slate: Slate, claim: Claim) -> int | str | None:
 
 def open_angles(slate: Slate, claim: Claim, batch: int) -> list[str]:
     """The angles of a table batch neither attacked on nor not applicable to the claim."""
-    spent = claim.used_angles | claim.na_angles
+    spent = claim.used_angles | claim.na_reasons.keys()
     return [a for a in table_batches(slate)[batch - 1] if a not in spent]
 
 
@@ -637,7 +637,7 @@ def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str])
     _refuter_role(slate, claim, event.get("as"), None, "angle-na", problems)
     if row is not None and row["id"] in claim.used_angles:
         problems.append(f"angle-na: angle {row['id']!r} was already used on {claim.id}")
-    elif row is not None and row["id"] in claim.na_angles:
+    elif row is not None and row["id"] in claim.na_reasons:
         problems.append(f"angle-na: angle {row['id']!r} is already recorded not applicable "
                         f"to {claim.id}")
 
@@ -675,7 +675,7 @@ def _validate_attack(slate: Slate, event: dict[str, Any], problems: list[str]) -
             message += ("; choose a new angle name not listed in `used`, including names outside the fixed list; "
                        "the fixed list is not a menu for this batch")
         problems.append(message)
-    elif batch != FRESH_EYE and angle in claim.na_angles:
+    elif batch != FRESH_EYE and angle in claim.na_reasons:
         problems.append(f"attack: angle {angle!r} is recorded not applicable to {claim.id}")
 
 
@@ -1034,7 +1034,6 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         slate.angle_na.append(event)
         if "claim" in event:
             claim = slate.claims[event["claim"]]
-            claim.na_angles.add(event["angle"])
             claim.na_reasons[event["angle"]] = event["reason"]
     else:
         _apply_claim_event(slate.claims[event["claim"]], event)

@@ -696,11 +696,14 @@ def receive(args: argparse.Namespace) -> None:
                 if not json.loads(f.read_text(encoding="utf-8")).get("read")
             )
 
+        peer = other_role(args.recipient)
         deadline = time.monotonic() + args.timeout
         while True:
+            peer_record = read_channel_record(path)
+            peer_live = seat_live(peer_record, peer)
             current = inbox()
             pending = unread_count(current)
-            if pending > 0 or args.timeout <= 0:
+            if pending > 0 or args.timeout <= 0 or peer_live is False:
                 break
             if time.monotonic() >= deadline:
                 current = inbox()
@@ -711,9 +714,6 @@ def receive(args: argparse.Namespace) -> None:
         fcntl.flock(wait_lock, fcntl.LOCK_UN)
         wait_lock.close()
 
-    peer_record = read_channel_record(path)
-    peer = other_role(args.recipient)
-    peer_live = seat_live(peer_record, peer)
     messages = [json.loads(f.read_text(encoding="utf-8")) for f in current]
     messages.sort(key=lambda m: m.get("created_at", 0), reverse=True)
     recent = messages[:HISTORY_SIZE]

@@ -84,7 +84,6 @@ class Claim:
     fix_check: dict[str, Any] | None = None
     used_angles: set[str] = field(default_factory=set)
     # Attack angles a refuter recorded as not applicable to this claim, with the reason.
-    na_angles: set[str] = field(default_factory=set)
     na_reasons: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -164,7 +163,7 @@ class Slate:
 
     def remaining_angles(self, claim: Claim) -> list[str]:
         """Attack angles neither used on nor recorded not applicable to the claim."""
-        spent = claim.used_angles | claim.na_angles
+        spent = claim.used_angles | claim.na_reasons.keys()
         return [a for a in self.angle_ids("attack") if a not in spent]
 
     def open_claims(self) -> list[tuple[Claim, str]]:

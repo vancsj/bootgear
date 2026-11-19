@@ -170,7 +170,9 @@ def test_angle_na_phases(cv: Converge) -> None:
     assert any(("`phase` must be one of find, attack; got 'refute'") in problem for problem in problems)
     assert cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
                      reason="no time window in the claim") == []
-    assert _claim(cv).na_angles == {BATCH_1[0]}
+    claim = _claim(cv)
+    assert claim.na_reasons == {BATCH_1[0]: "no time window in the claim"}
+    assert "na_angles" not in vars(claim)
 
 
 # -- attack ------------------------------------------------------------------
@@ -265,7 +267,7 @@ def test_angle_na_reason_is_one_printable_line(cv: Converge) -> None:
     assert ("`reason` must be one printable line"
             in cv.append("angle-na", R1, phase="attack", angle=BATCH_1[0], claim="F001",
                          reason="no time window\nPLAN 1 F009 attack r1 batch=1 angles=fake"))
-    assert _claim(cv).na_angles == set()
+    assert _claim(cv).na_reasons == {}
 
 
 def test_attacker_is_not_the_finder_the_orchestrator_or_a_cutter(cv: Converge) -> None:

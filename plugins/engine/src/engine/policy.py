@@ -27,6 +27,7 @@ from bootgear_cli.clikit import gear_argv, gear_command
 from . import session_paths
 from .host_adapter import AdapterError, Event, HostContext, Intent
 from .subagent_state import has_running_descendant
+from .validate_standard import rule_headings
 
 _CLOSED_HEADING_RE: Final = re.compile(r"(?m)^## closed\s*$")
 _RAPID_SECONDS: Final = 30
@@ -39,7 +40,6 @@ _ESCALATE_AFTER_SECONDS: Final = 15 * 60
 _MAX_NUDGE_HISTORY: Final = 50
 _TERMINAL_NODES: Final = frozenset({"succeeded", "failed"})
 _STANDARD_FILES: Final = ("review-standard", "test-standard")
-_STANDARD_RULE_RE: Final = re.compile(r"(?m)^## (R\d+) \[([^\]\n]+)\]\s*$")
 _STANDARDS_HEADER: Final = "Standards (read each file in full before you judge or write):"
 
 _REMINDER_MESSAGE: Final = (
@@ -269,10 +269,10 @@ def _goal_text(settlement: dict[str, Any] | None) -> str | None:
 
 def _read_text(path: Path) -> str | None:
     try:
-        value = path.read_text(encoding="utf-8").strip()
+        value = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    return value or None
+    return value if value.strip() else None
 
 
 def _principles(context: HostContext, settlement: dict[str, Any] | None) -> str | None:
@@ -280,10 +280,10 @@ def _principles(context: HostContext, settlement: dict[str, Any] | None) -> str 
     sections: list[str] = []
     user_text = _read_text(Path.home() / user_dir / "principles.md")
     if user_text:
-        sections.append(f"[user]\n{user_text}")
+        sections.append(f"[user]\n{user_text.strip()}")
     project_text = _read_text(Path(context.cwd) / ".bootgear" / "config" / "principles.md")
     if project_text:
-        sections.append(f"[project]\n{project_text}")
+        sections.append(f"[project]\n{project_text.strip()}")
     if settlement:
         task = settlement.get("principles")
         if isinstance(task, str) and task.strip():
@@ -299,8 +299,7 @@ def _standards(context: HostContext) -> str | None:
         if text is None:
             continue
         rules = ", ".join(
-            f"{match.group(1)} [{match.group(2)}]"
-            for match in _STANDARD_RULE_RE.finditer(text)
+            f"{rule_id} [{severity}]" for rule_id, severity in rule_headings(text)
         )
         lines.append(f"[{name}] {relative}: {rules}" if rules else f"[{name}] {relative}")
     if not lines:

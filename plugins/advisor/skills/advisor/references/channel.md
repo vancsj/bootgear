@@ -70,15 +70,20 @@ Save `{channel, message_id}` to a receipt file (e.g. `<task-dir>/codex-pending.j
 <gear> --host <host> advisor channel receive --channel <channel> --for <mine> --timeout 300
 ```
 
-Returns the last 3 messages as `{message_id, sender, kind, parent_id?, preview}`, plus `answered` on each request addressed to you: true once you have sent a response naming it as `parent_id`. Match your response by `parent_id == ` your request's `message_id`, not by recency. Exit `1` with a `note` means no new message yet: a reply can take many minutes, so re-run with a long `--timeout` instead of resending. Re-run up to 12 times (300s each) before reporting the peer unavailable this round. If the listener's `state` is `busy`, keep re-running: busy waits do not count toward the 12, up to 12 of them.
+Returns the last 3 messages as `{message_id, sender, kind, parent_id?, preview}`, plus `answered` on each request addressed to you: true once you have sent a response naming it as `parent_id`. Match your response by `parent_id == ` your request's `message_id`, not by recency. Exit `1` with a `note` means no new message yet. Retry with a long `--timeout` when `peer_live` is `true` or `null`. Retry up to 12 times (300s each) before reporting the peer unavailable this round. If the listener is live and busy, keep polling. Allow up to 12 busy waits without counting them as quiet waits.
 
 `next` can have two lines, run in order. When a line says "your heartbeat is not running", start that heartbeat in a new background session and keep it running.
 
-`peer_live: false` means the peer's heartbeat is stale: the output carries the note "peer heartbeat stale; tell the user instead of waiting again" and no `next`. Tell the user instead of waiting again.
+On exit `1` with `peer_live: false`, stop waiting. In asking mode, report the stale peer to the user. In listening mode, follow the conditional close in step 4 of `SKILL.md`.
 
 Never wrap `receive` in your own short-timeout poll loop — pass the real timeout to one call.
 
-Claude Code: run the listener loop in `SKILL.md` step 5, which fetches on exit 0. Codex CLI: make one `receive` call per poll, with no loop. On exit 0, fetch and answer the message, then `receive` again. On exit 1, `receive` again. Never call `receive` again while a message is unread.
+On Claude Code, run the listener loop in `SKILL.md` step 5.
+On Codex CLI, make one `receive` call per poll.
+On exit 0, fetch and answer the message, then start the next poll.
+On exit 1 with `peer_live: false`, follow the stale peer guidance above.
+On other exit 1 results, start the next poll.
+Fetch all unread messages before you call `receive` again.
 
 Then:
 ```sh

@@ -326,9 +326,19 @@ def _has_prose(body: str) -> bool:
                for line in body.split("\n"))
 
 
-def _split_rules(text: str) -> list[tuple[str, str, int, str]]:
+def _extract_headings(text: str) -> tuple[str, list[re.Match[str]]]:
+    text = _blank_fences_and_comments(text)
+    return text, list(RULE_HEADING_RE.finditer(text))
+
+
+def rule_headings(text: str) -> list[tuple[str, str]]:
+    """Return the rule IDs and severities outside fenced blocks and comments."""
+    _, headings = _extract_headings(text)
+    return [(heading.group(1), heading.group(2)) for heading in headings]
+
+
+def _split_rules(text: str, headings: list[re.Match[str]]) -> list[tuple[str, str, int, str]]:
     """Return (id, severity, line_number, body) for every ## R### [sev] heading."""
-    headings = list(RULE_HEADING_RE.finditer(text))
     rules = []
     for i, m in enumerate(headings):
         start = m.end()
@@ -339,16 +349,10 @@ def _split_rules(text: str) -> list[tuple[str, str, int, str]]:
     return rules
 
 
-def _preamble(text: str) -> str:
-    """Text before the first rule heading — where severities:/cutoff: must live."""
-    first = RULE_HEADING_RE.search(text)
-    return text if first is None else text[: first.start()]
-
-
 def validate(text: str) -> list[str]:
-    text = _blank_fences_and_comments(text)
+    text, headings = _extract_headings(text)
     problems: list[str] = []
-    preamble = _preamble(text)
+    preamble = text[:headings[0].start()] if headings else text
 
     severities_matches = list(SEVERITIES_LINE_RE.finditer(preamble))
     if len(severities_matches) > 1:
@@ -436,7 +440,7 @@ def validate(text: str) -> list[str]:
                 f"ignored"
             )
 
-    strict_lines = {m.start() for m in RULE_HEADING_RE.finditer(text)}
+    strict_lines = {heading.start() for heading in headings}
     for m in RULE_HEADING_LIKE_RE.finditer(text):
         if m.start() not in strict_lines:
             line_no = text.count("\n", 0, m.start()) + 1
@@ -457,7 +461,7 @@ def validate(text: str) -> list[str]:
                 f"would otherwise silently validate as ordinary prose"
             )
 
-    rules = _split_rules(text)
+    rules = _split_rules(text, headings)
     if not rules:
         problems.append("no `## R### [severity]` rule headings found")
 

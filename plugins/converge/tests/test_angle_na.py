@@ -18,7 +18,7 @@ def test_refuter_records_a_not_applicable_angle(cv: Converge) -> None:
     cv.ready()
     assert _na(cv, R1, BATCH_1[0]) == []
     claim = ledger.read(cv.path(), "s1").claims["F001"]
-    assert claim.na_angles == {BATCH_1[0]}
+    assert claim.na_reasons == {BATCH_1[0]: "no such path here"}
     assert BATCH_1[0] not in cv.status()["by_id"]["F001"]["fixed_remaining"]
     assert (any((f"attack: angle {BATCH_1[0]!r} is recorded not applicable to F001") in problem for problem in cv.check("F001", BATCH_1[0], agent=R2)))
 
