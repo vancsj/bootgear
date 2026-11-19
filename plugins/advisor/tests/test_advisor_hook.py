@@ -11,13 +11,14 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 PLUGIN = Path(__file__).resolve().parents[1]
 REPO = PLUGIN.parents[1]
 HOOK = PLUGIN / "hooks" / "advisor_hook.py"
 CHANNEL = PLUGIN / "skills" / "advisor" / "scripts" / "channel.py"
 sys.path.insert(0, str(REPO / "plugins" / "cli" / "src"))
-from bootgear_cli.clikit import current_program
+from bootgear_cli.clikit import current_program, gear_command
 
 EVENTS = ("SessionStart", "PostToolUse", "UserPromptSubmit", "Stop")
 
@@ -125,6 +126,20 @@ class AdvisorHookTests(unittest.TestCase):
                                         "start it in a new background session: " + shlex.join(prefix) + " "))
         self.assertIn("heartbeat --channel 0001 --role listener --session s1", text)
         self.assertEqual(self.event("PostToolUse", tool_name="Bash").stdout, "")
+
+    def test_hook_points_reminder_and_resume_commands_to_the_channel_route(self) -> None:
+        self.pair()
+        self.stop_heartbeat()
+        stale_record = self.record()
+        for host in ("claude", "codex"):
+            env = {"BOOTGEAR_HOST": host, "BOOTGEAR_PROG": gear_command("advisor", "hook", host=host)}
+            with self.subTest(host=host), patch.dict(self.env, env):
+                self.write_record(stale_record)
+                reminder = self.context(self.event("PostToolUse"), "PostToolUse")
+                resume = self.context(self.event("SessionStart", source="compact"), "SessionStart")
+                prefix = f"--host {host} advisor channel --root "
+                self.assertIn(prefix, reminder)
+                self.assertEqual(resume.count(prefix), 2)
 
     def test_user_prompt_submit_reminds_with_its_own_event_name(self) -> None:
         self.pair()

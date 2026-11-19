@@ -328,7 +328,7 @@ def brief_record(record: dict[str, object]) -> dict[str, object]:
 
 def script_command(args: argparse.Namespace, root: Path) -> str:
     """This script's invocation, with `--root` whenever it was given or is not the default."""
-    command = current_program("advisor", "channel")
+    command = clikit.gear_command("advisor", "channel")
     if args.root is not None or root != DEFAULT_ROOT:
         command += f" --root {shlex.quote(str(root))}"
     return command
