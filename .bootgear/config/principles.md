@@ -32,6 +32,7 @@
 - Write the CLI output for the role that sees it: the user, the main agent, or a role agent. Write each `next` line for the same role. Name only commands that this role can run.
 - A skill states the overall workflow so the model can apply its judgment and knowledge. The CLI controls normal workflow steps and transitions. It prints deterministic detail from validated CLI-owned state or configuration when the caller needs it. Force transitions must let callers pass workflow gates with a recorded reason. Role checks and ledger validation still apply. Skills keep judgment, safety, orchestration, fallbacks, and public handbacks. Skills may show concise examples for common, stable commands. Do not repeat CLI-owned, state-dependent detail in skill text.
 - A script enforces a rule about data or behavior that the script can check (CLI validation, a gate, a cap). Do not state such a rule in text only. The review standard enforces rules about doc content. Tests and scripts do not, except mechanical repo hygiene such as `check_content.py`.
+- Apply Occam's razor. Use the least restrictive rule that addresses the observed problem.
 - Support valid inputs and common mistakes from an LLM caller. Report clear errors and leave the workflow state ready for a corrected call. Invented or very rare cases do not require defensive handling.
 
 ## Docs and repo content
