@@ -297,18 +297,21 @@ class QuestionBoundaryTest(unittest.TestCase):
         self.default_dir = self.home / ".bootgear" / "session"
         self.custom_dir = self.tmp / "task" / "session"
         self.custom_dir.mkdir(parents=True)
-        self.session_id = "question-run"
-        self.ledger = self.custom_dir / f"{self.session_id}.md"
-        self.ledger.write_text(
-            f"# session: {self.session_id}\n\n"
-            "## settlement\n"
-            "autonomy:\n  no_further_questions: true\n  permitted_mutations: [tests]\n\n"
-            "## state\ncurrent: inspect\nstarted: 2026-11-15 00:00\n",
-            encoding="utf-8",
-        )
-        session_paths.register_session_path(self.session_id, self.custom_dir, self.default_dir)
-        self.addCleanup(session_paths.unregister_session_path, self.session_id,
-                        self.custom_dir, self.default_dir)
+        self.ledgers = {}
+        for host in ("claude", "codex"):
+            session_id = f"question-run-{host}"
+            ledger = self.custom_dir / f"{session_id}.md"
+            ledger.write_text(
+                f"# session: {session_id}\n\n"
+                "## settlement\n"
+                "autonomy:\n  no_further_questions: true\n  permitted_mutations: [tests]\n\n"
+                "## state\ncurrent: inspect\nstarted: 2026-11-15 00:00\n",
+                encoding="utf-8",
+            )
+            self.ledgers[host] = ledger
+            session_paths.register_session_path(session_id, self.custom_dir, self.default_dir)
+            self.addCleanup(session_paths.unregister_session_path, session_id,
+                            self.custom_dir, self.default_dir)
 
     def _event(self, host, *, record_prompt=False):
         tool_name, matcher = ("AskUserQuestion", "^AskUserQuestion$") if host == "claude" else (
@@ -325,7 +328,7 @@ class QuestionBoundaryTest(unittest.TestCase):
         if host == "codex":
             questions[0]["id"] = "question"
         payload = {
-            "session_id": self.session_id,
+            "session_id": self.ledgers[host].stem,
             "cwd": str(self.tmp),
             "hook_event_name": "PreToolUse",
             "tool_name": tool_name,
@@ -344,25 +347,56 @@ class QuestionBoundaryTest(unittest.TestCase):
             source_dir=PLUGIN_DIR / "src",
             hook_dir=PLUGIN_DIR / "hooks",
             cwd=str(self.tmp),
-            session_id=self.session_id,
+            session_id=event.session_id,
             event=event.hook_event_name,
             matcher_pattern=event.manifest_matcher_pattern,
             matcher_value=event.matcher_value,
             handler_kind=event.handler_kind,
         )
 
-    def test_question_after_cutoff_is_denied_on_both_hosts(self):
+    def _ask(self, host, *, record_prompt=False):
+        event = self._event(host, record_prompt=record_prompt)
+        intent = host_adapter.dispatch_and_apply(event, self._context(event))
+        return host_adapter.render(intent, event)
+
+    def test_question_reminds_then_allows_one_revised_retry_on_both_hosts(self):
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                event = self._event(host)
                 with patch.object(Path, "home", return_value=self.home):
-                    intent = host_adapter.dispatch_and_apply(event, self._context(event))
-                self.assertEqual(host_adapter.render(intent, event).kind, "deny")
+                    first = self._ask(host)
+                    retry = self._ask(host, record_prompt=True)
+                    after_retry = self._ask(host)
+                self.assertEqual((first.kind, retry.kind, after_retry.kind), ("deny", "observe", "deny"))
+                reason = json.loads(first.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+                self.assertIn("Engine run", reason)
+                self.assertIn("no_further_questions", reason)
+                self.assertIn("30 seconds", reason)
+
+    def test_expired_retry_opens_a_fresh_window_on_both_hosts(self):
+        for host in ("claude", "codex"):
+            with self.subTest(host=host), patch.object(Path, "home", return_value=self.home), patch.object(
+                policy.time, "monotonic", side_effect=[100.0, 131.0, 161.0]
+            ):
+                decisions = [self._ask(host).kind for _ in range(3)]
+                self.assertEqual(decisions, ["deny", "deny", "observe"])
+
+    def test_overlapping_calls_share_one_retry_on_both_hosts(self):
+        def ask(host, barrier):
+            barrier.wait(timeout=5)
+            return self._ask(host).kind
+
+        for host in ("claude", "codex"):
+            with self.subTest(host=host), patch.object(Path, "home", return_value=self.home):
+                self.assertEqual(self._ask(host).kind, "deny")
+                barrier = threading.Barrier(2)
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    decisions = list(pool.map(ask, (host, host), (barrier, barrier)))
+                self.assertCountEqual(decisions, ["observe", "deny"])
 
     def test_previous_record_exception_cannot_allow_questions_on_either_host(self):
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                marker = self.custom_dir / f".{self.session_id}.question_state"
+                marker = self.custom_dir / f".{self.ledgers[host].stem}.question_state"
                 marker.write_text('{"kind":"canonical_record","phase":"execute"}', encoding="utf-8")
 
                 event = self._event(host, record_prompt=True)
@@ -372,30 +406,31 @@ class QuestionBoundaryTest(unittest.TestCase):
                 self.assertEqual(host_adapter.render(intent, event).kind, "deny")
 
     def test_question_before_cutoff_is_allowed_on_both_hosts(self):
-        session_paths.unregister_session_path(self.session_id, self.custom_dir, self.default_dir)
-        self.ledger.unlink()
         for host in ("claude", "codex"):
             with self.subTest(host=host):
+                ledger = self.ledgers[host]
+                session_paths.unregister_session_path(ledger.stem, self.custom_dir, self.default_dir)
+                ledger.unlink()
                 event = self._event(host, record_prompt=True)
                 with patch.object(Path, "home", return_value=self.home):
                     intent = host_adapter.dispatch_and_apply(event, self._context(event))
                 self.assertEqual(intent.kind, "observe")
 
     def test_question_without_an_active_run_is_allowed_on_both_hosts(self):
-        self.ledger.write_text(
-            f"# session: {self.session_id}\n\n## closed\noutcome: succeeded\n",
-            encoding="utf-8",
-        )
-
         for host in ("claude", "codex"):
             with self.subTest(host=host):
+                ledger = self.ledgers[host]
+                ledger.write_text(
+                    f"# session: {ledger.stem}\n\n## closed\noutcome: succeeded\n",
+                    encoding="utf-8",
+                )
                 event = self._event(host)
                 with patch.object(Path, "home", return_value=self.home):
                     intent = host_adapter.dispatch_and_apply(event, self._context(event))
                 self.assertEqual(intent.kind, "observe")
 
     def test_missing_registered_ledger_fails_closed(self):
-        self.ledger.unlink()
+        self.ledgers["codex"].unlink()
         event = self._event("codex")
 
         with patch.object(Path, "home", return_value=self.home):

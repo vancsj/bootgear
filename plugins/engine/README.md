@@ -48,8 +48,10 @@ flowchart TD
 | Domain-skill overrides | a project skill to use in place of `spec`, `spec-review`, `test` or `review`, whole or per sub-task |
 | `goal` | what the task is, and the concrete *succeeded when* and *failed when* conditions |
 
-After you confirm `goal`, no further work questions are asked. The one exception is recovering
-the ledger's location when a compaction has lost it.
+After you confirm `goal`, Engine tells the agent to handle routine work questions on its own.
+The question hook denies the first call and reminds the agent that `no_further_questions` is true.
+If the agent still needs to ask, one call can pass within 30 seconds, even with a revised question.
+An allowed call uses the retry. A call after expiry starts a new window with a reminder.
 
 ---
 

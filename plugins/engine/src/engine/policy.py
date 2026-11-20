@@ -41,6 +41,8 @@ _MAX_NUDGE_HISTORY: Final = 50
 _TERMINAL_NODES: Final = frozenset({"succeeded", "failed"})
 _STANDARD_FILES: Final = ("review-standard", "test-standard")
 _STANDARDS_HEADER: Final = "Standards (read each file in full before you judge or write):"
+_QUESTION_RETRY_MARKER: Final = "question_retry_state"
+_QUESTION_RETRY_SECONDS: Final = 30
 
 _REMINDER_MESSAGE: Final = (
     "An engine run is active in this session ({run_id}). Before treating "
@@ -203,6 +205,8 @@ def _apply_marker(update: MarkerUpdate, *, locked_path: Path | None = None) -> N
 
 
 def _event_marker(event: Event, context: HostContext) -> Path | None:
+    if event.handler_kind == "question_boundary" and event.hook_event_name == "PreToolUse":
+        return _marker_path(context, _QUESTION_RETRY_MARKER)
     if (
         event.host == "codex"
         and event.handler_kind == "session_recall"
@@ -624,7 +628,17 @@ def _question_boundary(event: Event, context: HostContext) -> Intent:
     if not isinstance(autonomy, dict) or autonomy.get("no_further_questions") is not True:
         return Intent.observe()
 
-    return Intent.deny("Engine blocks user questions after clarify")
+    marker_path = _marker_path(context, _QUESTION_RETRY_MARKER)
+    state = _read_json(marker_path, {})
+    now = time.monotonic()
+    denied_at = state.get("denied_at") if isinstance(state, dict) else None
+    if isinstance(denied_at, float) and 0 <= now - denied_at <= _QUESTION_RETRY_SECONDS:
+        return Intent.observe(MarkerUpdate(marker_path, None))
+    return Intent.deny(
+        "An Engine run is active with no_further_questions: true. "
+        f"If you still need to ask, retry within {_QUESTION_RETRY_SECONDS} seconds.",
+        MarkerUpdate(marker_path, {"denied_at": now}),
+    )
 
 
 def _compaction_observe(event: Event, context: HostContext) -> Intent:
