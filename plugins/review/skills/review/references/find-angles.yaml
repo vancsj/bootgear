@@ -48,3 +48,15 @@
   tag: find
   tell: The description claims a behavior.
   asks: Read the claim as its opposite; does the diff still fit?
+- id: external-limits
+  tag: find
+  tell: New or changed code calls an external service that has quotas, rate limits or payload caps.
+  asks: Does the call stay within the documented limits at expected volume and payload size?
+- id: timing-env-dependent-test
+  tag: find
+  tell: A test sets a timeout, sleeps, or reads environment variables or machine state.
+  asks: Does it still pass on a slower machine or with other environment values, and what sets its timeout?
+- id: new-throw-on-shared-path
+  tag: find
+  tell: A refusal, validation or exception is newly thrown from a method, interceptor or aspect that existing callers already invoke.
+  asks: Which callers catch broadly or run inside a transaction, and what happens to them and to the transaction when it throws?
