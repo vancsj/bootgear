@@ -118,6 +118,22 @@ When a spec-only attack trigger is absent, record `angle-na` with `trigger absen
 Use the normal converge gap hunt to check missed concerns and request fit in both directions.
 Never disable the cut step.
 
+### Claim context
+
+File each lens or gap-hunt claim with enough context for an independent reviewer.
+
+- Set `loc` to the primary artifact's absolute path and line.
+- In `claim`, name the expected behavior, who relies on it, and the observable consequence.
+- In `trigger`, name the action or input that starts the path to that consequence.
+- In `evidence`, cite the governing requirement or caller contract and the source for each step.
+  Name any unverified link and keep the evidence tier consistent with what you checked.
+- When widening or revising, keep the applicable context in the replacement text.
+  Include any new source anchors, trigger details, and unverified links there.
+
+Rate the current claim using its trigger and cited evidence.
+If replacement text updates the trigger or evidence, use those details for the rating.
+For `cosmetic`, explain why the specific consequence leaves the applicable outcomes and caller or reader actions intact.
+
 ### Cutoff and remedy
 
 Pass [references/cutoff.yaml](references/cutoff.yaml) as the absolute `--defaults` path at init.
@@ -126,7 +142,6 @@ No claim receives fix-now or fix-check treatment.
 Visits one and two report eligible clarity, security, data-loss, and wrong-output findings.
 Later visits retain security, data-loss, and wrong-output; request-fit also retains clarity.
 
-The finder files each `loc` as the primary artifact's absolute path and line.
 The cutter rates the production remedy using the effective difficulty basis from public converge status.
 Cite affected paths, callers, scope, and migration needs in normal difficulty evidence.
 Document size does not decide production remedy difficulty.
@@ -159,7 +174,8 @@ Read public status and map results in this order:
 
 1. Missing role, coverage, required evidence, open claim work, or a failed gate returns `blocked`.
 2. A disputed finding returns `revise`, except simplicity or proportionality findings handled by rules four and five.
-3. A survived claim with a public `trigger` starting `implementation-level:` returns `deferred`.
+3. A survived claim returns `deferred` if its public `trigger` starts with `implementation-level:` and its current text preserves the contract.
+   If the current claim invalidates a requirement or design contract, continue to the applicable finding rule.
 4. A simplicity or proportionality finding without a choice returns follow-up.
 5. A finding whose cut carries a choice returns `choices`, even when revise also contains findings.
 6. A survived, trivial, contract-preserving clarity finding with public `artifact_patch_eligible: true` returns `inline`.
