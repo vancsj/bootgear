@@ -122,6 +122,19 @@ Hand the slate to `converge`. Use its public `work` and `act` flow for role rout
 
 Give each role the host user-principles file, project principles and standards in `.bootgear/config/`, and the Engine settlement principles when active. Require it to read applicable files before acting.
 
+Give the finder, gap hunter and cutter these claim rules:
+
+- In `claim`, name the expected behavior, who relies on it, and the observable consequence of the change.
+- In `trigger`, name the caller action, input, or state that starts the path.
+- In `evidence`, cite the requirement or caller contract and the changed path to the consequence.
+  Name any unverified link. Set the evidence tier from the checks already done.
+- For a test gap, name the wrong result the current tests could let through.
+- When widening or revising a claim, keep the relevant context in the replacement text.
+  Include new source anchors, trigger details, and unverified links there.
+
+The cutter rates the current claim. Use any updated trigger or evidence in the replacement text.
+For `cosmetic`, explain why the stated consequence leaves the applicable outcomes and caller or reader actions intact.
+
 Before each new or continued finder brief, the main agent fills this required part by hand:
 
 ```text
