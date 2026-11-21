@@ -1,38 +1,32 @@
 # Views and security
 
-Choose views that explain the affected mechanism. Keep small local changes terse.
-Use the relevant levels from [C4 guidance](https://c4model.com/diagrams) for changed architecture.
-Do not require every C4 level or diagram type.
+Show the affected mechanism. Keep small local changes short.
+For changed architecture, select only useful levels from [C4 guidance](https://c4model.com/diagrams).
 
-| Affected mechanism | Explain |
+| Mechanism | Show |
 |---|---|
-| Architecture | Boundaries, responsibilities, and connections at one consistent level. |
-| Stored, copied, derived, or overlaid values | Origin, writer, stored source, copy time, readers, and observable result. |
-| Order or lifecycle | Calls, allowed transitions, reversals, later updates, retries, and failure recovery. |
+| Architecture | Boundaries, duties, and connections at one consistent level. |
+| Stored, copied, derived, or overlaid values | Input, writer, source, capture operation and time, live or copy readers, and output. |
+| Order or lifecycle | Calls, allowed transitions, reversals, updates, retries, and recovery. |
 | Persistent relations | Ownership, update and deletion rules, affected callers, and side effects. |
 
-For each affected value, name its exact input, setter, source, capture operation, and live or copy readers.
-Keep similarly named fields separate when their writers or effects differ.
-Trace dependencies and cache changes where they affect output.
-For time-dependent behaviour, distinguish business dates, recorded times, and operation order where relevant.
-Check invariants across allowed action sequences, including validation order and application order.
+Separate fields with different writers or effects. Trace dependencies and cache changes that affect output.
+Distinguish business dates, recorded times, and operation order. Compare validation with application order across allowed sequences.
 
-State observable outcomes, unchanged-path checks, and important event-sequence tests.
-Inspect fixtures and assertions; show a plausible wrong result that the verification must reject.
+State observable outcomes, unchanged paths, and important event sequences.
+Inspect fixtures and assertions. Show a plausible wrong result the check must reject.
 State unit, integration, and full-workflow limits separately.
 
-Apply [STRIDE](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats) for changed trust boundaries, permissions, external inputs, or sensitive data.
+For changed trust boundaries, permissions, external inputs, or sensitive data, apply [STRIDE](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats).
 
 | Category | Check |
 |---|---|
-| Spoofing | Can a caller use another identity? |
+| Spoofing | Can a caller assume another identity? |
 | Tampering | Can a caller change data without permission? |
-| Repudiation | Can evidence establish who performed a sensitive action? |
-| Information disclosure | Can data reach a caller who must not see it? |
-| Denial of service | Can callers or dependencies exhaust resources and block valid work? |
-| Elevation of privilege | Can a caller obtain permissions beyond its role? |
+| Repudiation | Can evidence identify who performed a sensitive action? |
+| Information disclosure | Can data reach an unauthorized caller? |
+| Denial of service | Can callers or dependencies exhaust resources and block work? |
+| Elevation of privilege | Can a caller exceed its role's permissions? |
 
-Trace applicable threats through real entry points and controls.
-State the control and an observable verification that fails when the control is wrong.
-Give a short reason for each inapplicable category.
-Do not add six empty threat essays when no trigger applies.
+Trace applicable threats through real entry points and controls. Give a check that detects a faulty control.
+Give short reasons for inapplicable categories. Omit threat sections when no trigger applies.

@@ -1,216 +1,240 @@
 ---
 name: clarify
-description: Settle task type, approach, source-of-truth order, debate threshold, and autonomy scope; draft a goal for confirmation. Use at the start of any engine run, before execute. Use checkpoint mode for required model confirmation or source-skill choices during an existing task.
+description: Settle an Engine run's scope, workflow, authority, and permissions. Use before execution or at a required confirmation checkpoint.
 ---
 
-In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+## Inputs and outcomes
 
-Start with the user's original request, directly or through `start`. The run id comes from the environment.
+Take the original request from the user or `start`. Use the run ID from the environment.
+Keep `session_dir` in context. Use `--dir <session-dir>` only for a custom directory.
 
-- **Confirmed** — write the settlement once and hand `execute` the confirmed goal, machine, permissions, `<engine-root>` and absolute `<session-dir>`.
-- **Edited or declined** — stay in clarify and redraft for confirmation.
-- **Existing ledger, invalid machine or refused settlement** — follow Recovery. An invalid new settlement writes no ledger.
+- **Confirmed** — write the settlement once. Pass the goal, machine, permissions, `<engine-root>`, and absolute `<session-dir>` to `execute`.
+- **Edited or declined** — revise the draft and ask for confirmation again.
+- **Existing ledger, invalid machine, or refused settlement** — follow Fallbacks.
 
-## Checkpoint mode
+### Checkpoint mode
 
-For `mode: checkpoint`, dispatch before initial assessment, advisor startup, goal sign-off or session initialization.
-Inputs: checkpoint kind (`models` or `source-selection`), task folder, pending payload, scope and existing confirmation references.
-Active callers also supply engine root and session directory.
-For this mode, read [references/confirmation-checkpoints.md](references/confirmation-checkpoints.md).
-Return to the requesting caller:
+For `mode: checkpoint`, use this path before any new-run work.
+Take kind (`models` or `source-selection`), task folder, pending payload, scope, and existing confirmations.
+In a run, also take the Engine root and session directory.
+Read [confirmation-checkpoints.md](references/confirmation-checkpoints.md) only for this mode.
 
-- `checkpoint-confirmed`: kind, confirmed values, scope and typed user confirmation references.
-- `needs-confirmation`: kind, pending payload, unresolved question and next caller action.
-- `unavailable`: actual diagnostic, missing interaction mechanism and next caller action.
+Return one outcome to the caller.
 
-This mode never initializes a run, restarts advisors, or grants mutation permission.
+- `checkpoint-confirmed` — kind, confirmed values, scope, and typed user confirmation references.
+- `needs-confirmation` — kind, pending payload, unresolved question, and next caller action.
+- `unavailable` — diagnostic, missing interaction mechanism, and next caller action.
 
-## Workflow
+Keep the existing run, advisors, and permissions.
 
-Read applicable rules, assess the request, settle items 1–10, and validate the resolved machine. Show the goal, diagram, node reminders, gate commands, advisor roles, seats, startup choice, launcher and existing pairings. Get explicit confirmation before initialization and handoff.
+## Procedure
 
-## What to settle
+Read the host user-principles file and the project's `.bootgear/config/{principles,review-standard,test-standard}.md` files when present.
+Use answers already clear from the conversation. Settle the items below in the order that fits the request.
+For work questions in items 1–5 and 8–10, give `deputy:ask` the question, options, and stakes.
+On `answered`, use the answer and retain its slugs. On `escalate`, ask the user.
+If deputy is missing, record `no-deputy:not-installed` and ask the user.
 
-Ask items in the order that fits the conversation. Use answers already implied by the conversation. Do not force a questionnaire.
+### 1. Assess the request
 
-Before item 1, read the host user-principles file and `principles.md`, `review-standard.md`, and `test-standard.md` under the project's `.bootgear/config/`, when present. Apply them to the settlement and goal.
+Read the request or ticket, the implementation path, and related tests or checks before choosing a task type.
+Write a nonempty `request_assessment` string outside `state_machine`.
+Include observed scope, affected areas, size (`small`, `medium`, or `large`), evidence, and unknowns.
+For shallow checks, state why they suffice. Reassess later only for new scope.
 
-For work questions in items 1–5 and 8–10, give `deputy:ask` the question, options and stakes. On `answered`, use the answer and retain its slugs. On `escalate`, ask the user. If deputy is missing, record `no-deputy:not-installed` and ask the user. Keep production changes, outward sends, irreversible actions, goal sign-off and permitted mutations with the user.
+### Task type
 
-1. **Request assessment** — investigate the request before settling task type or anything else; do not accept the first framing uncritically. Inspect the ticket/request text, the relevant implementation path, and existing tests or validation for related behavior. Record as settlement field `request_assessment`:
-   - observed scope and affected surfaces
-   - a coarse size estimate (`small`/`medium`/`large`)
-   - the basis/evidence for that estimate (files read, commands run)
-   - open unknowns, if any
+Show the node reminders first.
 
-   Scale investigation depth to the request: a shallow pass is enough for trivial, bounded work, but state explicitly why deeper investigation wasn't needed rather than skipping the field.
-
-   Store the assessment as a nonempty string, separate from `state_machine`. Later nodes record reassessment only for newly discovered scope.
-
-2. **Task type** — record exactly one of the six values:
-   - `ticket-writing` — an issue body, with no design.
+2. **Task type** — choose one exact value:
+   - `ticket-writing` — draft an issue body without design.
    - `ticket-to-pr` — implement a ticket.
-   - `triage` — one reported problem.
-   - `change-review` — correctness review of a change already made.
-   - `design-doc` — requirements and design, with no task list.
-   - `artefact-review` — assess the quality of supplied output, including drafts, against a configurable rubric.
+   - `triage` — investigate one reported problem.
+   - `change-review` — review a change already made.
+   - `design-doc` — write requirements and design without tasks.
+   - `artefact-review` — assess supplied output against a rubric.
 
-   Show node reminders before choosing. Use the exact value whose description and reminders match. Ask the user when two fit. If none fits, tell the user, choose the closest and record the mismatch.
+If two fit, ask the user. If none fits, tell the user, choose the closest, and record the mismatch.
 
-   If `task_type` is `triage`, settle `triage_cutoff`: `one-user` only when the request says the target is a single user, a single-user install or a single customer; otherwise `product`.
+- For `triage`, set `triage_cutoff: one-user` only for an explicit single user, install, or customer. Otherwise use `product`.
+- For `design-doc`, require `work_dir`.
+- For `ticket-to-pr`, `change-review`, or `artefact-review`, require one fixed `task_folder`.
+  `init` validates, creates, and canonicalizes it. Reuse it for overrides, retries, and compaction.
+  Never amend it or supply it as a leave argument.
+- For `artefact-review`, record `artefact_review` with the raw request and nonempty local `inputs` paths.
+  Save messages or remote extracts locally with provenance if needed. Add an optional task `config` for custom criteria or angles.
+  Run `engine task artefact settings` to resolve defaults and host, project, and task settings.
+  Before sign-off, show effective criteria, disabled items, evidence limits, and configured source paths.
+  State the audience, purpose, reader task, and delivery mode from evidence. Mark unknowns and inferences.
+  The default machine reviews the supplied inputs without edits or publication.
 
-   If `task_type` is `design-doc`, settle `work_dir`. For a design-doc run, `work_dir` is required. It is an absolute path or a path that starts with `~`.
+Use absolute or home paths for folders and artefact files.
 
-   For `ticket-to-pr`, `change-review` or `artefact-review`, settle one fixed `task_folder` for task records.
-   Supply an absolute or home path. `init` validates, creates and canonicalises it before storing the run identity.
-   Reuse the stored folder through overrides, retries and compaction. Never amend it or supply it through leave arguments.
+### 3. Resolve the state machine
 
-   For `artefact-review`, record `artefact_review` with the raw request and nonempty local `inputs` paths.
-   Use absolute or home paths. Save supplied messages or remote extracts locally with provenance when needed.
-   Include an optional task `config` path when the workflow needs custom rubric criteria or finding angles.
-   Use `<gear> --host <host> engine task artefact settings` to resolve defaults, host user configuration, project configuration and the task file.
-   Show the effective criteria, disabled items, evidence limits and configured source paths before goal confirmation.
-   Establish audience, purpose, reader task and delivery mode from evidence; keep unknown or inferred context explicit.
-   The default machine reviews supplied inputs without changing or publishing them.
+1. Start from the built-in machine. If `.bootgear/config/state-machine-<task_type>.yaml` exists, use it as a full replacement.
+2. Apply run-specific changes last. For `change-review` of another author's change, remove `fix`, `spec`, `spec-review`, and `spec-debate`.
+   Remove all edges, reminder branches, and exit checks for these nodes. Keep them if the user requests fixes.
+   Compare commit or diff authors, or the PR author, with the user. A missing author counts as a mismatch.
+   Preserve the agreed correction scope and mutations.
+3. Run `engine task state validate <path>`. Fix errors or use Fallbacks.
+4. Run `engine task state diagram <path>` on the validated machine.
+5. Show the diagram and reminders at sign-off. For each `reminder.leave_check` or `reminder.exit_checks`, show:
+   - Exact argv, tier, and exit it gates.
+   - Resolved command prefix. Gear uses `gear.toml` for registered routes and `command -v` for other commands.
+   - Any unresolved command.
 
-3. **State machine** — resolve the run's `state_machine` settlement field before drafting `goal`. Follow these override tiers exactly:
-   1. Resolve the built-in machine for `<task_type>` and tier 2 (`.bootgear/config/state-machine-<task_type>.yaml`, if present — wholly replaces tier 1 for this task type).
-   2. Apply any per-run adjustment for this run (tier 3), such as removing a node the task doesn't need. For `change-review` of a change the user did not author, remove `fix`, `spec`, `spec-review` and `spec-debate`. The user authored the change when its git author matches the user's git identity. The git author is the author of the branch commits or the diff. For a PR, it is the PR author. A mismatch or a missing author means the user did not author the change. Remove every incident next edge, reminder branch and exit check. Keep this authoring subgraph when the user requests fixes. Preserve the clarified correction scope and permitted mutations.
-   3. Run `<gear> --host <host> engine task state validate <path>` on the resolved machine. Do not proceed on a validation failure; fix the machine or fall back to the unmodified tier 1/2 result.
-   4. Run `<gear> --host <host> engine task state diagram <path>` on the same resolved machine.
-   5. Show the user the rendered diagram and node reminders together with the `goal` draft, in the confirmation step below.
-      For every node with `reminder.leave_check` or `reminder.exit_checks`, list each argv verbatim, its tier, and the exit it gates. Show its resolved command prefix. `transition` resolves registered Gear commands through `gear.toml`; it resolves other commands through `command -v`. Flag a command when Gear and `command -v` cannot resolve it. These commands run at `transition`; the user's confirmation approves them.
-   6. Record the complete resolved machine (not a tier-1/2 diff) as settlement field `state_machine`, a block scalar, once, with the rest of settlement. Do not write settlement without a validated `state_machine`.
+Sign-off approves these transition checks. Store the full validated machine as the `state_machine` block scalar.
 
-4. **Approach and principles are distinct:**
-   - **approach** — record concrete workflow steps as a nonempty string.
-   - **principles** — record constraints across the run as a nonempty string. Merge them with project and user principles before execution.
+### 4. Record approach and principles
 
-5. **Source of truth, per domain — set separate authorities.** Settle at least:
-   - scope and outcome — use the ticket, issue, or user's stated intent by default
-   - current behavior — use the code and its existing tests by default
-   - implementation approach — use this settlement's stated approach by default
-   - correctness once implemented — use tests and verification run after the change by default
+Write nonempty strings for both. Use `approach` for workflow steps and `principles` for constraints.
+Merge user and project principles with run principles before execution.
 
-   Adjust domains to the task type. Omit an implementation-approach domain for triage when it is not needed.
+### 5. Set authorities by domain
 
-6. **Debate threshold** — a decision that `resolve` cannot settle goes to `debate` when any of these holds: (a) undoing it takes more than one revert, or it changes shared state; (b) it reaches more than one person or customer; (c) it touches money, legal, security or data-loss; (d) any of (a) to (c) is unknown. Otherwise it is solo: reversible by one revert, confined to one component or file, and none of (a) to (d) applies. Record each answer with the decision. A `resolve` settled by a source of truth is always solo. Never send this item to `deputy:ask`: the deputy has no threshold to judge against.
+Set separate `source_of_truth` entries. Default to these sources.
 
-   Also settle:
-   - Set `debate_round_cap` to `10` by default. Set a different positive value when requested. Give an owed unavailable-party retry one extra round beyond this cap.
-   - Use the default three-party roster (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) unless the run needs custom parties. Record a custom party as `{id, label, prompt, mechanism}`; require a distinct ID and a host-supported mechanism.
-   - Resolve `debate_party_config` with `<gear> --host <host> engine task config resolve --name debate-parties --project-root <project-root> [--task-config-file <task-config-file>] --report models --json`. Follow its `next`. Show `model_report` to the user; never copy `effective` into settlement.
-   - Set `convergence_policy` to `unanimous` by default.
-   - Set `consented_stop_allowed` to `true` by default. Use `unanimous_convergence`, `consented_stop`, and `round_cap` as the debate outcomes. Set `consented_stop_allowed` to `false` to remove `consented_stop`. End debate only in `unanimous_convergence` or `round_cap` when `consented_stop_allowed` is `false`.
+| Domain | Source |
+|---|---|
+| Scope and outcome | Ticket, issue, or user intent. |
+| Current behavior | Code and existing tests. |
+| Implementation approach | The settled approach. |
+| Correctness after implementation | Checks and tests run after the change. |
 
-7. **Autonomy has two parts:**
-   - Set `no_further_questions: true` after `goal` confirmation. Do not ask routine work questions during the run. Required model or source-selection checkpoints use checkpoint mode. Recovery may also ask for an unclear run identity after compaction.
-   - **Permitted mutations** — ask which actions `execute` may take without asking again, including commit, push, open a PR, edit the ticket, post review comments, merge, and force-push. Require a specific list. Do not accept "go ahead autonomously" as the list.
+Adjust for the task type. Omit the approach domain for triage when it adds no value.
 
-8. **Domain-skill overrides** — map task types to domain skills as follows:
-   - `design-doc` uses `spec`.
-   - `ticket-writing` drafts without a skill and reviews with `spec-review`.
-   - `ticket-to-pr` and `triage` use `test`.
-   - `change-review` uses `review`.
-   - `artefact-review` uses its machine stages and public `converge`, `resolve` and `debate` capabilities.
+### 6. Set the debate rules
 
-   Ask whether the project has a specialized skill for every domain the task type calls.
+Record `debate_threshold`. Debate an unresolved decision if it meets any condition below.
 
-   Record `spec_override`, `test_override`, and/or `review_override` as:
-   - a bare `<skill-name>` when one skill covers the whole domain
-   - `{sub-task-label: <skill-name>}` when the project splits the domain by concern, such as `test_override: {unit: <skill-a>, e2e: <skill-b>}` or `review_override: {quick: <skill-a>, full: <skill-b>}`
+- Undo needs more than one revert, or the decision changes shared state.
+- More than one person or customer is affected.
+- The decision affects money, legal matters, security, or data loss.
+- Any of these conditions is unknown.
 
-   Use the project's own sub-task labels. Do not invent a fixed vocabulary. Treat an absent override as the general default. Ask about specialized skills once here. At call time, resolve the current override, including any later `AMENDMENT`, select the entry matching the current sub-task, and fall back to the general default when no mapping label matches.
+Otherwise decide solo for a one-revert change confined to one component or file. Record each threshold answer with the decision.
+A decision from a settled source is solo. Keep the threshold choice out of deputy.
 
-   For every task type, settle **`debate_mode`** —
-   `threshold` (default: decide choice claims below `debate_threshold` solo,
-   and resolve or escalate those at or above it) or `mandatory` (resolve every
-   choice claim, and escalate only those unresolved at or above
-   `debate_threshold`). `execute` reads it at each debate node; an absent value
-   means `threshold`.
+- Default `debate_round_cap` to `10`. Use a requested positive cap. Give an owed unavailable-party retry one extra round.
+- Default to `main-agent`, `independent-reviewer`, and `adversarial-reviewer`.
+  Custom parties need unique `id`, `label`, `prompt`, and a host-supported `mechanism`.
+- Use `convergence_policy: unanimous`. Default `consented_stop_allowed` to `true`.
+  This policy allows `unanimous_convergence`, `consented_stop`, and `round_cap`. With `false`, remove `consented_stop`.
 
-9. **Run manifest** — record skills, agents, and other capabilities this run may use beyond the three overrides.
+### 7. Set autonomy
 
-   Write:
-   - `spec_skill`/`test_skill`/`review_skill` — record the skill each domain call uses in the same shape as item 8's override; optionally record `spec_review_skill` and `spec_review_override` for the independent spec-review stage. Record only the fields whose node the machine has: `spec_skill` for `spec`, `test_skill` for `test-code`, `e2e-test` or `triage`, `review_skill` for `review`. A `change-review` run records `spec_skill` too when its authorized authoring subgraph remains. A `design-doc` run records `spec_skill`. A `ticket-writing` run records `spec_review_skill`.
-     - **Bare `<skill-name>`** when the override or its absence names one skill. Use the override, or the general default (`spec`, `test`, `review`) when absent.
-     - **`{sub-task-label: <skill-name>}` mapping** when the override is a mapping. Mirror it exactly.
+After sign-off, set `no_further_questions: true`. Leave only required checkpoints and unclear run identity recovery.
+Get a specific `permitted_mutations` list, including which Git, PR, ticket, or review actions are allowed.
+A general instruction to act autonomously supplies no mutation list.
 
-     At call time, select the matching entry through the domain skill's public override contract.
-   - `debate_roster` — record every stable party ID that `debate` may invoke. Include built-ins (`main-agent`, `independent-reviewer`, `adversarial-reviewer`) and custom IDs. Do not add duplicates. Always include `main-agent`.
-   - `debate_party_config` — record the resolved party configuration snapshot. `debate` uses this field and does not re-read configuration layers.
-   - `debate_admission` — record whether skills other than `execute`/`resolve` may call `debate` directly, and record which ones. Record absent or empty for no direct calls. Allow only `resolve`'s escalation path to reach `debate` when direct calls are absent.
-   - `review_fix_mode` — default to `accepted_only` for externally accepted feedback. Use `auto_within_permitted_mutations` to authorize automatic `fix-now` patches within item 7's permissions.
+### 8. Select domain overrides
 
-   Record what this run may call. Do not record a prediction of what it will call.
+Ask once about specialized skills for the domains this machine calls.
 
-10. **Advisor roles, seats, and startup** — settle the advisor's roles and channel startup timing.
-   - Check the required CLI and `advisor` skill availability without starting or pairing a listener.
-     Check the host's listener requirements below and report actual availability errors.
-   - Resolve `converge-seats` without a task file: `<gear> --host <host> engine task config resolve --name converge-seats --project-root <project-root> --json`.
-     Recommend `adversarial-reviewer` and `gap-hunter`, or only `adversarial-reviewer` when `r2` is `native_subagent`.
-     Ask which roles the advisor takes: `independent-reviewer`, `adversarial-reviewer`, `refuter`, or `gap-hunter`.
-     "No" means none. Offer only roles whose required capabilities are available.
-   - For selected channel uses, present both startup choices. Reuse a choice already explicit in the conversation.
-     Otherwise, ask the user. Do not infer timing from a launcher's presence.
-   - **Early startup** (`early`): start and pair each selected channel use before goal confirmation.
-     Ask the user to start a listener when no approved launcher is available.
-     Show every pairing. Keep each pairing for the run; do not close it after each task.
-   - **Deferred startup** (`deferred`): start a listener only when its first advisor task is due.
-     Settle the exact approved automatic launcher command or capability. Verify its availability without starting it.
-     Obtain permission to run it under item 7. Show the launcher and planned channel uses at goal confirmation.
-     Do not require live pairings during clarify. Settle unavailable launchers here; do not defer questions to execute.
-   - Direct calls need no listener. For direct-only roles, record `startup: early` without a launcher.
-     Keep their direct dispatch unchanged.
-   - Pair one listener per selected channel use. Never share the debate and `r2` channels.
-     Record a party as `native_subagent` only after the user explicitly declines its advisor use.
-     If early pairing fails, show the diagnostic and settle another available choice before writing the settlement.
-   - Write task-layer debate-parties and converge-seats files for the chosen roles.
-     Set each selected debate party's `mechanism` to `advisor`; set other parties to `native_subagent`.
-     Name all five converge seats. Set `r2: advisor` for `refuter` or `gap-hunter`; set all other seats to `native_subagent`.
-     Resolve both with `--task-config-file` and follow each `next`.
-   - Record `advisor_roles: {roles, brief, startup}` and `converge_seats` together.
-     Limit `brief` to the chosen roles in one line. Deferred startup also records the single-line approved `launcher`.
-     When no advisor role is selected, omit startup and launcher.
-   - After `init`, record channels that already exist with `<gear> --host <host> engine task session record-decision` in `solo` mode.
-     Use summary `advisor channels: r2=<n>, debate=<m>`, naming only existing channels.
-     For deferred startup, record each new pairing when it happens. Preserve the other use's channel when updating the decision.
-   - While a channel exists, run its heartbeat task's printed `next` at once when that task ends.
-     Keep the 720-second restart grace.
+- `design-doc` uses `spec`.
+- `ticket-writing` drafts directly and uses `spec-review` to review.
+- `ticket-to-pr` and `triage` use `test`.
+- `change-review` uses `review`.
+- `artefact-review` uses its stages and public `converge`, `resolve`, and `debate`.
 
-## Draft and confirm the goal
+For `spec_override`, `test_override`, and `review_override`, use a bare skill name or a `{sub-task-label: skill-name}` map.
+Use project labels. At call time, apply valid amendments and match the current label. Use the general default if absent or unmatched.
 
-State the task and constraints in one or two sentences. Give a concrete success condition. State the task-specific failure that leaves no path to completion. Treat a stall as open work. Allow edits and require explicit confirmation. Store `goal` as a mapping with text values `succeeded` and `failed`.
+Default `debate_mode` to `threshold`. Decide lower choices solo and resolve choices at or above the threshold.
+For `mandatory`, resolve every choice. In both modes, debate only unresolved choices at or above the threshold.
+`execute` rereads the mode at each debate node. An absent mode means `threshold`.
 
-## Write the settlement
+### 9. Record the run manifest
 
-After confirmation, write items 1–10 and the goal into the settlement input. Include every task-specific field the selected type requires. Keep `state_machine` as the validated block scalar and let Gear set `session_dir`.
+Record allowed capabilities. Include the matching domain fields for these nodes.
+
+| Node or task | Field |
+|---|---|
+| `spec`, `design-doc`, or a retained `change-review` authoring path | `spec_skill` |
+| `test-code`, `e2e-test`, or `triage` | `test_skill` |
+| `review` | `review_skill` |
+| `ticket-writing` | `spec_review_skill` |
+| Optional independent spec review | `spec_review_skill` and `spec_review_override` |
+
+Mirror each override's shape. With no override, use the general `spec`, `test`, or `review`.
+At call time, use the domain skill's public selection contract.
+
+- In `debate_roster`, list all permitted stable party IDs once. Always include `main-agent`.
+- Record the resolved `debate_party_config` snapshot from item 10. Debate uses that snapshot.
+- In `debate_admission`, list any other skills allowed to call debate directly. Leave it absent or empty for `resolve` only.
+- Default `review_fix_mode` to `accepted_only` for external acceptance.
+  Use `auto_within_permitted_mutations` to allow automatic `fix-now` patches within the run's permissions.
+
+### 10. Set advisor roles and startup
+
+Check required CLIs and the advisor skill without launching or pairing. Report real errors. Use the host requirements below.
+Resolve `converge-seats` without a task config. Offer only available roles among independent reviewer, adversarial reviewer, refuter, and gap hunter.
+Recommend adversarial reviewer and gap hunter, or adversarial reviewer alone when `r2` is `native_subagent`.
+Take an explicit decline as no advisor for that role. Record `native_subagent` in its place only after that decline.
+
+For channel roles, show both startup choices. Reuse an explicit choice or ask.
+Keep separate listeners for debate and `r2`.
+
+| Choice | Action |
+|---|---|
+| `early` | Pair before sign-off. Without an approved launcher, ask the user to start the listener. Keep each pairing for the run. |
+| `deferred` | Verify the exact launcher without running it. Get permission in item 7. Launch at the first advisor task. |
+| Direct-only | Record `startup: early` without a launcher. Use direct dispatch. |
+
+For early failure, report the diagnostic and settle another available choice before writing.
+For deferred startup, settle launcher failures here. Show the launcher and planned uses at sign-off.
+
+Write task configs for both settings. Set selected debate parties to `advisor` and the rest to `native_subagent`.
+Name all five Converge seats. Use `advisor` only for `r2` when refuter or gap hunter is selected.
+Use the following route. Add `--task-config-file <task-config-file>` for each task config.
 
 ```text
-<gear> --host <host> engine task session init --settlement-file <file>
+<gear> --host <host> engine task config resolve --name <name> --project-root <project-root> --json
 ```
 
-On refusal, use Recovery. On success, use the directory of the printed `INIT <ledger-file>` as `<session-dir>`. Pass it and `<engine-root>` to `execute`. Preserve the directory on every active-run handoff, including `recall`, `resolve`, `debate`, `spec`, `test`, and `review`.
+For `debate-parties`, add `--report models`. Show `model_report`. Follow `next` and store `debate_party_config`, never `effective`.
+For `converge-seats`, follow `next` and store `converge_seats`.
+Record `advisor_roles: {roles, brief, startup}`, with one line for the brief. For deferred startup, add the approved one-line `launcher`.
+With no roles, omit startup and launcher.
+
+### Confirm and initialize
+
+Show the goal, diagram, reminders, gate commands, advisor roles and seats, startup choice, launcher, and existing pairings.
+State concrete success and failure in one or two sentences. Keep a stall open while a path remains.
+Allow edits. Require explicit sign-off. Write `goal` with text values `succeeded` and `failed`.
+
+Run `<gear> --host <host> engine task session init --settlement-file <file>` with all settled fields.
+Let Gear set `session_dir`. Use the parent of the printed `INIT <ledger-file>` for all active-run handoffs.
+
+After init, record deputy answers as `solo` decisions with their slugs.
+For existing channels, use `session record-decision` in `solo` mode with `advisor channels: r2=<n>, debate=<m>`.
+Name only existing channels. Record deferred pairings at startup and preserve the other use's channel.
+While paired, run the heartbeat's printed `next` when it stops. Keep the 720-second restart grace.
+Hand the confirmed run to `execute`.
 
 ## Rules
 
-- Ask routine work questions only during initial clarify. Record settled answers and reuse them. Use checkpoint mode only for model or source-selection confirmation.
-- After `init`, record each deputy answer in the run as a `solo` decision citing its slugs. Only the user's own confirmed standing decisions go to `deputy:record`.
-- Record any mid-run user amendment as an explicit session decision. Keep the original settlement intact.
+Keep production, outward sends, irreversible actions, goal approval, and mutation permissions with the user.
+Use `deputy:record` only for the user's confirmed standing decisions.
+Record a mid-run change as a session decision. Keep the original settlement.
 
-## Recovery
+## Fallbacks
 
-- **Run identity unclear after compaction** — recover `<session-dir>` and resume the existing ledger; do not start a new run.
-- **Ledger already exists** — treat `init`'s refusal as a mid-session `clarify` rerun. Tell the user. Do not run `init` again and do not append a suffix. Resume the existing ledger through `recall`.
-- **`<gear> --host <host> engine task state validate` fails on the resolved machine** — fall back to the unmodified tier 1/2 result (item 3, step 3). If that also fails, tell the user the validation error and stop without writing the settlement.
-- **Settlement fails validation** — `init` prints the problems and writes no ledger. Fix every listed problem in the settlement file, then run `init` again. Do not add `--force`. When a listed problem is in a value the user confirmed, ask the user for a valid value.
+- For unclear identity, recover `<session-dir>` and resume. Never create a replacement run.
+- If the ledger exists, report the rerun and use `recall`. Do not rerun init or append a suffix.
+- If the adjusted machine fails validation, try the base or project machine unchanged.
+  If that fails, report the error and stop before writing settlement.
+- If init rejects settlement, fix every listed field and retry without `--force`.
+  Ask the user for a valid value if the refusal concerns a confirmed value.
+- For a missing sibling skill, stop and report `cli:setup` for `engine`. Resume after verification.
 
 ## Host mechanics
 
-Call `cli:gear` for the absolute Gear path. Run `<gear> --host <host> engine task <command>`.
-Both hosts support `native_subagent` and `advisor`. The handoff's `<engine-root>` is the installed Engine plugin root.
+Get the absolute path from `cli:gear`. Run `<gear> --host <host> engine task <command>`.
+Use the installed Engine plugin root as `<engine-root>`. Both hosts support `native_subagent` and `advisor`.
 
-- **Claude Code (`claude`)** — Gear reads `CLAUDE_CODE_SESSION_ID`. If needed, install `cli@bootgear` through the plugin interface. Only refuter and gap hunter use a listener. Debate uses direct `codex exec` when `command -v codex` succeeds.
-- **Codex (`codex`)** — Gear reads `CODEX_SESSION_ID`. If needed, install with `codex plugin add cli@bootgear`. Refuter or gap hunter shares one listener use. Debate needs a separate listener. If the `advisor` skill is missing, tell the user and record no advisor role.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `engine`. Resume after setup verifies the required plugins.
+- **Claude Code** — use `claude` and `CLAUDE_CODE_SESSION_ID`. Install missing `cli@bootgear` through the host.
+  Only refuter and gap hunter need a listener. Debate is direct if `command -v codex` succeeds.
+- **Codex** — use `codex` and `CODEX_SESSION_ID`. If needed, run `codex plugin add cli@bootgear`.
+  Refuter and gap hunter share one listener use. Debate needs its own. If `advisor` is absent, report it and record no advisor role.

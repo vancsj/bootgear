@@ -1,13 +1,5 @@
-# task=ask
+# Ask
 
-A straight opinion or answer — not an adversarial attack (`review`), not delegated investigation (`delegate`).
-
-## Request
-
-State the question plainly. Include the facts the peer needs.
-For direct mode, supply all task facts in the prompt. For channel mode, let the peer inspect sources.
-Ask for an answer, not objections.
-
-## Handling the response
-
-Treat the answer as advisory, not settled. Verify anything checkable against the source before relying on it or reporting it as fact.
+State the question and needed facts. Request an answer.
+For direct communication, include all facts in the prompt. On a channel, allow source checks.
+Verify checkable claims before relying on the answer or reporting it as fact.

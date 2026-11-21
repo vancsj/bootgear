@@ -1,44 +1,24 @@
-# task=rewrite
+# Rewrite
 
-Rewrite a draft (issue/ticket body, PR description, review comment, chat message). Return it; post only with user approval.
+Return the draft. Post only with user approval.
+Verify actionable symbols, behavior, counts, and causes. Remove unverified claims or keep their required hedges.
 
-## Accuracy
+## Brief
 
-Before rewriting, verify every claim a reader could act on: symbols, behaviour, counts, causes. Remove unverified claims or keep their hedge. Tell the peer not to remove a required hedge.
+Use one prompt per draft. Apply the destination and user's latest constraints.
+Include these instructions in each prompt.
 
-## Prompt structure
+- Use plain English and established industry terms. Keep clear idioms and remove decorative or unclear figurative wording.
+- Omit narration, justification, filler, and decoration. Invent no terms, claims, or details.
+- Shorten and rearrange wording where useful. Keep meaning, reasons, qualifications, requirements, numbers, identifiers, and structure.
+- Make each noun and reference clear on first reading.
+- Open a bug draft with the reproducible case. Cut repeated context, soft framing, unnecessary hedges, and explanatory closers.
+- Use short sentences. Preserve the existing lists, numbering, tables, and verbatim code blocks.
+- Copy symbol names, paths, IDs, and numbers exactly. Retain all required hedges.
 
-State this rule in every prompt:
+For a template, preserve its exact headers and shape. For chat, use only supported markup and never nest emphasis.
+Use the basic rules for other destinations. Do not require plain prose or ban lists and fragments.
 
-> No narration. No justification. No filler. No decoration. Use plain English. Use no jargon except
-> broadly used industry terms. Common idioms are allowed when clear and useful. Remove
-> figurative language only when decorative, obscure, dramatic, or less precise than direct wording. Do
-> not invent words, claims, or details. Preserve key meaning, reasons, qualifications, operational
-> requirements, meaningful numbers, exact identifiers, and structure. Make the result shorter where
-> possible. Remove wording, not meaning.
+## Check
 
-State the required rewrite: shorter and restructured where useful.
-
-- One read is enough; every noun/referent resolves.
-- Bugs open with the reproducible scenario, not a mechanism restatement.
-- Cut restated context, soft framing, hedging, explanatory closers.
-- Short sentences over long compounds; restructuring is allowed and expected.
-
-Structure contract:
-
-- Keep the draft's existing structure: bullet lists stay bullets, numbered lists stay numbered, tables stay tables, code blocks stay verbatim. Rewrite the wording inside them.
-- Never instruct "plain prose" or ban lists and fragments. A destination without headers is not a destination without structure.
-- Reproduce symbol names, paths, IDs and numbers character-for-character.
-
-Then the destination-specific rule:
-
-- Templated destinations (e.g. repo issue templates): preserve exact headers and document shape too.
-- Chat destinations: use only the markup that destination renders; never nest emphasis markers.
-- PR review comments, issue comments, everything else: the contract above is the whole rule.
-
-Use one prompt per draft. Derive constraints from that draft's destination and the user's latest instruction.
-
-## Check the rewrite
-
-- Symbol names, IDs, numbers, and required hedges preserved exactly.
-- Templated destinations: rewritten headings match the active template before posting.
+Compare identifiers, numbers, and required hedges. For templates, check headings against the active template before posting.

@@ -1,19 +1,17 @@
 # Source selections
 
-Build the candidate set from supplied project context and the caller inventory. Never scan installed skills.
-Read the optional project configuration through public `settings`.
-The project can supply `.bootgear/config/self-review.json`:
+Use project context and caller inventory. Never scan installed skills.
+Run public `settings` for project config at `.bootgear/config/self-review.json`.
 
 ```json
 {"candidates": [{"name": "example-review"}]}
 ```
 
-The caller supplies `candidates`, including an explicit empty list when appropriate.
-Use entries with `name` and `origin`. Valid origins are `user-request`, `host-registration`, `caller-judgement` and `project-config`.
-The helper unions candidates by public skill name and preserves project-config origins.
-An empty caller inventory does not select `neither` for named project candidates.
+The caller supplies `candidates`, including an empty list when appropriate. Each has `name` and `origin`.
+Allowed origins are `user-request`, `host-registration`, `caller-judgement`, and `project-config`.
+The helper combines candidates by public name and keeps project origins. An empty caller list does not select `neither`.
 
-Supply one selection per candidate:
+Give each candidate one selection.
 
 ```json
 {
@@ -28,18 +26,16 @@ Supply one selection per candidate:
 }
 ```
 
-Valid confirmation kinds are `user-message` and `user-confirmed-ledger-entry`. Each needs a nonempty `ref`.
-Deputy advice does not confirm a selection. Check the actual confirmed reference and current scope.
-Preserve the user's free-text scope, including selected phases or orchestration.
-Do not reduce it to a stage bucket. Explain present artifact coverage explicitly.
+Use `user-message` or `user-confirmed-ledger-entry` with a nonempty `ref`.
+Verify the user confirmation and current scope. Deputy advice supplies no confirmation.
+Preserve free-text scope, phases, and orchestration. A stage label is insufficient. State how the source covers this artifact.
 
 | Mode | Action |
 |---|---|
-| `invoke` | Invoke the source skill and follow its workflow, selected scope and public handback. |
-| `absorb` | Read and apply the selected instructions without invoking the source skill. |
-| `neither` | Do not invoke or absorb that source skill. |
+| `invoke` | Invoke the skill. Follow its workflow, scope, and public handback. |
+| `absorb` | Read and apply the selected instructions without invoking the skill. |
+| `neither` | Skip the skill. |
 
-Supply applicable confirmed selections explicitly for each checkpoint and reconfiguration. Never copy modes automatically.
-Ask the caller for missing selections before source-dependent work. Return every missing name together.
-A changed scope with pending confirmation cannot retain an old mode silently.
-Validate references and semantic coverage yourself. The helper checks structure and nonempty fields only.
+Resupply confirmed selections at each checkpoint and configuration. Never copy a mode automatically.
+Before source-dependent work, return all missing names to the caller. Stop on unconfirmed scope changes.
+Verify reference meaning and coverage. The helper checks structure and nonempty fields only.

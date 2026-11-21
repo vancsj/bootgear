@@ -13,4 +13,4 @@
   tag: find
   lens: tests
   tell: A test opens a stream, response body, connection or worker thread.
-  asks: Is each closed or joined on every exit path, and is a wait timeout checked instead of ignored?
+  asks: "Does each exit close or join the resource? Does it check wait timeouts?"

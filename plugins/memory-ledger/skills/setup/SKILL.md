@@ -1,228 +1,83 @@
 ---
 name: setup
 disable-model-invocation: true
-description: Set up (or re-check) the memory-ledger — verify python/git/config dependencies, create the local ledger beside the shared one, wire the config file and the host instructions file, add a shared remote, and audit existing entries for ones filed in the wrong ledger. Run it on a new machine, when a root is missing or misconfigured, or when adding the second ledger to an existing single-ledger setup.
+description: Set up or check the memory ledger. Use on a new machine, for a missing or invalid root, or to add a ledger.
 ---
 
-## When to use, inputs and handback
+## Inputs and outcomes
 
-Set up the memory-ledger for this user: on a new machine, when a root is missing
-or misconfigured, or when adding the second ledger to an existing single-ledger
-setup.
+Ask for paths, the shared remote URL, and confirmations as needed.
+Return one result to the user.
 
-Inputs: none up front; the user answers paths, the remote URL, and each
-confirmation as the steps reach them.
+- Complete — `doctor` with no failures and a `rules` row per ledger, roots with counts, and a tagged `resolve` result.
+- Stopped — `doctor` failure and cause, the minimum Python version, or `selftest` failure.
+- Partial — declined write and the work that remains.
 
-Hand back to the user, from step 10: `doctor` with no failures and a `rules` row
-per ledger, both ledgers in `resolve-roots` with entry counts, and a `resolve`
-result tagged `[shared]` / `[local]`. Step 7 also hands the user a proposed
-classification to confirm before anything moves.
+Return proposed audit classifications before moving entries.
 
-Outcomes:
+## Procedure
 
-- completed — the three results above;
-- stopped at a `doctor` `FAIL`, with its cause;
-- stopped because python is below the floor `doctor` names;
-- stopped at a failing `selftest` (a code bug);
-- partly done because the user declined a write (config, instructions file,
-  remote, permissions) — name what remains.
+Use `<gear> --host <host> memory-ledger ledger <command>` for the commands below.
+Run steps in order. Stop at the first hard failure. Open only the reference for the step that needs it.
 
-## Workflow
+1. Run `doctor` and report its table verbatim. Carry warnings into setup. Stop on any `FAIL`.
+   Run `selftest` before changing files.
+2. Run `resolve-roots`. Use shared for team facts and local for machine facts.
+   Defaults are `~/.memory-ledger/shared` and `~/.memory-ledger/local`. Confirm any different path.
+   If a populated ledger exists or placement is unclear, read [ledger-split.md](references/ledger-split.md).
+   On first install, create fresh roots. Seed each repo with `rules --init --only <shared|local>`.
+3. If `doctor` reports no local ledger, confirm the path. Create and seed it.
 
-`doctor` + `selftest` → resolve the roots → create the local ledger (rules,
-`_about`, save) → wire the config → shared remote (push only after step 7, with
-its own yes) → instructions file → audit filings → folder shape → permissions
-(optional) → verify → report the three results and stop.
+   ```sh
+   mkdir -p <local-root> && cd <local-root> && git init -q .
+   printf '.ledger-cache.json\n' > .gitignore
+   <gear> --host <host> memory-ledger ledger rules --init --only local
+   <gear> --host <host> memory-ledger ledger rules --only local
+   <gear> --host <host> memory-ledger ledger new <folder>/_about --local --q "What belongs here?" \
+     --claim "…" --because "…" --evidence "…"
+   ```
 
-Work the steps in order and stop at the first hard failure — each one depends on
-the one before.
+   Create only needed folders. Explain in the local charter what makes a fact specific to this machine.
+   If the deputy root is missing or lacks Git, confirm its path (default `~/.memory-ledger/deputy`).
+   Use the same initialization with the deputy path, `--only deputy`, `--deputy`, and `decisions/_about`.
+   Keep the deputy root without a remote.
+   Commit the local seed with `save --only local -m "Seed the local ledger"`.
 
-### 1. Dependencies
-
-```
-<gear> --host <host> memory-ledger ledger doctor
-```
-
-Report its table verbatim.
-
-- **Any `FAIL` stops setup** (see "Fallbacks").
-- `warn` lines are the work this skill exists to do. Carry them into the steps below.
-
-Then confirm the arithmetic still holds:
-
-```
-<gear> --host <host> memory-ledger ledger selftest
-```
-
-### 2. Decide the two roots
-
-```
-<gear> --host <host> memory-ledger ledger resolve-roots
-```
-
-Read `references/ledger-split.md` before deciding which root is shared and which
-is local, and whenever a ledger with entries already exists.
-
-Defaults are `~/.memory-ledger/shared` and `~/.memory-ledger/local`. Ask
-before choosing anything else, and take the user's answer.
-
-On a first install both roots are created fresh; once each repo exists, seed its
-rule file with `<gear> --host <host> memory-ledger ledger rules --init --only <shared|local>`.
-
-### 3. Create the local ledger
-
-Only if `doctor` reported it missing. Confirm the path first, then:
-
-```
-mkdir -p <local-root> && cd <local-root> && git init -q .
-printf '.ledger-cache.json\n' > .gitignore
-```
-
-Seed its rule file, then read it:
-
-```
-<gear> --host <host> memory-ledger ledger rules --init --only local
-<gear> --host <host> memory-ledger ledger rules --only local
-```
-
-Then seed its charter — a folder with no `_about.md` is an orphan and `lint`
-reports it:
-
-```
-<gear> --host <host> memory-ledger ledger new <folder>/_about --local --q "What belongs here?" \
-  --claim "…" --because "…" --evidence "…"
-```
-
-### 3a. Create the deputy ledger
-
-Only if `doctor` reported the deputy root missing or not a git repo. Confirm the
-path first (default `~/.memory-ledger/deputy`), then:
-
-```
-mkdir -p <deputy-root> && cd <deputy-root> && git init -q .
-printf '.ledger-cache.json\n' > .gitignore
-<gear> --host <host> memory-ledger ledger rules --init --only deputy
-<gear> --host <host> memory-ledger ledger rules --only deputy
-<gear> --host <host> memory-ledger ledger new decisions/_about --deputy --q "What belongs here?" \
-  --claim "…" --because "…" --evidence "…"
-```
-
-The deputy root has no remote. Do not add one.
-
-Mirror only the top-level folders the user actually needs; an empty ledger with
-three speculative folders is three orphan charters. One is usually enough to
-start. The local charter should say what makes a fact local — true of this
-machine, not re-checkable by a teammate — not merely list topics.
-
-Commit it:
-
-```
-<gear> --host <host> memory-ledger ledger save --only local -m "Seed the local ledger"
-```
-
-### 4. Wire the config file
-
-Show the user the exact block before writing. `memory.root` names the shared
-ledger; never re-point it at the local one. Read `references/config.md` when
-writing or diffing the config file.
-
-Verify with `<gear> --host <host> memory-ledger ledger doctor` — the config row should now name both keys.
-
-### 5. Shared remote (optional, and the user's call)
-
-If `doctor` says the shared ledger has no remote, the team cannot read anything
-in it. Ask whether to add one. If yes, take the URL from the user — never guess
-it — then:
-
-```
-git -C <shared-root> remote add origin <url>
-```
-
-**Do not push.** Show the user what the first push would publish
-(`git -C <shared-root> log --oneline | wc -l` commits, `<gear> --host <host> memory-ledger ledger list --prose | tail -1`
-entries) and let them run it or ask you to; the first push gets its own yes.
-
-Before offering to push, work step 7.
-
-### 6. Instructions file
-
-Read the instructions file. If it already has a memory-ledger section, propose an
-updated version reflecting two ledgers and show it as a diff. If it has none —
-the normal case on a first install — propose a new section instead, and say
-plainly that you are adding one rather than editing one. Do not write
-until the user accepts. Keep it to the rules the user needs at the moment of
-using the ledger. Read `references/instructions-section.md` when drafting the
-section.
-
-### 7. Audit what is already filed
-
-```
-<gear> --host <host> memory-ledger ledger audit
-<gear> --host <host> memory-ledger ledger audit --json [--filter <text>]
-```
-
-**Which ledger an entry belongs in has no heuristic, and you make the call, not
-the tool.** Read `references/audit.md` when `audit` reports findings and when
-classifying the `audit --json` output.
-
-Report your proposed classification to the user and let them confirm before
-anything moves.
-
-### 8. Folder shape
-
-```
-<gear> --host <host> memory-ledger ledger lint
-```
-
-Read `references/folder-shape.md` when `lint` reports `OVERSIZE` or `REGROUP`.
-
-### 9. Permissions (optional)
-
-Offer to auto-approve the ledger CLI. Read `references/permissions.md` only when
-the user opts in.
-
-### 10. Verify
-
-```
-<gear> --host <host> memory-ledger ledger doctor
-<gear> --host <host> memory-ledger ledger lint
-<gear> --host <host> memory-ledger ledger resolve "<something the user has asked before>"
-```
-
-Setup is done when `doctor` shows no failures and a `rules` row per ledger,
-both ledgers appear in `resolve-roots` with entry counts, and a `resolve` returns candidates tagged
-`[shared]` / `[local]`. Report those three results and stop — do not go on to
-file anything.
+4. For a config change, read [config.md](references/config.md). Preview the exact block.
+   Keep `memory.root` on the shared ledger. After approval, write the block and run `doctor`. Check both root keys in the config row.
+5. If the shared ledger lacks a remote, offer to add one. Use only the URL the user gives.
+   After approval, use `git -C <shared-root> remote add origin <url>`. Wait until after the audit to offer a push.
+   For that offer, show the commit count (`git -C <shared-root> log --oneline | wc -l`).
+   Show the entry count (`<gear> --host <host> memory-ledger ledger list --prose | tail -1`). Get separate push approval.
+6. Read the host instructions. When drafting a section, read [instructions-section.md](references/instructions-section.md).
+   Show a diff for an existing section, or say that you propose a new section. Write only after approval.
+7. Run `audit`. For findings or JSON classification, read [audit.md](references/audit.md).
+   Use `audit --json` and optional `--filter <text>` for details. Decide placement yourself and show it before moving anything.
+   Wait for confirmation before moving any entry.
+8. Run `lint`. On `OVERSIZE` or `REGROUP`, read [folder-shape.md](references/folder-shape.md).
+9. Offer CLI auto-approval. If the user opts in, read [permissions.md](references/permissions.md).
+10. Run `doctor`, `lint`, `resolve-roots`, and `resolve "<past user question>"`.
+    Check for a `rules` row per ledger, shared and local counts, and matching `[shared]` or `[local]` results.
+    Report the three outcomes. Stop after setup.
 
 ## Rules
 
-**Every step that writes outside the ledger repos needs explicit confirmation, and
-you show the exact bytes before writing them.** That covers the config file,
-the instructions file, any `.gitignore`, any git remote, and any push. Creating a
-ledger repo and its `_about.md` entries is the one thing you may do after a single
-yes, because it is a new empty directory and reversible with `rm -rf`.
-
-- Never push unasked, and never guess a remote URL.
-- Never install or switch interpreters on the user's behalf.
-- Never split a folder unasked.
+Preview exact bytes and get confirmation for config, host instructions, `.gitignore`, remotes, and pushes.
+One approval can cover a new empty ledger repo and its `_about.md` entries.
+Get approval before splitting folders. Leave interpreter installation and selection to the user.
 
 ## Fallbacks
 
-- **Any `doctor` `FAIL` stops setup.** Fix the named cause and re-run. Do not
-  proceed to step 2 with a failing interpreter or a missing git — everything
-  after it writes files.
-- If python is below the floor `doctor` names, say so and stop.
-- A failing `selftest` is a code bug, not a setup problem: report it and stop.
+On `doctor` failure, report the cause. Fix it or wait for correction and rerun `doctor` before proceeding.
+If Python is below the reported minimum, report it and stop.
+Report a failing `selftest` as a code defect and stop.
 
 ## Host mechanics
 
-```
-Call `cli:gear` and use its absolute path for ledger commands.
-Run `<gear> --host <host> memory-ledger ledger <command> [arguments]`.
-Claude: instructions file = ~/.claude/CLAUDE.md
-Codex: instructions file = ~/.codex/AGENTS.md
-```
+Get the absolute path from `cli:gear`. Gear reads the session ID from the environment.
+Use only the current host's row.
 
-Use the absolute path returned by `cli:gear` as `<gear>`.
-If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`. On Codex, run `codex plugin add cli@bootgear`.
-Gear sets the host from `--host`. The CLI reads the session id from the environment.
+| Host | `<host>` | Instructions | Install missing CLI |
+|---|---|---|---|
+| Claude Code | `claude` | `~/.claude/CLAUDE.md` | `/plugin install cli@bootgear` |
+| Codex | `codex` | `~/.codex/AGENTS.md` | `codex plugin add cli@bootgear` |

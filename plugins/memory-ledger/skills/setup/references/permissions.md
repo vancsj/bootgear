@@ -1,10 +1,5 @@
 # Permissions
 
-**Auto-approve the whole CLI, not a read-only subset.** Match on the script name
-with no subcommand gate.
-
-Ask where their permission rules live before writing any; setups differ, and a
-rule added to the wrong place silently never fires. If they have a
-permission-hook plugin, that is the mechanism rather than `settings.json`. Check
-first whether a rule already covers it — this may well be done already. Show the
-exact pattern you propose and let them decide.
+Match the full CLI by script name. Leave the subcommand unrestricted.
+Ask where the user keeps permission rules. Use their permission-hook plugin when present.
+Check for an existing rule. Show the exact proposed pattern and wait for approval.

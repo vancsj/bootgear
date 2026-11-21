@@ -1,20 +1,18 @@
-# Design and architecture failure patterns: find angles for the architecture lens.
-# Rows follow converge's angle schema; `cost` is the change or failure the design
-# makes harder. A design claim with no cost scenario shown is cut.
+# Architecture find angles. Use cost for the change or failure the design makes harder.
+# Cut a design claim without an observed cost scenario.
 
-# Boundaries and coupling
 - id: layer-leak
   tag: find
   lens: architecture
   tell: A controller or UI calls the repository or database, or domain code imports a framework or transport.
-  asks: Does a layer reach past the one below it?
+  asks: "Does a layer bypass the one below it?"
   cost: Swapping the store or transport touches domain code.
 - id: wrong-owner
   tag: find
   lens: architecture
-  tell: Logic was added where its data does not live.
+  tell: "The change adds logic outside the place that holds its data."
   asks: Does the rule belong with the data it reads?
-  cost: The next caller re-implements the rule.
+  cost: "The next caller duplicates the rule."
 - id: hidden-coupling
   tag: find
   lens: architecture
@@ -25,19 +23,19 @@
   tag: find
   lens: architecture
   tell: A new import points back into a caller.
-  asks: Does the dependency graph now contain a cycle?
-  cost: The parts cannot be tested or deployed separately.
+  asks: "Does the dependency graph now have a cycle?"
+  cost: "Tests or deployments cannot isolate the parts."
 - id: shotgun-change
   tag: find
   lens: architecture
-  tell: One concept is edited in five or more files.
-  asks: Is one concept spread over copies that must change together?
+  tell: "One concept changes in five or more files."
+  asks: "Do separate copies of one concept need changes together?"
   cost: The next change misses a copy.
 - id: feature-envy
   tag: find
   lens: architecture
-  tell: A call chain reaches through objects, such as `a.b().c().d()`.
-  asks: Does the caller depend on the internals of objects it does not own?
+  tell: "A call reaches through objects, for example `a.b().c().d()`."
+  asks: "Does the caller rely on internals of objects it does not own?"
   cost: A change inside `b` breaks distant callers.
 
 # Abstraction
@@ -68,29 +66,29 @@
 - id: flag-parameters
   tag: find
   lens: architecture
-  tell: A call passes positional booleans, such as `doThing(x, true, false)`.
-  asks: Can a caller pass a wrong combination without noticing?
-  cost: A wrong combination is passed.
+  tell: "A call uses positional booleans, for example `doThing(x, true, false)`."
+  asks: "Can the caller pass a wrong combination without noticing?"
+  cost: "The caller passes a wrong combination."
 - id: leaky-abstraction
   tag: find
   lens: architecture
-  tell: Callers must know the internals to use the unit correctly.
-  asks: Can a caller misuse the interface in a way that compiles?
+  tell: "A caller needs internal details to use the unit."
+  asks: "Can misuse still compile?"
   cost: Misuse compiles and fails at runtime.
 
 # State and data
 - id: two-sources-of-truth
   tag: find
   lens: architecture
-  tell: The same fact is stored or cached twice.
-  asks: Which copy wins when the two disagree?
-  cost: The copies drift and nobody detects it.
+  tell: "Two copies store or cache the same fact."
+  asks: "Which copy wins if they disagree?"
+  cost: "The copies diverge without detection."
 - id: derived-data-stored
   tag: find
   lens: architecture
-  tell: A total or status is persisted beside its inputs.
-  asks: What updates the stored value when an input changes?
-  cost: The stored value goes stale when an input changes.
+  tell: "Storage keeps a total or status with its inputs."
+  asks: "What updates the stored value when an input changes?"
+  cost: "An input change leaves a stale value."
 - id: stringly-typed
   tag: find
   lens: architecture
@@ -100,15 +98,15 @@
 - id: invalid-states-representable
   tag: find
   lens: architecture
-  tell: Fields form nullable pairs, or `status` and `errorMsg` can both be set.
-  asks: Can the type hold a combination the domain forbids?
-  cost: Code has to handle impossible combinations.
+  tell: "Fields form nullable pairs, or `status` and `errorMsg` can coexist."
+  asks: "Can the type hold a forbidden combination?"
+  cost: "Code must handle impossible combinations."
 - id: implicit-state-machine
   tag: find
   lens: architecture
-  tell: State transitions are scattered over `if` statements.
-  asks: Where is the set of legal transitions enforced?
-  cost: An illegal transition gets written.
+  tell: "Separate `if` statements scatter state transitions."
+  asks: "What enforces legal transitions?"
+  cost: "Code can write an illegal transition."
 - id: mutable-shared-state
   tag: find
   lens: architecture
@@ -120,9 +118,9 @@
 - id: unversioned-breaking-change
   tag: find
   lens: architecture
-  tell: A public API, schema or event shape changed.
-  asks: Do existing clients keep working across the deploy?
-  cost: Clients break on deploy.
+  tell: "A public API, schema, or event shape changes."
+  asks: "Do existing clients work during deployment?"
+  cost: "Deployment breaks clients."
 - id: wide-interface
   tag: find
   lens: architecture
@@ -144,41 +142,41 @@
 - id: inconsistent-error-contract
   tag: find
   lens: architecture
-  tell: One module mixes throwing, returning null and returning an error code.
-  asks: Does every caller handle the style it actually receives?
-  cost: Callers miss one error style.
+  tell: "One module mixes throwing, returning null, and returning error codes."
+  asks: "Does each caller handle the form it receives?"
+  cost: "Callers miss an error form."
 
 # Failure handling
 - id: swallowed-error
   tag: find
   lens: architecture
-  tell: An empty catch, log-and-continue, or `|| true`.
-  asks: Does a failure surface anywhere a caller or operator sees it?
-  cost: A broken run looks like success.
+  tell: "A path uses an empty catch, logs and continues, or uses `|| true`."
+  asks: "Can the caller or operator see the failure?"
+  cost: "Failure looks like success."
 - id: partial-write
   tag: find
   lens: architecture
   tell: A multi-step mutation has no transaction or up-front validation.
-  asks: What state is left if the process stops between steps?
+  asks: "What state remains if the process stops between steps?"
   cost: A crash leaves corrupt state.
 - id: non-idempotent-retry
   tag: find
   lens: architecture
   tell: A retry wraps a side effect.
-  asks: Is the side effect safe to repeat?
-  cost: A duplicate charge, email or row.
+  asks: "Is the side effect safe to repeat?"
+  cost: "The retry duplicates a charge, email, or row."
 - id: no-timeout-backpressure
   tag: find
   lens: architecture
-  tell: A new network or queue call.
+  tell: "Code adds a network or queue call."
   asks: What bounds the wait and the backlog?
-  cost: One slow dependency stalls everything.
+  cost: "A slow dependency blocks other work."
 - id: fallback-hides-failure
   tag: find
   lens: architecture
-  tell: A default value is returned on error.
-  asks: Can a caller tell the fallback from real data?
-  cost: Wrong data is served silently.
+  tell: "An error path returns a default."
+  asks: "Can the caller distinguish fallback from real data?"
+  cost: "The caller receives wrong data without warning."
 
 # Evolution and operation
 - id: irreversible-migration
@@ -191,20 +189,20 @@
   tag: find
   lens: architecture
   tell: A new flag or environment variable has no owner or removal plan.
-  asks: Who owns the setting and when does it go away?
-  cost: Combinations go untested.
+  asks: "Who owns the setting? When can the owner remove it?"
+  cost: "Tests miss setting combinations."
 - id: hardcoded-environment
   tag: find
   lens: architecture
-  tell: URLs, IDs or paths are written in code.
+  tell: "Code embeds URLs, IDs, or paths."
   asks: Does the value differ between environments?
   cost: The code breaks in another environment.
 - id: missing-observability
   tag: find
   lens: architecture
-  tell: A new path has no log or metric at its decisions.
-  asks: Could a production failure on this path be diagnosed?
-  cost: A production failure cannot be diagnosed.
+  tell: "A new path has no log or metric at decision points."
+  asks: "Can operators diagnose a production failure on this path?"
+  cost: "Operators cannot diagnose a production failure."
 - id: hot-path-cost
   tag: find
   lens: architecture
@@ -223,29 +221,29 @@
   tag: find
   lens: architecture
   tell: A test only asserts that stubs were called.
-  asks: Would the test pass with a broken implementation?
+  asks: "Would the test pass with a broken implementation?"
   cost: The test passes with a broken implementation.
 - id: rationale-misplaced
   tag: find
   lens: architecture
-  tell: Why-prose sits in code or instructions.
-  asks: Does the rationale belong in a reference document instead?
-  cost: Instructions bloat and drift.
+  tell: "Code or instructions contain rationale."
+  asks: "Does the rationale belong in a reference document?"
+  cost: "Instructions grow and diverge."
 - id: unverified-platform-claim
   tag: find
   lens: architecture
   tell: The design relies on assumed API or CLI behavior.
-  asks: Was the behavior checked against official docs or real output?
-  cost: The relied-on behavior does not exist.
+  asks: "Did someone verify the behavior against official docs or real output?"
+  cost: "The design relies on absent behavior."
 - id: dead-speculative-code
   tag: find
   lens: architecture
-  tell: Unused parameters or "for later" branches.
-  asks: Does anything run this code today?
-  cost: Paths nobody runs still need maintaining.
+  tell: "Code has unused parameters or branches for future use."
+  asks: "Does any current path use them?"
+  cost: "Unused paths need maintenance."
 - id: reinvented-wheel
   tag: find
   lens: architecture
-  tell: A hand-rolled version of an existing utility or library.
-  asks: Does an existing implementation already do this?
-  cost: Two implementations drift apart.
+  tell: "Code implements its own version of an existing utility or library."
+  asks: "Does the existing implementation serve this case?"
+  cost: "The implementations diverge."

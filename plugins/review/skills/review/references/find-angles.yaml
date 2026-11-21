@@ -1,8 +1,8 @@
-# review find angles for a diff. Rows follow converge's angle schema:
-# id (kebab-case, unique across every angle file), tag, tell, asks, optional lens.
+# Use the Converge angle schema. Use a unique kebab-case ID across all angle files.
+
 - id: changed-contract
   tag: find
-  tell: A signature, return value, error or semantics changed.
+  tell: "A signature, return value, error, or behavior changes."
   asks: Which callers assume the old contract?
 - id: removed-behavior
   tag: find
@@ -34,29 +34,29 @@
   asks: How does the change behave with the flag off?
 - id: test-cant-fail
   tag: find
-  tell: A test was added or changed.
-  asks: Would the test fail if the code under test were wrong?
+  tell: "The change adds or edits a test."
+  asks: "Would the test fail with wrong code?"
 - id: ticket-diff
   tag: find
   tell: A ticket is linked to the change.
-  asks: What did the ticket ask for that the diff lacks, and what does the diff do that the ticket did not ask for?
+  asks: "What work from the ticket does the diff omit? What work does the diff add beyond the ticket?"
 - id: odd-old-code
   tag: find
   tell: The changed old code looked odd.
-  asks: Why was it like that? Check `git log -S` and blame before removing it.
+  asks: "Check `git log -S` and blame for the reason before removal."
 - id: inverse-pr-text
   tag: find
   tell: The description claims a behavior.
-  asks: Read the claim as its opposite; does the diff still fit?
+  asks: "Reverse the claim. Does the diff still fit?"
 - id: external-limits
   tag: find
-  tell: New or changed code calls an external service that has quotas, rate limits or payload caps.
-  asks: Does the call stay within the documented limits at expected volume and payload size?
+  tell: "Changed code calls an external service with quotas, rate limits, or payload caps."
+  asks: "Does the call meet documented limits at expected volume and payload size?"
 - id: timing-env-dependent-test
   tag: find
   tell: A test sets a timeout, sleeps, or reads environment variables or machine state.
-  asks: Does it still pass on a slower machine or with other environment values, and what sets its timeout?
+  asks: "Does it pass on slower machines or with different environment values? What sets the timeout?"
 - id: new-throw-on-shared-path
   tag: find
-  tell: A refusal, validation or exception is newly thrown from a method, interceptor or aspect that existing callers already invoke.
-  asks: Which callers catch broadly or run inside a transaction, and what happens to them and to the transaction when it throws?
+  tell: "An existing method, interceptor, or aspect starts throwing a refusal, validation error, or exception."
+  asks: "Which callers catch broadly or run in a transaction? What happens to each caller and transaction?"

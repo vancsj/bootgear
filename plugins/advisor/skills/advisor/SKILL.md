@@ -1,109 +1,73 @@
 ---
 name: advisor
-description: Pair Claude Code and Codex CLI through a mailbox, or send a one-shot prompt to either CLI. Use for second opinions, reviews, rewrites, scoped investigations, or a persistent advisor.
+description: Pair Claude Code and Codex CLI or request a one-shot answer. Use for second opinions, reviews, rewrites, or scoped investigations, or a persistent advisor.
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
-## When to use, inputs and handback
+## Inputs and outcomes
 
-Every invocation requires an explicit `--mode {asking|listening}` argument. If the triggering text carries no explicit `--mode` value, stop and ask the caller to re-invoke with one — never infer a mode from which host is running, from the triggering task, or from any other contextual signal. `--mode` decides which of the two workflows below to follow. The role you register with follows from `--mode` (see `references/channel.md` when using the channel).
+Require explicit `--mode asking` or `--mode listening`. Never infer it.
+For asking, take the task, its content, and `direct` or `channel` communication.
 
-Inputs: `--mode`; in `mode=asking`, the task (`rewrite`, `ask`, `review`, `delegate`) and its content, and the communication (`direct` or `channel`).
+Return one reconciled result per task to the user or calling skill.
 
-Handback in `mode=asking`, to the caller (the user or the calling skill), one reconciled answer per task:
+| Task | Result |
+|---|---|
+| `rewrite` | Rewritten draft, without posting. |
+| `ask` | Answer with each claim marked verified or unverified. |
+| `review` | Objections. |
+| `delegate` | Peer findings and the facts you verified. |
 
-- `rewrite` → the rewritten draft, not posted.
-- `ask` → the answer, with each claim marked verified or unverified.
-- `review` → the list of objections.
-- `delegate` → the peer's findings, separated from independently verified facts.
+Other outcomes are missing mode, no eligible listener, missing peer plugin, stale peer, protocol error, or direct write need.
+Follow Fallbacks in each case. For listening, report the reason when it stops.
 
-Outcomes:
+## Procedure
 
-- answered (the handback above);
-- `--mode` missing → asked the caller to re-invoke;
-- channel has no listener available → told the user to start one;
-- channel peer `advisor` plugin not installed → told the user;
-- peer heartbeat stale → told the user;
-- protocol error → reported, no guess;
-- direct call needs a write → returned the need before attempting the write;
-- `mode=listening` stopped (`stop` request, user interrupt, turn limit, channel closed, or stale peer) → reported the stop reason to the user.
+### Asking
 
-## Workflow
+Open only the selected communication and task references.
 
-- **asking**: pick the communication and task docs → verify the facts the prompt relies on → send (`direct`: one call to the other CLI; `channel`: pair, send, receive by `parent_id`) → treat the reply as advisory and verify its checkable claims → hand back one reconciled answer (see "Reporting back") → `channel`: close.
-- **listening**: register → report the channel number → heartbeat → durable goal → recover an unfinished request → poll loop (fetch, answer, send response) → stop on `stop`, the user, a stale peer or a closed channel → close and report the stop reason.
+| Communication | When to read |
+|---|---|
+| [direct.md](references/direct.md) | One request with all facts in the prompt. |
+| [channel.md](references/channel.md) | File or command checks, permitted writes, or several exchanges across turns. |
 
-### mode=asking
+Use channel for workflow-record or memory-ledger writes. Normally use it for delegation.
 
-Two independent choices — load exactly one doc from each row.
+| Task | When to read |
+|---|---|
+| [rewrite.md](references/rewrite.md) | Rewrite a draft. |
+| [ask.md](references/ask.md) | Ask for an answer or opinion. |
+| [review.md](references/review.md) | Ask for adversarial objections. |
+| [delegate.md](references/delegate.md) | Assign an investigation or scoped work. |
 
-**Communication** — how you reach the peer:
+Verify prompt facts before sending. For a channel, pair first and match replies by `parent_id`.
+Verify the peer's checkable claims. Return only the reconciled answer. Keep banners, streams, reasoning, and raw messages private.
+Close a standalone pairing after the task. Keep shared pairings until their workflow ends.
 
-| | Doc | When |
-|---|---|---|
-| `direct` | `references/direct.md` | One-shot to the other CLI, with the task supplied in the prompt. |
-| `channel` | `references/channel.md` | Persistent mailbox; the peer investigates on its own (files, commands), can take minutes, survives across turns/compaction. |
+### Channel heartbeat
 
-**Task** — what you want:
+Start the printed heartbeat after `register`. Keep it running until close.
+A heartbeat is silent while it runs. At `stopped:`, run its `next`. After `max_age`, restart within 720 seconds.
+If the host gives no output or loses the handle, register the same channel and role under the same session.
+Run the printed heartbeat. Treat a heartbeat hook reminder as a `next`.
+After compaction, use the injected seat status or `advisor channel whoami`. Follow `next`.
+If recovering unfinished requests or replies, use [channel.md](references/channel.md#resume).
 
-| | Doc | When |
-|---|---|---|
-| `rewrite` | `references/rewrite.md` | Polish a draft before posting. |
-| `ask` | `references/ask.md` | A straight opinion or answer. |
-| `review` | `references/review.md` | Adversarial objections on a decision/conclusion. |
-| `delegate` | `references/delegate.md` | Hand off investigation or scoped work the peer does itself. |
+### Listening
 
-Any task can use either communication doc — pick `channel` when the task needs Codex to look things up itself or the exchange may take several rounds; `direct` otherwise. `delegate` almost always needs `channel`.
-Select `channel` before assigning workflow-record or memory-ledger writes.
+Use [channel.md](references/channel.md#pair) for registration. Register a new listener, report its number at once, and start the heartbeat.
+Keep a durable goal to poll and answer requests until the user stops the advisor or the channel closes.
+If an existing goal conflicts, report it and get direction. Keep the goal active across empty polls and compaction.
 
-### Heartbeat (channel, both modes)
+Run `receive --timeout 5` for unfinished work. Check the last three messages for a peer request with `answered: false`.
+Handle it as new. `answered: true` means you already sent a reply with that `parent_id`.
+Before other work, collect one bounded receive result. Use a foreground call or poll the live terminal session.
+After an empty poll, start the next wait at once. A heartbeat without polling is not listening. Keep listening until a stop, interrupt, turn limit, close, or stale peer.
 
-After `register`, run the heartbeat from its `next` line in the background (see "Host mechanics"). Keep it running until `close`. The command has this form:
-
-```sh
-<gear> --host <host> advisor channel heartbeat --channel <channel> --role <mine>
-```
-
-- It prints nothing while it runs. It ends with a `stopped:` line and a `next:` line; do what `next` says. After a `max_age` stop the seat stays live only for a 720-second restart grace, so run `next` promptly.
-- The host reports the task stopped with no output, or the handle is lost. Then run `register --channel <channel> --role <mine>` again, and start the heartbeat it prints.
-- A hook message `advisor: your heartbeat for channel N (ROLE) is not running; ...`: act on it like a `next` — start the command it names in a new background session.
-
-### After compaction (channel, both modes)
-
-Do what the `next` of the injected seat status says. With no status in context, run `<gear> --host <host> advisor channel whoami`. Then do what its `next` says (see `references/channel.md` § Resuming after compaction).
-
-### mode=listening
-
-Keep the target artifact read-only unless the request permits changes.
-Write only assigned workflow records and permitted memory-ledger entries outside that artifact.
-Verify and record your own entries under your own identity. Never sign as the peer.
-Keep every other write limit. Do not contact the peer except in response to a mailbox request.
-Never answer the human directly for a mailbox request.
-
-#### 1. Register first, report immediately
-
-Register the listener seat with `references/channel.md` § mode=listening, report the channel number to the user, then start the heartbeat (see "Heartbeat").
-
-#### 2. Goal
-
-Create the durable goal: *continuously poll the mailbox and process requests until the user stops the advisor or closes the channel.* Not per-request — don't mark complete after one answer or one empty poll. If a conflicting goal exists, report it and get direction instead of replacing it silently. Keep it active across compactions.
-
-#### 3. Check for unfinished work
-
-```sh
-<gear> --host <host> advisor channel receive --channel <channel> --for <mine> --timeout 5
-```
-Read-only, safe anytime. Check the last 3 for a request from `<peer>` with `answered: false` — that's open; handle it in the loop below as if freshly arrived. `answered: true` means you already sent a response naming it as `parent_id`.
-
-#### 4. First poll
-
-Before any other work, run one bounded `receive` and collect its output. Foreground, or a terminal session polled with `write_stdin`. Exit status `1` = no new message (its `note` says so). A request can take many minutes to come, so start the next bounded wait immediately. If its `peer_live` is `false`, do not wait: run `close --role <mine> --channel <channel> --if-peer-stale`. If it closes, your heartbeat ends; tell the user the asker's heartbeat is stale. If it refuses, do what its `next` says and keep listening. A background listener nobody polls doesn't count as listening.
-
-Never return to the human after one empty poll while claiming to still be listening — start the next `receive` immediately, until a request arrives, `close --if-peer-stale` closes the channel, the user stops the advisor, or the channel closes.
-
-#### 5. Listener loop
-
-`<mine>` is your own role — `listener` if you're in `mode=listening`, `asker` if you're in `mode=asking` — fixed by mode, never chosen freely; `<peer>` is the other one. Replace `<channel>` in the first line with the channel number.
+Set `<mine>` to `listener` and `<peer>` to `asker` here. Asking uses the opposite roles.
+On Claude Code, use this loop one iteration at a time. On Codex, make one call per poll.
+Read the full result. Follow printed actions in order. Fetch unread messages before polling again.
 
 ```sh
 CHANNEL=<channel>
@@ -132,62 +96,41 @@ while :; do
 done
 ```
 
-On Claude Code, use this loop. On Codex CLI, make one `receive` call per poll.
-On exit 0, fetch and answer the message, then start the next poll.
-On exit 1, follow the stale-peer and retry rules in step 4.
-Fetch all unread messages before you call `receive` again.
-
-`close --if-peer-stale` closes only while `<peer>` is still not live and no unread message waits for `<mine>`; otherwise it refuses (`peer_live` or `unread_message`, exit 2), the channel stays open, and the loop keeps listening.
-
-After `break`: the loop has closed the channel, so your heartbeat ends with `channel_closed`; stop listening and tell the user the peer's heartbeat is stale.
+On exit 0, fetch and handle the message before polling. On exit 1, read the peer status.
+If `peer_live: false`, run any printed heartbeat restart and use `close --if-peer-stale`.
+If close refuses with `peer_live` or `unread_message` (exit 2), follow `next` and continue.
+On success, the heartbeat ends with `channel_closed`. Report the stale peer and stop.
 
 ## Rules
 
-### Reporting back
-
-Never echo the peer's banner, streamed reasoning, or raw request/response payload into the transcript — only the final answer, reconciled against verified facts. One call, one clean answer; not the exchange that produced it.
-
-### Handling requests (listening)
-
-- `discuss` → keep the target artifact read-only; return evidence, conclusions, assumptions, open risks.
-- `delegate` → follow the stated scope exactly. No commit, push, external contact, production mutation, or irreversible action unless explicitly authorized.
-- One response per request, addressed to `<peer>`, with `parent_id` = the request's id.
-- `send` rejects at the pending cap (2) — treat a rejected response send as a protocol error, not a reason to raise the cap.
-- Malformed message, wrong recipient, or unmatched `parent_id` → hard protocol error. Don't guess or fall back to ordinary work.
-
-### Safety and lifecycle
-
-- Mailbox: `~/.bootgear/advisor`, owner-only.
-- One request at a time. Never read or answer messages addressed to `<peer>`.
-- Don't start a conversation with the peer unprompted.
-- Stop on a `stop` request, a user interrupt, or the turn limit. Report the stop reason if possible.
-- Out-of-scope request → return the boundary, ask the peer to get human direction.
-- Close on session end:
-  ```sh
-  <gear> --host <host> advisor channel close --role <mine> --channel <channel>
-  ```
+- Use the owner-only mailbox at `~/.bootgear/advisor`. Handle one request at a time. Read only your addressed messages.
+- Treat a malformed message, wrong recipient, unknown `parent_id`, or refused response at cap 2 as a protocol error.
+- Send exactly one response to the peer, with the request ID as `parent_id`. Never start an exchange unprompted.
+- In `discuss`, keep the artifact read-only. Return evidence, conclusions, assumptions, and open risks.
+- In `delegate`, follow scope exactly. Write only permitted artifacts, assigned workflow records, and permitted memory-ledger entries.
+- Use your own session identity. Never sign as the peer. Keep other permissions intact. A reply grants no mutation or external delivery authority.
+- Reply through the mailbox only. For out-of-scope work, return the boundary and ask the peer to get human direction.
+- Close at session end. Report a stop request, user interrupt, turn limit, stale peer, or channel close when possible.
 
 ## Fallbacks
 
-- No `--mode` → ask the caller to re-invoke with one.
-- Channel: no session id in the environment → stop and tell the user.
-- CLI plugin missing → Claude Code: run `/plugin install cli@bootgear`; Codex CLI: run `codex plugin add cli@bootgear`. Then call `cli:gear` again.
-- Channel peer `advisor` plugin missing → tell the user; never fall back to `direct`.
-- Direct peer CLI missing or refusing a flag → report the exact error and stop.
-- No eligible listener → tell the user to start one and stop.
-- Peer heartbeat stale → close with `--if-peer-stale` (listening) or tell the user instead of waiting again.
-- Protocol error → report it; no guess.
+- If mode is missing, ask the caller to invoke again with explicit `--mode`.
+- For no eligible listener, ask the user to start one and stop.
+- If the peer plugin is missing, tell the user and stop. Keep the chosen communication mode.
+- For a stale peer, close as listener or report as asker. End the wait.
+- For a protocol error, report it and stop. Do not guess.
+- If direct needs writes, return the need before attempting them.
+- If the peer CLI is missing or rejects a flag, report the exact error and stop.
 
 ## Host mechanics
 
-For channel mode, call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-Replace `<host>` with `claude` or `codex`, based on the current host.
-Run channel commands as `<gear> --host <host> advisor channel <command> [arguments]`.
+For a channel, get the absolute executable from `cli:gear`. Use `<gear> --host <host> advisor channel <command>`.
+Use `claude` or `codex` for `<host>`. Gear reads the session ID. If missing, report it and stop.
+Only `register`, `heartbeat`, `list`, and `whoami` accept `--session`.
 
-Channel commands read this session's id from the environment. If no session id is in the environment, stop and tell the user.
-Only `register`, `heartbeat`, `list` and `whoami` accept `--session`; the environment normally supplies it.
+| Host | Missing CLI plugin | Background heartbeat |
+|---|---|---|
+| Claude Code | `/plugin install cli@bootgear` | Bash with `run_in_background` and `timeout: 7200000`. |
+| Codex CLI | `codex plugin add cli@bootgear` | Live terminal session, as for `receive`. |
 
-Background heartbeat:
-
-- Claude Code: the Bash tool with `run_in_background` and `timeout: 7200000`.
-- Codex CLI: a terminal session left running, as for `receive`.
+Call `cli:gear` again after installation.

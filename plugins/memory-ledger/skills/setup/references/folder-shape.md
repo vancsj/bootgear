@@ -1,10 +1,7 @@
 # Folder shape
 
-`OVERSIZE` means a folder holds more direct entries than the cap and should be
-split; the line names candidate sub-folders and marks the ones that already
-exist, which are the cheapest splits because the destination and its `_about.md`
-are already there. `REGROUP` is the softer version for folders under the cap.
+`OVERSIZE` means a folder exceeds the direct entry cap. `REGROUP` suggests a split below the cap.
+Prefer an applicable listed folder with an existing `_about.md`.
 
-Both are advisory and neither has a `--fix`. Offer to do a split; do not perform
-one unasked. When you do move entries, fix the `# <slug>` header in each and
-re-run `lint`.
+Both results are advisory and have no `--fix`. Offer a split and wait for approval.
+When you move entries, update each `# <slug>` heading. Run `lint` again.

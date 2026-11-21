@@ -2,8 +2,8 @@
   tag: find
   lens: default
   tell: The triage report has a row in its `## Claims` table.
-  asks: File each row as one cause claim, in row order, with the row's tier. The claim id must equal the row id. Put the row command and output in the evidence.
+  asks: File one cause claim per row in order. Use the row ID and tier for the claim. Include its command and output.
 - id: reproduction-rerun
   tag: attack
-  tell: The claim quotes a reproduction command and its output.
-  asks: Run the quoted command again. Does the observed output match the quoted output in substance? Do not compare exact strings. Put the command and the observed output in the evidence. If the command fails or the output does not match, record the attack as refuted.
+  tell: The claim quotes a reproduction command and output.
+  asks: Rerun the command. Compare meaning. Include the command and actual output. Record the attack as refuted on failure or mismatch.

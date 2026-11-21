@@ -1,11 +1,9 @@
-# task=delegate
+# Delegate
 
-Hand off investigation (`discuss`) or scoped work (`delegate`) to the peer.
-Use channel mode when it must read files, run commands, or exchange several messages.
+Use `discuss` for a read-only investigation and `delegate` for scoped work.
+Use a channel if the peer needs files, commands, or several exchanges.
 
-## Request body
-
-```
+```text
 TYPE: discuss
 USER_REQUEST:
 ...
@@ -15,14 +13,10 @@ SCOPE:
 ...
 ```
 
-Include `discuss` or `delegate`, the question or work, relevant paths, decisions, constraints, and permitted changes.
-Name the target artifact and each workflow record the role can write.
-Permit memory-ledger lookup and record, including for roles that keep the target artifact read-only.
-Select `channel` for these writes. The role verifies and records its own entries under its own identity.
-Keep judging roles independent. Exclude author private analysis and another judging role's reasoning.
+Set the type to `discuss` or `delegate`. Give the work, paths, decisions, constraints, and allowed changes.
+Name the artifact and each writable workflow record. Allow memory-ledger lookup and writes within the role's limits.
+Select channel for these writes. Require the peer to verify and record with its own identity.
+Keep author analysis and other roles' reasoning out of judgment briefs.
 
-## Handling the response
-
-- The peer's response is advisory; reconcile against the repo, contracts, and intent.
-- Distinguish the peer's findings from verified facts. Claim it did work only when its response shows evidence.
-- No commit, push, external contact, production mutation, or irreversible action from a delegated response alone, unless the original scope explicitly and safely authorized it.
+Check the response against the repo, contracts, and intent. Distinguish peer findings from verified facts.
+Claim completed work only with evidence. Keep commit, push, outward sends, production, and irreversible actions within original permission.

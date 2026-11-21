@@ -1,9 +1,7 @@
 # Instructions-file section
 
-The facts the setup adds, and nothing more:
+Add only these rules.
 
-- Reads span every open ledger; `--only shared|local|deputy` narrows.
-- `new` needs `--shared`, `--local` or `--deputy`, and there is no default.
-- Shared history is append-only. Judge the entry and write it; ask only when you
-  genuinely cannot place it — it reads general but leans on this machine, or it
-  is about a person.
+- Search all open ledgers. Use `--only shared|local|deputy` to narrow the search.
+- For `new`, choose `--shared`, `--local`, or `--deputy`. There is no default.
+- Keep shared history append-only. Choose the ledger. Ask only about unclear placement or facts about a person.

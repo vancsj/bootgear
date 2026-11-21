@@ -1,92 +1,69 @@
 ---
 name: test
-description: Write test cases, run them, and read or triage reports. Works standalone and delegates to a project's matching test skill when one exists.
+description: Write and run test cases, or classify test failures. Use for direct testing or a test stage in Engine.
 ---
 
-In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+## Inputs and outcomes
 
-Use this skill when a task needs test cases written, tests run, or a failure understood.
+Take the change, requirement, or failure output. In Engine, also take `<engine-root>`, `<session-dir>`, and the sub-task label.
+Report each sub-task to `execute` in Engine or to the user in standalone use.
 
-Inputs: the change or requirement, or the failing output to triage. Inside an active `engine` run, also `<engine-root>`, `<session-dir>` and the sub-task label passed by `execute`. The run id comes from the environment.
+- **Cases written:** path and coverage.
+- **Run performed:** exact command and actual pass or fail output. State when a run did not occur.
+- **Triage:** one classification per failure, with its error text or stack trace and whether it blocks the task.
 
-## Reporting back
+Engine uses the report for todos and goal checks. Leave the broader completion decision to Engine.
 
-Report each sub-task separately:
+## Procedure
 
-- **cases written** — location and coverage.
-- **run performed** — exact command and actual pass/fail output. State separately if it was not run.
-- **triage** — one classification per failure, with its error text or stack trace, and whether it's blocking (see "Reading and triaging reports"). Never combine failures into one conclusion.
+### Select a test skill first
 
-The report goes to the caller: `execute` inside an active `engine` run, the user standalone. Inside a run, this report is input to `execute`'s todo updates and goal check. `test` does not decide whether the broader task is complete.
+1. In Engine, read `<gear> --host <host> engine task session read --section settlement`.
+   Read `test_override` and the full decisions. Use the latest valid `AMENDMENT test_override`.
+   - Use a bare skill name for every sub-task.
+   - For a mapping, use the exact label from `execute`.
+   - If no override or label matches, use the default here. End the search.
+2. In standalone use, check for a project test skill for the sub-task. Use it if present.
+3. Otherwise, use the default.
 
-## Workflow
+Pass active run paths to the override. Require the same report format. Keep an invalid override report visible.
 
-Check for an override → write cases (if asked) → run → triage failures → report back to the caller.
+### Write, run, or triage
 
-## Check for an override first
+Use only the requested sub-tasks.
 
-Before any other action:
+1. **Write cases.** Cover the requested behavior and edge cases. Use the project's framework and conventions.
+   If none apply, choose a simple approach and report it.
+   If `.bootgear/config/test-standard.md` exists, cite its applicable rule ID for each case.
+2. **Run tests.** Run the affected suite. Record the exact command and actual output.
+3. **Triage failures.** Use the real output. Classify each as a regression, a flaky or environmental failure, or an incorrect test.
+   Cite the error text or stack trace for each classification.
+   - If a regression cites a test standard rule, compare its severity with `cutoff`.
+   - At or above `cutoff`, mark it blocking. Below `cutoff`, report it as non-blocking.
+   - If there is no cited rule or test standard, mark the regression blocking.
 
-1. If running inside an active `engine` run, read the settlement:
+## Rules
 
-   ```text
-   <gear> --host <host> engine task session read --section settlement
-   ```
+Scale coverage to risk. For a small change, write a few cases and run the affected tests.
+For a large or high-risk change, expand coverage. Run unit tests plus integration or end-to-end tests.
+Triage each failure with evidence.
 
-   Read `test_override`, then scan the active run's full decisions for an `AMENDMENT test_override`; the latest valid value wins.
+For delegated writing or triage, name the host user-principles file, project principles, and each project standard when present.
+Add the settlement's `principles` in Engine. Tell the role to read these rules first.
+For a read-only role, name the target and each permitted workflow record.
+Allow memory-ledger lookup and writes. Keep role independence and other write limits.
 
-   - For a bare `<skill-name>`, use that skill for every sub-task.
-   - For a mapping, use the entry matching the exact sub-task label passed by `execute`. Do not infer the label.
-   - If the override is absent, or the mapping has no matching label, use this skill's default. Do not search again.
+## Fallbacks
 
-2. If `test` was invoked directly without an active run, check for a project testing skill matching the sub-task. Delegate if one exists.
-
-3. Otherwise, use the default implementation below.
-
-When delegating inside an active run, pass `<engine-root>` and `<session-dir>` using the active run's handoff contract. The override must use the reporting format in "Reporting back". Do not adapt this skill to compensate for an override that does not.
-
-## Default implementation
-
-Use only the sub-tasks required by the request:
-
-1. **Writing test cases.** Given a change or requirement, write cases for the stated behavior and its edge cases. Use the project's existing framework and conventions. If none are evident, choose the simplest reasonable approach and state that choice. If `.bootgear/config/test-standard.md` exists, apply its rule IDs and cite the specific rule for each case. When you delegate test writing or triage to an agent, name `.bootgear/config/principles.md`, the host user-principles file and each standard file in `.bootgear/config/` in its brief, each when present. In an active run, add the `principles` text of the settlement. Tell it to read the files first.
-
-2. **Running tests.** Run the relevant suite and record the exact command and actual output.
-
-3. **Reading and triaging reports.** Use the actual failure output. Classify each failure as a real regression, a flaky or environmental failure, or an incorrect test. Include the error text or stack trace supporting each classification.
-
-   If a regression cites a `.bootgear/config/test-standard.md` rule, mark it blocking when the rule's severity is at or above `cutoff`, non-blocking (reported but not a blocker) when below. No cited rule, or no `test-standard.md`: treat as blocking.
-
-### Scaling to the change
-
-Name the target artifact and each permitted workflow record when briefing a read-only testing role.
-Permit memory-ledger lookup and record. Keep its other write limits and judging independence.
-
-For a small change, write a few cases and run the relevant tests.
-
-For a large or high-risk change, expand case coverage, run integration or end-to-end tests as well as unit tests, and triage every failure with its supporting evidence.
+If a required sibling skill is missing, stop. Report `cli:setup` for target `test` and resume after it verifies dependencies.
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
+Get the absolute path from `cli:gear`. Choose the current host below.
+In Engine, keep the caller's `<engine-root>` and `<session-dir>`. Gear reads the run ID from the environment.
+Omit `--dir` for `~/.bootgear/session`. Pass `--dir <session-dir>` for a custom directory.
 
-### Claude Code
-
-Use `claude` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-- Keep `<engine-root>` from `execute`'s handoff for the session data.
-
-### Codex
-
-Use `codex` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
-- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Keep `<engine-root>` from the caller for active-run handoffs.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `test` as the next step.
-Resume after setup verifies the required plugins.
+| Host | `<host>` | Install missing CLI |
+|---|---|---|
+| Claude Code | `claude` | `/plugin install cli@bootgear` |
+| Codex | `codex` | `codex plugin add cli@bootgear` |

@@ -1,403 +1,163 @@
 ---
 name: debate
-description: Run a multi-party decision debate when `resolve` cannot settle a decision that passes `debate_threshold`; stop at `debate_round_cap`.
+description: Settle an unresolved Engine choice with several parties. Use when the choice passes the debate threshold.
 ---
 
-Run `debate` when `resolve` cannot settle a decision, or on a direct call that
-`debate_admission` allows. It is part of `engine`; do not require another debate
-mechanism. Input: the plain decision, the settled source text
-and `principles`, and the caller's converge render when it has one.
+## Inputs and outcomes
 
-Read `session_dir` from the settlement unconditionally. Pass every free-text
-value as its own argument to the public session interface. The CLI owns the
-exact command syntax and refusal shape.
+Take the decision, settled sources, principles, and any caller Converge render.
+Require an unsettled `resolve` result or an admitted direct call. Use Engine's debate.
 
-Before recording anything, classify the dispute. Send a fact that code, evidence, or a check can settle to `converge`. Return `inconclusive` for a factual question with no source that can settle it. Debate choices only.
+Return one result to `resolve` or the admitted caller.
 
-Require an unsettled `resolve` result or an admitted direct call. For a direct call, require all of the following:
+| Result | Handback |
+|---|---|
+| **Refused** | Factual dispute or failed admission check. Record nothing. Route to `converge` or `resolve`, respectively. |
+| `inconclusive` | No source can settle a fact. Record nothing. |
+| **Deputy assertion** | Answer and cited slugs on an admitted direct call. Dispatch no parties. |
+| **Closed question** | Question ID, closing outcome, answer, dissent, and absence data. |
 
-- The manifest's `debate_admission` names the caller.
-- A plain decision and at least two conflicting live alternatives.
-- The caller checked its sources of truth and settled principles without deciding.
+For `consented_stop` or `round_cap`, return main's decision. Include any answer from `resolve` after a stall.
+`scope_settled` ends only round 0.
+
+## Procedure
+
+### Admit and brief
+
+Before recording, classify the dispute. Send facts with a possible check to `converge`. Return `inconclusive` for an uncheckable fact.
+For a direct choice, require all four conditions.
+
+- `debate_admission` names the caller.
+- The caller supplies a plain decision and at least two conflicting live options.
+- The caller checked the settled sources and principles without a decision.
 - The choice passes `debate_threshold` for reversibility and impact.
 
-Otherwise refuse the direct call and name the failed check. Never record a refusal. Require the admitted caller to assemble the full brief.
+Name the failed check on refusal. Require an admitted caller to assemble the full brief.
 
-## Handback
+Use `recall` for full decisions and effective settlement. Read `session_dir` there.
+Use the settled `debate_party_config`, roster, custom parties, cap, consent and convergence policy, and admission.
 
-Hand back to the caller (`resolve`, or the admitted direct caller) exactly one
-of these outcomes:
+Give each party these items at round 0 and each later round.
 
-- **Refused** — a factual dispute (the caller uses the `converge` skill) or a
-  direct call that failed a check (names the failed check; the caller routes
-  through `resolve`). Nothing is recorded.
-- **`inconclusive`** — a fact no source can settle. Nothing is debated.
-- **Deputy assertion** — the asserted answer and its cited slugs on an admitted direct call. No parties are dispatched.
-- **A closed question** — the question ID, the closing outcome
-  (`unanimous_convergence`, `consented_stop`, `round_cap`, or
-  `degraded_convergence`), the decided answer (the main agent's decision for
-  `consented_stop` and `round_cap`, including a `resolve`-supplied answer after
-  a stuck round), and the preserved dissent and absence data recorded with it.
+- The decision, all `source_of_truth` domains, `debate_threshold`, and the reason it applies.
+- `task_type`, `goal`, and merged user, project, and task principles. Omit `approach`.
+- Existing project standard paths in `.bootgear/config/`. Tell each party to read them first.
+- The caller's Converge render, when present. Treat `survived` and killed claims as settled. Keep disputed findings and unverified follow-ups open.
 
-A `scope_settled` close ends round 0 only; it is not a handback.
+Include `deputy_slugs` from `resolve` as past user decisions. Ask each party if each still applies.
+Record the reason for each departure. Do not ask deputy again.
+For an admitted direct call, ask `deputy:ask` before dispatch. Use cited slugs in the same brief.
+Return any `assertion` without dispatch. If deputy is absent, record `no-deputy:not-installed` and omit slugs.
 
-## Workflow
+### Parties
 
-Check admission (direct calls) → classify fact or choice → recall the
-settlement and brief → get or resume the question ID → round 0 scoping →
-rounds (round-start recheck; a stuck round goes to `resolve`; an unavailable
-party follows the retry rules) → angle round on agreement → close with exactly
-one outcome → hand back.
+Dispatch only enabled stable IDs in `debate_roster`. Use 2–5 parties, including `main-agent`. Exclude external review and Converge roles from that count.
+Use configured labels in prose only. Record the stable ID.
+Apply `label`, `prompt`, `mechanism`, and `enabled` from `debate_party_config.parties.<id>`.
+Append `advisor_roles.brief` for an advisor. Reject invalid configuration before dispatch.
+Custom parties use `{id, label, prompt, mechanism}`. Use a host-supported mechanism.
 
-## Before debating
+### Round 0: scoping
 
-Call `recall` for the effective settlement and full decisions. Read the roster, custom parties, round cap, convergence and consent policy, and admission. Read the sources of truth, threshold, task type, goal, and principles. Use the settled `debate_party_config` snapshot.
+Resume the open question from `recall`. Otherwise run `session next-question-id` and use its printed round-0 submission.
+If it refuses for an open question, resume that question.
 
-Brief every party, in round 0 and every later round, with:
+Each enabled party gives its own topic, scope, principles, and cutoff. Record a real position or marker for each.
+Discuss once. Each party agrees, refines, or refutes named points. Main records the scope and unresolved caveats.
+Allow dissent. For an all-marker round, use the `debate-degraded` path. Otherwise submit `scope_settled` and use the printed round-1 submission.
 
-- the plain decision
-- `source_of_truth` for every domain
-- `debate_threshold` and why the decision reached `debate`
-- the run's `task_type` and `goal`
-- merged user, project, and task principles
-- the paths of the project's standard files in `.bootgear/config/`, each when
-  present, and the instruction to read them first
-- the caller's converge render, when it has one: its findings with status
-  `survived` and its killed claims are settled facts, and parties argue only
-  the choice, not those facts; its `disputed` findings and `unverified`
-  follow-ups are not settled
+### Rounds
 
-Do not use `approach`.
+Record one position per party as it arrives. Preserve earlier entries and omit unchanged restatements.
+Require independent round-1 positions. From round 2, require each party to answer each other's latest position.
+Use agreement, refinement, or refutation of named points.
 
-When `resolve` supplied `deputy_slugs`, include them in the brief as the user's past decisions the debate starts from. Each party states, for every entry, whether it still applies; a party that departs from an entry gives its reason, recorded with its position. Make no second deputy ask in that case.
+At each round start, run `recall` and brief from that effective state. Finish the round under that state.
+Apply roster, party, and cap amendments at the next start. Preserve recorded rounds.
+Keep remaining parties. Drop removed parties after any retry owed. Brief added parties for an independent first position.
 
-When debate is admitted as a direct call (`debate_admission`), call `deputy:ask` for the decision before party dispatch (production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it), pass its cited slugs the same way. If its `source` is `assertion`, hand that answer back to the caller without dispatching parties. If `deputy` is not installed, record `no-deputy:not-installed` and dispatch without `deputy_slugs`.
+If the cap holds at the next start, close with `debate-capped` after any owed retry.
+If a round stalls or compaction interrupts it, read only the relevant section of [round-recovery.md](references/round-recovery.md).
+If dispatch fails or a reply is unusable, read [unavailable-party.md](references/unavailable-party.md) for the marker and retry rules.
+Keep absence episodes separate.
 
-## Open and scope the question
+### Recording
 
-Resume the open question found by `recall`. Otherwise run `session next-question-id` and use its printed round-0 submission. On refusal for an open question, resume the named debate.
-
-In round 0, each enabled party independently states its topic, scope, principles, and cutoff understanding. Record a real position or an absence marker for each party. Discuss once, with each party agreeing, refining, or refuting named points. The main agent synthesizes the scope and preserves unresolved caveats. Unanimity is optional. An all-marker scoping round takes the `debate-degraded` path instead of `scope-settled`.
-
-Submit the round-0 synthesis using the closing format below. Then use Gear's printed round-1 submission.
-
-## Parties
-
-Read stable IDs from `debate_roster`. Invoke exactly its enabled IDs. Record
-the stable ID in every round entry; use configured labels only in prose.
-A debate needs `main-agent` plus at least one other party.
-A question runs at most 5 parties including `main-agent`; agents used by the
-caller's review or converge slate don't count toward it.
-
-For each `debate_party_config.parties.<id>`, apply `label` and `prompt` to the
-brief, use `mechanism` when present, and omit the party when `enabled: false`.
-Append `advisor_roles.brief` to the brief of a party seated `advisor`.
-Reject an invalid configuration before dispatch.
-
-Use the configured host-supported mechanism for each enabled party. The
-built-in IDs are ordinary peers, and custom entries use
-`{id, label, prompt, mechanism}`. Require an independent round-1 position and
-later responses for every enabled party. Record `UNAVAILABLE` with the
-observed failure when a configured dispatch cannot run.
-
-## Rounds
-
-Record one position per party per round. Require independent positions in
-round 1; every round 2+ position must explicitly respond to each other
-party's latest recorded position by agreeing, refining, or refuting named
-points. Record positions as they arrive, preserve earlier positions, and do
-not restate unchanged positions.
-
-At each round start, use `recall` for the effective settlement and brief every party from that checkpoint.
-
-Apply amendments to `debate_roster` and `debate_parties` from the next round;
-do not restart or invalidate recorded rounds. Continue already-listed parties
-in the amended roster. Stop asking removed parties from the next round,
-except for one retry already owed; stop them after that retry. Ask added
-parties from the next round; treat their first position as an independent
-round-1-style position. Keep each absence episode separate from another
-party's pending retry.
-
-Apply an amendment to `debate_round_cap` at the next round-start recheck.
-Finish the current round under its start state; if the cap is reached, close
-at that recheck with `--mode debate-capped`. Run any owed retry first,
-regardless of the amended cap.
-
-Treat the start-of-round recheck as atomic. Do not re-brief or re-poll a party
-already recorded after a mid-round amendment or apply that amendment to
-remaining parties. Apply it at the next round-start recheck.
-
-After compaction, inspect the highest round tagged to this question. A party
-is dealt with if the ledger contains either:
+Use Gear's opening templates. For later positions use `session record-decision` with `--mode debate`, the question ID, and this form.
 
 ```text
-round N, party '<role>':
+round N, party '<role>': <position>
 ```
 
-or an unavailability marker. If fewer than the full roster are dealt with,
-resume that partial round and poll only parties with neither entry. Use the
-settlement/amendment state in effect at that round's start recheck. If every
-roster party has an entry or marker, treat the round as complete and perform
-the next round-start recheck.
+Use one line. For closure, omit `round N`. Include the question ID and required positions, dissent, or absences.
 
-Recover a partial round's start state as the state strictly before its first
-recorded response or unavailability marker. Do not add a round-start marker.
+| Mode | Summary prefix |
+|---|---|
+| `debate` | `unanimous_convergence:` |
+| `debate-capped` | `consented_stop:` or `round_cap:` |
+| `debate-degraded` | `degraded_convergence:` |
+| `scope-settled` | `scope_settled:` with topic, scope, principles, cutoff, and dissent. Requires a real round-0 position. |
 
-## Recording
+Close each question once. Record nothing after closure.
 
-Use the opening submissions Gear prints as templates. For later positions, use `session record-decision` in `debate` mode with the question ID and a one-line summary of the form `round N, party '<role>': <position>`.
+### End a round
 
-For a closing outcome, omit the `round N` prefix and record one of the public
-outcomes: `unanimous_convergence`, `consented_stop`, `round_cap`, or
-`degraded_convergence`. Include the question ID and the outcome's required
-positions, dissent, or absence data.
+- **`unanimous_convergence`:** require agreement on substance and no live objection that changes the outcome.
+  Run the angle round below. Require the result to meet the effective `goal`. Only `AMENDMENT goal` can narrow it.
+- **`consented_stop`:** require `consented_stop_allowed: true` and an explicit `CUT` from every party in the round.
+  Silence, absence, non-response, or `continue` prevents consent. Record final positions and CUT voters.
+  Main states its position and strongest unresolved objection. Check consent yourself. Gear checks only summary presence.
+- **`round_cap`:** at the cap (default 10), main decides. Record its position and strongest unresolved objection.
+- **`degraded_convergence`:** apply only the conditions in [unavailable-party.md](references/unavailable-party.md) after dispatch failure.
 
-Close only with these mode/prefix combinations:
-
-- `--mode debate`: `unanimous_convergence:`
-- `--mode debate-capped`: `consented_stop:` or `round_cap:`
-- `--mode debate-degraded`: `degraded_convergence:`
-- `--mode scope-settled`: `scope_settled:` followed by topic, scope, principles, cutoff and dissent. Close round 0 only, after at least one real position.
-
-Close each question once. Use the judgment and recovery rules below to choose the outcome and prepare the closing submission.
-
-## Ending a round
-
-Use exactly one outcome:
-
-- **`unanimous_convergence`** — only when every party agrees on the
-  substance, no live objection changes the outcome, the angle round below
-  changed nothing, and the agreed answer still delivers the run's current
-  `goal` (settlement plus any `AMENDMENT goal`). Only an `AMENDMENT goal`
-  narrows the goal; a debate cannot.
-- **`consented_stop`** — only when `consented_stop_allowed` is `true` and
-  every party in that round explicitly votes `CUT`. Silence, absence, and
-  non-response mean non-consent; one `continue` vote rules it out. Record
-  every party's last position and every `CUT` voter. Require the main agent to
-  state its position and strongest unresolved objection.
-- **`round_cap`** — when `debate_round_cap` is reached without either
-  outcome. Use default cap `10` unless `clarify` sets another. Require the
-  main agent to decide, state its position and strongest unresolved objection;
-  record `--mode debate-capped`.
+For a tie, continue toward the cap unless all parties explicitly vote `CUT`.
 
 ### Angle round
 
-When every party agrees, run one more round before recording
-`unanimous_convergence`. Ask the public `converge` command for the `decide`
-and `attack` angle lists.
-
-Each party declares at least two of those angles that no party has used on
-this question, applies them to the agreed answer, and starts its position
-with `angles: <ids>`. It then states whether the agreed answer delivers the
-run's current `goal`: `goal: kept`, or `goal: narrowed <what>` naming the
-part dropped or called out of scope. A `goal: narrowed <what>` is a new
-objection. Record the angle-round position as:
+When every party agrees, run one more round before closing. Get `decide` and `attack` lists from the public `converge` command.
+Each party names and applies at least two angles no party has used for this question.
+Start with `angles: <ids>`. Check the effective goal with `goal: kept` or `goal: narrowed <what>`.
 
 ```text
 round N, party '<role>': angles: <id>,<id>; goal: kept; <position or response in one line>
 ```
 
-Record `unanimous_convergence` only if that round changes nothing: no party
-changes its position and no new objection is raised. Otherwise continue with
-ordinary rounds.
+A narrowing is a new objection. If any position changes or a new objection appears, continue ordinary rounds.
+Otherwise close with `unanimous_convergence`.
 
-A genuine tie is neither `unanimous_convergence` nor `consented_stop`.
-Continue to `round_cap` unless every party explicitly votes `CUT`.
+## Rules
 
-Enforce `consented_stop_allowed` and the complete `CUT` vote set yourself;
-the CLI checks only that the summary is non-empty.
-
-## Stuck round
-
-Before the cap, a round is stuck when every party essentially repeats its
-prior position unchanged.
-
-Call `resolve` again with the current positions. Ask whether
-`source_of_truth` or `principles` settles the disagreement in a way no party
-has applied.
-
-When `resolve` decides the issue:
-
-1. Let `resolve` record its own `--mode resolve` entry without `--question`.
-2. Require its summary to state that it broke a debate stall.
-3. Do not treat that entry as closing this question.
-4. Immediately record a closing entry for `<qid>` with
-   `--mode debate-capped` and a `round_cap:` summary.
-5. Name the resolved answer and cite the `resolve` entry that supplied it.
-
-When `resolve` does not decide the issue, continue toward `round_cap`.
-
-## Unavailable party
-
-Classify a party as unavailable only when its configured dispatch cannot run;
-`## Host mechanics` names what that means on this host.
-
-Treat empty output, unparseable output, and multi-line output from a completed
-process as responses, not unavailability.
-
-For a non-empty response, record a faithful single-line summary of its
-substance. Summaries are one line; the CLI refuses line breaks. Do not pass a
-literal line break to `record-decision --summary`; condense multi-line
-responses in your own words.
-
-For an empty or unparseable response, record:
-
-```text
-round N, party '<role>': NO-RESPONSE (<detail>)
-```
-
-Put the literal token `NO-RESPONSE` immediately after the colon. Set
-`<detail>` to what was observed, such as empty stdout or unparseable output.
-Count this placeholder as the party's position for the round.
-
-For genuine process-level unavailability, record immediately:
-
-```text
-round N, party '<role>': UNAVAILABLE (<detail>)
-```
-
-Put the literal token `UNAVAILABLE` immediately after the colon.
-
-Count an unavailability marker as the party's dealt-with slot for
-partial-round recovery. Do not count it as a responding party for unanimity,
-`consented_stop`, or closing-mode selection.
-
-When a party responds after an unavailability marker for the same round N:
-
-- Append an ordinary round-N entry if round N+1 has not started and the question
-  has not closed.
-- Do not edit or remove the marker.
-- Use the late response as the actual round-N position for party count,
-  unanimity, and the round-N+1 brief.
-- If a round-N+1 entry already exists, discard the late response.
-- If the question has closed, discard the late response.
-- Do not record the late response under round N+1.
-
-For every genuine unavailability, first apply the reversibility and impact
-test from `debate_threshold` in the settlement.
-
-When the decision is at the high end of what `debate_threshold` sends to
-`debate`:
-
-- Fail the stakes assessment; judge using reversibility and blast radius, not a
-  numeric scale or field, and state the reasoning.
-- Do not use `debate-degraded` under any party count. Treat the absence as a
-  stuck round, name the gap, and continue toward a `--mode debate-capped` close
-  with a `round_cap:` summary.
-- Do not use the party-count rules below. Set `no_further_questions` to
-  `true` in v1. Do not pause for a human.
-
-When the stakes assessment passes:
-
-- Count only parties that respond in that round.
-- Retry every still-unavailable party exactly once, together, in the next round
-  before recording any closing entry. Give one retry round to all parties
-  missing when the retry is triggered — not a separate retry per party.
-  Brief every party in that round to state `goal: kept` or
-  `goal: narrowed <what>` against the current `goal` in its position.
-- Give the retry regardless of `debate_round_cap`; run one retry round beyond
-  the cap when necessary. Treat this as the only case that may run beyond
-  `debate_round_cap` — close every other stall at the cap.
-
-Give each party exactly one retry per continuous absence. Use the retry round as
-the next round after the absence begins. Do not give a second retry for the
-same continuous absence. Start a new retry episode only after the party has
-returned for at least one round and later becomes unavailable again.
-
-Count a returning party from its return round onward. If it has no round-1
-position, treat its return position as an independent round-1-style stance but
-record it under the current round number. Otherwise require it to respond to
-the latest state.
-
-Do not record any entry after the question has a closing entry. Do not record
-a closing entry while a retry is owed.
-
-Track staggered absence episodes independently. Recheck all retry obligations
-after every completed round, including new absences that begin during another
-party's retry round.
-
-After every owed retry has passed:
-
-- Define `responded` as having at least one real, non-marker position recorded
-  anywhere in the debate.
-- Treat a party whose every recorded entry is `UNAVAILABLE` as not responded.
-- If exactly one party has responded, record `--mode debate-degraded` with a
-  summary beginning `degraded_convergence:`. State that the debate collapsed
-  to that judgment. Name every absence episode and retry.
-- If two or more parties have responded and agree unanimously, record
-  `--mode debate-degraded` with a summary beginning
-  `degraded_convergence:`. Name every absence episode and retry.
-- Before either `degraded_convergence` close, every party that has responded
-  states `goal: kept` or `goal: narrowed <what>` against the run's current
-  `goal` in its position in the last retry round; do not add a round for it. A
-  late round-N response does not count. If any says `narrowed`, or a
-  responding party has no statement, record `--mode debate-capped` with a
-  `round_cap:` summary naming the narrowing or the missing statement instead.
-- If two or more parties have responded without unanimity before the cap,
-  record `--mode debate-capped`. Name every party ever unavailable, every
-  retry, and the dissent.
-- Do not use `consented_stop` in a round containing a live absence. Permit
-  `consented_stop` in a later full-roster round when every party votes `CUT`.
-- If zero parties have ever responded, record `--mode debate-capped` with a
-  `round_cap:` summary. Name every unavailable party, every episode, and every
-  retry. State that no party ever responded.
-- Do not use `debate-degraded` when zero parties have responded.
-
-For every `debate-degraded` entry and every `debate-capped` entry in the
-assessment-passes branch, name every missing party, confirm the stakes
-assessment, and confirm the one-round retry.
-
-For a high-stakes `round_cap:` close, name the gap and confirm the stakes
-assessment. Do not claim that a retry occurred.
+Keep production changes, outward sends, irreversible actions, goal sign-off, and mutation permissions out of deputy.
+Pass each free-text value as one CLI argument. Let Gear report exact syntax and refusals.
+Skip recovery references in ordinary rounds.
 
 ## Fallbacks
 
-Treat unavailable dispatches under the retry and closing rules above.
-If a required sibling skill is missing, stop and report `cli:setup` with target `engine`. Resume after setup verifies the required plugins.
+Use the unavailable-party rules for failed dispatch.
+For a missing required sibling, stop and report `cli:setup` for `engine`. Resume after verification.
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
+Get the absolute path from `cli:gear`. Run `<gear> --host <host> engine task <command>`.
+Use `<gear> --host <host> converge converge <command>` for angles. Add `--dir` only for a custom session path.
+Both hosts support `native_subagent` and `advisor`. Do not switch mechanism after a failure.
+A failed native spawn, failed or timed-out advisor call, or missing advisor skill makes a party unavailable.
+Read only the current host's section.
 
 ### Claude Code
 
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run session commands as `<gear> --host claude engine task <command> [arguments]`.
-- Run converge commands as `<gear> --host claude converge converge <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-- Use the host-supported party dispatch mechanism; do not substitute another
-  host's mechanism. Claude Code supports `native_subagent` and `advisor`.
-- A party is unavailable when its `advisor` call fails or times out, or its
-  sub-agent cannot be spawned. A missing `advisor` skill makes that party
-  unavailable; never replace it silently with another mechanism.
-- `independent-reviewer` runs as a fresh sub-agent with the full brief and no
-  main-agent position.
-- `adversarial-reviewer` defaults to `advisor` with `--mode asking`, direct communication, and its `review` task.
-  Send the full brief and request counterexamples.
-- A party whose mechanism is `native_subagent` runs as a sub-agent; a party
-  whose mechanism is `advisor` runs as `adversarial-reviewer` does.
+Use `--host claude`. If Gear is absent, install with `/plugin install cli@bootgear`.
+Use a fresh subagent for `independent-reviewer`. Give it the full brief without main's position.
+By default, `adversarial-reviewer` uses `advisor`, `--mode asking`, direct communication, and `review`.
+Use the same dispatch for all advisor seats. Send the full brief and request counterexamples.
+For a native mechanism, use a subagent.
 
 ### Codex
 
-Use `codex` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run session commands as `<gear> --host codex engine task <command> [arguments]`.
-- Run converge commands as `<gear> --host codex converge converge <command> [arguments]`.
-- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Use the host-supported party dispatch mechanism; do not substitute another
-  host's mechanism. Codex supports `native_subagent` and `advisor`.
-- A party whose mechanism is `native_subagent` runs as a native subagent.
-- A party with mechanism `advisor` asks a Claude Code listener through `advisor`.
-  Use `--mode asking`, communication `channel` (never `direct`), and its `review` task. Use the debate channel named in the run
-  ledger's `advisor channels:` decision (read through `recall`), never the `r2`
-  channel. For deferred startup without a debate channel, run the settled launcher at the first advisor request.
-  Pair through `advisor` with `--mode asking` and communication `channel`, then record the debate channel in the run ledger.
-  Preserve any recorded `r2` channel. If startup is early, require the existing debate pairing.
-  Before each advisor request, reclaim that channel's live seat
-  through the `advisor` skill's scan and claim (the scan offers a seat this session
-  holds).
-- A party is unavailable when its native subagent cannot be created or times out.
-  It is also unavailable when its `advisor` call fails, times out, or finds no live listener.
-  A missing `advisor` skill also makes it unavailable. Never fall back to the other
-  channel or another mechanism.
+Use `--host codex`. If Gear is absent, run `codex plugin add cli@bootgear`.
+Use a native subagent for a native seat. Treat a spawn timeout as unavailability.
+For an advisor, use a Claude Code listener with `--mode asking`, `channel`, and `review`.
+Use the recorded debate channel, never `r2`. A missing live listener makes the party unavailable.
+For deferred startup without a pairing, run the settled launcher at the first advisor request.
+Pair through Advisor and record the debate channel. Preserve the `r2` channel in the decision.
+For early startup, require the existing pairing. Reclaim its live seat before each request through Advisor's scan and claim.

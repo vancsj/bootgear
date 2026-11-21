@@ -7,20 +7,20 @@
 - id: protection-disabled
   tag: find
   lens: security
-  tell: CSRF, authentication or origin checks are turned off, or an allowed-origin list is a wildcard.
-  asks: Is the reason stated, and does it hold for every client that reaches this route?
+  tell: "Code disables CSRF, authentication, or origin checks, or uses a wildcard origin."
+  asks: "Does the stated reason apply to every client that reaches the route?"
 - id: debug-surface-exposed
   tag: find
   lens: security
-  tell: A diagnostic, metrics, admin or debug route is exposed.
+  tell: "Code exposes a diagnostic, metrics, admin, or debug route."
   asks: Who can reach it without extra authentication, and what does it reveal?
 - id: open-redirect
   tag: find
   lens: security
-  tell: A redirect target is built from request input.
-  asks: Is it checked against an allowed list?
+  tell: "Code builds a redirect target from request input."
+  asks: "Does it check the target against an allowed list?"
 - id: outlives-request
   tag: find
   lens: security
-  tell: A background task or callback is started from a request handler.
-  asks: After the request context is gone, does it still run with the caller's identity, or with none?
+  tell: "A request handler starts a background task or callback."
+  asks: "What identity does it use after the request context ends?"

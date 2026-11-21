@@ -1,50 +1,40 @@
-# review lenses
+# Review lenses
 
-Each lens is one topic of the single finder, F. Its brief lists every lens of
-the depth with the scope and brief below, plus the diff and, when one is
-linked, the ticket. For each lens, F declares the find angles whose tell
-matches the diff (`find-angles.yaml`, the lens's `angles-<lens>.yaml`,
-`design-patterns.yaml` for `architecture`, and each enabled `pack-*.yaml`)
-and records every other angle as not applicable.
+Give the single finder the selected rows, diff, and linked ticket. Record each find angle as checked or inapplicable.
 
-| Lens | Depth | Scope | Brief |
-|---|---|---|---|
-| `correctness` | quick, full | Claimed behavior, edge cases, failure paths, state. | Find where the code does not do what the change claims, for some reachable input or order of events. |
-| `tests` | quick, full | Tests added, changed or missing for the changed behavior. | Find behavior the change adds or alters that no test would catch breaking, and tests that cannot fail. |
-| `security` | full | Injection, authorization, authentication, sensitive-data exposure, secrets. | Find a path by which an untrusted input or caller gets an effect or data it should not. |
-| `architecture` | full | Fit with surrounding structure; the design-pattern catalog. | Find a design choice with a tell in the diff and a cost scenario shown in this repo. |
-| `simplicity` | full | Unnecessary abstraction, unreachable branches, excess complexity, reinvented utilities. | Find code the change could drop or shrink with the same behavior. |
-| `contract` | full | Public API, schema, CLI, event and file-format surfaces; callers and consumers. | Find a caller or consumer that the changed surface breaks or leaves unstated. |
-| `consistency` | full | Fit with peer files and neighbours: naming, structure, error handling, docs, tests of the same kind. | Find where the change deviates from its cross-file and intra-file peers, citing each peer with `file:line`; file `tier: traced` only when every compared peer is cited, else `inferred`. |
+| Lens | Finder brief |
+|---|---|
+| `correctness` | Find changed behavior that fails for a reachable input or event order. Check edge cases, failure paths, and state. |
+| `tests` | Find changed behavior that no test would catch breaking. Find tests that cannot fail. |
+| `security` | Check injection, authorization, authentication, and secrets. Find a path to unauthorized data or effects. |
+| `architecture` | Check fit with surrounding code. Require a design-pattern tell in the diff and a cost scenario in the repo. |
+| `simplicity` | Find abstractions, branches, complexity, or duplicate utilities the change can remove without changing behavior. |
+| `contract` | Check callers and consumers of public API, schema, CLI, event, and file formats. Find broken or unstated contracts. |
+| `consistency` | Compare names, structure, errors, docs, and tests with peers inside and outside the file. Cite each peer as `file:line`. Use `traced` only with all citations. Otherwise use `inferred`. |
 
 ## Changed behavior checks
 
-Trace changed values from input through writers, copies, timing, readers and observable output.
-Keep similarly named fields distinct when their writers or meaning differ.
-Check validation order against application order, including reversals, later edits, retries, recovery and caches where affected.
-Check relationship ownership and required updates or deletion across affected callers.
-Test hidden assumptions in code, tests and diagrams against primary evidence.
-Use current confirmed intent and amendments when a stale ticket conflicts with the required result.
-Check that each test oracle rejects a concrete wrong output. A passing command alone does not prove the behavior.
+Trace values from input through writers, copies, timing, readers, and visible output.
+Keep fields with different writers or meaning distinct.
+Compare validation and application order. Check affected reversals, edits, retries, recovery, and caches.
+Check relationship ownership, updates, and deletion across callers. Test assumptions in code, tests, and diagrams against primary evidence.
+Use current confirmed intent when a ticket is stale. Check that each test can reject a concrete wrong output.
 
-Apply STRIDE when a change adds untrusted input, authentication, authorization, sensitive data or a trust boundary.
-Trace applicable spoofing, tampering, repudiation, disclosure, denial-of-service and privilege threats through controls and observable tests.
-Give short reasons for inapplicable categories. Keep local changes proportionate.
-Use normal Converge treatment for findings. Do not create a separate direct-proof path.
-Independent roles receive the full diff, request, standards and raw evidence; exclude author-only reasoning and suspect lists.
+For changed trust, untrusted input, authentication, authorization, or sensitive data, apply STRIDE.
+Trace spoofing, tampering, repudiation, disclosure, denial of service, and privilege escalation through controls and observable tests.
+Give short reasons for inapplicable categories. Keep effort proportionate. Use normal Converge treatment.
+Give independent roles the full diff, request, standards, and raw evidence. Keep author reasoning and suspect lists private.
 
 ## Cut dimensions per lens
 
-The cutter rates each claim's `impact`, `size` and `reach`, `rate` when its
-lens policy counts it, and `difficulty` after the attack, deciding each value
-by the evaluate tests from the public Converge angles interface. Per lens:
+After attack, use public evaluate angles for `impact`, `size`, `reach`, and `difficulty`. Rate `rate` when the lens uses it.
 
-| Lens | Meaning |
+| Lens | Rating |
 |---|---|
-| `correctness` | `impact` from the wrong result; `size` counts users or records whose result changes; `rate` counts call sites or production queries that reach the trigger (`call-site-count`, `prod-traffic`). |
-| `tests` | `impact` and `reach` of the behavior no test would catch breaking. |
-| `security` | `reach: crafted` when only input an attacker supplies reaches the trigger. |
-| `contract` | `impact: clarity` when the changed surface leaves a caller's contract unstated. |
-| `architecture` | `rate` counts the commits touching the claim's files in the last 90 days (`git log` churn, the `file-churn` angle); `impact` from the cost scenario shown in this repo. |
-| `simplicity` | `impact` is `clarity` or `cosmetic` unless the extra code returns a wrong result. |
-| `consistency` | `impact` is `clarity` unless the divergence returns a wrong result. |
+| `correctness` | Use the wrong result for `impact`. Count changed users or records for `size`. Count reaching call sites or production queries for `rate` (`call-site-count`, `prod-traffic`). |
+| `tests` | Use the untested behavior for `impact` and `reach`. |
+| `security` | Use `reach: crafted` when only attacker input reaches the trigger. |
+| `contract` | Use `impact: clarity` when a changed surface leaves a caller contract unstated. |
+| `architecture` | Count commits touching the claim's files in 90 days for `rate` (`git log`, `file-churn`). Use the repo cost scenario for `impact`. |
+| `simplicity` | Use `clarity` or `cosmetic` unless extra code returns a wrong result. |
+| `consistency` | Use `clarity` unless divergence returns a wrong result. |

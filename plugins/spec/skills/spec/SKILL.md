@@ -1,238 +1,155 @@
 ---
 name: spec
-description: Write concise requirements, material design choices and derived tasks before independent review. Use when behaviour or design needs settling.
+description: Write requirements, material design choices, and derived tasks. Use when behavior or design needs a spec.
 ---
 
 ## Inputs and outcomes
 
-Inputs: request or ticket, project root, repository evidence, and one fixed task folder.
-Include supplied project review context, candidate skill inventory, confirmed selections, and applicable model confirmations.
-In an active run, include engine root, session directory, and stage label. The run id comes from the environment.
-On re-entry, include the independent review render, claim IDs, and settled choices.
+Take the request or ticket, project root, repo evidence, and fixed task folder.
+Take supplied project review context, candidate skills, confirmed selections, and model confirmations.
+In Engine, take the Engine root, session directory, and stage label. On re-entry, take the render, claim IDs, and choices.
 Optional `stop_after` accepts only `design`.
 
-Hand back to the caller (`execute` in an active run, the user standalone):
+Return one outcome to `execute` in Engine or the standalone user.
 
-- `package`: requirements, optional design, task paths, open choices, and exact evidence for independent review.
-- `package-design`: requirements and design paths, open choices, and evidence; no task artifact.
-- `blocked`: missing statement, evidence, capability diagnostic, or pending confirmation; retain affected claim IDs and work.
-- `delegated`: override artifacts and the same applicable public handback fields.
-- `ready`: re-entry only; applied inline claim IDs, with the same slate and no new review.
+| Outcome | Handback |
+|---|---|
+| `package` | Requirements, optional design, task paths, open choices, and exact review evidence. |
+| `package-design` | Requirements, design, open choices, and evidence. Omit tasks. |
+| `blocked` | Missing statement or evidence, actual capability error, or pending confirmation. Keep claim IDs and work. |
+| `delegated` | Override artifacts and the same applicable fields. |
+| `ready` | On inline-only re-entry, applied claim IDs and the same slate. |
 
-Packages and delegated authoring handbacks include `author_review`: `task_folder`, `stage`, `visit`, `record_path`, and `outcome`.
-Only author-review outcomes `clean` and `limit-reached` permit independent handoff.
-Keep `unresolved_refs` with the caller, separate from independent role inputs.
-A limit does not resolve those items.
-Keep contract questions visible in the primary documents as Open questions.
+Include `author_review` with `task_folder`, `stage`, `visit`, `record_path`, and `outcome` for authored packages and overrides.
+Only `clean` and `limit-reached` permit handoff. Keep `unresolved_refs` with the caller, outside independent briefs.
 
 For required confirmation, return `blocked` with `checkpoint_outcome: needs-confirmation`, `checkpoint_kind`, `pending_payload`, and `missing_confirmation`.
-Source selections also retain the public self-review result and all missing candidate names.
-Include the next caller action and existing confirmation references.
-An active caller uses clarify's public checkpoint mode, then re-enters this skill.
-A standalone caller obtains confirmation through host interaction, then re-enters.
-Do not require engine for standalone authoring.
-
-When raw implementation feedback applies, read [references/implementation-feedback.md](references/implementation-feedback.md).
-Use its public intake, primary artifact binding, and gate handback.
+Include existing confirmation references and the next caller action.
+For source selection, include the public self-review result and all missing candidate names.
+Engine uses clarify checkpoint mode. Standalone uses host interaction. Re-enter after confirmation.
 
 ## Procedure
 
-1. Resolve an override before authoring and before each mapped stage.
-2. Investigate and form both models before drafting.
-3. Write requirements; write design for real trade-offs, or whenever `stop_after` is `design`.
-4. Check completeness against the primary artifacts.
-5. Derive tasks, except when `stop_after` is `design`.
-6. Invoke self-review at stage `spec`, then return the package for independent spec-review.
-7. On independent feedback, refresh affected artifacts and use the re-entry rules below.
+### Select an override
 
-### Overrides
+Check before authoring and at each mapped stage. In Engine, read `engine task session read --section settlement`.
+Use `spec_override` with its latest valid amendment. A bare skill covers the task.
+Use mapping labels `requirements`, `design`, `review`, and `task`. If unmatched, use this default and stop searching.
+Standalone, use a clearly named or registered project spec skill that fits.
 
-In an active run, read the settlement through the public session command:
+Pass run paths, task folder, authoring context, and `stop_after`. Require the stage artifact and applicable author handback.
+For `stop_after: design`, skip the mapped task stage. Return no tasks.
+Return `blocked` for an incompatible override. Obtain any missing author check through its public skill before handoff.
 
-```text
-<gear> --host <host> engine task session read --section settlement
-```
+### 1. Investigate and write requirements
 
-Use `spec_override`, including its latest valid amendment.
-A bare skill name applies to the whole task.
-A mapping uses stage labels `requirements`, `design`, `review`, and `task`.
-An absent matching entry uses this skill's default stage. Do not search for another override.
-Standalone, use a clearly named or registered project spec skill when its description matches the request.
+Read the request, implementation, analogous tests, and authoritative contracts. Read existing host and project principles and standards.
+Use `.bootgear/config/{principles,review-standard,test-standard}.md` and Engine settlement principles where applicable.
+Write `investigation.md` with behavior, evidence, checked boundaries, and unresolved facts.
 
-Pass engine root, session directory, task folder, authoring context, and `stop_after` to an override.
-Overrides return each stage's artifact and the applicable author-review handback.
-When `stop_after` is `design`, invoke no mapped task stage and return no task artifact.
-An incompatible override returns `blocked`; obtain the missing author check through its public skill before independent handoff.
+Form both models before design. State user expectations and limits. State concepts, responsibilities, relationships, and boundaries.
+If either model is uncertain or changed materially, stop affected drafting and return the checkpoint.
+Read [investigation-models.md](references/investigation-models.md) for an uncertain or changed model or a complex evidence trace.
+Reuse exact confirmation when it covers the payload and scope. Clear, unchanged models need no new question.
 
-### Stage 1: investigation and requirements
+Write concise `requirements.md` with goal, boundaries, required behavior, constraints, and acceptance checks.
+Add a compatibility target or feature model only if it defines behavior.
+Use relevant arc42 sections. Keep facts, assumptions, constraints, decisions, and Open questions visible.
+For material assumptions or status distinctions, use [document-status.md](references/document-status.md).
+State each contract once and cite it elsewhere. Keep necessary numbers, identifiers, and evidence. Remove avoidable counts.
+Keep run controls in settlement. Keep rationale in `requirements-notes.md`.
+If an exclusion blocks the requested result, return that scope choice. Leave unresolved interpretations with the caller.
 
-Read the request, relevant implementation, analogous tests, and authoritative contracts before choosing a design.
-Read `.bootgear/config/principles.md`, `.bootgear/config/review-standard.md`, and `.bootgear/config/test-standard.md` when present.
-Read the host user-principles file when present.
-In an active run, also read the settlement's principles.
+Return requirements path and content, notes path, Open questions, and evidence. In Engine, the caller handles choices after review.
 
-Before drafting, read [references/investigation-models.md](references/investigation-models.md).
-Write task-local `investigation.md` with conclusions, evidence, checked boundaries, and unresolved facts.
-Form the mental and conceptual models.
-If either is uncertain or materially changed, return the pending checkpoint before affected drafting.
-Clear, unchanged models need no new confirmation.
+### 2. Write design
 
-Read [references/document-status.md](references/document-status.md) when writing or updating requirements or design.
-Write concise `requirements.md` with the goal, boundaries, required behaviour, constraints and acceptance checks.
-Include a compatibility target or feature model only when it defines the requested behaviour.
-Use relevant arc42 sections. Keep material facts, assumptions, constraints, decisions and open questions clear without empty headings.
-State each contract once. Reference that statement elsewhere.
-Remove avoidable descriptive counts. Preserve behaviour-defining numbers, identifiers and useful citations.
-Keep run controls in the settlement.
-Write rationale in task-local `requirements-notes.md`.
-Challenge any exclusion that prevents the requested outcome; return the concrete scope choice to the caller.
-Do not decide unresolved interpretations through guesswork, resolve, or debate within this stage.
+For a real trade-off or `stop_after: design`, write `design.md`. Otherwise a small task can use requirements alone.
+State material choices, consequences, boundaries, behavior, and necessary order. Cite the existing pattern.
+Keep rejected alternatives with their cost or risk. Use relevant arc42 sections and clear status labels.
+Leave local names and implementation inventories open. Put extra rationale in `design-notes.md`.
 
-Return the requirements artifact: primary path and content, notes path, open questions, and investigation evidence.
-In an active run, the caller handles choices after independent review.
-Standalone, the direct caller handles them.
+For changed architecture, data, lifecycle, relations, or security, read only the applicable checks in [views-security.md](references/views-security.md).
+Use a C4 or runtime view if it explains the changed mechanism. Skip diagrams without a useful view.
+Return design path and content, notes path, and unresolved material trade-offs in primary Open questions.
 
-### Stage 2: design
+### 3. Check completeness
 
-Run this stage for real trade-offs. Always run it when `stop_after` is `design`.
-Otherwise, a small task can use requirements alone.
+Read primary requirements and design when present. For each material change, verify all four conditions.
 
-Explain material choices, consequences, affected boundaries, resulting behaviour and necessary order in `design.md`.
-Cite the existing pattern being followed.
-For real alternatives, state the selected approach and each rejected option's cost or risk.
-Keep these alternatives in the primary design for independent review.
-Use relevant arc42 sections. Keep material status information clear through sections or concise labels.
-Leave routine internal naming and implementation inventories to implementation.
-Put additional rationale in task-local `design-notes.md`.
-Read [references/views-security.md](references/views-security.md) for affected architecture, data, lifecycle, relations, or security boundaries.
-Choose useful C4 or runtime views that explain the changed mechanism. Do not require a diagram without a useful view.
+1. It names the affected boundary or location clearly enough to implement.
+2. It states the result.
+3. It states the order or says order is independent.
+4. It leaves no substantive TBD, competing option, or implementation-time choice.
 
-Return the design artifact: primary path and content, notes path, and unresolved material trade-offs.
-Retain those trade-offs in primary Open questions.
+Allow local naming and equivalent structure when behavior is fixed.
+Check the literal goal and all constraints in both directions. Resolve assumptions that can invalidate requirements or architecture.
+If a check fails, name the criterion and change. Revise requirements or design before tasks.
 
-### Stage 3: completeness
+### 4. Derive tasks
 
-Read primary requirements and design, when present. Do not rely on notes.
-Check the design, or requirements when design was skipped:
+Skip this stage for `stop_after: design`.
+Write ordered `task.md` steps from clear primary statements. Cite each statement. Name work units and acceptance checks.
+Reference contracts. Do not invent behavior or design choices. Allow independent order and local names where specified.
+If derivation fails, return once to design or completeness with the exact gap.
+If it remains, return `blocked` with the missing statement and no task artifact. On re-entry, retain claim IDs and evidence.
+Return task path and content, or the refusal.
 
-1. Each material change identifies its affected boundary or location clearly enough for implementation.
-2. Each change states the resulting behaviour.
-3. Changes have a stated order, or are explicitly order-independent.
-4. No substantive choice remains as TBD, an implementation-time decision, or competing options.
+### 5. Check authored work and return
 
-A local method name or equivalent code structure can remain open when the contract fixes behaviour.
-Do not turn that freedom into a missing requirement.
-Check the literal goal and every constraint. Check both directions between the request and proposed work.
-Resolve assumptions that can invalidate requirements or architecture before affected implementation can start.
-If completeness fails, name the criterion and change, then revise requirements or return to design.
-Do not derive tasks from a failing artifact.
+Call public self-review at `spec` with the fixed folder and authoring context. Give it all primary artifacts and relevant settlement.
+Follow its reading and fixes. Keep mechanical results separate from the author record.
+Keep the default two passes and stop early when clean. Preserve the open budget across edits, retries, config changes, and compaction.
+Renew closed checkpoints only from related independent revision or confirmed intent change. Keep active limits fixed.
+Use its public source contract. Never scan installed skills or infer a mode.
+On `needs-candidates` or `needs-selection`, retain work and return the required confirmation handback.
+On `unavailable`, return `blocked` with the diagnostic and mechanism. Keep author checking and locking required.
+Return `package` or `package-design` only on `clean` or `limit-reached`. Keep open references with the caller.
 
-### Stage 4: task breakdown
+### Re-entry and implementation feedback
 
-Skip this stage when `stop_after` is `design`.
-Derive ordered `task.md` steps from unambiguous primary requirements or design statements.
-Each step names its source statement. Do not invent behaviour or a material design choice.
-Name work units and acceptance checks. Reference primary contracts instead of repeating design details or implementation inventories.
-If a step cannot be derived, make one bounded return to design or completeness with the exact gap.
-If the same gap remains, return `blocked`, no task artifact, and the missing statement.
-Include related claim IDs and evidence on re-entry.
-Ordering already declared independent and local naming are not substantive choices.
+For raw implementation feedback, read [implementation-feedback.md](references/implementation-feedback.md).
+Use public intake, artifact binding, and gate handback.
 
-Return the task artifact: content and path, or the structural refusal.
+Read the render, claim IDs, and choices. Apply authorized inline patches. Address revise claims in primary artifacts.
+Propagate changed intent through specs, tasks, tests, views, and drafts. Check changed models before affected drafting.
+If findings recur, compare artifacts and evidence. Record the cause and correction with the task before another round.
 
-### Stage 5: author check and package return
+- For `revise` or settled `choices`, repeat completeness, task derivation when required, and author check. Return the refreshed package.
+- For `ready` with only inline patches, return `ready` with applied IDs. Skip stages 3–5 and any new slate.
+  Keep the existing checkpoint and required exit gate.
 
-Invoke self-review through its public interface at stage `spec`, using the fixed task folder and authoring context.
-Supply the actual requirements, design when present, tasks and relevant settlement text.
-Follow its reading-and-fix workflow. Do not replace it with checkpoint helper calls.
-Keep mechanical results separate from the author's recorded result. Keep deeper questions open for independent review.
-Keep its default two-pass budget. Stop earlier when clean.
-Reuse an open checkpoint after edits, retries, configuration changes, or compaction.
-Renew a closed checkpoint only with related independent-revision or confirmed-intent-change evidence.
-Do not increase an active limit or infer any source-skill mode.
-Keep candidate discovery, selections, scope, provenance, and coverage under self-review's public contract.
-Never scan installed skills to form candidates.
+Retain unresolved claims and author references. Skip references for paths you do not use.
 
-At `needs-candidates` or `needs-selection`, retain pending work and return the confirmation handback where required.
-At `unavailable`, return `blocked` with the actual diagnostic and named mechanism.
-Do not bypass checking or run without supported locking.
-Only `clean` or `limit-reached` permits the independent package handoff.
-Retain all still-open author references with the caller.
+## Rules
 
-Return `package` with all derived primary paths, open choices, evidence, and `author_review`.
-When `stop_after` is `design`, return `package-design` without task content or path.
-Do not run independent spec-review, resolve, or debate here.
-
-### Re-entry
-
-Read the review render, claim IDs, and settled choices.
-Apply authorised inline patches and address revise claims in the primary artifacts.
-Propagate changed intent through requirements, design, tasks, tests, views, and supporting drafts.
-Recheck materially changed models before affected drafting.
-When findings recur, compare the changed artifacts and prior evidence before another round.
-Record the supported cause and corrective action in task-local caller tracking.
-
-For `revise` or settled `choices`, rerun completeness, task derivation when applicable, and the author check.
-Return the refreshed package, or `package-design` when `stop_after` is `design`.
-Do not silently drop unresolved claims or author references.
-For `ready` with only inline patches, apply them and return `ready` with their IDs.
-Do not rerun stages 3–5 or start a new slate on that inline path.
-Preserve the existing checkpoint and the caller's required ready-exit gate.
-
-## Judgment rules and safety
-
-Keep primary artifacts readable without notes.
-Write required facts in the primary artifact; notes may explain them but cannot carry them alone.
-Cite durable rationale in notes rather than embedding it in the primary artifact.
-Keep evidence, assumptions, constraints, decisions, and unresolved questions distinct.
-User confirmation settles intent; verify current behaviour with evidence.
-Independent roles receive primary artifacts, authoritative intent, standards, and normal converge evidence.
-Exclude notes, author hypotheses, private unresolved lists, and suspect-line lists from their briefs.
-A factual finding, author check, or ready result grants no mutation or delivery permission.
-
-`debate_mode` belongs to the caller's settlement:
-
-- `threshold`: decide below-threshold choices through the caller; escalate eligible choices through resolve and debate.
-- `mandatory`: send every choice to resolve; send unresolved choices at or above the threshold to debate.
+Make primary artifacts complete without notes. Cite durable rationale in notes. Keep contract questions in primary Open questions.
+User confirmation settles intent. Verify current behavior with evidence.
+Give independent roles primary artifacts, intent, standards, and normal Converge evidence. Keep author notes and suspect lists private.
+Leave independent review, resolve, and debate to the caller. In `threshold`, it decides lower choices and escalates eligible choices.
+In `mandatory`, it resolves all choices and debates unresolved choices at or above the threshold.
+A finding, author check, or ready result adds no mutation or delivery authority.
 
 ## Fallbacks
 
-Return `blocked` when required evidence, self-review, an override, or its public helper is unavailable.
-Report the real diagnostic, missing mechanism, pending work, and next caller action.
-Without required confirmation, return before affected drafting or a source-dependent author pass.
-Do not treat unavailable history as empty history or request new mutation permission as a fallback.
+If needed evidence, self-review, override, or helper is unavailable, return `blocked`.
+Give the real diagnostic, mechanism, pending work, and next action. Do not treat unavailable history as empty.
+Without confirmation, stop affected drafting or source-dependent author work. Do not request extra mutation permission as a fallback.
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
+Read only the current host's section. Keep `session_dir` and the caller's Engine root. Add `--dir` only for a custom directory.
+Use `spec` for `<spec-plugin>`. Gear reads the run ID from the environment.
 
 ### Claude Code
 
-Use `spec` for `<spec-plugin>`.
-
-Use `claude` for `<host>`.
-
-- Invoke skills through the Skill tool.
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
-- Run feedback commands as `<gear> --host claude spec spec-feedback <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-- Keep `session_dir` in context. Supply `--dir` only for a custom session directory.
+Invoke through Skill. Get the absolute executable from `cli:gear`.
+Run `<gear> --host claude engine task <command>` and `<gear> --host claude spec spec-feedback <command>`.
+If needed, run `/plugin install cli@bootgear`.
 
 ### Codex
 
-Use `spec` for `<spec-plugin>`.
-
-Use `codex` for `<host>`.
-
-- Invoke skills by public name.
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run feedback commands as `<gear> --host codex spec spec-feedback <command> [arguments]`.
-- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
-- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Keep `<engine-root>` from the caller for active-run handoffs.
-- Keep `session_dir` in context. Supply `--dir` only for a custom session directory.
-- If required self-review or its public command is missing, return `blocked` with the actual diagnostic.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `spec` as the next step.
-Resume after setup verifies the required plugins.
+Invoke by public name. Get the absolute executable from `cli:gear`.
+Run `<gear> --host codex engine task <command>` and `<gear> --host codex spec spec-feedback <command>`.
+If needed, run `codex plugin add cli@bootgear`.
+If a required sibling is missing, stop and report `cli:setup` for `spec`. Resume after verification.

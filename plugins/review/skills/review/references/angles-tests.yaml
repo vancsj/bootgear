@@ -1,19 +1,20 @@
-# tests find angles: asked of the tests lens beside the general find angles.
+# Add these test coverage angles to the general angles.
+
 - id: untested-branch
   tag: find
   lens: tests
-  tell: A branch, condition or error path was added or changed.
-  asks: Which existing test fails if this branch is wrong? If none, what input would break it unnoticed?
+  tell: "The change adds or edits a branch, condition, or error path."
+  asks: "Which existing test fails with wrong behavior on this branch? If none, name an input that can fail unnoticed."
 - id: guard-side-effects-untested
   tag: find
   lens: tests
-  tell: An early return, guard or permission check was added or changed.
-  asks: Does a test assert that the deletes, saves, sends or events did not happen on that path?
+  tell: "The change adds or edits an early return, guard, or permission check."
+  asks: "Does a test assert that the path deletes, saves, sends, and emits nothing?"
 - id: entry-point-invalid-input
   tag: find
   lens: tests
-  tell: A new public entry point accepts input, such as an endpoint, a command or a function with outside callers.
-  asks: Are missing, wrong-type and out-of-set inputs tested, with the error each returns?
+  tell: "A new public entry point accepts input, such as an endpoint, command, or function with outside callers."
+  asks: "Do tests cover missing, wrong-type, and out-of-set inputs? Check the returned error for each."
 - id: fallback-untested
   tag: find
   lens: tests
@@ -22,25 +23,25 @@
 - id: strict-boundary-untested
   tag: find
   lens: tests
-  tell: A strict comparison against a threshold was added or changed.
-  asks: Do tests probe the limit and both neighbors, so a change from < to <= fails?
+  tell: "The change adds or edits a strict threshold comparison."
+  asks: "Do tests cover the limit and both neighbors? Would they catch a change from < to <=?"
 - id: status-only-assertion
   tag: find
   lens: tests
   tell: A test checks the success or failure of a call that returns a structured result.
-  asks: Does it assert the returned fields, text or headers for each branch, not only the status?
+  asks: "Does the test check fields, text, or headers on each branch as well as status?"
 - id: fixture-drift
   tag: find
   lens: tests
   tell: A test uses a canned payload, mock response or fixture in place of production data.
-  asks: Does the fixture match what production now selects, with no excluded field and no missing one?
+  asks: "Does the fixture match all and only fields that production selects?"
 - id: unstable-negative-assertion
   tag: find
   lens: tests
   tell: A test asserts that something is absent or empty after an asynchronous step.
-  asks: Is the assertion made once the condition is guaranteed stable, not before the step finishes?
+  asks: "Does the test check absence or emptiness only after the async step finishes and the condition stays stable?"
 - id: disabled-or-bypassed-test
   tag: find
   lens: tests
-  tell: A test or check is skipped, suppressed or loosened, or a safety guard is bypassed.
-  asks: Is there a stated reason and a tracked follow-up, or was it disabled to get a pass?
+  tell: "A test or check is skipped, suppressed, or loosened, or a safety guard is bypassed."
+  asks: "Is there a reason and tracked follow-up? Did the change only make the check pass?"

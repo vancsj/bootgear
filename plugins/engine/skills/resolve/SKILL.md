@@ -1,97 +1,66 @@
 ---
 name: resolve
-description: Resolve disagreements during `execute` from the settlement's per-domain `source_of_truth` order; if no settled source applies, invoke `debate` with the settled source text and `principles`. Use during engine runs when two considerations conflict.
+description: Settle a disagreement with the run's source of truth. Use before debate or when a debate stalls.
 ---
 
-In an active Engine run, keep `session_dir` in context. Omit `--dir` for the default `~/.bootgear/session`; pass `--dir <session-dir>` only for a custom directory.
+## Inputs and outcomes
 
-Apply the settlement's per-domain `source_of_truth`.
+Take the disagreement, caller, `<engine-root>`, and `<session-dir>`. Return one result to `execute` or `debate`.
 
-Invoke `debate` with the required settlement data when no settled source applies.
+- **Decided** — the decision and its `source_of_truth` domain, or the user's applicable deputy assertion.
+- **Escalated** — return `debate`'s handback unchanged. It can be a recorded closed question, a factual refusal, or `inconclusive`.
+  Send factual disputes to `converge`. A refusal or inconclusive result records no outcome.
+- **Not settled** — no domain settled a stuck round. Let `debate` continue toward `round_cap`.
 
-Hand the result back to the caller, `execute` or `debate`, as one of these outcomes:
+Use before debate for disagreements at or above `debate_threshold`. In threshold mode, `execute` decides lower claims solo.
+In a stalled debate, use the positions supplied by `debate` before it reaches the cap.
 
-- **Decided:** a settled domain decides it. Record a `--mode resolve` entry and return the decision and the domain whose source settled it.
-- **Escalated** (called by `execute`): no settled source applies. Invoke `debate` and hand its handback to `execute` unchanged: a closed question `debate` recorded, Refused (a factual dispute; nothing recorded; settle it with the `converge` skill), or `inconclusive` (nothing recorded).
-- **Not settled** (called during a stuck round): no domain settles it. Report that and stop; `debate` continues toward `round_cap`.
+## Procedure
 
-## When to run
+1. If settlement is stale, call `recall` with the same run paths.
+2. Classify the domain: `scope and outcome`, `current behavior`, `implementation approach`, or `correctness`.
+   Use scope for whether work belongs. Use current behavior for whether to change it.
+3. Read and apply that domain's settled source. Read the ticket if it controls scope.
+4. If the source settles it, record the decision.
 
-Run `resolve` when `execute` sends a disagreement in either case:
+   ```text
+   <gear> --host <host> engine task session record-decision --mode resolve --summary "<decision and source_of_truth domain>"
+   ```
 
-1. **Before `debate`.** Check `debate_threshold` in the settlement. Run this case when the disagreement is at or above that threshold. Decide below-threshold disagreements `solo` in `execute`; do not send them to `resolve`. Use this case for conflicts between the ticket and existing code, implementations that meet the `goal` differently, or current test behavior that conflicts with the apparent `goal`.
+   For a stuck round, omit `--question` and state that the decision broke the stall.
+5. If no single source settles it, follow the route for this caller.
+   - For a stuck round, return **Not settled**. Do not start another debate.
+   - Before debate, call `deputy:ask`. Use an applicable `assertion` as the decision.
+     Record it as `solo` with its slug and return.
+   - On escalation, retain only cited slugs present in the candidates. If deputy is absent, record `no-deputy:not-installed`.
+     Call `debate` in the same turn. Pass the fields below.
 
-2. **During `debate`.** Run this case when a round makes no progress before `round_cap` and `debate` calls `resolve` again. Apply this procedure to the positions `debate` passes in, not the original decision text.
+| Pass to debate | Content |
+|---|---|
+| Decision | Plain question, touched domains, and each unsatisfied condition. |
+| Sources | Full `source_of_truth`, `debate_threshold`, `task_type`, `goal`, and merged user, project, and task principles. |
+| Run | Same `<engine-root>` and `<session-dir>`. |
+| Deputy | Applicable `deputy_slugs` as past user decisions. Omit them if deputy is absent. |
 
-## How it works
+## Rules
 
-1. If the settlement is not fresh in context, call `recall` first. Pass the same
-   `<engine-root>` and `<session-dir>` this call has. The run id comes from the
-   environment. Do not resolve against a remembered settlement that may have
-   compacted.
+Apply only settled authorities. Keep `approach` out of the principles.
+Leave production changes, outward sends, irreversible actions, goal sign-off, and mutation permissions with the user.
+Require `debate` to recall its roster, parties, cap, policies, and admission. Keep those fields out of the handoff.
+On escalation, leave recording to `debate` with `debate`, `debate-capped`, or `debate-degraded`.
+Pass each free-text value as one quoted argument. Never interpolate it into a shell command string.
 
-2. Classify the disagreement's domain. Use the settlement's per-domain `source_of_truth`. Classify the domain as `scope and outcome`, `current behavior`, `implementation approach`, or `correctness`. Classify "is this in scope?" as `scope and outcome`. Classify "should this change existing behavior?" as `current behavior`.
+## Fallbacks
 
-3. Apply that domain's settled source. Read the ticket when `scope and outcome` is settled by the ticket.
-
-4. If no single domain applies, including cases where two domains conflict or no settled source covers the disagreement, follow the caller-specific rule:
-
-   - **Called before `debate`:** First call `deputy:ask` for the decision (production change, outward send, irreversible action, goal sign-off, or permitted mutations are never sent to it). If its `source` is `assertion`, that answer is the decision: record it as `solo` with the assertion's slug, and do not invoke `debate`. If it escalates, keep only its cited slugs that appear in its candidate list, and pass them to `debate` as `deputy_slugs`, labelled as the user's past decisions the debate starts from. If `deputy` is not installed, record `no-deputy:not-installed` and pass no `deputy_slugs`. Then invoke the public `debate` skill in the same turn. Do not leave it pending. Pass only this decision-specific context:
-     - the decision, stated plainly
-     - the touched domain(s) and the unsatisfied settlement condition for each
-     - the full `source_of_truth` for every domain
-     - `debate_threshold`, `task_type`, `goal`, and merged user, project, and task principles
-     - the same `<engine-root>` and `<session-dir>` this call already has
-
-     Require `debate` to read `debate_roster`, `debate_parties`, `debate_round_cap`, `convergence_policy`, `consented_stop_allowed`, and `debate_admission` itself via its own recall. Do not relay those fields as settlement data.
-
-     Do not use `approach` as a principles source.
-
-   - **Called during a stuck round:** Do not invoke `debate` again. Report that no domain settles the disagreement and stop. Let `debate` continue toward `round_cap` itself.
-
-## Recording the outcome
-
-Write one line in the session ledger for every disagreement `resolve` decides:
-
-```text
-<gear> --host <host> engine task session record-decision --mode resolve --summary "<what was decided, and which source_of_truth domain settled it>"
-```
-
-During a stuck round, record the decided entry without `--question`, and state in the summary that it broke a debate stall.
-
-Pass every free-text argument (`--summary`) as its own quoted argument. Never interpolate it into one shell string.
-
-If `resolve` escalates, do not write a `resolve` entry. Require `debate` to record its outcome with `--mode debate`, `debate-capped`, or `debate-degraded`.
-
-## What resolve is not
-
-Do not invent a `source_of_truth` order.
-
-Apply only what `clarify` settled.
-
-Escalate to `debate` when the settlement is ambiguous or silent on the domain. Do not guess.
+If a sibling skill is missing, stop and report `cli:setup` for `engine`. Resume after it verifies dependencies.
 
 ## Host mechanics
 
-Read only the subsection for the current host. Skip the other host subsection.
+Get the absolute path from `cli:gear`. Run `<gear> --host <host> engine task <command>`.
+Gear reads the run ID from the environment. Add `--dir <session-dir>` only for a custom directory.
+Pass the installed Engine root, `<plugin-dir>` on Claude Code or `<plugin-root>` on Codex, as `<engine-root>`.
 
-### Claude Code
-
-Use `claude` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host claude engine task <command> [arguments]`.
-- If `cli:gear` is missing, run `/plugin install cli@bootgear` first.
-- Pass `<plugin-dir>` as `<engine-root>` in the handoff to this skill.
-
-### Codex
-
-Use `codex` for `<host>`.
-
-- Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
-- Run engine commands as `<gear> --host codex engine task <command> [arguments]`.
-- If `cli:gear` is missing, install `cli@bootgear` with `codex plugin add cli@bootgear`.
-- Pass `<plugin-root>` as `<engine-root>` in the handoff to this skill.
-
-If a required sibling skill is missing, stop and report `cli:setup` with target `engine` as the next step.
-Resume after setup verifies the required plugins.
+| Host | `<host>` | Install missing CLI |
+|---|---|---|
+| Claude Code | `claude` | `/plugin install cli@bootgear` |
+| Codex | `codex` | `codex plugin add cli@bootgear` |

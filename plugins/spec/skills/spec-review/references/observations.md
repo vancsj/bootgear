@@ -1,21 +1,15 @@
 # Independent observation checks
 
-Read this reference when the caller supplies observations.
-Accept an optional raw inventory path as `observations_path`.
-Hand `observations_path`, finder-authored `checks_path`, and `checks` back to the caller with the normal result.
-
-The raw file has this envelope:
+Take optional `observations_path`. Return it with finder-authored `checks_path` and `checks`.
 
 ```json
 {"observations": [{"id": "O001", "evidence_paths": ["<readable raw evidence file>"]}]}
 ```
 
-Investigate every observation against required behaviour, primary specs, standards, and raw evidence.
-Read primary Open questions. Keep author hypotheses, private unresolved lists, and suspect-line lists outside independent role briefs.
-Write checks from independent investigation and final claim outcomes. The caller passes your file without edits.
-Keep every actual finding in normal converge treatment, including attacks, finder replies, verdicts, and withdrawals.
-
-Write this report envelope:
+Check each observation against required behavior, primary specs and Open questions, standards, and raw evidence.
+Keep hypotheses, private lists, and suspect lines out of independent briefs.
+Write checks from independent investigation and final claims. The caller passes the file unchanged.
+Keep findings in normal Converge, including attacks, replies, verdicts, and withdrawals.
 
 ```json
 {
@@ -30,21 +24,17 @@ Write this report envelope:
 }
 ```
 
-Each observation needs exactly one check. Use only current-slate claim IDs.
-Use `unassessed` while investigation remains incomplete. Never present it as closure.
-A checked result needs nonempty investigation evidence references and a disposition about required behaviour.
-An empty `claim_ids` list is valid when independent investigation found no defect.
-A passing rerun or an empty claim list alone cannot close a blocking behavioural gap.
-Do not claim coverage from a report copied from another slate.
+Write one check per observation. Use only current-slate claim IDs. Use `unassessed` while incomplete.
+For `checked`, supply nonempty evidence references and a required-behavior disposition.
+An empty claim list is valid after independent investigation. It cannot close a gap alone. Neither can a passing rerun.
+Never reuse checks from another slate.
 
-Use the public Spec feedback settings interface for complete schemas.
-Run its gate with both sidecar paths and the current slate before an affected ready exit.
-Explicit empty arrays serve initial reviews on the two bound engine paths. Other reviews need no empty files.
-A ready-inline correction uses the same slate and checks, with no added review slate.
-The gate checks report scope, fields, IDs, raw file readability, coverage, known claims, and normal converge completion.
-It does not prove evidence truth, independent authorship, meaning, or permissions.
+Use public Spec feedback settings for schemas. Before the affected ready exit, run its gate with both files and the slate.
+Use explicit empty arrays for initial reviews on the two bound Engine paths. Omit them for other initial reviews.
+After ready-inline correction, keep the same slate and checks.
+The gate checks scope, shape, IDs, readability, coverage, known claims, and Converge completion.
+The caller verifies truth, independent authorship, meaning, and permission.
 
-Return the independent dispositions to the caller. The caller links them to private todos afterward.
-Keep unresolved observations visible. Missing checks and unassessed results leave their corresponding gaps open.
-If a public helper is unavailable, return blocked with its diagnostic and named mechanism.
-Keep the same observations, checks, task folder, checkpoint history, and cumulative caps during recovery.
+Return independent dispositions. Let the caller link private todos. Keep missing or unassessed checks open.
+If a public helper is missing, return blocked with its actual diagnostic and mechanism.
+On recovery, keep observations, checks, folder, checkpoints, and cumulative caps.

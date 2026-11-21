@@ -1,21 +1,22 @@
-# simplicity find angles: asked of the simplicity lens beside the general find angles.
+# Add these simplicity angles to the general angles.
+
 - id: defensive-check-on-guaranteed
   tag: find
   lens: simplicity
-  tell: A guard, default or null check handles a case that the type or the caller's contract already rules out.
-  asks: Can that case happen? If not, does the check hide a real failure or mislead the reader?
+  tell: "A guard, default, or null check handles a case the type or caller contract excludes."
+  asks: "Can the case happen? If no, does the check hide a real failure or mislead the reader?"
 - id: nested-condition-chain
   tag: find
   lens: simplicity
-  tell: Conditions nest three or more levels, or else-if branches chain on one value.
-  asks: Would early returns, a lookup or a flat branch say the same with less reading?
+  tell: "Conditions nest at least three levels, or else-if branches test one value."
+  asks: "Would early returns, a lookup, or a flat branch keep behavior with less code to read?"
 - id: mixed-concerns-block
   tag: find
   lens: simplicity
   tell: A function, block or test body does two unrelated things.
-  asks: Which two concerns does it mix, and does the mix hide a bug or a path that is hard to test?
+  asks: "Which concerns does it mix? Does the mix hide a bug or make a path hard to test?"
 - id: parameter-sprawl
   tag: find
   lens: simplicity
-  tell: A function gains a parameter and now takes five or more.
-  asks: Do the parameters travel together, so that one request object could carry them?
+  tell: "A function adds a parameter and now takes at least five."
+  asks: "Do the parameters travel together in a way one request object can express?"

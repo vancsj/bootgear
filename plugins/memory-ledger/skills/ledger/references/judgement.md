@@ -2,71 +2,78 @@
 
 ## Choose a ledger
 
-Read each open ledger's `WHAT-BELONGS.txt` with `ledger rules`. Its rules take precedence over these defaults.
+Read each open ledger's `WHAT-BELONGS.txt` with `ledger rules`. Apply its rules first.
 
-- Use shared for durable codebase, product, business, and third-party facts teammates can verify. Use local for machine-specific facts and reusable snapshots of moving state.
-- Prefer claims tied to mainline, a locked dependency, an applied migration, or a closed date window. A live vendor setting, PR status, or open-ended production count can drift. Keep task-only work state with the task.
-- Treat claims about missing work under active development as perishable. A documented design decision can make such a claim durable.
-- Date the claim rather than the question. When a tally has a reusable method, put the method in shared and the measured count in local.
-- Choose the destination yourself. Ask the user about uncertain placement or entries about people. Follow the CLI's confirmation guidance before publishing an append-only shared entry.
-- Read every open ledger when judging a match. Narrow with `--only` only for a deliberate scoped read.
-- For portability audits, use `audit` to find machine-bound evidence and `audit --json` to inspect all answers with checks. Ask whether a teammate could run each check on their machine and get the same result.
+- Use shared for durable facts about code, products, business, and third parties that teammates can verify.
+- Use local for machine-specific facts and reusable snapshots of changing data.
+- Prefer mainline, locked dependencies, applied migrations, or closed date ranges. Vendor settings, open PRs, and live counts can change.
+- Treat absent work in active development as temporary unless a documented decision makes it durable.
+- Date the claim. For a reusable count, put the method in shared and the measured value in local.
+- Choose the destination. Ask the user if placement is unclear or the entry concerns a person.
+- Follow the CLI's confirmation guidance before publishing an append-only shared entry.
+- For portability, run `audit`. Use `audit --json` to inspect answers with checks.
+  Ask if a teammate can run each check on their machine and get the same result.
 
 ## Judge the match
 
-1. Resolve before reading or writing. Read each candidate and compare its question with yours. In `(n/m terms)`, check which of your `m` terms its `n` matches actually cover. Check any `UNKNOWN` terms for a missing distinction.
-2. Read a matching entry with `show`. Verify and sign it, or add a rival if it needs a correction.
-3. If the question differs, use the resolver's `MINT` leaf. Choose the folder from its `_about` scope. Never invent a slug.
-4. Use `--in <folder>` only with an explicit scope. A guessed folder can hide an existing answer.
-5. Read the entry named in a near-duplicate refusal before considering `new --anyway`.
+1. Resolve before reading or writing. Compare each candidate question with yours.
+2. In `(n/m terms)`, check which terms match. Check `UNKNOWN` terms for a missing distinction.
+3. Use `show` for a match. Verify and sign it or write a rival.
+4. For a different question, use the `MINT` leaf. Choose the folder from its `_about` scope.
+5. Use `--only` for deliberate scoped reads. Use `--in <folder>` only with an explicit scope.
+6. On a near-duplicate refusal, read the named entry before considering `new --anyway`.
 
 ## Write the claim
 
-- Give each answer one falsifiable claim in at most 40 words. Use a separate entry for each independent question.
-- Add `--alt-terms` for phrases someone would search for without knowing the entry exists. Include symbols, error text, and alternate phrasings. Describe the question instead of the answer.
-- Name the slug for its question. Keep committed answers, answer IDs, and evidence intact. Add a check with `add-evidence`; use a rival to replace a check or correct a claim.
-- For `OVERSIZE` or `REGROUP`, propose a folder split. On approval, use `git mv` and update each slug heading before saving.
-- Keep secrets and erasable data out of the ledger. Record only questions with answers another session can check.
+- Write one falsifiable claim per answer, up to 40 words. Use separate entries for independent questions.
+- Add `--alt-terms` for search phrases, symbols, and errors that describe the question.
+- Name the slug for its question. Preserve committed answers, IDs, and checks.
+- Use `add-evidence` to add a check. Write a rival to replace a check or correct the answer.
+- For `OVERSIZE` or `REGROUP`, propose a split. After approval, use `git mv` and update each slug heading before saving.
+- Store only reusable questions with verifiable answers. Keep secrets and erasable data out.
 
 ## Write the evidence
 
-1. Give a repeatable check for the clause that drives the decision. Split independent checks across repeated `--evidence` flags. Avoid `;` chaining, which can hide a failed step. If checks must share a shell command, use failure-propagating chaining such as `&&`. Use `cd <repo> &&` or `git -C <repo>` when a command needs that checkout.
-2. Prefer repo-relative paths. Use `--repo <name>` to identify a different checkout. A conventional tool cache can use its standard path. Avoid personal home paths.
-3. Prefer discovery over a fixed path or input. Guard live-state checks so a missing dependency or unreadable source fails visibly. Use `git grep -E` for alternatives.
-4. Include the ref in a branch claim's check, such as `git grep … origin/<branch> …`. A pass on a different checkout does not verify that branch.
-5. Cover the full claim. A partial check can pass while its omitted clause is false.
+1. Check the clause that drives the decision. Give each independent check its own `--evidence` flag.
+2. Use `&&` if shell steps must run in order. Avoid `;`. Use `cd <repo> &&` or `git -C <repo>` when needed.
+3. Prefer paths relative to the repo. Use `--repo <name>` for another checkout.
+   Use standard paths for tool caches. Avoid personal home paths.
+4. Prefer discovery over fixed paths or data. Make missing dependencies and unreadable sources fail visibly.
+5. Include the ref in a branch check, for example `git grep … origin/<branch> …`.
+6. Check the full claim. Use these checks to test its limits.
 
-Check what the observation actually proves:
-
-| Check | What to verify next |
-| --- | --- |
-| Search returns no match | Try alternate spellings, dynamic names, configuration, and call sites. Run a positive control. |
-| Search returns a match | Check that the code is reachable and that a fixture, comment, or disabled flag does not explain the hit. |
-| Search is path-scoped | Widen it to the tree and any sibling service that deploys the same code. |
-| Query returns a count | Check population boundaries, inner joins, soft deletes, and the date window. |
+| Observation | Next check |
+|---|---|
+| No match | Try alternate names, dynamic names, config, and call sites. Run a positive control. |
+| Match | Check reachability. Exclude fixtures, comments, and disabled flags. |
+| Path-limited search | Search the tree and services that deploy the same code. |
+| Count | Check the population, inner joins, soft deletes, and date range. |
 | Definition or annotation | Check the effective runtime value after overrides and profiles. |
-| Documentation or vendor page | Check current behavior when the claim is about runtime. |
-| Silent exit zero | Make the check fail once before trusting a pass. |
+| Documentation | For runtime claims, check current behavior. |
+| Silent exit zero | Make the check fail once. |
 
 ## Verify and sign
 
-1. Read the answer before every use. Run every current `Evidence:` line. Run connector checks with the tool they name.
-2. Name an observation that would be false if the claim were wrong. Run that broader check. Add it if a later agent can reuse it. Write a rival if the claim proves narrower than the checks suggest.
-3. Use `sign` for a pass. For a failure, use `sign --fail --output` with the real output. Use `refute --output` to contest another session's signature. Correct your own verdict by rerunning the checks and signing again.
-4. Sign under the current AI session, including when an earlier session wrote the seed. A subagent sharing your session reports its evidence to you; sign once. Never sign as the user or invent an identity. The CLI records a verdict after you run the checks.
-5. Read `e=N` as the number of checks available when a signature was cast. Rerun added checks before re-signing. Judge broken checks from the evidence and write a rival when needed.
-6. Save each verified result in the same working stretch.
+1. Before each use, read the answer and run all current `Evidence:` lines. Use the named connector for connector checks.
+2. Run a check that would fail if the claim were false. Add it if reusable. Write a rival if it narrows the claim.
+3. Use `sign` for a pass or `sign --fail --output` with the real failure. Use `refute --output` to contest another signature.
+4. To correct your own verdict, rerun the checks and sign again.
+5. Use your current AI session, including for another session's seed. Never use the user's identity or invent one.
+   A subagent that shares your session reports its evidence to you. Sign once.
+6. Treat `e=N` as the check count at signing. Run added checks before signing again.
+7. Check why evidence fails. Write a rival when necessary. Save the verified result in the same work session.
 
 ## Judge confidence and conflicts
 
-Use confidence and signatures as leads. Rerun the checks before relying on any answer. A failing signature alone cannot settle the claim. It can come from the wrong branch, a missing build, or unavailable network. `refute` adds an opposing vote and preserves the original. For `SPLIT` evidence, write a rival with a check that distinguishes the conditions that produced the split.
+Use confidence and signatures as leads. Rerun checks. A failure can result from the wrong branch, missing build, or unavailable network.
+`refute` adds an opposing vote and keeps the original. For `SPLIT`, write a rival with a check that separates the conditions.
 
-An asserted answer records a human ruling. Use `assert` only when a check cannot decide the question, as with intent or a standing decision. Ask the user first. Supply their reason with `--why`; use `--clear` before replacing a ruling. Keep contrary signatures visible and use the CLI to change the assertion.
+Use `assert` only for a human ruling that a check cannot decide. Ask the user first.
+Pass their reason with `--why`. Use `--clear` before replacement. Use the CLI and keep contrary signatures visible.
 
-When answers disagree:
-
-- Write a rival that names the answer ID and states the difference in its claim.
-- Carry still-valid checks with `--keep-evidence <answer-id>`. The rival earns its own signatures; the original and its signatures stay intact.
-- Use the checks to decide which answer applies. Keep all applicable answers visible.
-- On `REF-LANDED`, promote a verified mainline answer. If a check names the old branch, use a rival with a mainline check. For `REF-GONE`, check the stored ref and repo. Confirm whether the work landed or was abandoned before dropping any entry.
-- For a proven false answer, record the failing check output under the original with `sign --fail --output`. Use `rival` to add the corrected claim and its proof.
+- For different answers, name the answer ID and the difference in the rival.
+- Carry valid checks with `--keep-evidence <answer-id>`. Each answer keeps its own signatures.
+- Run checks to decide which answers apply. Keep every applicable answer visible.
+- On `REF-LANDED`, promote a verified mainline answer. If a check uses the old branch, write a rival with mainline evidence.
+- On `REF-GONE`, check the saved ref and repo. Confirm if the work landed or stopped before dropping the entry.
+- For a false answer, sign the failure on the original. Use `rival` for the correction and proof.

@@ -1,9 +1,17 @@
 ---
 name: start
-description: Start a new engine run. Use when the user explicitly asks to start a new engine run.
+description: Start an Engine run. Use when the user explicitly requests a new run.
 disable-model-invocation: true
 ---
 
-Stable entry point for the `engine` plugin. Invoke the public `engine:clarify` skill through the host skill interface, passing along the user's original request.
+## Inputs and outcome
 
-`clarify` settles the run with the user and hands it to `execute`; `start` returns nothing itself.
+Take the user's original request. Leave the handback to `engine:clarify` and `engine:execute`.
+
+## Procedure
+
+Invoke `engine:clarify` with the original request. It settles the run and hands off to `engine:execute`.
+
+## Host mechanics
+
+Use the host skill interface.

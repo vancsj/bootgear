@@ -1,39 +1,34 @@
 # Checkpoints
 
-Use the workflow's fixed task folder throughout the task. Treat `record_path` as opaque; read public `status` only.
+Use the fixed task folder and public `status` only. Treat `record_path` as opaque.
 Run `status --task-folder TASK --stage spec --json` before opening or reusing a checkpoint.
-Absent storage returns `record_exists: false` and an empty `checkpoints` list without creating storage.
+Absent storage returns `record_exists: false` and empty `checkpoints`. It creates no storage.
 
-Route `open`, `configure` and `pass` with `--task-folder TASK --project-root PROJECT --stage spec|code`.
-Pass structured input with `--input FILE`, or `--input -` and JSON on stdin.
-Read the command's `next` field after each action.
+For `open`, `configure`, and `pass`, supply `--task-folder TASK --project-root PROJECT --stage spec|code`.
+Use `--input FILE` or `--input -` with JSON on stdin. Follow `next`.
 
-Open with explicit `candidates` and `selections` lists, including explicit-empty lists when applicable.
-The helper assigns each same-stage visit. Never supply a free visit identifier.
-The default `limit` is two. A different new-checkpoint limit needs `limit_confirmation` with typed user evidence.
-Never change an active checkpoint's limit.
+Open with explicit `candidates` and `selections` lists, including empty lists when applicable.
+The helper assigns the same-stage visit. Omit a free visit ID.
+Default `limit` is two. A different new limit needs `limit_confirmation` with typed user evidence.
+Keep the limit fixed while open.
 
-Use `configure` only on an open checkpoint. Supply the full applicable candidate inventory and confirmed selections again.
-Keep project candidates. Preserve original scope and provide a current coverage declaration.
-Configuration changes preserve the count and every completed pass snapshot.
+Configure only while open. Resupply the full candidate inventory and confirmed selections.
+Keep project candidates, original scope, and current coverage. Preserve pass count and completed snapshots.
 
-Record a pass with this shape:
+Record the pass after reading and authorized fixes.
 
 ```json
 {"expected_pass": 1, "result": "found", "unresolved_refs": ["caller:open-item"]}
 ```
 
-Use the expected next number. A duplicate call refuses and returns current state without another pass.
-Read the actual artifacts and fix clear issues before recording the author's result.
-Use `clean` when the author check is clean after authorised fixes. Use `found` when issues remain.
-Treat `check_kind: author-record` as a record of the author's declared result.
-Do not treat checkpoint output as proof that the helper read or checked the artifacts.
-Record only still-open references. A record never certifies that an open issue was resolved.
-`clean` closes the checkpoint, including at the cap. `found` at the cap closes it as `limit-reached`.
-Closed checkpoints remain immutable. Only `clean` and `limit-reached` permit independent-review handoff.
+Use the next number. A duplicate refuses and returns current state without another pass.
+Use `clean` when no issues remain from the author check. Use `found` when issues remain.
+Record only open references. `author-record` records the author's result and does not certify a fix.
+`clean` closes even at the cap. `found` at the cap closes as `limit-reached`.
+Keep closed checkpoints immutable. Only these two outcomes permit independent review.
 
-Open a successor only after the prior same-stage checkpoint closes and actual qualifying evidence exists.
-Add `renewal` with `kind: independent-revision` and a supporting independent review `ref`.
-For confirmed intent changes, use `kind: confirmed-intent-change`, a supporting `ref`, and typed `confirmation`.
-An ordinary edit, raw observation, retry or compaction never qualifies as renewal.
-Retain the same task folder and caller-owned open work across successors.
+Open a successor only after the prior same-stage checkpoint closes and qualifying evidence exists.
+Use `renewal` with `kind: independent-revision` and independent `ref`.
+For confirmed intent, use `kind: confirmed-intent-change`, supporting `ref`, and typed `confirmation`.
+Edits, raw observations, retries, and compaction do not qualify.
+Reuse the folder and caller-owned open work.

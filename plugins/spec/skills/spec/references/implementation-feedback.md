@@ -1,81 +1,69 @@
 # Implementation feedback
 
-Use this path when tests, runtime evidence, implementation, or code review shows a requirement or design gap.
-Keep the gap open before further affected changes. Use the workflow's fixed task folder.
-Keep correction scope and mutation limits. A feedback result grants no permission.
+Use when tests, runtime evidence, implementation, or review exposes a requirement or design gap.
+Keep the gap open before further affected changes. Keep the fixed folder, correction scope, and mutation limits.
 
 ## Intake
 
-Record raw observations in a JSON file:
+Record raw evidence without author hypotheses or suspect lines.
 
 ```json
 {"observations": [{"id": "O001", "evidence_paths": ["<readable raw evidence file>"]}]}
 ```
 
-Use unique IDs and nonempty evidence path lists. Resolve relative paths against the caller's working folder.
-Do not include author hypotheses or suspect-line lists in the raw inventory.
-Call public `spec-feedback settings` for supported inputs and schemas.
-Run public intake with the fixed task folder, observations file, and intended destination:
+Use unique IDs and nonempty evidence paths. Resolve relative paths from the caller's working folder.
+Use `spec-feedback settings` for supported inputs and schemas. Run public intake.
 
 ```text
 <gear> --host <host> <spec-plugin> spec-feedback intake --task-folder <folder> --observations <file> --destination spec-review --json
 ```
 
-Existing requirements route to spec-review. Design remains optional.
-First authoring routes to spec only without requirements, design, and prior spec checkpoints.
-Recover missing artifacts after a checkpoint in the same folder. Never create a new bootstrap.
-Keep `requirements.md`, optional `design.md`, and the author record in the fixed folder.
-Reject override handbacks that use another folder on a bound engine path.
+With requirements, route to spec-review. Design is optional.
+Route first authoring to spec only without requirements, design, and earlier spec checkpoints.
+Recover missing artifacts in the existing folder after a checkpoint. Never bootstrap again.
+Keep `requirements.md`, optional `design.md`, and author record in the fixed folder.
+On bound Engine paths, reject override output in another folder.
 
-## Independent review and resumption
+## Review and resumption
 
-Give the finder raw observations, primary specs, required behaviour, standards, and normal converge evidence.
-Keep private author work with the caller. Pass the finder-authored checks file without edits.
-Refresh affected tasks, tests, diagrams, verification, and supporting drafts after contract changes.
-Preserve deferred claim details, private todos, checkpoint counts, and cumulative visit caps.
-Raw observations, edits, retries, and compaction never renew a self-review budget.
-Closed checkpoint renewal needs related independent review or confirmed intent evidence.
+Give the finder raw observations, primary specs, required behavior, standards, and normal Converge evidence.
+Keep private author work with the caller. Pass independent checks without edits.
+Refresh affected tasks, tests, diagrams, checks, and drafts. Keep deferred details, private todos, pass counts, and visit caps.
+Raw observations, edits, retries, and compaction keep the budget. Renewal needs related independent review or confirmed intent.
 
-Run public `spec-feedback gate` before each affected ready exit:
+Use the public gate before every affected ready exit.
 
 ```text
 <gear> --host <host> <spec-plugin> spec-feedback gate --task-folder <folder> --slate <slate> --converge-dir <absolute-dir> --observations <file> --checks <file> --json
 ```
 
-Use the same slate after a ready-inline correction. Complete independent checks and normal converge work.
-Link independent dispositions to private todos afterward. An omitted item never closes a todo.
-Require relevant evidence and a disposition about required behaviour before closing a blocking gap.
-A passing rerun or an empty claim list alone cannot close it.
-Resume ticket-to-pr at impl and authorised change-review at fix.
-At a cap, retain pending gaps and use the existing blocked or follow-up outcome.
+Use the same slate after ready-inline fixes. Complete independent checks and Converge.
+Link independent dispositions to private todos afterward. Require relevant evidence and a disposition before closing a blocking gap.
+An omission, passing rerun, or empty claim list cannot close it alone.
+Resume ticket-to-PR at `impl` and authorized change-review at `fix`. At a cap, retain gaps as blocked or follow-up.
 
-## Public handback
+## Handback
 
-All commands support prose defaults, `--json`, and `--prose`.
-Without `--json` or `BOOTGEAR_OUTPUT=json`, the command returns prose.
-Paths resolve against `GEAR_CALLER_CWD` when set. Intake and gate never write task artifacts.
-
-Return these fields to the caller:
+Use `--json` or `--prose`. Default to prose unless `BOOTGEAR_OUTPUT=json`.
+Resolve paths from `GEAR_CALLER_CWD` when set. Intake and gate do not write task artifacts.
 
 | Field | Meaning |
 |---|---|
-| `outcome` | `ready`, `passed`, `refused`, or `unavailable`; only gate returns `passed`. |
-| `task_folder`, `requirements_path`, `design_path` | Canonical identity and primary paths; absent design is null. |
-| `destination`, `checkpoints` | Intake destination and public spec-stage history. |
-| `observations_path`, `checks_path`, `checks` | Sidecar paths and independent coverage entries when applicable. |
-| `slate`, `converge_dir`, `converge` | Gate identity and public converge gate result when available. |
-| `problems`, `diagnostic`, `next` | Grouped errors, actual capability diagnostic, and caller action. |
+| `outcome` | `ready`, `passed`, `refused`, or `unavailable`. Only gate returns `passed`. |
+| `task_folder`, `requirements_path`, `design_path` | Canonical task and paths. Absent design is null. |
+| `destination`, `checkpoints` | Intake target and public spec-stage history. |
+| `observations_path`, `checks_path`, `checks` | Sidecars and independent coverage when applicable. |
+| `slate`, `converge_dir`, `converge` | Gate identity and public result when available. |
+| `problems`, `diagnostic`, `next` | Grouped errors, diagnostic, and caller action. |
 
-`refused` requires corrected input or completed work before retrying.
-Map `unavailable` to blocked. Report its actual diagnostic and named mechanism; retain observations and private todos.
-Never bypass self-review or converge because a helper is unavailable.
-The CLI checks structure and coverage. The caller checks meaning, independence, scope, and permissions.
+Correct refused input or complete missing work before retrying. Map `unavailable` to blocked and report the diagnostic and mechanism.
+Keep observations and private todos. Do not bypass self-review or Converge.
+The caller checks meaning, independence, scope, and permission. The CLI checks structure and coverage.
 
 ## Host mechanics
 
-Call `cli:gear`. Replace `<gear>` with its literal absolute path in each tool call.
+Use the absolute path from `cli:gear`.
 For Claude Code, use `claude` for `<host>` and `spec` for `<spec-plugin>`.
 For Codex CLI, use `codex` for `<host>` and `spec` for `<spec-plugin>`.
-If `cli:gear` is missing on Claude Code, run `/plugin install cli@bootgear`.
-On Codex CLI, run `codex plugin add cli@bootgear` first.
-If self-review, converge, or spec-feedback is missing, return blocked with the actual diagnostic.
+Install missing `cli:gear` with `/plugin install cli@bootgear` or `codex plugin add cli@bootgear`, respectively.
+If required self-review, Converge, or spec-feedback is missing, return blocked with the real error.

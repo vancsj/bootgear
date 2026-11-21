@@ -1,41 +1,33 @@
 ---
 name: gear
-description: Return the absolute Gear executable path for the current host and a command example.
+description: Find the Gear executable. Use when a caller needs its path or a command example.
 ---
 
-## When to invoke, inputs, and handback outcomes
+## Inputs and outcomes
 
-Use this skill when a caller needs the Gear executable path.
-
-Input: the current host, Claude Code or Codex CLI.
-
-Hand back the absolute path to `bin/gear` and one command example for that host.
+Take the current host. Return the absolute Gear path and one example for that host, or a setup error.
 
 ## Procedure
 
-1. Resolve this skill's installed directory as an absolute path.
-2. Go up two directories from that directory to this plugin's root.
-3. Append `/bin/gear` and expand the path.
-4. Return the path and a host-specific command example.
+1. Find this skill's absolute installation path.
+2. Go up two directories from the skill directory.
+3. Append `/bin/gear` to the plugin root.
+4. Return the expanded path and the example.
 
-## Judgment rules and safety boundaries
+## Rules
 
-Use the path from this plugin's installed root.
-
-Run commands as `<gear> --host <host> <plugin> <command> [arguments]`.
+Use the installed plugin. Run commands as `<gear> --host <host> <plugin> <command> [arguments]`.
 
 ## Fallbacks
 
-If the CLI plugin is missing, install it through the host, then invoke this skill again.
-
-If Gear is missing from the installed plugin, return that setup error.
+If the CLI plugin is missing, install it and call this skill again.
+If the installation has no Gear executable, return the setup error.
 
 ## Host mechanics
 
-Return the expanded absolute path. Use `claude` or `codex` in the example, based on the current host.
-Replace `<gear>` in the example with the absolute path you returned.
-Claude Code example: `<gear> --host claude list`.
-Codex CLI example: `<gear> --host codex list`.
-Return only the example for the current host.
-On Claude Code, install it with `/plugin install cli@bootgear`.
-On Codex CLI, install it with `codex plugin add cli@bootgear`.
+Use the resolved path for `<gear>`. Give only the example for the current host.
+
+| Host | Example | Install |
+|---|---|---|
+| Claude Code | `<gear> --host claude list` | `/plugin install cli@bootgear` |
+| Codex CLI | `<gear> --host codex list` | `codex plugin add cli@bootgear` |
