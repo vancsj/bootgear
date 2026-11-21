@@ -7,7 +7,7 @@ from __future__ import annotations
 import sys
 import unittest
 
-from test_rules import SCRIPTS
+from rules_test_support import SCRIPTS
 
 sys.path.insert(0, str(SCRIPTS))
 

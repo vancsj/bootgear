@@ -15,6 +15,7 @@ sys.path.insert(0, str(PLUGIN_DIR / "src"))
 
 host_adapter = import_module("engine.host_adapter")
 policy = import_module("engine.policy")
+state_nudge = import_module("engine.policy_state_nudge")
 
 HostContext = host_adapter.HostContext
 
@@ -207,10 +208,10 @@ class ActiveStatePolicyRoutingTest(unittest.TestCase):
                     matcher_value=None,
                     handler_kind="state_nudge",
                 )
-                with patch.object(policy, "_ledger_path", return_value=ledger), \
-                        patch.object(policy.subprocess, "run", return_value=response) as run, \
-                        patch.object(policy, "gear_argv", wraps=policy.gear_argv) as route:
-                    self.assertEqual(policy._run_state(context), {"current": "clarify"})
+                with patch.object(state_nudge, "_ledger_path", return_value=ledger), \
+                        patch.object(state_nudge.subprocess, "run", return_value=response) as run, \
+                        patch.object(state_nudge, "gear_argv", wraps=state_nudge.gear_argv) as route:
+                    self.assertEqual(state_nudge._run_state(context), {"current": "clarify"})
                 route.assert_called_once_with("engine", "task", host=host)
                 argv = run.call_args.args[0]
                 self.assertEqual(argv[:5], [str(REPO_ROOT / "plugins" / "cli" / "bin" / "gear"),

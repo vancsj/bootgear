@@ -10,7 +10,7 @@ factual dispute never goes to debate.
 
 | Part | Role |
 |---|---|
-| `plugins/converge/src/converge/` | Python package: `ledger` (file I/O and common validation), `protocol` (event rules, claim state, batches, phases, cut, result), `model` (replayed slate and claims, rank), `effort` (patch size), `config`, `angles`, `render`, `cli` |
+| `plugins/converge/src/converge/` | Python package with ledger I/O, event checks and replay, claim state, cutoff rules, and CLI command groups. |
 | `plugins/converge/src/converge/angles/builtin.yaml` | Built-in `attack`, `evaluate` and `decide` angles |
 | `plugins/converge/gear.toml` | Registers the Python command through Gear. |
 | `plugins/converge/skills/converge/` | Orchestration skill (roles, steps, outcomes) |

@@ -51,16 +51,13 @@ from ledgerlib.preference import cmd_deputy_index, cmd_deputy_preference
 from ledgerlib.read import cmd_list, cmd_resolve, cmd_resolve_roots, cmd_show
 from ledgerlib.rules import cmd_rules
 from ledgerlib.selftest import cmd_selftest
+from ledgerlib.signatures import cmd_assert, cmd_hash, cmd_refute, cmd_sign
 from ledgerlib.write import (
     cmd_add_evidence,
-    cmd_assert,
-    cmd_hash,
     cmd_new,
     cmd_promote,
-    cmd_refute,
     cmd_rival,
     cmd_set_repo,
-    cmd_sign,
     cmd_vote,
 )
 

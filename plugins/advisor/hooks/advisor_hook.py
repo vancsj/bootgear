@@ -25,7 +25,12 @@ def load_channel():
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {SCRIPT}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Loading by path does not add the script's directory to the import path.
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
     return module
 
 

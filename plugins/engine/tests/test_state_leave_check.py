@@ -21,7 +21,7 @@ from state_validate_fixture import validate_reminder
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = PLUGIN_DIR.parents[1]
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
-from engine import state as leave_state
+from engine import state_leave_checks as leave_state
 
 GEAR = REPOSITORY_ROOT / "plugins" / "cli" / "bin" / "gear"
 TASK_COMMAND = [str(GEAR), "--host", HOST, "engine", "task"]

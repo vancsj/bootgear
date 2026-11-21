@@ -17,6 +17,7 @@ import argparse
 from bootgear_cli.clikit import Catalog, add_mode_flags, caller_path, parser_class, run
 
 from engine import artefact, config, session, state
+from engine.session_ledger import DEFAULT_DIR, PROG
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
@@ -49,7 +50,7 @@ EXAMPLES = {
     "state diagram": "state diagram <machine.yaml>",
     "config resolve": "config resolve --name <name> --project-root <dir>",
 }
-CATALOG = Catalog(prog=session.PROG, examples=EXAMPLES,
+CATALOG = Catalog(prog=PROG, examples=EXAMPLES,
                   frequent=("session recall", "session record-decision", "state transition"),
                   legacy_json=frozenset({"config resolve"}))
 
@@ -61,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dir_parent = argparse.ArgumentParser(add_help=False)
     dir_parent.add_argument("--dir", type=caller_path, default=None,
-                             help=f"ledger directory (default: {session.DEFAULT_DIR})")
+                             help=f"ledger directory (default: {DEFAULT_DIR})")
 
     session_parser = top.add_parser("session", help="ledger: settlement, decisions, "
                                                       "todos, pitches, close")

@@ -11,7 +11,7 @@ import shlex
 from pathlib import Path
 
 import pytest
-from converge import cli
+from converge import cli, cli_common
 
 from conftest import BATCH_1, DISABLED, FIND_ANGLES, FINDER, GEAR_COMMAND, R1, Converge
 
@@ -411,10 +411,10 @@ def test_kind_outside_its_set(cv: Converge) -> None:
 
 
 def test_triage_example_parses() -> None:
-    args = cli._parser().parse_args(shlex.split(cli.TRIAGE_CATALOG.examples["gate"]))
+    args = cli._parser().parse_args(shlex.split(cli_common.TRIAGE_CATALOG.examples["gate"]))
     assert (args.command, args.kind, str(args.report)) == ("gate", "triage", "<abs-file>")
-    assert cli.TRIAGE_CATALOG.examples["gate"] == TRIAGE_EXAMPLE
-    assert cli.EXAMPLES["gate"] == "gate <slate> --dir <abs-dir>"
+    assert cli_common.TRIAGE_CATALOG.examples["gate"] == TRIAGE_EXAMPLE
+    assert cli_common.EXAMPLES["gate"] == "gate <slate> --dir <abs-dir>"
 
 
 # -- base slate ------------------------------------------------------------------------

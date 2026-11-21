@@ -15,12 +15,13 @@ host hook stdin
 
 The engine has one shared source directory for both hosts:
 
-- `src/engine/host_adapter.py` — input bounds, normalization, validation,
-  host context, dispatch, effects, rendering, and safe traces.
+- `src/engine/host_event_input.py` — input bounds, normalization, and validation.
+- `src/engine/host_types.py` — shared host event, intent, and output types.
+- `src/engine/host_adapter.py` — host context, dispatch, effects, rendering, and safe traces.
 - `src/engine/host_contracts.py` — host/event fields, matchers, handlers,
   capabilities, and plugin-root paths.
-- `src/engine/policy.py` — static handler mapping and the current recall, stop,
-  and state-nudge policies.
+- `src/engine/policy.py` — static handler mapping, recall and stop policies, and invocation locks.
+- `src/engine/policy_markers.py` and `src/engine/policy_state_nudge.py` — marker storage and state reminders.
 - `hooks/gear` and `hooks/gear.py` — native hook loader that finds Gear and
   forwards the event to the plugin's registered handler.
 - `hooks/adapter.py` — handler entry point and import bootstrap.

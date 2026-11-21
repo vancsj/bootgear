@@ -17,7 +17,7 @@ from typing import Any
 
 from bootgear_cli.clikit import current_program
 
-from . import model, protocol, seats
+from . import model, protocol, protocol_event_checks, protocol_replay, seats
 from .model import Claim, Slate
 
 DEFAULT_DIR = Path("~/.bootgear/converge")
@@ -195,7 +195,7 @@ def validate_event(slate: Slate, event: dict[str, Any]) -> list[str]:
     if agent == model.CONVERGE_AGENT and kind != "cutoff":
         problems.append(f"agent id {model.CONVERGE_AGENT!r} is reserved for computed cutoff events")
     _agent_budget(slate, agent, problems)
-    protocol.validate_event(slate, event, problems)
+    protocol_event_checks.validate_event(slate, event, problems)
     return problems
 
 
@@ -297,7 +297,7 @@ def validate_cutoff(slate: Slate, event: dict[str, Any], problems: list[str]) ->
 def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.events.append(event)
     if event["event"] != "init":
-        protocol.apply_event(slate, event)
+        protocol_replay.apply_event(slate, event)
         return
     slate.lenses = list(event["lenses"])
     slate.angles = event["angles"]
@@ -436,3 +436,15 @@ def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = F
             fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+def given(event: dict[str, Any], key: str) -> bool:
+    value = event.get(key)
+    return isinstance(value, str) and bool(value.strip())
+
+
+def rebut_evidence(event: dict[str, Any], problems: list[str]) -> str | None:
+    evidence = nonempty(event, "evidence", problems)
+    if evidence is not None and event.get("evidence_sha256") != evidence_hash(evidence):
+        problems.append("`evidence_sha256` does not match the evidence")
+    return evidence

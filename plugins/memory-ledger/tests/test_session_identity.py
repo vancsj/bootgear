@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from bootgear_cli import clikit
+from bootgear_cli import clikit, host_context
 
 PLUGIN = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN / "scripts"))
@@ -95,12 +95,12 @@ class SessionIdentityTests(unittest.TestCase):
     def test_explicit_host_picks_its_session_variable(self) -> None:
         both = {"CLAUDE_CODE_SESSION_ID": "claude-session", "CODEX_SESSION_ID": "codex-session"}
         for host, ancestor in (("codex", "claude"), ("claude", "codex")):
-            with self.subTest(host=host), patch.object(clikit, "_ancestor_host",
+            with self.subTest(host=host), patch.object(host_context, "_ancestor_host",
                                                        return_value=ancestor):
                 context = self.context(both, host=host)
 
                 self.assertEqual(context.session_id, f"{host}-session")
-        with patch.object(clikit, "_ancestor_host", return_value="claude"):
+        with patch.object(host_context, "_ancestor_host", return_value="claude"):
             self.assertEqual(resolve_identity(self.context(both, host="codex")),
                              "codex:codex-session")
 

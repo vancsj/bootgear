@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import unittest
 
-from test_rules import TempLedgerCase, _git_repo
+from rules_test_support import TempLedgerCase, _git_repo
 
 
 class DotRootLintTests(TempLedgerCase):

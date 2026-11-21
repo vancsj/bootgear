@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from . import ledger, model, protocol, render, seats
+from . import ledger, model, protocol, protocol_event_checks, render, seats
 from .model import Claim, Slate
 
 ACTION_KINDS = tuple(kind for kind in model.EVENTS if kind != "init")
@@ -117,7 +117,7 @@ def package(slate: Slate, actor: str, role_host: str,
                 problems: list[str] = []
                 ledger.roles(slate, claim, actor, "cut" if role == "cutter" else "attack", problems)
                 if role in ("r1", "r2"):
-                    protocol._refuter_role(slate, claim, actor, row["batch"], "attack", problems)
+                    protocol_event_checks._refuter_role(slate, claim, actor, row["batch"], "attack", problems)
                 if problems:
                     continue
             if role in ("finder", "r2") and row["action"] in ("escalate", "accept", "reply") \
@@ -140,7 +140,7 @@ def package(slate: Slate, actor: str, role_host: str,
                      "checks[].positive_control"],
                     ["keep only checked clean angles; record refutations separately",
                      "fresh-eye: choose unused names; last=true closes below the cap"])
-                add("attack", {**base, **_check("")}, list(protocol.CHECK_FIELDS),
+                add("attack", {**base, **_check("")}, list(protocol_event_checks.CHECK_FIELDS),
                     ["choose one angle from the current item; fresh-eye uses a new name",
                      "records one refuted angle; fresh-eye permits last=true"])
                 if batch != protocol.FRESH_EYE:

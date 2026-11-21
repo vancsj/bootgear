@@ -389,16 +389,16 @@ def test_converged_lists_the_disputed_findings(cv: Converge) -> None:
 
 
 def test_examples_and_frequent_list_the_attack_commands() -> None:
-    from converge import cli
+    from converge import cli_common
 
     for name in ("attack", "reply", "verdict"):
-        assert name in cli.EXAMPLES and name in cli.FREQUENT
+        assert name in cli_common.EXAMPLES and name in cli_common.FREQUENT
 
 
 def _example(name: str) -> str:
-    from converge import cli
+    from converge import cli_common
 
-    return cli.EXAMPLES[name]
+    return cli_common.EXAMPLES[name]
 
 
 def test_init_prints_its_head(cv: Converge) -> None:

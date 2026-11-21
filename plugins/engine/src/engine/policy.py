@@ -7,38 +7,37 @@ validation and capability selection have succeeded.
 """
 from __future__ import annotations
 
-import fcntl
-import json
 import math
-import os
 import re
-import subprocess
-import tempfile
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 
-from bootgear_cli.clikit import gear_argv, gear_command
+from bootgear_cli.clikit import gear_command
 
-from . import session_paths
 from .host_adapter import AdapterError, Event, HostContext, Intent
+from .policy_markers import (
+    _CLOSED_HEADING_RE,
+    MarkerUpdate,
+    _active_ledger,
+    _apply_marker,
+    _ledger_path,
+    _marker_lock,
+    _marker_path,
+    _read_json,
+    _read_text,
+)
+from .policy_state_nudge import _state_nudge
 from .subagent_state import has_running_descendant
 from .validate_standard import rule_headings
 
-_CLOSED_HEADING_RE: Final = re.compile(r"(?m)^## closed\s*$")
 _RAPID_SECONDS: Final = 30
 _MAX_NUDGES: Final = 1
 _MAX_TURNS: Final = 32
 _CODEX_RUNTIME_SOURCES: Final = frozenset({"startup", "resume", "clear", "fork"})
-_STALE_SECONDS: Final = 5 * 60
-_MIN_RECHECK_SECONDS: Final = 60
-_ESCALATE_AFTER_SECONDS: Final = 15 * 60
-_MAX_NUDGE_HISTORY: Final = 50
-_TERMINAL_NODES: Final = frozenset({"succeeded", "failed"})
 _STANDARD_FILES: Final = ("review-standard", "test-standard")
 _STANDARDS_HEADER: Final = "Standards (read each file in full before you judge or write):"
 _QUESTION_RETRY_MARKER: Final = "question_retry_state"
@@ -68,19 +67,6 @@ _CODEX_SESSION_ID_MISSING: Final = (
     "Codex did not provide a session_id. Do not start or resume an engine run "
     "with a generated UUID; obtain the host session identity first."
 )
-_ESCALATED_MESSAGE: Final = (
-    "This engine run's state ({run_id}, node '{node}') was already flagged "
-    "as stale and still hasn't recorded a transition ({minutes} minutes "
-    "now). If the work has genuinely moved past this node, run "
-    "{transition_command} now; if not, that's also worth "
-    "confirming rather than leaving open."
-)
-
-
-@dataclass(frozen=True)
-class MarkerUpdate:
-    path: Path
-    data: dict[str, Any] | None
 
 
 @dataclass(frozen=True)
@@ -90,118 +76,6 @@ class Policy:
 
     def evaluate(self, event: Event, context: HostContext) -> Intent:
         return self.evaluator(event, context)
-
-
-def _ledger_path(context: HostContext) -> Path:
-    default_dir = Path.home() / ".bootgear" / "session"
-    try:
-        return session_paths.active_ledger_path(context.session_id, default_dir)
-    except session_paths.SessionPathError as error:
-        raise AdapterError("active_session_path_error", str(error)) from error
-
-
-def _marker_path(context: HostContext, suffix: str) -> Path:
-    return _ledger_path(context).parent / f".{context.session_id}.{suffix}"
-
-
-def _active_ledger(context: HostContext) -> tuple[Path, str] | None:
-    path = _ledger_path(context)
-    if not path.is_file():
-        return None
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-    if _CLOSED_HEADING_RE.search(text):
-        return None
-    return path, text
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return default
-    except (OSError, UnicodeDecodeError) as error:
-        raise AdapterError("marker_read_error", "marker state could not be read") from error
-
-    def unique_fields(items: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in items:
-            if key in result:
-                raise ValueError("duplicate marker field")
-            result[key] = value
-        return result
-
-    def invalid_constant(value: str) -> None:
-        raise ValueError(f"invalid marker constant: {value}")
-
-    def finite_float(value: str) -> float:
-        parsed = float(value)
-        if not math.isfinite(parsed):
-            raise ValueError("non-finite marker number")
-        return parsed
-
-    try:
-        return json.loads(
-            text,
-            object_pairs_hook=unique_fields,
-            parse_constant=invalid_constant,
-            parse_float=finite_float,
-        )
-    except (ValueError, json.JSONDecodeError, RecursionError) as error:
-        raise AdapterError("invalid_marker", "marker state contains invalid JSON") from error
-
-
-def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-
-
-@contextmanager
-def _marker_lock(path: Path, *, nonblocking: bool = False) -> Iterator[bool]:
-    lock_path = path.with_name(f"{path.name}.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-    acquired = False
-    try:
-        try:
-            flags = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
-            fcntl.flock(fd, flags)
-        except BlockingIOError:
-            yield False
-            return
-        acquired = True
-        yield True
-    finally:
-        if acquired:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-def _apply_marker(update: MarkerUpdate, *, locked_path: Path | None = None) -> None:
-    def write() -> None:
-        if update.data is None:
-            update.path.unlink(missing_ok=True)
-        else:
-            _atomic_write(update.path, json.dumps(update.data, separators=(",", ":")))
-
-    if locked_path is not None:
-        if locked_path != update.path:
-            raise AdapterError("policy_apply_error", "marker update is outside its lock")
-        write()
-        return
-    with _marker_lock(update.path) as locked:
-        if not locked:
-            raise AdapterError("policy_apply_error", "marker lock was not acquired")
-        write()
 
 
 def _event_marker(event: Event, context: HostContext) -> Path | None:
@@ -269,14 +143,6 @@ def _goal_text(settlement: dict[str, Any] | None) -> str | None:
         ):
             return f"succeeded when {succeeded.strip()}\nfailed when {failed.strip()}"
     return None
-
-
-def _read_text(path: Path) -> str | None:
-    try:
-        value = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-    return value if value.strip() else None
 
 
 def _principles(context: HostContext, settlement: dict[str, Any] | None) -> str | None:
@@ -481,134 +347,6 @@ def _stop_codex(event: Event, context: HostContext) -> Intent:
     if event.hook_event_name == "Stop":
         return Intent.continue_(message, update)
     return Intent.add_context(message, update)
-
-
-def _parse_minute_ts(value: Any) -> float | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M").astimezone().timestamp()
-    except ValueError:
-        return None
-
-
-def _last_activity(state: dict[str, Any]) -> tuple[str, float | None, int]:
-    node = state.get("current") or ""
-    transitions = state.get("transitions") or []
-    if not isinstance(transitions, list):
-        transitions = []
-    index = len(transitions)
-    if transitions and isinstance(transitions[-1], dict):
-        return node, _parse_minute_ts(transitions[-1].get("at")), index
-    return node, _parse_minute_ts(state.get("started")), index
-
-
-def _run_state(context: HostContext) -> dict[str, Any] | None:
-    ledger = _ledger_path(context)
-    try:
-        result = subprocess.run(
-            [
-                *gear_argv("engine", "task", host=context.host),
-                "session",
-                "read",
-                context.session_id,
-                "--dir",
-                str(ledger.parent),
-                "--section",
-                "state",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None
-    try:
-        value = json.loads(result.stdout)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-def _state_nudge(event: Event, context: HostContext) -> Intent:
-    if event.payload.get("agent_id") is not None:
-        return Intent.observe()
-    active = _active_ledger(context)
-    if active is None:
-        return Intent.observe()
-    marker = _marker_path(context, "state_nudge_state")
-    marker_value = _read_json(marker, {})
-    if not isinstance(marker_value, dict):
-        raise AdapterError("invalid_marker", "State nudge marker has invalid structure")
-    for name in ("last_checked_at", "identity_first_nudged_at"):
-        value = marker_value.get(name)
-        if value is not None and (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
-            raise AdapterError("invalid_marker", "State nudge marker has invalid structure")
-    if "escalated_for_identity" in marker_value and type(
-        marker_value["escalated_for_identity"]
-    ) is not bool:
-        raise AdapterError("invalid_marker", "State nudge marker has invalid structure")
-    if "nudges" in marker_value and not isinstance(marker_value["nudges"], list):
-        raise AdapterError("invalid_marker", "State nudge marker has invalid structure")
-    now = time.time()
-    last_checked = marker_value.get("last_checked_at", 0.0)
-    if isinstance(last_checked, (int, float)) and now - last_checked < _MIN_RECHECK_SECONDS:
-        return Intent.observe()
-    marker_value["last_checked_at"] = now
-    update = MarkerUpdate(marker, marker_value)
-    state = _run_state(context)
-    if state is None:
-        return Intent.observe(update)
-    node, last_activity, transition_index = _last_activity(state)
-    if node in _TERMINAL_NODES or last_activity is None:
-        return Intent.observe(update)
-    elapsed = max(0.0, now - last_activity)
-    if elapsed < _STALE_SECONDS:
-        return Intent.observe(update)
-    identity = [node, last_activity, transition_index]
-    transition_command = f"`{gear_command('engine', 'task', host=context.host)} state transition`"
-    if marker_value.get("last_nudged_identity") != identity:
-        marker_value["last_nudged_identity"] = identity
-        marker_value["identity_first_nudged_at"] = now
-        marker_value["escalated_for_identity"] = False
-        message = (
-            "This engine run's state ({run_id}, node '{node}') hasn't recorded a "
-            "transition in over {minutes} minutes. That doesn't necessarily mean "
-            "the run is stuck — one node can legitimately span several tool calls "
-            "— but check whether the current work has actually moved past this "
-            f"node and, if so, run {transition_command} to record it."
-        )
-    else:
-        if marker_value.get("escalated_for_identity"):
-            return Intent.observe(update)
-        first = marker_value.get("identity_first_nudged_at")
-        if not isinstance(first, (int, float)) or now - first < _ESCALATE_AFTER_SECONDS:
-            return Intent.observe(update)
-        marker_value["escalated_for_identity"] = True
-        message = _ESCALATED_MESSAGE
-    history = marker_value.get("nudges")
-    if not isinstance(history, list):
-        history = []
-    history.append(
-        {
-            "at": now,
-            "node": node,
-            "activity": last_activity,
-            "transition_index": transition_index,
-        }
-    )
-    marker_value["nudges"] = history[-_MAX_NUDGE_HISTORY:]
-    text = message.format(run_id=event.session_id, node=node, minutes=int(elapsed // 60),
-                          transition_command=transition_command)
-    return Intent.add_context(text, update)
 
 
 def _question_boundary(event: Event, context: HostContext) -> Intent:

@@ -3,6 +3,12 @@
 severities: [must, should]
 cutoff: must
 
+## File length guidance
+
+Review Python files and scripts at 500 lines or more.
+Check if the file combines responsibilities that can move into focused modules.
+Keep related code together when it shares one responsibility.
+
 ## R001 [must]
 Each `SKILL.md` must state what it hands back and to whom. The handback can be a finding, a decision, or a report.
 If another skill depends on the output shape, the skill must state that shape in its own file.

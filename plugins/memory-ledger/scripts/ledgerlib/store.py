@@ -370,3 +370,10 @@ def find_entry(root: Path, slug: str, kind: str | None = None) -> Entry:
     if not path.is_file():
         sys.exit(f"no entry at {path}")
     return Entry(path, root, kind)
+
+
+def find_answer(e: Entry, aid: str) -> Answer:
+    for a in e.answers:
+        if a.aid == aid:
+            return a
+    sys.exit(f"{e.slug} has no {aid} (has: {', '.join(x.aid for x in e.answers)})")

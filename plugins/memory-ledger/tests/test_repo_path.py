@@ -11,7 +11,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from test_rules import LEDGER, TempLedgerCase, _git, _git_repo
+from rules_test_support import LEDGER, TempLedgerCase, _git, _git_repo
 
 POSIX_PATH = "/srv/checkouts/app"
 WINDOWS_PATH = "C:\\work\\app"

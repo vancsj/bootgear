@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 
-from test_rules import TempLedgerCase
+from rules_test_support import TempLedgerCase
 
 ENTRY = """# tech/dup
 Q: Is the widget ready?

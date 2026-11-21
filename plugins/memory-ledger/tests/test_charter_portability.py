@@ -8,7 +8,7 @@ import sys
 import unittest
 from types import SimpleNamespace
 
-from test_rules import SCRIPTS, TempLedgerCase
+from rules_test_support import SCRIPTS, TempLedgerCase
 
 sys.path.insert(0, str(SCRIPTS))
 

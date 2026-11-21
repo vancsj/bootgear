@@ -1,127 +1,14 @@
-"""Tests the registered state-nudge hook through public Gear.
-
-Drives the hook as a subprocess against a real scratch ledger built with
-Gear `engine task` route, then manipulates the hook's own marker file directly to force the
-elapsed-time and history conditions each test needs, rather than sleeping.
-"""
-import errno
-import importlib.util
 import json
-import os
-import re
-import shutil
 import subprocess
-import tempfile
 import time
 import unittest
-from pathlib import Path
-from unittest import mock
 
-from bootgear_cli import runtime
-from gear_commands import HOST, display
 from gear_commands import TASK as TASK_COMMAND
-from settlement_fixture import valid_settlement
-
-PLUGIN_DIR = Path(__file__).resolve().parents[1]
-HANDLER = PLUGIN_DIR / "hooks" / "state_nudge_reminder.py"
-HOOK = PLUGIN_DIR / "hooks" / "gear"
-
-_spec = importlib.util.spec_from_file_location("state_nudge_reminder", HANDLER)
-if _spec is None or _spec.loader is None:
-    raise RuntimeError(f"could not load {HOOK}")
-state_nudge_reminder = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(state_nudge_reminder)
-
-MACHINE = """\
-name: smoke
-nodes:
-  clarify:
-    next: [impl]
-  impl:
-    next: [fix, succeeded]
-  fix:
-    next: [impl]
-  succeeded:
-    terminal: true
-  failed:
-    terminal: true
-"""
-
-SETTLEMENT = valid_settlement(MACHINE)
+from gear_commands import display
+from state_nudge_hook_test_support import StateNudgeHookTestCase, state_nudge_reminder
 
 
-class StateNudgeHookTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="state-nudge-hook-test-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.home = self.tmp / "home"
-        self.home.mkdir()
-        self.data = self.tmp / "data"
-        runtimes = self.data / "bootgear" / "runtimes"
-        runtimes.parent.mkdir(parents=True)
-        runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
-        self.session_dir = self.home / ".bootgear" / "session"
-        self.session_dir.mkdir(parents=True)
-        settlement_file = self.session_dir / "settlement.txt"
-        settlement_file.write_text(SETTLEMENT)
-        self.run_id = "test-run"
-        env = {**os.environ, "HOME": str(self.home), "XDG_DATA_HOME": str(self.data)}
-        subprocess.run(
-            [*TASK_COMMAND, "session", "init", self.run_id,
-             "--settlement-file", str(settlement_file), "--dir", str(self.session_dir)],
-            capture_output=True, text=True, check=True, env=env,
-        )
-        self.marker_path = self.session_dir / f".{self.run_id}.state_nudge_state"
-
-    def _hook_env(self, home: Path | None = None) -> dict:
-        env = os.environ.copy()
-        env["BOOTGEAR_HOST"] = HOST
-        env.setdefault("UV_CACHE_DIR", str(Path.home() / ".cache" / "uv"))
-        env["HOME"] = str(home or self.home)
-        env["XDG_DATA_HOME"] = str(self.data)
-        return env
-
-    def _hook_argv(self):
-        return [str(HOOK), "--host", HOST, "adapter", "--handler", "state_nudge",
-                "--matcher-pattern", ".*"]
-
-    def _hook_input(self, cwd: str | None = None, **extra) -> dict:
-        payload = {
-            "session_id": self.run_id,
-            "cwd": cwd or str(self.session_dir),
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "true"},
-            "tool_response": {"exit": 0},
-            **extra,
-        }
-        if HOST == "codex":
-            payload.update(turn_id="fixture-turn", tool_use_id="fixture-tool")
-        return payload
-
-    def _run_hook(self, cwd: str | None = None, home: Path | None = None,
-                  extra: dict | None = None) -> dict:
-        payload = self._hook_input(cwd, **(extra or {}))
-        result = subprocess.run(
-            self._hook_argv(),
-            input=json.dumps(payload),
-            capture_output=True, text=True,
-            env=self._hook_env(home),
-            check=False,
-        )
-        self.last_hook_result = result
-        self.assertEqual(result.returncode, 0, result.stderr)
-        if not result.stdout.strip():
-            return {}
-        return json.loads(result.stdout)
-
-    def _force_stale(self):
-        """Backdate the marker so the hook treats last activity as stale,
-        without waiting 5 real minutes."""
-        marker = json.loads(self.marker_path.read_text()) if self.marker_path.exists() else {}
-        marker["last_checked_at"] = 0.0
-        self.marker_path.write_text(json.dumps(marker))
-
+class StateNudgeHookTest(StateNudgeHookTestCase):
     def test_no_nudge_when_fresh(self):
         self._setup_home_ledger()
         out = self._run_hook(cwd=str(self.session_dir))
@@ -154,25 +41,6 @@ class StateNudgeHookTest(unittest.TestCase):
         out = self._run_hook(cwd=str(self.session_dir / "project"))
         self.assertEqual(out, {})
         self.assertFalse((cwd_session_dir / f".{self.run_id}.state_nudge_state").exists())
-
-    def _setup_home_ledger(self):
-        home_session_dir = self.home / ".bootgear" / "session"
-        home_session_dir.mkdir(parents=True, exist_ok=True)
-        ledger_src = self.session_dir / f"{self.run_id}.md"
-        (home_session_dir / f"{self.run_id}.md").write_text(ledger_src.read_text())
-        return (home_session_dir / f"{self.run_id}.md",
-                home_session_dir / f".{self.run_id}.state_nudge_state")
-
-    def _backdate_started(self, ledger_path: Path, old_ts: str) -> None:
-        text = re.sub(r"(?m)^started: .*$", f"started: {old_ts}",
-                       ledger_path.read_text())
-        ledger_path.write_text(text)
-
-    def _backdate_transitions(self, ledger_path: Path, old_ts: str) -> None:
-        text = ledger_path.read_text()
-        text = re.sub(r"(?m)^(- \d{4}-\d{2}-\d{2} \d{2}:\d{2}) (\S+ -> \S+ )",
-                       lambda m: f"- {old_ts} {m.group(2)}", text)
-        ledger_path.write_text(text)
 
     def test_nudges_once_stale_and_records_history(self):
         ledger_path, marker_path = self._setup_home_ledger()
@@ -402,111 +270,6 @@ class StateNudgeHookTest(unittest.TestCase):
         second = self._run_hook(cwd=str(self.session_dir))
         self.assertIn("hookSpecificOutput", second, self.last_hook_result.stderr)
         self.assertIn("already flagged", second["hookSpecificOutput"]["additionalContext"])
-
-    def test_subagent_tool_call_is_ignored(self):
-        """A subagent's tool call carries the parent's session_id plus an
-        agent_id. The nudge is for the session driving the run, so a
-        subagent call must neither nudge nor touch the shared marker."""
-        ledger_path, marker_path = self._setup_home_ledger()
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-
-        out = self._run_hook(cwd=str(self.session_dir), extra={"agent_id": "sub-1"})
-        self.assertEqual(out, {})
-        self.assertFalse(marker_path.exists())
-
-    def test_unwritable_session_dir_reports_policy_error_without_marker_write(self):
-        """The native adapter reports a policy error before it writes a marker."""
-        ledger_path, marker_path = self._setup_home_ledger()
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-        session_dir = ledger_path.parent
-        session_dir.chmod(0o555)
-        self.addCleanup(session_dir.chmod, 0o755)
-
-        out = self._run_hook(cwd=str(self.session_dir))
-        self.assertEqual(out, {})
-        self.assertEqual(self.last_hook_result.returncode, 0)
-        self.assertIn("policy_apply_error", self.last_hook_result.stderr)
-        self.assertFalse(marker_path.exists())
-
-    def test_non_contention_flock_error_proceeds_unlocked(self):
-        """Only contention means another hook is checking; any other flock
-        error (e.g. ENOLCK on NFS without a lock daemon) proceeds unlocked."""
-        marker_path = self.session_dir / "marker"
-
-        def failing_flock(fd, op):
-            raise OSError(errno.ENOLCK, "no locks available")
-
-        with mock.patch.object(state_nudge_reminder.fcntl, "flock", failing_flock):
-            self.assertEqual(state_nudge_reminder._try_lock(marker_path), (True, None))
-
-    def test_concurrent_hook_runs_nudge_once(self):
-        """Parallel tool calls start their PostToolUse hooks concurrently.
-        However many overlap, a stale run gets exactly one nudge and one
-        history entry."""
-        ledger_path, marker_path = self._setup_home_ledger()
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-        payload = json.dumps(self._hook_input(str(self.session_dir)))
-
-        procs = [subprocess.Popen(self._hook_argv(), stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  text=True, env=self._hook_env())
-                 for _ in range(6)]
-        # The hook blocks reading stdin until EOF: let every interpreter
-        # finish starting, then release them together so their marker
-        # reads overlap instead of being staggered by startup time.
-        pipes = []
-        for p in procs:
-            assert p.stdin and p.stdout and p.stderr
-            pipes.append((p.stdin, p.stdout, p.stderr))
-        for stdin, _, _ in pipes:
-            stdin.write(payload)
-            stdin.flush()
-        time.sleep(1.0)
-        for stdin, _, _ in pipes:
-            stdin.close()
-        outputs = [(stdout.read(), stderr.read()) for _, stdout, stderr in pipes]
-        for p in procs:
-            p.wait()
-
-        for p, (_, err) in zip(procs, outputs):
-            self.assertEqual(p.returncode, 0, err)
-        nudged = [out for out, _ in outputs if out.strip()]
-        self.assertEqual(len(nudged), 1, nudged)
-        self.assertEqual(len(json.loads(marker_path.read_text())["nudges"]), 1)
-
-    def test_history_capped_at_50(self):
-        """50 pre-seeded entries, each with a distinguishable `at` value, so
-        the new entry appended by this call must evict the OLDEST (index 0,
-        `at`: 0) and keep the newest 49 plus the one just appended -- not
-        just any 50 entries. Distinct values matter: a wrong-end eviction,
-        keeping the oldest 50 and dropping the new entry, would otherwise
-        produce an indistinguishable-looking marker."""
-        ledger_path, marker_path = self._setup_home_ledger()
-        marker = {
-            "last_checked_at": 0.0,
-            "last_nudged_identity": ["other", 0.0, 0],
-            "nudges": [{"at": i, "node": "clarify", "activity": i, "transition_index": 0}
-                       for i in range(50)],
-        }
-        marker_path.write_text(json.dumps(marker))
-
-        old_ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 600))
-        self._backdate_started(ledger_path, old_ts)
-
-        self._run_hook(cwd=str(self.session_dir))
-
-        marker = json.loads(marker_path.read_text())
-        self.assertEqual(len(marker["nudges"]), 50)
-        # Oldest seeded entry (at=0) must be evicted; entries 1..49 survive,
-        # and the newly appended entry (identity ["clarify", ...] but a
-        # distinct, real `at` timestamp from `time.time()`) is now last.
-        seeded_ats = [n["at"] for n in marker["nudges"][:-1]]
-        self.assertEqual(seeded_ats, list(range(1, 50)))
-        self.assertNotIn(marker["nudges"][-1]["at"], range(50))
-        self.assertEqual(marker["nudges"][-1]["node"], "clarify")
 
 
 if __name__ == "__main__":

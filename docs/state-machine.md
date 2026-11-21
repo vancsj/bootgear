@@ -2,7 +2,8 @@
 
 Every engine run moves through a state machine: a YAML graph of named nodes and legal edges. The machine lives in the run's [session ledger](session-ledger.md). `task state transition` is a hard gate: it refuses an illegal move instead of logging it. The machine enforces only which moves are legal. The work inside a node is still done by skills (`execute`, `resolve`, `debate`, the domain `spec`/`test`/`review` skills), which call `transition` when they finish.
 
-Code: `plugins/engine/src/engine/state.py` (commands `transition`, `current`, `amend`, `show`, `validate`, `diagram`), with ledger I/O shared from `session.py`.
+`plugins/engine/src/engine/state.py` owns the `transition`, `current`, `amend`, `show`, `validate`, and `diagram` commands.
+`state_machine.py` validates the graph and renders its diagram. `session_ledger.py` handles shared ledger I/O.
 
 ## Schema
 

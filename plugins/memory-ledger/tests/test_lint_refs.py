@@ -8,7 +8,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from test_rules import TempLedgerCase
+from rules_test_support import TempLedgerCase
 
 Q = "Which colour is the sky?"
 
@@ -31,7 +31,7 @@ class RefLintCase(TempLedgerCase):
                ) -> subprocess.CompletedProcess[str]:
         import sys
 
-        from test_rules import LEDGER
+        from rules_test_support import LEDGER
         return subprocess.run([sys.executable, str(LEDGER), *args], cwd=cwd,
                               env=env or self.env(), capture_output=True, text=True, check=False)
 

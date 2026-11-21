@@ -30,7 +30,7 @@ from conftest import (
 
 sys.path.insert(0, str(PLUGIN_DIR / "src"))
 from bootgear_cli import clikit
-from converge import cli
+from converge import cli, cli_common
 
 # An invalid mode value is ignored, so the shared default is prose.
 PIPE = {"BOOTGEAR_OUTPUT": ""}
@@ -237,7 +237,7 @@ def test_prose_on_a_regular_file_and_with_prose_flag(cv: Converge, tmp_path: Pat
 def test_both_mode_flags_refused(cv: Converge) -> None:
     cv.init()
     err = cv("status", "s1", "--dir", str(cv.dir), "--json", "--prose", code=2).stderr
-    assert err.startswith(f"example: {GEAR_COMMAND} {cli.EXAMPLES['status']}\n")
+    assert err.startswith(f"example: {GEAR_COMMAND} {cli_common.EXAMPLES['status']}\n")
     assert err.endswith("--json and --prose are mutually exclusive\n")
 
 
@@ -250,10 +250,10 @@ def test_argparse_refusal_prose(cv: Converge) -> None:
     lines = err.splitlines()
     assert lines[-1].startswith(f"{GEAR_COMMAND} cut: error: the following arguments are required: ")
     assert "usage:" not in err
-    assert lines[0] == f"example: {GEAR_COMMAND} {cli.EXAMPLES['cut']}"
+    assert lines[0] == f"example: {GEAR_COMMAND} {cli_common.EXAMPLES['cut']}"
     listed = lines[1].removeprefix("commands: ").split(", ")
-    assert listed and set(listed) <= set(cli.EXAMPLES) - {"cut"}
-    assert lines[2:-1] == [f"  {GEAR_COMMAND} {cli.EXAMPLES[k]}" for k in cli.FREQUENT if k != "cut"]
+    assert listed and set(listed) <= set(cli_common.EXAMPLES) - {"cut"}
+    assert lines[2:-1] == [f"  {GEAR_COMMAND} {cli_common.EXAMPLES[k]}" for k in cli_common.FREQUENT if k != "cut"]
 
 
 def test_domain_refusal_prose_ends_with_the_problems(cv: Converge) -> None:
@@ -263,7 +263,7 @@ def test_domain_refusal_prose_ends_with_the_problems(cv: Converge) -> None:
     assert lines[-3:-1] == ["converge: refused:",
                             "  - unknown find angle 'nope' (not in this slate's init snapshot)"]
     assert lines[-1].startswith("next: ")
-    assert lines[0] == f"example: {GEAR_COMMAND} {cli.EXAMPLES['file']}"
+    assert lines[0] == f"example: {GEAR_COMMAND} {cli_common.EXAMPLES['file']}"
     assert lines[1].startswith("commands: init, escalate, ")
 
 
@@ -274,16 +274,16 @@ def test_domain_refusal_json_and_display_prog(cv: Converge) -> None:
     error = json.loads(result.stderr)["error"]
     assert error["command"] == "file"
     assert error["message"] == "converge: refused:"
-    assert error["example"] == f"{GEAR_COMMAND} {cli.EXAMPLES['file']}"
+    assert error["example"] == f"{GEAR_COMMAND} {cli_common.EXAMPLES['file']}"
     assert "file" not in error["commands"] and "init" in error["commands"]
-    assert set(error["examples"]) == set(cli.FREQUENT) - {"file"}
+    assert set(error["examples"]) == set(cli_common.FREQUENT) - {"file"}
 
 
 def test_argparse_refusal_json(cv: Converge) -> None:
     error = _error(cv, "init", "s1", "--dir", str(cv.dir), "--as", MAIN, "--refuters", "3")
     assert error["command"] == "init"
     assert error["message"].startswith(f"{GEAR_COMMAND} init: error: argument --refuters: invalid choice")
-    assert error["example"] == f"{GEAR_COMMAND} {cli.EXAMPLES['init']}"
+    assert error["example"] == f"{GEAR_COMMAND} {cli_common.EXAMPLES['init']}"
 
 
 # ---------------------------------------------------------------------------
@@ -384,8 +384,8 @@ def test_next_after_cutoff_and_converged(cv: Converge) -> None:
 
 def test_examples_cover_every_leaf_and_parse() -> None:
     parser = cli._parser()
-    assert set(cli.EXAMPLES) == set(clikit.leaf_commands(parser))
-    assert set(cli.FREQUENT) <= set(cli.EXAMPLES)
-    for leaf, example in cli.EXAMPLES.items():
+    assert set(cli_common.EXAMPLES) == set(clikit.leaf_commands(parser))
+    assert set(cli_common.FREQUENT) <= set(cli_common.EXAMPLES)
+    for leaf, example in cli_common.EXAMPLES.items():
         args = parser.parse_args(shlex.split(example))
         assert args.command == leaf, example
