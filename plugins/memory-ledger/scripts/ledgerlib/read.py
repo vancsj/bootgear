@@ -5,11 +5,13 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
+from shlex import quote
 
 from bootgear_cli.clikit import current_program
 
 from .config import pick, resolve_roots
 from .constants import (
+    DEPUTY,
     FUZZY_FLOOR,
     KINDS,
     RESOLVE_MAX_FOLDERS,
@@ -204,10 +206,23 @@ def cmd_resolve(args, root):
     # a property of the whole tree, so `lint` reports it as REGROUP, once, where
     # the tree is visible.
     print(f"MINT     {minted}   (choose folder: {' '.join(folders) or 'none yet'})")
+    deputy_root = resolve_roots(context=args.context, deputy_override=args.deputy_root)[DEPUTY]
     if len(ledgers) > 1:
-        print("         `new` needs --shared or --local. Ask before writing to shared: "
+        destinations = "--shared or --local"
+        rules_commands = f"{prog} rules"
+        if deputy_root.is_dir():
+            destinations = "--shared, --local, or --deputy"
+            rules_commands += f" and {prog} --deputy-root={quote(str(deputy_root))} rules --only deputy"
+        print(f"         `new` needs {destinations}. Ask before writing to shared: "
               "history is append-only, so a machine-local fact filed there cannot be "
-              f"unpublished later. Each ledger's rules: {prog} rules.")
+              f"unpublished later. Each ledger's rules: {rules_commands}.")
+    elif ledgers[0].kind == DEPUTY:
+        print("         Use --deputy with `new` to write to the deputy ledger.")
+    elif args.only is None and deputy_root.is_dir():
+        shared_note = " Ask before writing to shared." if ledgers[0].kind == "shared" else ""
+        print(f"         For `new`, use --{ledgers[0].kind} or --deputy.{shared_note}")
+    if args.deputy_root and args.only in (None, DEPUTY) and deputy_root.is_dir():
+        print(f"         For --deputy, pass --deputy-root={quote(str(deputy_root))} before `new`.")
 
 
 def print_entry_json(e: Entry) -> None:

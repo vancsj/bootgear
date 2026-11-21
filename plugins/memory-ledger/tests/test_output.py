@@ -42,14 +42,16 @@ class LedgerOutputTests(unittest.TestCase):
         self.home.mkdir()
         self.shared = self.temp / "shared"
         self.local = self.temp / "local"
+        self.deputy = self.temp / "deputy"
         _git_repo(self.shared)
         _git_repo(self.local)
+        _git_repo(self.deputy)
 
     def env(self, **extra: str) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items()
                if k not in (clikit.ENV_MODE, clikit.ENV_PROG, clikit.ENV_CALLER_CWD)}
         env.update(HOME=str(self.home), LEDGER_ROOT=str(self.shared),
-                   LEDGER_LOCAL_ROOT=str(self.local))
+                   LEDGER_LOCAL_ROOT=str(self.local), LEDGER_DEPUTY_ROOT=str(self.deputy))
         env.update(extra)
         return env
 
@@ -98,6 +100,69 @@ class LedgerOutputTests(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["next"], f"{PROGRAM} save")
         self.assertFalse(any(line.startswith("next:") for line in data["lines"]))
+
+    def test_deputy_writes_print_a_scoped_save(self) -> None:
+        for host in ("claude", "codex"):
+            env = {"BOOTGEAR_HOST": host}
+            slug = f"decisions/{host}-probe"
+            seeded = self.run_pipe(
+                "--session-id", "author-fixture", "new", slug, "--deputy",
+                "--q", f"How should {host} run?", "--claim", "Use the fixture.",
+                "--because", "The fixture supplies the config.", "--evidence", "true",
+                "--json", **env)
+            self.assertEqual(seeded.returncode, 0, seeded.stderr)
+            signed = self.run_pipe(
+                f"--deputy-root={self.deputy}", "--session-id", "verifier-fixture", "sign", slug, "a1",
+                "--only", "deputy", "--json", **env)
+            for command, result in (("new", seeded), ("sign", signed)):
+                with self.subTest(host=host, command=command):
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(shlex.split(json.loads(result.stdout)["next"])[-3:],
+                                     ["save", "--only", "deputy"])
+            self.assertIn(f"--deputy-root={self.deputy}", shlex.split(json.loads(signed.stdout)["next"]))
+
+    def test_mint_hint_names_the_deputy_destination(self) -> None:
+        for host in ("claude", "codex"):
+            for scope, hint in (
+                ((), "`new` needs --shared, --local, or --deputy."),
+                (("--only", "deputy"), "Use --deputy with `new` to write to the deputy ledger."),
+            ):
+                with self.subTest(host=host, scope=scope):
+                    result = self.run_pipe(
+                        "resolve", "What is the fixture policy?", *scope, BOOTGEAR_HOST=host)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("MINT ", result.stdout)
+                    self.assertIn(hint, result.stdout)
+
+    def test_mint_hint_names_only_available_destinations(self) -> None:
+        missing_root = str(self.temp / "unconfigured")
+        for host in ("claude", "codex"):
+            for missing, default_kind in (("LEDGER_ROOT", "local"), ("LEDGER_LOCAL_ROOT", "shared")):
+                with self.subTest(host=host, missing=missing):
+                    result = self.run_pipe("resolve", "What is the fixture policy?",
+                                           BOOTGEAR_HOST=host, **{missing: missing_root})
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn(f"--{default_kind} or --deputy", result.stdout)
+            with self.subTest(host=host, missing="LEDGER_DEPUTY_ROOT"):
+                result = self.run_pipe("resolve", "What is the fixture policy?",
+                                       BOOTGEAR_HOST=host, LEDGER_DEPUTY_ROOT=missing_root)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("--deputy", result.stdout)
+
+    def test_mint_hint_uses_the_explicit_deputy_root(self) -> None:
+        override = self.temp / "deputy's override"
+        _git_repo(override)
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                result = self.run_pipe(f"--deputy-root={override}", "resolve",
+                                       "What is the fixture policy?", BOOTGEAR_HOST=host)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"--deputy-root={shlex.quote(str(override))} rules --only deputy",
+                              result.stdout)
+                single = self.run_pipe(f"--deputy-root={override}", "resolve", "What is the fixture policy?",
+                                       BOOTGEAR_HOST=host, LEDGER_ROOT=str(self.temp / "missing"))
+                self.assertEqual(single.returncode, 0, single.stderr)
+                self.assertIn(f"--deputy-root={shlex.quote(str(override))} before `new`", single.stdout)
 
     def test_write_prose_ends_with_save_next(self) -> None:
         code, out, err = self.run_file(

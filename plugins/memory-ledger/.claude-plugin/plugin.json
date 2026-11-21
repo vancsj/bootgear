@@ -1,6 +1,6 @@
 {
   "name": "memory-ledger",
-  "version": "4.17.4",
+  "version": "4.17.5",
   "description": "Append-only ledger of settled questions, rival answers, and the evidence check behind each \u2014 signed per AI session so consensus accumulates across runs, split across a shared team ledger, a machine-local one and a deputy ledger of your own decisions. Start with /memory-ledger:setup.",
   "author": {
     "name": "vancsj",

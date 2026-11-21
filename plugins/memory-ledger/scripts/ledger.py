@@ -21,6 +21,7 @@ confidence — and this file is only the front door onto them.
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 
 from bootgear_cli.clikit import (
@@ -37,6 +38,7 @@ from ledgerlib.constants import (
     DEFAULT_DEPUTY_ROOT,
     DEFAULT_LOCAL_ROOT,
     DEFAULT_SHARED_ROOT,
+    DEPUTY,
     KINDS,
     SLUG_ADDRESSED,
 )
@@ -376,7 +378,13 @@ def _dispatch(args) -> int:
     if code == 0 and args.cmd in {"resolve", "show"}:
         record_lookup(args.context.session_id)
     if code == 0 and args.cmd in SAVE_NEXT:
-        print(f"next: {CATALOG.command('save')}")
+        deputy_write = getattr(args, "deputy", False) or getattr(args, "only", None) == DEPUTY
+        scope = f" --only {DEPUTY}" if deputy_write else ""
+        save = "save"
+        if deputy_write and args.deputy_root:
+            deputy_root = next(lg.root for lg in args.ledgers if lg.kind == DEPUTY)
+            save = f"--deputy-root={shlex.quote(str(deputy_root))} {save}"
+        print(f"next: {CATALOG.command(save)}{scope}")
     return code
 
 
