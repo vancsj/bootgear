@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -108,6 +109,18 @@ else:
 
     run = FeedbackRunner(registry, task, env)
     return task, inventory, checks, run, log
+
+
+@pytest.mark.parametrize("command", [(), ("settings",), ("intake",), ("gate",)])
+def test_help_describes_feedback_commands(feedback, command):
+    _, _, _, run, _ = feedback
+    result = subprocess.run([*run.prefix, *command, "--help"], env=run.env,
+                            text=True, capture_output=True, check=True)
+    description = result.stdout.split("\n\n", 2)[1]
+    assert not description.startswith(("positional arguments:", "optional arguments:", "options:")), result.stdout
+    if not command:
+        for name in ("settings", "intake", "gate"):
+            assert re.search(rf"^    {name} +\S", result.stdout, re.MULTILINE), result.stdout
 
 
 def test_intake_package_routes_and_no_writes(feedback):

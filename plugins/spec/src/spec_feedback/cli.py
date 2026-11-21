@@ -292,10 +292,16 @@ def cmd_gate(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _parser() -> Parser:
-    parser = Parser(prog=PROGRAM, allow_abbrev=False)
+    parser = Parser(prog=PROGRAM, allow_abbrev=False,
+                    description="Validate spec feedback and check independent review coverage.")
     subs = parser.add_subparsers(dest="command", required=True)
-    for name, function in (("settings", cmd_settings), ("intake", cmd_intake), ("gate", cmd_gate)):
-        sub = subs.add_parser(name, allow_abbrev=False)
+    commands = (
+        ("settings", cmd_settings, "Show the task layout, input schemas, and available helpers."),
+        ("intake", cmd_intake, "Validate raw observations and their destination for spec or spec-review."),
+        ("gate", cmd_gate, "Verify independent checks cover every observation and the review slate passes the Converge gate."),
+    )
+    for name, function, description in commands:
+        sub = subs.add_parser(name, allow_abbrev=False, help=description, description=description)
         sub.set_defaults(function=function)
         sub.add_argument("--task-folder", required=name != "settings", help="fixed task folder; contains requirements.md and optional design.md")
         output = sub.add_mutually_exclusive_group()

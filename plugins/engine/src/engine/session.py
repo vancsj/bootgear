@@ -1922,19 +1922,32 @@ def add_subparsers(sub: argparse._SubParsersAction, dir_parent: argparse.Argumen
     s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.set_defaults(func=_run_id_command(cmd_recall))
 
-    s = sub.add_parser("record-decision", parents=[dir_parent],
-                        help="append a decisions entry")
+    s = sub.add_parser(
+        "record-decision", parents=[dir_parent], help="append a decisions entry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Debate --summary forms by mode (include text after the colon):\n"
+            "  debate           round N, party '<role>': <position>\n"
+            "  scope-settled    scope_settled: <topic, scope, principles, cutoff, dissent>\n"
+            "  debate           unanimous_convergence: <question, agreed answer, round count>\n"
+            "  debate-capped    consented_stop: or round_cap: <question, decision, dissent>\n"
+            "  debate-degraded  degraded_convergence: <question, answer, unavailable party, round count>\n"
+            "\n"
+            "Start each question at round 0. Record scope-settled after a round-0 entry\n"
+            "and before any round 1+ entry. Repeat the current round number or advance\n"
+            "to a higher one. A final entry requires a prior round entry and closes the\n"
+            "question. After that, record no further entries for the same question."
+        ),
+    )
     s.add_argument("run_id", nargs="?", help=RUN_ID_HELP)
     s.add_argument("--mode", required=True,
                    choices=["solo", "resolve", "debate", "debate-capped",
                             "debate-degraded", "scope-settled"],
                    help="how the decision was reached: solo (below threshold), "
-                        "resolve (source-of-truth order), debate (roster "
-                        "converged), debate-capped (round limit hit, main "
-                        "agent tie-broke), debate-degraded (a party was "
-                        "unavailable, fewer than the full roster responded), "
-                        "scope-settled (closes a question's round-0 scoping "
-                        "phase; round 1+ substance follows separately)")
+                        "resolve (source-of-truth order), debate (round position "
+                        "or unanimous close), debate-capped (consented stop or "
+                        "round cap), debate-degraded (convergence with an unavailable "
+                        "party), scope-settled (closes round 0)")
     s.add_argument("--summary", required=True, help="one-line decision, reason, and cited evidence")
     s.add_argument("--question", metavar="QID",
                    help="stable id (e.g. 'q1') tying every round and the "

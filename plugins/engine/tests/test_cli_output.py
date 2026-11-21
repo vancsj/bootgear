@@ -143,6 +143,15 @@ class CliOutputTest(unittest.TestCase):
         return self._json_task("session", cmd, self.run_id, "--dir",
                                str(self.session_dir), *args, **env)
 
+    def test_record_decision_help_lists_debate_summary_forms(self):
+        result = self._task("session", "record-decision", "--help")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for summary in ("round N, party '<role>':", "scope_settled:",
+                        "unanimous_convergence:", "consented_stop:", "round_cap:",
+                        "degraded_convergence:"):
+            with self.subTest(summary=summary):
+                self.assertIn(summary, result.stdout)
+
     def _assert_refusal_lines(self, stderr, command, example):
         """The example, sibling commands and frequent examples come first; the message and
         its problems are the last lines."""
