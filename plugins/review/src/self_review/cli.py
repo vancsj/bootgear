@@ -19,6 +19,7 @@ ORIGINS = ("project-config", "user-request", "host-registration", "caller-judgem
 CONFIRMATIONS = ("user-message", "user-confirmed-ledger-entry")
 COMMANDS = ("settings", "status", "open", "configure", "pass", "check")
 WRITING_KINDS = ("procedure", "description")
+SPEC_CLEAN_ATTESTATION = "I have read the full spec and gone through the issues not requiring high effort to settle"
 
 
 class Refusal(Exception):
@@ -316,6 +317,9 @@ def run(args: argparse.Namespace, task: Path) -> dict[str, Any]:
             problems.append("expected_pass must be a positive integer")
         if request.get("result") not in ("clean", "found"):
             problems.append("result must be clean or found")
+        if (args.stage == "spec" and request.get("result") == "clean"
+                and request.get("attestation") != SPEC_CLEAN_ATTESTATION):
+            problems.append(f'attestation must be exactly "{SPEC_CLEAN_ATTESTATION}" for a clean spec pass')
         refs_problems(request.get("unresolved_refs"), "unresolved_refs", problems)
         if problems:
             raise Refusal(problems)
@@ -444,7 +448,8 @@ def main(argv: list[str] | None = None) -> int:
                     "Renewing a closed checkpoint needs renewal; use settings for supported values."
                 )
             elif command == "pass":
-                sub.epilog = ('Input JSON: {"expected_pass":1,"result":"clean","unresolved_refs":[]}.\n'
+                sub.epilog = ("For a clean spec pass, supply this JSON input. Only this case requires an exact attestation.\n"
+                              f'{{"expected_pass":1,"result":"clean","unresolved_refs":[],"attestation":"{SPEC_CLEAN_ATTESTATION}"}}\n'
                               "result: clean or found. expected_pass must equal the current count plus one.\n"
                               "unresolved_refs lists references the caller still needs to resolve.")
         output = sub.add_mutually_exclusive_group()

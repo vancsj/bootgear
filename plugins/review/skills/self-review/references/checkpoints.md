@@ -21,6 +21,13 @@ Record the pass after reading and authorized fixes.
 {"expected_pass": 1, "result": "found", "unresolved_refs": ["caller:open-item"]}
 ```
 
+For a spec pass, read the full spec and check issues within reasonable effort.
+For a clean spec pass, supply this exact `attestation`.
+
+```json
+{"expected_pass": 1, "result": "clean", "unresolved_refs": [], "attestation": "I have read the full spec and gone through the issues not requiring high effort to settle"}
+```
+
 Use the next number. A duplicate refuses and returns current state without another pass.
 Use `clean` when no issues remain from the author check. Use `found` when issues remain.
 Record only open references. `author-record` records the author's result and does not certify a fix.

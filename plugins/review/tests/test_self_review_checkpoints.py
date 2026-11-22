@@ -3,10 +3,33 @@ import json
 import os
 import subprocess
 
-from self_review_test_support import COMMAND, PROGRAM, SelfReviewTestCase
+from self_review_test_support import (
+    COMMAND,
+    PROGRAM,
+    SPEC_CLEAN_ATTESTATION,
+    SelfReviewTestCase,
+)
 
 
 class SelfReviewTest(SelfReviewTestCase):
+    def test_clean_spec_requires_exact_attestation(self):
+        self.open()
+        record_path = self.task / "self-review.json"
+        before = record_path.read_bytes()
+        request = {"expected_pass": 1, "result": "clean", "unresolved_refs": []}
+
+        for fields in ({}, {"attestation": SPEC_CLEAN_ATTESTATION + "."}):
+            with self.subTest(fields=fields):
+                refused = self.call("pass", {**request, **fields}, expected=2)
+                self.assertEqual(refused["outcome"], "refused")
+                self.assertIn("attestation", refused["diagnostic"])
+                self.assertIn(SPEC_CLEAN_ATTESTATION, refused["diagnostic"])
+                self.assertEqual(record_path.read_bytes(), before)
+
+        accepted = self.call("pass", {**request, "attestation": SPEC_CLEAN_ATTESTATION})
+        self.assertEqual(accepted["outcome"], "clean")
+        self.assertEqual(accepted["passes"], 1)
+
     def test_stages_have_separate_caps_and_closed_entries_are_immutable(self):
         self.open()
         self.record(1, refs=["caller:open"])

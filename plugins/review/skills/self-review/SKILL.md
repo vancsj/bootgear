@@ -49,16 +49,20 @@ If you need counting rules, exit codes, or diagnostics, read [writing-check.md](
 For an author pass:
 
 1. Run public `status` before each pass. Follow `next`. Keep spec and code budgets separate.
-2. Read the request, rules, and actual artifacts. For specs, read requirements, design if present, tasks, and relevant settlement.
-   For code, read the complete change, related prose, and tests. Use current evidence.
-3. Compare behavior, decisions, tables, diagrams, tasks, and acceptance checks.
-   Check wording, consistency, omissions, easy facts, and basic rules.
+2. Read the request, rules, and actual artifacts. For specs, read all current spec documents, including unchanged sections.
+   Read the relevant settlement. For code, read the complete change, related prose, and tests. Use current evidence.
+   For a spec pass, you may ask a sub-agent to read the full spec, request, and standards.
+   Ask it to report issues to you. Keep its report private. Decide what to fix and record the verdict yourself.
+3. Consider behavior, decisions, tables, diagrams, tasks, and acceptance checks.
+   Consider wording, consistency, omissions, easy facts, and basic rules.
+   For a spec pass, choose which issues to pursue and how much effort to spend.
 4. Run `settings`. For candidates or selected modes, read [source-selections.md](references/source-selections.md).
    Apply confirmed modes only. Follow the public workflow and handback for each invoked source.
 5. Run `check` on relevant prose. Read again for meaning, plain words, active voice, stable terms, and remaining ASD-STE100 rules.
 6. Fix clear issues within scope. Remove avoidable counts and repeated detail. Keep numbers that define behavior, identifiers, and citations.
 7. For opening, configuring, renewing, or recording a checkpoint, read [checkpoints.md](references/checkpoints.md).
-   Record after reading and fixes. Use `found` for remaining issues. Keep only open references.
+   Record after reading and fixes. Give the exact attestation for a clean spec pass.
+   Use `found` for remaining issues. Keep only open references.
 8. Follow `next`. Stop early when clean. Return deeper questions to the caller.
 
 ## Rules

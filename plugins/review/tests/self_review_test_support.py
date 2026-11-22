@@ -13,6 +13,7 @@ HOST = os.environ.get("BOOTGEAR_TEST_HOST", "claude")
 COMMAND = [str(REPO / "plugins" / "cli" / "bin" / "gear"), "--host", HOST,
            "--root", str(REPO), "review", "self-review"]
 PROGRAM = shlex.join([COMMAND[0], "--host", HOST, "review", "self-review"])
+SPEC_CLEAN_ATTESTATION = "I have read the full spec and gone through the issues not requiring high effort to settle"
 
 
 class SelfReviewTestCase(unittest.TestCase):
@@ -38,8 +39,10 @@ class SelfReviewTestCase(unittest.TestCase):
         return self.call("open", data if data is not None else {"candidates": [], "selections": []}, stage)
 
     def record(self, number, result="found", stage="spec", refs=None, expected=0):
-        return self.call("pass", {"expected_pass": number, "result": result,
-                                 "unresolved_refs": refs or []}, stage, expected)
+        request = {"expected_pass": number, "result": result, "unresolved_refs": refs or []}
+        if stage == "spec" and result == "clean":
+            request["attestation"] = SPEC_CLEAN_ATTESTATION
+        return self.call("pass", request, stage, expected)
 
     def source(self, name, mode="absorb", scope="selected phases: authoring; orchestration"):
         return {"name": name, "mode": mode, "scope": scope, "coverage": "Applies to this artifact.",
