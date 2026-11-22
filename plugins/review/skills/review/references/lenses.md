@@ -1,6 +1,6 @@
 # Review lenses
 
-Give the single finder the selected rows, diff, and linked ticket. Record each find angle as checked or inapplicable.
+Give each finder its selected rows, the diff, and the linked ticket. Record each find angle as checked or inapplicable.
 
 | Lens | Finder brief |
 |---|---|

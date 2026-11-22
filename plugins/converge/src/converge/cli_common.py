@@ -25,7 +25,7 @@ from bootgear_cli.clikit import (
     render_refusal,
 )
 
-from . import assignments, ledger, protocol, render, seats
+from . import assignments, finder_launch, ledger, protocol, render, seats
 from .cli_advisor import _reclaim_step
 from .model import Slate
 
@@ -74,6 +74,8 @@ EXAMPLES = {
     "angles": "angles --tag find --angles <file>",
     "config": "config validate --project-root <dir>",
     "prune": "prune <slate> <slate> --project-root <dir>",
+    "launch": "launch <slate> --dir <dir> --as main --input <launches.json>",
+    "launch-result": "launch-result <slate> --dir <dir> --as main --input <outcomes.json>",
 }
 ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
                  '--angle <angle> --reason "<why>"')
@@ -183,6 +185,10 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
     """The next legal action on the slate, from `protocol.slate_phase`."""
     phase = protocol.slate_phase(slate)
     if phase == "find":
+        if finder_launch.blocked(slate):
+            return "return the blocked finder assignment and its reason to the review caller"
+        if saved_host := finder_launch.saved_host(slate):
+            return _work_step(args, saved_host, slate.events[0]["as"])
         if assignments.parallel(slate):
             return _step(args, "work", "--as", slate.events[0]["as"], "--role-host", host() or "claude")
         return _MISSING + _step(args, "coverage")
@@ -223,6 +229,12 @@ def _role_command(args: argparse.Namespace, role_host: str, command: str, *, act
             f"--as {shlex.quote(actor or args.agent)}")
 
 
+def _work_step(args: argparse.Namespace, role_host: str, actor: str) -> str:
+    return _role_command(args, role_host, "work", actor=actor) + f" --role-host {role_host}"
+
+
 def _coverage_problems(slate: Slate) -> list[str]:
-    return [f"lens {lens} has missing find angles: {', '.join(row.missing)}"
-            for lens, row in render.coverage(slate).items() if row.missing]
+    problems = [f"lens {lens} has missing find angles: {', '.join(row.missing)}"
+                for lens, row in render.coverage(slate).items() if row.missing]
+    problems.extend(finder_launch.pending(slate))
+    return problems

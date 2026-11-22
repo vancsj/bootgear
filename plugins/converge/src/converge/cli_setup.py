@@ -13,8 +13,8 @@ import yaml
 from bootgear_cli.clikit import emit
 
 from . import angles as angles_mod
+from . import assignments, ledger, seats
 from . import config as config_mod
-from . import ledger, seats
 from .cli_advisor import _driver_lines, _drivers, launcher_problems
 from .cli_common import (
     CATALOG,
@@ -26,6 +26,7 @@ from .cli_common import (
     _refuse_next,
     _write,
 )
+from .model import Slate
 
 # ---------------------------------------------------------------------------
 # git snapshots
@@ -181,34 +182,64 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
 # write commands
 
 
-def _review_group(args: argparse.Namespace, project_root: str) -> str:
+def _review_inputs(args: argparse.Namespace, project_root: Path) -> tuple[str, Path | None]:
     if args.review_group is not None:
-        return args.review_group
+        return args.review_group, args.config
     prior = args.continue_from
     if prior is None:
-        return str(_path(args).resolve())
+        return str(_path(args).resolve()), args.config
     try:
         path = ledger.slate_path(args.dir, prior)
         previous = ledger.read(path, prior)
     except ledger.LedgerError as error:
         _refuse(error.problems, "cannot continue standalone review")
-    if previous.project_root != project_root:
+    if previous.project_root != str(project_root):
         _refuse([f"preceding slate {prior!r} belongs to a different project"])
-    return previous.review_group or str(path.resolve())
+    saved = Path(previous.task_config) if previous.task_config is not None else None
+    return previous.review_group or str(path.resolve()), args.config or saved
+
+
+def _r2_retry_problems(counts: dict[str, int], approved: list[int]) -> list[str]:
+    expected = {"finder": approved[0], "r1": approved[1], "r2": 1}
+    problems = []
+    for seat, value in expected.items():
+        if value < 1:
+            problems.append(f"approved {seat} count must be positive; got {value}")
+        elif counts[seat] != value:
+            problems.append(f"parallelism.{seat} is {counts[seat]}, expected {value} for this r2-only retry")
+    return problems
 
 
 def cmd_init(args: argparse.Namespace) -> None:
     seat_fields, notes = _init_seats(args)
+    project_root = args.project_root.expanduser().resolve()
+    review_group, task_config = _review_inputs(args, project_root)
     try:
-        resolved = config_mod.resolve(args.project_root, args.config, args.defaults)
+        resolved = config_mod.resolve(project_root, task_config, args.defaults)
     except config_mod.ConfigError as exc:
         _refuse(exc.problems, "invalid configuration")
     effective = resolved["effective"]
-    r2_workers = effective["parallelism"]["r2"]
+    report_rules = effective["cutoff"]["report_rules"]
+    for rule in args.report_rule:
+        if rule not in report_rules:
+            report_rules.append(rule)
+    if any(not rule.strip() for rule in args.report_rule):
+        _refuse(["--report-rule requires a nonempty rule ID"])
+    counts = effective["parallelism"]
+    if args.r2_only_retry is not None:
+        problems = _r2_retry_problems(counts, args.r2_only_retry)
+        if problems:
+            _refuse_next(args, "invalid r2-only retry", problems,
+                         "Restore the approved finder and r1 counts and set r2 to 1 before retrying init.")
+    r2_workers = counts["r2"]
     if r2_workers > 1 and seat_fields.get("seats", {}).get("r2") == "advisor":
         problems = launcher_problems(seat_fields["advisor"])
         if problems:
-            _refuse(problems, "invalid parallel advisor launcher")
+            _refuse_next(args, "invalid parallel advisor launcher", problems,
+                         "For a parallel launch, use an approved invitation-aware launcher. "
+                         "For an approved task override of parallelism.r2 only, set r2 to 1. "
+                         f"Retry with --r2-only-retry {counts['finder']} {counts['r1']}. "
+                         "Preserve finder and r1 counts and other task settings.")
     try:
         rows = angles_mod.resolve(args.angles, effective, Path(resolved["project_root"]))
     except angles_mod.AngleError as exc:
@@ -218,7 +249,16 @@ def cmd_init(args: argparse.Namespace) -> None:
     event: dict[str, Any] = {"event": "init", "lenses": _ids(args.lenses), "angles": rows,
                              "config": effective, "refuters": args.refuters,
                              "project_root": resolved["project_root"],
-                             "review_group": _review_group(args, resolved["project_root"])}
+                             "review_group": review_group}
+    if task_config is not None:
+        event["task_config"] = str(task_config.resolve())
+    if effective.get("finder_routing") is not None:
+        host = os.environ.get("BOOTGEAR_HOST", "claude")
+        initial = Slate(args.slate, lenses=event["lenses"], angles=rows, config=effective)
+        plan = assignments.finder_plan(initial, host)
+        if plan.problems:
+            _refuse(plan.problems, "finder capacity")
+        event["finder_host"] = host
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
@@ -231,14 +271,18 @@ def cmd_init(args: argparse.Namespace) -> None:
         event = _init_snapshot(args, event, problems)
     path = _path(args)
     data: dict[str, Any] = {"slate": args.slate, "lenses": event["lenses"], "angles": len(rows),
-                            "path": str(path), "review_group": event["review_group"]}
+                            "path": str(path), "review_group": event["review_group"],
+                            "parallelism": effective["parallelism"]}
+    workers = " ".join(f"{seat}={counts[seat]}" for seat in ("finder", "r1", "r2"))
     head = (f"INIT {args.slate} lenses={','.join(event['lenses']) or '-'} "
-            f"angles={len(rows)} path={path}")
+            f"angles={len(rows)} {workers} path={path}")
     for key in ("pass", "snapshot"):
         if key in event:
             data[key] = event[key]
             head += f" {key}={event[key]}"
     lines = [head]
+    if "task_config" in event:
+        data["task_config"] = event["task_config"]
     if "since" in event:
         delta = f"git diff {event['since']['snapshot']} {event['snapshot']}"
         data["since"], data["diff"] = event["since"]["slate"], delta
@@ -255,6 +299,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     early = event.get("advisor", {}).get("startup") != "deferred"
     step = (("; ".join(driver["prepare"] for driver in drivers) or None) if early
             else _next_step(args, _read(args)))
+    if step is None and "finder_host" in event:
+        step = _next_step(args, _read(args))
     emit(args.output_mode, data, lines, step)
 
 

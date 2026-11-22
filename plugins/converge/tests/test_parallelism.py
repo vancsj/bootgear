@@ -234,24 +234,45 @@ def test_parallel_advisor_launcher_and_worker_commands(cv: Converge) -> None:
     roles = {"roles": ["refuter"], "brief": "review the claim", "startup": "deferred",
              "launcher": "start-listener"}
     task = cv.root / "task.yaml"
-    task.write_text("parallelism: {r2: 2}\n")
+    task.write_text("parallelism: {finder: 3, r1: 3, r2: 3}\ncutoff: {report_rules: [R004]}\n")
     options = ("--as", MAIN, "--lenses", "correctness", "--settlement", str(settlement),
                "--review-group", "engine-run", "--config", str(task))
     for template in ("start-listener", "start-listener {group} --worker={worker} {invitation}",
                      "start-listener {group} {worker} {worker} {invitation}"):
         roles["launcher"] = template
         settlement.write_text(json.dumps({"converge_seats": {"r2": "advisor"}, "advisor_roles": roles}))
-        assert "launcher template" in cv.refused("init", "s1", *options)
+        error = cv.refused("init", "s1", *options)
+        assert "launcher template" in error
+        assert "parallelism.r2 only" in error and "Preserve finder and r1" in error
+        assert "--r2-only-retry 3 3" in error
         assert not cv.path().exists()
 
     roles["launcher"] = "start-listener {group} {worker} {invitation}"
     settlement.write_text(json.dumps({"converge_seats": {"r2": "advisor"}, "advisor_roles": roles}))
-    cv.ok("init", "s1", *options)
+    output = cv.ok("init", "s1", *options, "--json")
+    assert json.loads(output.stdout)["parallelism"] == {"finder": 3, "r1": 3, "r2": 3, "max_workers": 4}
     data = cv.status()
     assert data["review_group"] == "engine-run"
-    assert [driver["worker"] for driver in data["drivers"]] == ["r2", "r2-2"]
+    assert [driver["worker"] for driver in data["drivers"]] == ["r2", "r2-2", "r2-3"]
     second = data["drivers"][1]
     assert "reserve --group engine-run --worker r2-2" in second["reserve"]
     assert "wait-listener --group engine-run --worker r2-2" in second["wait_listener"]
     assert "--as r2-2 --role-host claude" in second["work_claude"]
     assert "--as r2-2 --role-host codex" in second["work_codex"]
+
+    error = cv.refused("init", "still-parallel", *options, "--r2-only-retry", "3", "3")
+    assert "parallelism.r2 is 3, expected 1 for this r2-only retry" in error
+    assert not cv.path("still-parallel").exists()
+
+    roles["launcher"] = "start-listener"
+    settlement.write_text(json.dumps({"converge_seats": {"r2": "advisor"}, "advisor_roles": roles}))
+    original = task.read_text()
+    task.write_text("parallelism: {finder: 1, r1: 1, r2: 1}\n")
+    error = cv.refused("init", "downgraded", *options, "--r2-only-retry", "3", "3")
+    for seat in ("finder", "r1"):
+        assert f"parallelism.{seat} is 1, expected 3 for this r2-only retry" in error
+    assert not cv.path("downgraded").exists()
+    task.write_text(original.replace("r2: 3", "r2: 1"))
+    retry = cv.ok("init", "retry", *options, "--r2-only-retry", "3", "3", "--prose")
+    assert "finder=3 r1=3 r2=1" in retry.stdout
+    assert cv.events("retry")[0]["config"]["cutoff"]["report_rules"] == ["R004"]

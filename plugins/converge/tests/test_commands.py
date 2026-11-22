@@ -225,7 +225,7 @@ def test_status_prints_claims_plan_and_next(cv: Converge) -> None:
     _attack(cv, BATCH_1[0])
     out = _lines(cv, "status", "s1")
     assert out[0] == ("SLATE s1 lenses=correctness,security phase=attack cutoff=none claims=2 "
-                      "difficulty_basis=artifact agents=4/5 advisor=-")
+                      f"difficulty_basis=artifact agents=4/5 advisor=- task_config={cv.root / 's1.task.yaml'}")
     assert out[1:] == [
         (f"F001 status=survived cut=no tier=traced batch=1 batch_state=open escalated=yes "
         f"fixed_remaining={','.join(BATCH_1[1:])} artifact_patch_eligible=false"),

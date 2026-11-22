@@ -169,6 +169,9 @@ At call time, use the domain skill's public selection contract.
 ### 10. Set advisor roles and startup
 
 Check required CLIs and the advisor skill without launching or pairing. Report real errors. Use the host requirements below.
+Use Converge `config resolve` at the review project before launcher approval.
+Include the approved task `converge.yaml` if the task folder has one. Show effective finder, r1, and r2 counts.
+Save an approved task config as `converge.yaml` in the settled task folder for both review stages.
 Resolve `converge-seats` without a task config. Offer only available roles among independent reviewer, adversarial reviewer, refuter, and gap hunter.
 Recommend adversarial reviewer and gap hunter, or adversarial reviewer alone when `r2` is `native_subagent`.
 Take an explicit decline as no advisor for that role. Record `native_subagent` in its place only after that decline.
@@ -186,6 +189,8 @@ For early failure, report the diagnostic and settle another available choice bef
 For deferred startup, settle launcher failures here. Show the launcher and planned uses at sign-off.
 When Converge uses multiple advisor workers, defer early pairing to its reserved worker setup before their first assignments.
 Approve the full invitation-aware command if a launcher is used for parallel workers.
+Give `{group}`, `{worker}`, and `{invitation}` as separate whole arguments.
+For an approved single r2 override, change only `parallelism.r2` in the task folder's `converge.yaml`.
 
 Write task configs for both settings. Set selected debate parties to `advisor` and the rest to `native_subagent`.
 Name all five Converge seats. Use `advisor` only for `r2` when refuter or gap hunter is selected.

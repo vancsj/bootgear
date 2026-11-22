@@ -18,7 +18,7 @@ from bootgear_cli.clikit import (
     host,
 )
 
-from . import ledger, model, protocol, render, work
+from . import finder_launch, ledger, model, protocol, render, work
 from .cli_advisor import _converge_command
 from .cli_common import (
     CATALOG,
@@ -32,6 +32,7 @@ from .cli_common import (
     _refuse_next,
     _role_command,
     _step,
+    _work_step,
     _write,
     _written,
 )
@@ -172,10 +173,15 @@ def cmd_work(args: argparse.Namespace) -> None:
               f"state={package['state']} seq={package['source_seq']}")]
     if "assignment" in package:
         lines.append("ASSIGNMENT " + dumps(package["assignment"]))
+    if "launch" in package:
+        lines.append("LAUNCH " + dumps(package["launch"]))
+    if package.get("unused_finder_lenses"):
+        lines.append("UNUSED FINDER LENSES " + ", ".join(package["unused_finder_lenses"]))
     for worker in package.get("workers", []):
         if worker["mechanism"] == "native_subagent":
-            worker["work"] = (_role_command(args, args.role_host, "work", actor=worker["id"])
-                              + f" --role-host {args.role_host}")
+            worker_host = worker.get("profile", {}).get("host", args.role_host)
+            worker["work"] = (_role_command(args, worker_host, "work", actor=worker["id"])
+                              + f" --role-host {worker_host}")
         lines.append("WORKER " + dumps(worker))
     for item in package["items"]:
         lines.append("ITEM " + dumps(item))
@@ -197,7 +203,16 @@ def cmd_work(args: argparse.Namespace) -> None:
     if package["actions"]:
         step = "choose an action, supply its evidence, then " + package["submit"]
     elif package["seat"] == "main":
-        if any(worker["ready"] for worker in package.get("workers", [])):
+        workers = package.get("workers", [])
+        if package["state"] == "blocked":
+            step = _next_step(args, slate)
+        elif package["phase"] == "find" and (saved_host := finder_launch.saved_host(slate)):
+            if any(worker["ready"] and "profile" in worker for worker in workers):
+                command = _role_command(args, saved_host, "launch") + " --input <launches.json>"
+                step = "reserve the ready finder profiles for available native slots: " + command
+            else:
+                step = "recover the original native finder receipts and record the launch outcomes"
+        elif any(worker["ready"] for worker in workers):
             step = "start or resume each ready worker with its full assignment"
         else:
             step = (f"{_step(args, 'render')}; then {_step(args, 'gate')}; "
@@ -208,6 +223,8 @@ def cmd_work(args: argparse.Namespace) -> None:
     elif package["state"] == "waiting" and "assignment" in package:
         step = (_role_command(args, args.role_host, "work") + " --role-host "
                 + args.role_host + f" --wait {args.wait or 30}")
+    elif package["state"] == "blocked":
+        step = "report the blocked finder assignment and its reason to main"
     elif "assignment" in package:
         step = "report completion to main"
     else:
@@ -217,6 +234,44 @@ def cmd_work(args: argparse.Namespace) -> None:
         (args.out / "work.json").parent.mkdir(parents=True, exist_ok=True)
         (args.out / "work.json").write_text(json.dumps(package, indent=2) + "\n")
     emit(args.output_mode, package, lines, step)
+
+
+def cmd_launch(args: argparse.Namespace) -> None:
+    reservation = args.command == "launch"
+    field = "launches" if reservation else "outcomes"
+    refresh_host = finder_launch.saved_host(_read(args)) or host() or "claude"
+    refresh = _work_step(args, refresh_host, args.agent)
+    try:
+        raw = sys.stdin.read() if args.input == "-" else caller_path(args.input).read_text()
+        value = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        _refuse_next(args, "invalid finder launch input", [str(exc)], refresh)
+    if not isinstance(value, dict) or set(value) != {field}:
+        _refuse_next(args, "invalid finder launch input", [f"expected one JSON object with {field!r}"], refresh)
+
+    def build(slate: Slate) -> dict[str, Any]:
+        saved_host = finder_launch.saved_host(slate)
+        if saved_host is not None and host() != saved_host:
+            raise ledger.LedgerError([f"use the slate's finder host {saved_host}"])
+        if reservation:
+            return value
+        results, problems = finder_launch.outcomes(slate, value[field])
+        if problems:
+            raise ledger.LedgerError(problems)
+        return {field: results}
+
+    args.action_next = refresh
+    event = _write(args, {"event": args.command}, build=build)
+    if reservation:
+        accepted = [{"id": entry["id"], "host": entry["host"],
+                     "arguments": finder_launch.native_arguments(entry)} for entry in event[field]]
+        step = "start each accepted worker with these arguments and its full assignment, then record its launch result"
+        emit(args.output_mode, {"seq": event["seq"], "accepted": accepted},
+             [f"LAUNCH seq={event['seq']}", *["ACCEPTED " + dumps(entry) for entry in accepted]], step)
+    else:
+        _written(args, {"seq": event["seq"], field: event[field]},
+                 f"LAUNCH RESULT seq={event['seq']} "
+                 + " ".join(f"{row['id']}={row['state']}" for row in event[field]))
 
 
 def cmd_action(args: argparse.Namespace) -> None:

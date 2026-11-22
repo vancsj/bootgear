@@ -50,9 +50,12 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "accept": ("claim", "when", "round"),
     "cutoff": ("results",),
     "fix-check": ("claim", "outcome", "evidence"),
+    "launch": ("launches",),
+    "launch-result": ("outcomes",),
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
-    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "review_group"),
+    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "review_group", "task_config",
+             "finder_host"),
     "file": ("lens", "angle", "depends", "rule"),
     "escalate": ("wider", "evidence"),
     "find-run": (),
@@ -67,6 +70,8 @@ OPTIONAL: dict[str, tuple[str, ...]] = {
     "accept": (),
     "cutoff": (),
     "fix-check": ("review_slate",),
+    "launch": (),
+    "launch-result": (),
 }
 ENVELOPE = ("seq", "ts", "event", "as")
 
@@ -243,20 +248,32 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
                                     and refuters in (1, 2)):
         problems.append(f"`refuters` must be 1 or 2; got {refuters!r}")
     config = event.get("config")
-    config_problems = validate_config(config, "snapshot", complete=True)
+    finder_host = event.get("finder_host")
+    routed = isinstance(config, dict) and config.get("finder_routing") is not None
+    if routed and finder_host not in ("claude", "codex"):
+        problems.append("init: finder routing requires a saved host of claude or codex")
+    if not routed and "finder_host" in event:
+        problems.append("init: finder_host requires finder routing")
+    config_problems = validate_config(config, "snapshot", complete=True, finder_host=finder_host)
     problems.extend(f"config snapshot: {p}" for p in config_problems)
-    if not config_problems and isinstance(config, dict) and type(refuters) is int and refuters in (1, 2):
-        initial = Slate("init", config=config, init_refuters=refuters)
-        if assignments.parallel(initial) and event.get("as") in assignments.workers(initial):
+    if not problems:
+        initial = Slate("init", lenses=event["lenses"], angles=event["angles"], config=event["config"],
+                        init_refuters=event["refuters"])
+        if routed:
+            initial.finder_plan = assignments.finder_plan(initial, event["finder_host"])
+            problems.extend(initial.finder_plan.problems)
+        if ((assignments.parallel(initial) or routed)
+                and event.get("as") in assignments.workers(initial)):
             problems.append("init: main must use an ID outside the worker assignments")
     if "review_group" in event:
         group = event["review_group"]
         if not isinstance(group, str) or not group.strip() or group.startswith("-"):
             problems.append("review_group must be nonempty and cannot start with '-'")
-    if "project_root" in event:
-        root = event["project_root"]
-        if not (isinstance(root, str) and root.startswith("/")):
-            problems.append(f"`project_root` must be an absolute path; got {root!r}")
+    for field in ("project_root", "task_config"):
+        if field in event:
+            path = event[field]
+            if not (isinstance(path, str) and path.startswith("/")):
+                problems.append(f"`{field}` must be an absolute path; got {path!r}")
     if "pass" in event:
         value = event["pass"]
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
@@ -328,9 +345,12 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.project_root = event.get("project_root")
     slate.review_pass = event.get("pass")
     slate.review_group = event.get("review_group")
+    slate.task_config = event.get("task_config")
     slate.since = event.get("since")
     slate.seats = event.get("seats") or {}
     slate.advisor = event.get("advisor")
+    if "finder_host" in event:
+        slate.finder_plan = assignments.finder_plan(slate, event["finder_host"])
 
 
 # ---------------------------------------------------------------------------

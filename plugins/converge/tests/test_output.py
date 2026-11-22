@@ -102,8 +102,10 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     d = str(cv.dir)
     plan = _next(cv, "status s1 --dir {dir} --json")
     init = _json(cv, *_init_args(cv))
-    assert init == {"slate": "s1", "lenses": ["correctness", "security"],
-                    "angles": init["angles"], "path": str(cv.path()), "review_group": str(cv.path().resolve())}
+    assert init == {"slate": "s1", "lenses": ["correctness", "security"], "angles": init["angles"],
+                    "path": str(cv.path()), "review_group": str(cv.path().resolve()),
+                    "task_config": str(cv.root / "steps.yaml"),
+                    "parallelism": {"finder": 1, "r1": 1, "r2": 1, "max_workers": 4}}
     assert isinstance(init["angles"], int) and init["angles"] > 0
     assert _json(cv, "status", "s1", "--dir", d)["phase"] == "find"
     initial_cutoff_error = _error(cv, "cutoff", "s1", "--dir", d)

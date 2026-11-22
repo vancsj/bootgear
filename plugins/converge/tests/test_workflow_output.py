@@ -374,7 +374,7 @@ def test_shared_status_prints_claims_plan_and_next(tmp_path: Path) -> None:
     slate.check(BATCH_1[0])
     out = slate.lines("status")
     assert out[0] == ("SLATE s1 lenses=correctness phase=attack cutoff=none claims=2 "
-                      "difficulty_basis=artifact agents=4/5 advisor=-")
+                      f"difficulty_basis=artifact agents=4/5 advisor=- task_config={tmp_path / 'task.yaml'}")
     assert out[-2] == f"PLAN 1 F001 attack r1 batch=1 angles={','.join(BATCH_1[1:])}"
     assert out[-1] == f"next: attack: r1 attack F001 batch 1; plan: {slate.plan()}"
     data = slate.status()

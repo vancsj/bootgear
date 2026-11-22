@@ -14,7 +14,7 @@ from bootgear_cli.clikit import (
 
 from . import angles as angles_mod
 from . import config as config_mod
-from . import ledger, model, protocol, render
+from . import finder_launch, ledger, model, protocol, render
 from .cli_advisor import _drivers
 from .cli_common import (
     _MISSING,
@@ -124,6 +124,7 @@ def cmd_status(args: argparse.Namespace) -> None:
             "cutoff": cutoff, "agents": agents, "agent_cap": slate.agent_cap,
             "parallelism": slate.parallelism,
             "review_group": slate.review_group,
+            "task_config": slate.task_config,
             "gap_hunt_done": slate.gap_hunt_done,
             "phase": phase, "steps": slate.config["steps"], "caps": slate.config["caps"],
             "plan": plan,
@@ -139,6 +140,8 @@ def cmd_status(args: argparse.Namespace) -> None:
               f"difficulty_basis={slate.config['cutoff']['difficulty_basis']} "
               f"agents={len(agents)}/{slate.agent_cap} advisor={advisor or '-'}"),
              *map(_claim_line, claims), _adhoc_line(adhoc), *_plan_lines(plan)]
+    if slate.task_config is not None:
+        lines[0] += f" task_config={slate.task_config}"
     emit(args.output_mode, {}, lines, step)
 
 
@@ -147,7 +150,7 @@ def cmd_converged(args: argparse.Namespace) -> None:
     phase = protocol.slate_phase(slate)
     flags = protocol.cut_flags(slate)
     open_ids = {claim.id: claim_phase for claim, claim_phase in slate.open_claims()}
-    pending, disputed = [], []
+    pending, disputed = finder_launch.pending(slate), []
     for claim in slate.claims.values():
         if claim.id in open_ids:
             pending.append(f"{claim.id} open in {open_ids[claim.id]}")
@@ -176,14 +179,19 @@ def cmd_coverage(args: argparse.Namespace) -> None:
         lines.append(f"LENS {lens} ran={','.join(row.ran) or '-'} na={','.join(row.na) or '-'} "
                      f"missing={','.join(row.missing) or '-'}")
         lines.extend(f"NA {lens} {angle_id} {reason}" for angle_id, reason in row.na.items())
-    if any(row.missing for row in coverage.values()):
+    pending = finder_launch.pending(slate)
+    if pending:
+        lines.extend(pending)
+        step = _next_step(args, slate)
+    elif any(row.missing for row in coverage.values()):
         step = _MISSING + _step(args, "coverage")
     else:
         step = _step(args, "status", "--json")
-    emit(args.output_mode,
-         {"lenses": {lens: {"ran": row.ran, "na": row.na, "missing": row.missing}
-                     for lens, row in coverage.items()}},
-         lines, step)
+    data: dict[str, Any] = {"lenses": {lens: {"ran": row.ran, "na": row.na, "missing": row.missing}
+                                     for lens, row in coverage.items()}}
+    if slate.finder_plan is not None:
+        data["finder_turns_pending"] = pending
+    emit(args.output_mode, data, lines, step)
 
 
 def _base_slate(args: argparse.Namespace) -> Slate | None:

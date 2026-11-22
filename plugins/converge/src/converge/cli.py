@@ -33,6 +33,7 @@ from .cli_actions import (
     cmd_find_run,
     cmd_fix_check,
     cmd_gap_hunt_done,
+    cmd_launch,
     cmd_rebut,
     cmd_reply,
     cmd_verdict,
@@ -105,6 +106,10 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="refuter seats on the slate; 1 drops r2")
     p.add_argument("--defaults", type=caller_path, metavar="FILE",
                    help="caller-layer converge.yaml, below the user layer: a skill's cutoff tables")
+    p.add_argument("--report-rule", action="append", default=[], metavar="ID",
+                   help="append a missing cutoff report rule; repeat in the required order")
+    p.add_argument("--r2-only-retry", nargs=2, type=int, metavar=("FINDER", "R1"),
+                   help="approved positive finder and r1 counts. Resolved counts must match and r2 must be 1.")
     config_args(p, root_help="project directory for .bootgear/config layers and git refs/converge/<slate> snapshots")
 
     p = command("file", cmd_file, write=True)
@@ -279,6 +284,17 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p = command("config", cmd_config, slate=False)
     p.add_argument("action", choices=("validate", "resolve"))
     config_args(p)
+
+    p = command("launch", cmd_launch, write=True)
+    p.description = "Reserve a batch of ready routed finders. Only the saved main actor can reserve a worker."
+    p.add_argument("--input", required=True, metavar="FILE",
+                   help="JSON object with launches: [{id, host, model, effort}]; use '-' for stdin")
+    p = command("launch-result", cmd_launch, write=True)
+    p.description = "Record native finder results. A known effective mismatch blocks the worker."
+    p.add_argument("--input", required=True, metavar="FILE",
+                   help="JSON object with outcomes: [{id, state: finished|blocked, handle, receipt_worker, "
+                        "effective: {model, effort}, reason}]; use '-' for stdin. A native handle and receipt_worker "
+                        "are required for finished outcomes or native evidence. A blocked outcome needs a reason.")
     add_mode_flags(parser)
     guidance = {
         "slate": "saved slate id; lowercase letters, digits, dots, underscores, and hyphens",

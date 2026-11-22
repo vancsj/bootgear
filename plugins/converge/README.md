@@ -170,6 +170,8 @@ Claude Code uses `--host claude converge converge`; Codex uses
 
 ```
 init        start a slate: lenses, angle files, refuters; --snapshot pins the work tree
+launch      reserve ready routed finders and return their native launch arguments
+launch-result  record native finder results and observed model and effort
 file        file a claim
 escalate    the finder widens a claim with a route to the worse outcome, or declines
 find-run    record that a find angle was run
@@ -242,6 +244,16 @@ angles: {files: [...], disable: [...]}
 
 `init` snapshots the effective config and angle table into the slate, so later edits never
 change an open one. Design detail: [docs/converge.md](../../docs/converge.md).
+
+Set `parallelism.finder` to the total finder budget. Add `finder_routing` to route by lens.
+Set `default` with `model` and `effort`. Each `groups` entry takes `lenses`, `workers`, `model`, and `effort`.
+Groups take only the workers their angle pairs can use. The default receives any remaining pairs within the budget.
+On Claude Code, use `haiku`, `sonnet`, or `opus` as the model. On Codex, use a native model ID.
+Set `finder_routing: null` in a later layer to clear the routing policy for that review.
+
+Use `init --report-rule ID` to add a missing report rule without replacing task settings. Repeat it in the order you want.
+Use `--continue-from` to reuse the prior standalone slate's saved `--config` path. Supply `--config` to select an approved replacement.
+For an approved r2-only retry, set `parallelism.r2` to 1. Pass `--r2-only-retry FINDER R1` with the approved counts.
 
 ---
 

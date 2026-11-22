@@ -79,9 +79,15 @@ Pass absolute [angles.yaml](references/angles.yaml) and [design-patterns.yaml](r
 Pass absolute [cutoff.yaml](references/cutoff.yaml) as `--defaults`. Let the CLI load these files.
 Use `--pass <n>` only in Engine from visit 3. Omit `--snapshot` and `--since`.
 In Engine, pass the exported settlement with `--settlement` and its run ID with `--review-group`.
+When the task folder has an approved `converge.yaml`, pass it once with `--config`.
 For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
+Before standalone launcher approval, use Converge's advisor startup steps. Show the effective worker counts.
+Copy an approved standalone config to `<converge-dir>/<slate>.task.yaml` and pass the copy once with `--config`.
 For later standalone visits, pass the prior slate ID with `--continue-from`.
+To replace its config after approval, save a new copy for this slate and pass that copy with `--config`.
+If Gear refuses the launcher, follow its retry options. Change only `parallelism.r2` for an approved single r2 override.
 Use the Converge worker plan for parallel seats. Keep invited channels until the outer review ends.
+When main's work shows finder profiles, use Converge's routed finder handoff.
 
 ```text
 <gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml

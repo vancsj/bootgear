@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import assignments, ledger, model
+from . import assignments, finder_launch, ledger, model
 from .model import Claim, Slate
 from .protocol import (
     FRESH_EYE,
@@ -42,6 +42,7 @@ def validate_event(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
      "verdict": _validate_verdict, "cut": _validate_cut, "accept": _validate_accept,
      "rebut": _validate_rebut, "cutoff": ledger.validate_cutoff,
      "fix-check": _validate_fix_check,
+     "launch": finder_launch.validate_event, "launch-result": finder_launch.validate_event,
      }[event["event"]](slate, event, problems)
     _gate(slate, event, problems)
 
@@ -176,14 +177,16 @@ def _batch(event: dict[str, Any], problems: list[str]) -> int | str | None:
 
 def _find_owner(slate: Slate, agent: Any, lens: str, angle: str, kind: str,
                 problems: list[str]) -> None:
-    if assignments.parallel(slate):
+    if assignments.parallel(slate) or slate.finder_plan is not None:
         if not _find_open(slate):
-            problems.append(f"{kind}: parallel find work is closed")
+            problems.append(f"{kind}: find work is closed")
         owner = assignments.find_owners(slate).get((lens, angle))
         if owner is None:
             problems.append(f"{kind}: no find assignment for {lens}/{angle}")
         elif owner != agent:
             problems.append(f"{kind}: {lens}/{angle} is assigned to {owner}")
+        elif slate.finder_plan is not None and slate.finder_launches.get(owner, {}).get("state") != "attempted":
+            problems.append(f"{kind}: {owner} needs an active finder launch reservation")
 
 
 def _validate_gap_hunt_done(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -226,11 +229,11 @@ def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
     ledger.angle_lens(row, lens, problems)
     if origin == "lens" and lens is not None and lens not in slate.lenses:
         problems.append(f"lens {lens!r} is not an init lens ({', '.join(slate.lenses)})")
-    if assignments.parallel(slate):
-        if origin == "gap-hunt" and (event.get("as") != "r2" or slate_phase(slate) != "gap-hunt"):
-            problems.append("file: only r2 can file during the open parallel gap hunt")
-        if origin == "lens" and lens is not None and row is not None:
-            _find_owner(slate, event.get("as"), lens, row["id"], "file", problems)
+    if (origin == "gap-hunt" and assignments.parallel(slate)
+            and (event.get("as") != "r2" or slate_phase(slate) != "gap-hunt")):
+        problems.append("file: only r2 can file during the open parallel gap hunt")
+    if origin == "lens" and lens is not None and row is not None:
+        _find_owner(slate, event.get("as"), lens, row["id"], "file", problems)
 
 
 def _validate_escalate(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:

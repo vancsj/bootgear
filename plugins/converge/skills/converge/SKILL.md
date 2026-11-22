@@ -28,11 +28,16 @@ Use Gear's public `converge converge` commands. Read help for syntax.
 Create a slate with the supplied lenses, angles, config, and settlement. For an existing slate, read status and resume.
 Follow printed steps and role handoffs.
 
+Before launcher approval, use `config resolve` at the review project. Include its task config when present.
+Show the effective finder, r1, and r2 counts. For multiple r2 workers, approve an invitation-aware launcher.
+Give `{group}`, `{worker}`, and `{invitation}` as separate whole arguments. Use the retry options Gear prints on refusal.
+
 Use the printed seat mechanisms. Start each native role once and reuse it.
 For an advisor, call `advisor:advisor` and follow the printed driver.
 Honor deferred startup. Reuse the recorded channel until shared work ends. Act on heartbeat `next` when it stops.
 
 For parallel seats, read the worker assignments from main's `work` output.
+When main's work shows finder profiles, use the [routed finder handoff](references/finder-routing.md).
 Start each ready worker once with its ID, full assignment, and work command.
 Keep the same native worker for a reply handoff. Report a refused launch with its assignment and host diagnostic.
 For parallel advisors, use the printed reservation and driver for that worker ID.
