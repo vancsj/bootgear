@@ -28,6 +28,8 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
         )
     elif kind == "find-run":
         slate.find_runs.append(event)
+    elif kind == "gap-hunt-done":
+        slate.gap_hunt_done = True
     elif kind == "angle-na":
         slate.angle_na.append(event)
         if "claim" in event:

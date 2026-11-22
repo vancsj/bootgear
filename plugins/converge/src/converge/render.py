@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import effort, model, protocol
+from . import assignments, effort, model, protocol
 from .model import Slate
 
 
@@ -31,8 +31,7 @@ def coverage(slate: Slate) -> dict[str, LensCoverage]:
         ran = sorted({r["angle"] for r in slate.find_runs if r["lens"] == lens})
         na = {r["angle"]: r["reason"] for r in slate.angle_na
               if r["phase"] == "find" and r.get("lens") == lens}
-        applicable = [row["id"] for row in slate.angles
-                      if row["tag"] == "find" and row.get("lens") in (None, lens)]
+        applicable = assignments.find_angles(slate, lens)
         missing = [a for a in applicable if a not in ran and a not in na]
         result[lens] = LensCoverage(ran, dict(sorted(na.items())), missing)
     return result

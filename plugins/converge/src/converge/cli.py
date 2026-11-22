@@ -19,6 +19,7 @@ from bootgear_cli.clikit import (
 
 from . import angles as angles_mod
 from . import ledger, model, protocol, seats
+from .advisor_wait import cmd_advisor_wait
 from .cli_actions import (
     _batch_arg,
     cmd_accept,
@@ -31,6 +32,7 @@ from .cli_actions import (
     cmd_file,
     cmd_find_run,
     cmd_fix_check,
+    cmd_gap_hunt_done,
     cmd_rebut,
     cmd_reply,
     cmd_verdict,
@@ -94,6 +96,11 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="previous slate with a snapshot; requires --snapshot and --pass equal to the previous pass + 1; prints their git diff")
     p.add_argument("--settlement", type=caller_path, metavar="FILE",
                    help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--review-group", metavar="ID",
+                       help="Engine run ID for the shared advisor reservations")
+    group.add_argument("--continue-from", metavar="SLATE",
+                       help="preceding standalone slate in the same directory and project")
     p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
                    help="refuter seats on the slate; 1 drops r2")
     p.add_argument("--defaults", type=caller_path, metavar="FILE",
@@ -128,6 +135,9 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
         p.add_argument(flag, required=True)
     p.add_argument("--result", required=True,
                    help="`none` if the find filed no claim, else the claim ids it filed, comma-separated")
+
+    p = command("gap-hunt-done", cmd_gap_hunt_done, write=True)
+    p.description = "Record completion from r2 after a parallel gap hunt, including with zero claims."
 
     p = command("angle-na", cmd_angle_na, write=True)
     p.description = "Record an absent tell. find requires lens; attack requires claim and a current table angle."
@@ -192,8 +202,18 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="host that executes this role's commands; always explicit")
     p.add_argument("--role", choices=seats.SEATS,
                    help="seat for a custom agent id not yet present in the slate")
+    p.add_argument("--wait", type=int, metavar="SECONDS",
+                   help="parallel workers wait up to this positive duration for work or a reply handoff")
     p.add_argument("--out", type=caller_path,
                    help="optional: save work.json and separate editable actions in an assigned workflow directory outside the target artifact")
+
+    p = command("advisor-wait", cmd_advisor_wait, write=True)
+    p.description = "Wait for one parallel advisor response with a quiet receive limit."
+    p.add_argument("--channel", required=True, help="reserved channel number")
+    p.add_argument("--request", required=True, metavar="MESSAGE_ID",
+                   help="message_id from the outstanding request's send receipt")
+    p.add_argument("--timeout", type=float, default=300, metavar="SECONDS",
+                   help="seconds per receive (default: 300)")
 
     p = command("reply", cmd_reply, write=True)
     p.description = "Reply to the batch's refutation. rebut requires new evidence; decline carries no evidence or text."

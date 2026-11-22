@@ -12,7 +12,7 @@ from typing import Any
 
 from bootgear_cli.clikit import current_program
 
-from . import effort, model
+from . import assignments, effort, model
 from .model import Claim, Slate
 
 
@@ -193,7 +193,7 @@ def role_agents(slate: Slate) -> dict[str, str]:
 # status and phases
 
 # Phases in order; `cut-before` and `cut-after` are skipped when `steps.cut` excludes them.
-PHASES = ("find", "escalate", "cut-before", "attack", "cut-after", "cutoff", "done")
+PHASES = ("find", "gap-hunt", "escalate", "cut-before", "attack", "cut-after", "cutoff", "done")
 CLAIM_PHASES = ("escalate", "cut-before", "attack", "cut-after")
 
 
@@ -244,11 +244,22 @@ def slate_phase(slate: Slate) -> str:
     """The first phase, in `PHASES` order, with an open item."""
     if _find_open(slate):
         return "find"
+    if assignments.needs_gap_hunt(slate) and not slate.gap_hunt_done:
+        return "gap-hunt"
     unverified = unverified_ids(slate)
     for phase in CLAIM_PHASES:
         if any(claim_open(slate, c, phase, unverified) for c in slate.claims.values()):
             return phase
     return "done" if slate.cutoff_valid else "cutoff"
+
+
+def gap_hunt_open(slate: Slate, phase: str) -> bool:
+    if assignments.parallel(slate):
+        return phase == "gap-hunt"
+    return (slate.init_refuters == 2 and slate.config["steps"]["gap_hunt"]
+            and phase not in ("find", "done")
+            and not any(event["event"] in ("escalate", "cut", "clean", "attack")
+                        for event in slate.events))
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +496,13 @@ def batch_plan(slate: Slate) -> list[list[dict[str, Any]]]:
     rows = [_claim_rows(slate, claim, phase)
             for claim in sorted(slate.claims.values(), key=model.rank_key)
             if claim_open(slate, claim, phase, unverified)]
+    if assignments.parallel(slate):
+        for row in rows:
+            claim = slate.claims[row["claim"]]
+            if row["action"] in ("attack", "verdict"):
+                row["agent"] = assignments.claim_owner(slate, claim, row["agent_role"])
+            elif row["action"] in ("escalate", "reply", "accept"):
+                row["agent"] = claim.finder
     size = slate.cap("batch_items")
     return [rows[i:i + size] for i in range(0, len(rows), size)]
 

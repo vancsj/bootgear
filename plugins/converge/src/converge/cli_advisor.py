@@ -7,10 +7,25 @@ from pathlib import Path
 from typing import Any
 
 from bootgear_cli.clikit import (
+    argv_template,
     gear_command,
 )
 
-from . import seats
+from . import assignments, seats
+
+INVITE_MARKERS = ("{group}", "{worker}", "{invitation}")
+
+
+def launcher_problems(advisor: dict[str, Any]) -> list[str]:
+    template = advisor.get("launcher")
+    if template is None:
+        return (["deferred parallel startup requires an approved launcher template"]
+                if advisor.get("startup") == "deferred" else [])
+    try:
+        argv_template(template, INVITE_MARKERS)
+    except ValueError as error:
+        return [f"launcher template: {error}"]
+    return []
 
 
 def _converge_command() -> str:
@@ -18,9 +33,60 @@ def _converge_command() -> str:
     return gear_command("converge", "converge")
 
 
+def _parallel_driver(slate_id: str, ledger_dir: Path, group: str,
+                     worker: str, advisor: dict[str, Any] | None) -> dict[str, str]:
+    directory = shlex.quote(str(ledger_dir.resolve()))
+    slate = shlex.quote(slate_id)
+    identity = shlex.join(["--group", group, "--worker", worker])
+    channel = gear_command("advisor", "channel")
+    work = {host: (f"{gear_command('converge', 'converge', host=host)} work {slate} "
+                   f"--dir {directory} --as {worker} --role-host {host}")
+            for host in ("claude", "codex")}
+    launch = (advisor or {}).get("launcher")
+    start = (f"{channel} launch {identity} --template {shlex.quote(launch)}" if launch else
+             "give the operator the reserved group, worker ID, and invitation for Advisor listening mode")
+    path = shlex.quote(str(ledger_dir.resolve() / f"{slate_id}.{worker}.request.txt"))
+    wait = (f"{_converge_command()} advisor-wait {slate} --dir {directory} --as {worker} "
+            '--channel "$CHANNEL" --request "$MESSAGE_ID"')
+    brief = seats.seat_roles(None, "r2")[1] if advisor is None else advisor["brief"]
+    return {
+        "seat": "r2",
+        "worker": worker,
+        "group": group,
+        "prepare": ("reserve only when this worker has an assignment" if (advisor or {}).get("startup") == "deferred"
+                    else "prepare the invited listener before its first assignment"),
+        "reserve": f"{channel} reserve {identity}",
+        "launch": start,
+        "wait_listener": f"{channel} wait-listener {identity}",
+        "work_claude": work["claude"],
+        "work_codex": work["codex"],
+        "step": (f'{channel} send --channel "$CHANNEL" --from asker --to listener '
+                 f"--kind request --cap 1 --body-file {path} --json"),
+        "receive": wait,
+        "then": ("Start the reserve output's asker heartbeat if needed before launch. "
+                 "Use the reserved channel returned by wait-listener. Save the send receipt and run receive "
+                 "with its message ID. Resume by receiving the same ID. Never send a second active request."),
+        "request": "\n".join((
+            "TYPE: delegate",
+            f"USER_REQUEST: Act as worker {worker} in seat r2. {brief} <full worker assignment and role brief>",
+            "CONTEXT: <artifact, assigned claims, evidence and applicable standards>",
+            f"SCOPE: Use the work command for your actual host: {work['claude']} or {work['codex']}.",
+            ("Keep the same worker ID for direct Gear actions. Continue ready work and use work --wait "
+             "for ordinary prerequisites. Report completion, a finder reply handoff, or blocked work."),
+            "Respect the assigned write scope. Report WRITE-DENIED and the exact refusal if a write fails.",
+            "Tests already ran:",
+            "- latest test: <recorded command>; result: <one recorded result line>",
+        )),
+    }
+
+
 def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
-             advisor: dict[str, Any] | None) -> list[dict[str, str]]:
+             advisor: dict[str, Any] | None, *, review_group: str | None = None,
+             r2_workers: int = 1) -> list[dict[str, str]]:
     """How the orchestrator drives each advisor seat through the advisor channel."""
+    if r2_workers > 1 and review_group is not None and slate_seats.get("r2") == "advisor":
+        return [_parallel_driver(slate_id, ledger_dir, review_group, assignments.worker_id("r2", index), advisor)
+                for index in range(r2_workers)]
     drivers = []
     abs_dir = ledger_dir.resolve()
     for seat, mechanism in slate_seats.items():
@@ -89,6 +155,11 @@ def _drivers(slate_id: str, ledger_dir: Path, slate_seats: dict[str, str],
 
 def _driver_lines(driver: dict[str, str]) -> list[str]:
     seat = driver["seat"]
+    if "worker" in driver:
+        worker = driver["worker"]
+        return [f"DRIVER {worker} {key}: {driver[key]}"
+                for key in ("prepare", "reserve", "launch", "wait_listener", "step", "receive", "then")
+                ] + [f"REQUEST {worker}:", *driver["request"].splitlines()]
     return [f"DRIVER {seat} prepare (before this seat's first task): {driver['prepare']}",
             f"DRIVER {seat} step (one background step per turn): {driver['step']}",
             f"DRIVER {seat} placeholders: {driver['placeholders']}",

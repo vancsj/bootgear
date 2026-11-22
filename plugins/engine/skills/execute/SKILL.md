@@ -22,6 +22,8 @@ Honor settled `advisor_roles.startup` and `launcher`. Pass them unchanged to deb
 Use recorded early pairings. Let the consumer start a deferred listener at its first advisor task.
 Record each pairing with `session record-decision` in `solo` mode, as `advisor channels: r2=<n>, debate=<m>`.
 Preserve the other channel. On a stale peer, use the consumer's unavailable outcome. Never start a replacement.
+For parallel `r2`, use the consumer's worker reservations. Use the run ID as their review group.
+Keep the original asker and worker IDs across visits. Record any reservation references as evidence.
 Keep direct dispatch unchanged.
 
 ### Run each iteration

@@ -10,6 +10,8 @@ import re
 import secrets
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import NoReturn
 
@@ -98,6 +100,22 @@ def channel_lock(path: Path):
     handle = lock_path.open("r+")
     fcntl.flock(handle, fcntl.LOCK_EX)
     return handle
+
+
+@contextmanager
+def allocator_lock(root: Path) -> Iterator[None]:
+    path = root / "allocator.lock"
+    path.touch(mode=0o600, exist_ok=True)
+    os.chmod(path, 0o600)
+    with path.open("r+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+
+
+def next_channel(root: Path) -> str:
+    numbers = (int(path.name) for path in (root / "channels").iterdir()
+               if path.is_dir() and path.name.isdigit())
+    return f"{max(numbers, default=0) + 1:04d}"
 
 
 def read_channel_record(path: Path) -> dict[str, object]:

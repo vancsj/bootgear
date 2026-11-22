@@ -25,7 +25,7 @@ from bootgear_cli.clikit import (
     render_refusal,
 )
 
-from . import ledger, protocol, render, seats
+from . import assignments, ledger, protocol, render, seats
 from .cli_advisor import _reclaim_step
 from .model import Slate
 
@@ -46,12 +46,14 @@ EXAMPLES = {
                 '--tell "<tell>" --searches "<searches>" --positive-control "<hit>" --result none',
     "angle-na": "angle-na <slate> --dir <dir> --as r1 --phase attack --claim F001 "
                 '--angle <angle> --reason "<why>"',
+    "gap-hunt-done": "gap-hunt-done <slate> --dir <dir> --as r2",
     "attack": "attack <slate> --dir <dir> --as r1 --claim F001 --batch 1 --angle <angle> "
               '--tell "<tell>" --evidence "<evidence>" --searches "<searches>" '
               '--positive-control "<hit>"',
     "clean": "clean <slate> --dir <dir> --as r1 --input <action.json>",
     "work": "work <slate> --dir <dir> --as r1 --role-host claude --out <work-dir>",
     "act": "act <slate> --dir <dir> --as r1 --input <action.json>",
+    "advisor-wait": "advisor-wait <slate> --dir <dir> --as r2-2 --channel 0001 --request <message-id>",
     "reply": 'reply <slate> --dir <dir> --as finder --claim F001 --batch 1 --stance rebut '
              '--evidence "<new evidence>"',
     "verdict": "verdict <slate> --dir <dir> --as r1 --claim F001 --batch 1 --verdict agree",
@@ -156,7 +158,9 @@ def _writer_next(args: argparse.Namespace, slate: Slate) -> str:
     actor = getattr(args, "agent", None)
     if actor is None or actor == slate.events[0]["as"]:
         return _next_step(args, slate)
-    return ("report the result to main; refresh your work: "
+    prefix = ("refresh your work: " if assignments.parallel(slate) and actor in assignments.workers(slate)
+              else "report the result to main; refresh your work: ")
+    return (prefix
             + _role_command(args, host() or "claude", "work")
             + " --role-host " + (host() or "claude"))
 
@@ -165,19 +169,12 @@ def _writer_next(args: argparse.Namespace, slate: Slate) -> str:
 # the next step, from the slate's phase
 
 
-def _gap_hunt_open(slate: Slate) -> bool:
-    """The gap hunt may still file: it is on, the slate has r2, and no escalate, cut or attack
-    is written."""
-    return (bool(slate.config["steps"]["gap_hunt"]) and slate.init_refuters == 2
-            and not any(e["event"] in ("escalate", "cut", "clean", "attack") for e in slate.events))
-
-
 def _plan_text(slate: Slate) -> str:
     """The plan rows grouped by agent role and action, in plan order."""
     groups: dict[tuple[str, str], list[str]] = {}
     for row in itertools.chain.from_iterable(protocol.batch_plan(slate)):
         item = row["claim"] + (f" batch {row['batch']}" if row["batch"] is not None else "")
-        groups.setdefault((row["agent_role"], row["action"]), []).append(item)
+        groups.setdefault((row.get("agent", row["agent_role"]), row["action"]), []).append(item)
     return "; ".join(f"{role} {action} {', '.join(items)}"
                      for (role, action), items in groups.items())
 
@@ -186,22 +183,28 @@ def _next_step(args: argparse.Namespace, slate: Slate) -> str:
     """The next legal action on the slate, from `protocol.slate_phase`."""
     phase = protocol.slate_phase(slate)
     if phase == "find":
+        if assignments.parallel(slate):
+            return _step(args, "work", "--as", slate.events[0]["as"], "--role-host", host() or "claude")
         return _MISSING + _step(args, "coverage")
     if phase == "done":
         return _step(args, "render")
     step = (_step(args, "cutoff") if phase == "cutoff"
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
-    gap_open = _gap_hunt_open(slate)
-    if gap_open:
+    gap_open = protocol.gap_hunt_open(slate, phase)
+    if phase == "gap-hunt":
+        step = "give r2 its gap-hunt assignment on its executing host, including the completion action"
+    elif gap_open:
         step = ("gap hunt: continue r2 with work and its explicit executing host; "
                 "r2 submits generated act actions, then reports completion to main; "
                 f"before the first escalate, cut or attack; then {step}")
     plan = protocol.batch_plan(slate)
     advisor_due = gap_open or any(row["agent_role"] == seats.ADVISOR_SEAT
                                  for row in (plan[0] if plan else []))
-    if (advisor_due and slate.mechanism(seats.ADVISOR_SEAT) == "advisor"
-            and slate.advisor is not None and slate.advisor.get("startup") == "deferred"):
-        step = f"{_reclaim_step(seats.ADVISOR_SEAT, slate.advisor)}; then {step}"
+    if advisor_due and slate.mechanism(seats.ADVISOR_SEAT) == "advisor" and slate.advisor is not None:
+        if slate.parallelism["r2"] > 1:
+            step = f"use the ready advisor worker's reserved-channel driver from {_step(args, 'status', '--json')}"
+        elif slate.advisor.get("startup") == "deferred":
+            step = f"{_reclaim_step(seats.ADVISOR_SEAT, slate.advisor)}; then {step}"
     return step
 
 
@@ -214,10 +217,10 @@ def _opt(event: dict[str, Any], **values: Any) -> dict[str, Any]:
     return event
 
 
-def _role_command(args: argparse.Namespace, role_host: str, command: str) -> str:
+def _role_command(args: argparse.Namespace, role_host: str, command: str, *, actor: str | None = None) -> str:
     return (f"{gear_command('converge', 'converge', host=role_host)} {command} "
             f"{shlex.quote(args.slate)} --dir {shlex.quote(str(args.dir.resolve()))} "
-            f"--as {shlex.quote(args.agent)}")
+            f"--as {shlex.quote(actor or args.agent)}")
 
 
 def _coverage_problems(slate: Slate) -> list[str]:

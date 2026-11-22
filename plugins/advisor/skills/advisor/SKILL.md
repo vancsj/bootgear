@@ -8,6 +8,7 @@ allowed-tools: Bash, Read, AskUserQuestion
 
 Require explicit `--mode asking` or `--mode listening`. Never infer it.
 For asking, take the task, its content, and `direct` or `channel` communication.
+For invited listening, take `--group`, `--worker`, and `--invitation` together.
 
 Return one reconciled result per task to the user or calling skill.
 
@@ -56,7 +57,8 @@ If recovering unfinished requests or replies, use [channel.md](references/channe
 
 ### Listening
 
-Use [channel.md](references/channel.md#pair) for registration. Register a new listener, report its number at once, and start the heartbeat.
+Use [channel.md](references/channel.md#pair) for registration. Use its invited path when the invitation fields are present.
+Report the channel number at once and start the heartbeat.
 Keep a durable goal to poll and answer requests until the user stops the advisor or the channel closes.
 If an existing goal conflicts, report it and get direction. Keep the goal active across empty polls and compaction.
 
@@ -126,7 +128,7 @@ On success, the heartbeat ends with `channel_closed`. Report the stale peer and 
 
 For a channel, get the absolute executable from `cli:gear`. Use `<gear> --host <host> advisor channel <command>`.
 Use `claude` or `codex` for `<host>`. Gear reads the session ID. If missing, report it and stop.
-Only `register`, `heartbeat`, `list`, and `whoami` accept `--session`.
+Use each command's help for `--session` support.
 
 | Host | Missing CLI plugin | Background heartbeat |
 |---|---|---|

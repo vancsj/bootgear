@@ -78,7 +78,10 @@ request-fit,clarity-completeness,architecture-fit,simplicity,proportionality,tes
 Pass absolute [angles.yaml](references/angles.yaml) and [design-patterns.yaml](references/design-patterns.yaml) paths in one `--angles`.
 Pass absolute [cutoff.yaml](references/cutoff.yaml) as `--defaults`. Let the CLI load these files.
 Use `--pass <n>` only in Engine from visit 3. Omit `--snapshot` and `--since`.
-In Engine, pass the exported settlement with `--settlement`.
+In Engine, pass the exported settlement with `--settlement` and its run ID with `--review-group`.
+For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
+For later standalone visits, pass the prior slate ID with `--continue-from`.
+Use the Converge worker plan for parallel seats. Keep invited channels until the outer review ends.
 
 ```text
 <gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml

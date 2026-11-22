@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import ledger, model
+from . import assignments, ledger, model
 from .model import Claim, Slate
 from .protocol import (
     FRESH_EYE,
@@ -37,6 +37,7 @@ from .protocol_cut_checks import (
 def validate_event(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
     """Every problem with appending `event`, a kind other than init, to `slate`."""
     {"file": _validate_file, "escalate": _validate_escalate, "find-run": _validate_find_run,
+     "gap-hunt-done": _validate_gap_hunt_done,
      "angle-na": _validate_angle_na, "clean": _validate_clean, "attack": _validate_attack, "reply": _validate_reply,
      "verdict": _validate_verdict, "cut": _validate_cut, "accept": _validate_accept,
      "rebut": _validate_rebut, "cutoff": ledger.validate_cutoff,
@@ -144,6 +145,11 @@ def _refuter_role(slate: Slate, claim: Claim, agent: Any, batch: Any, kind: str,
                   problems: list[str]) -> None:
     """Table batches are attacked by `r1`; the fresh-eye batch by `fresh_eye_role`."""
     role = fresh_eye_role(slate, claim) if batch == FRESH_EYE else "r1"
+    if assignments.parallel(slate):
+        worker = assignments.claim_owner(slate, claim, role)
+        if agent != worker:
+            problems.append(f"{kind}: {claim.id} is assigned to {worker}")
+        return
     agents = role_agents(slate)
     r1, r2 = agents.get("r1"), agents.get("r2")
     where = f"the fresh-eye batch of {claim.id} is" if batch == FRESH_EYE else "table batches are"
@@ -166,6 +172,25 @@ def _batch(event: dict[str, Any], problems: list[str]) -> int | str | None:
         return value
     problems.append(f"`batch` must be a positive integer or {FRESH_EYE}; got {value!r}")
     return None
+
+
+def _find_owner(slate: Slate, agent: Any, lens: str, angle: str, kind: str,
+                problems: list[str]) -> None:
+    if assignments.parallel(slate):
+        if not _find_open(slate):
+            problems.append(f"{kind}: parallel find work is closed")
+        owner = assignments.find_owners(slate).get((lens, angle))
+        if owner is None:
+            problems.append(f"{kind}: no find assignment for {lens}/{angle}")
+        elif owner != agent:
+            problems.append(f"{kind}: {lens}/{angle} is assigned to {owner}")
+
+
+def _validate_gap_hunt_done(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
+    if slate_phase(slate) != "gap-hunt":
+        problems.append("gap-hunt-done: requires an open parallel gap hunt")
+    if event.get("as") != "r2":
+        problems.append("gap-hunt-done: only r2 owns the gap hunt")
 
 
 def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -201,6 +226,11 @@ def _validate_file(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
     ledger.angle_lens(row, lens, problems)
     if origin == "lens" and lens is not None and lens not in slate.lenses:
         problems.append(f"lens {lens!r} is not an init lens ({', '.join(slate.lenses)})")
+    if assignments.parallel(slate):
+        if origin == "gap-hunt" and (event.get("as") != "r2" or slate_phase(slate) != "gap-hunt"):
+            problems.append("file: only r2 can file during the open parallel gap hunt")
+        if origin == "lens" and lens is not None and row is not None:
+            _find_owner(slate, event.get("as"), lens, row["id"], "file", problems)
 
 
 def _validate_escalate(slate: Slate, event: dict[str, Any], problems: list[str]) -> None:
@@ -226,6 +256,8 @@ def _validate_find_run(slate: Slate, event: dict[str, Any], problems: list[str])
     lens = ledger.nonempty(event, "lens", problems)
     row = ledger.angle(slate, "find", event.get("angle"), problems)
     ledger.angle_lens(row, lens, problems)
+    if lens is not None and row is not None:
+        _find_owner(slate, event.get("as"), lens, row["id"], "find-run", problems)
     for key in ("tell", "searches", "positive_control"):
         ledger.nonempty(event, key, problems)
     result = event.get("result")
@@ -252,6 +284,8 @@ def _validate_angle_na(slate: Slate, event: dict[str, Any], problems: list[str])
     if phase == "find":
         lens = ledger.nonempty(event, "lens", problems)
         ledger.angle_lens(row, lens, problems)
+        if lens is not None and row is not None:
+            _find_owner(slate, event.get("as"), lens, row["id"], "angle-na", problems)
         if "claim" in event:
             problems.append("angle-na: `claim` is only recorded for phase attack")
         return

@@ -24,7 +24,7 @@ RESULT = ("fix-now", "fixed", "finding", "follow-up", "killed")
 # The phases an `angle-na` event is recorded in.
 PHASE = ("find", "attack")
 ORIGIN = ("lens", "gap-hunt")
-EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "clean", "attack", "reply", "verdict", "cut",
+EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "gap-hunt-done", "clean", "attack", "reply", "verdict", "cut",
           "rebut", "accept", "cutoff", "fix-check")
 
 # Every cut rates these; `rate` is an integer `>= 0`. An after cut also rates `AFTER_FIELDS`.
@@ -56,6 +56,8 @@ SHA_RE = re.compile(r"\A(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 CONVERGE_AGENT = "converge"
 NON_AGENT_IDS = (CONVERGE_AGENT,)
 MAX_AGENTS = 5
+WORKER_SEATS = ("finder", "r1", "r2")
+DEFAULT_PARALLELISM = {"finder": 1, "r1": 1, "r2": 1, "max_workers": 4}
 
 
 def claim_id(n: int) -> str:
@@ -101,6 +103,7 @@ class Slate:
     # The init's resolved --project-root, against which patch and loc paths resolve.
     project_root: str | None = None
     review_pass: int | None = None
+    review_group: str | None = None
     since: dict[str, str] | None = None
     # Seat -> mechanism from init; a seat not recorded is native_subagent.
     seats: dict[str, str] = field(default_factory=dict)
@@ -113,6 +116,7 @@ class Slate:
     cutoff_valid: bool = False
     # The init event's refuter seat count, 1 or 2.
     init_refuters: int = 2
+    gap_hunt_done: bool = False
 
     @property
     def initialised(self) -> bool:
@@ -123,6 +127,18 @@ class Slate:
 
     def cap(self, name: str) -> int:
         return int(self.config["caps"][name])
+
+    @property
+    def parallelism(self) -> dict[str, int]:
+        return self.config.get("parallelism", DEFAULT_PARALLELISM)
+
+    @property
+    def worker_seats(self) -> tuple[str, ...]:
+        return WORKER_SEATS if self.init_refuters == 2 else WORKER_SEATS[:-1]
+
+    @property
+    def agent_cap(self) -> int:
+        return self.cap("agents") + sum(self.parallelism[seat] - 1 for seat in self.worker_seats)
 
     def lens_cap(self, lens: str | None) -> int:
         """The `caps.per_lens` entry for `lens`, else its `default`."""

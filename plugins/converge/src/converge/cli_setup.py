@@ -10,14 +10,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from bootgear_cli.clikit import (
-    emit,
-)
+from bootgear_cli.clikit import emit
 
 from . import angles as angles_mod
 from . import config as config_mod
 from . import ledger, seats
-from .cli_advisor import _driver_lines, _drivers
+from .cli_advisor import _driver_lines, _drivers, launcher_problems
 from .cli_common import (
     CATALOG,
     _ids,
@@ -183,6 +181,22 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
 # write commands
 
 
+def _review_group(args: argparse.Namespace, project_root: str) -> str:
+    if args.review_group is not None:
+        return args.review_group
+    prior = args.continue_from
+    if prior is None:
+        return str(_path(args).resolve())
+    try:
+        path = ledger.slate_path(args.dir, prior)
+        previous = ledger.read(path, prior)
+    except ledger.LedgerError as error:
+        _refuse(error.problems, "cannot continue standalone review")
+    if previous.project_root != project_root:
+        _refuse([f"preceding slate {prior!r} belongs to a different project"])
+    return previous.review_group or str(path.resolve())
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     seat_fields, notes = _init_seats(args)
     try:
@@ -190,6 +204,11 @@ def cmd_init(args: argparse.Namespace) -> None:
     except config_mod.ConfigError as exc:
         _refuse(exc.problems, "invalid configuration")
     effective = resolved["effective"]
+    r2_workers = effective["parallelism"]["r2"]
+    if r2_workers > 1 and seat_fields.get("seats", {}).get("r2") == "advisor":
+        problems = launcher_problems(seat_fields["advisor"])
+        if problems:
+            _refuse(problems, "invalid parallel advisor launcher")
     try:
         rows = angles_mod.resolve(args.angles, effective, Path(resolved["project_root"]))
     except angles_mod.AngleError as exc:
@@ -198,7 +217,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         effective = config_mod.rereview(effective)
     event: dict[str, Any] = {"event": "init", "lenses": _ids(args.lenses), "angles": rows,
                              "config": effective, "refuters": args.refuters,
-                             "project_root": resolved["project_root"]}
+                             "project_root": resolved["project_root"],
+                             "review_group": _review_group(args, resolved["project_root"])}
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
@@ -211,7 +231,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         event = _init_snapshot(args, event, problems)
     path = _path(args)
     data: dict[str, Any] = {"slate": args.slate, "lenses": event["lenses"], "angles": len(rows),
-                            "path": str(path)}
+                            "path": str(path), "review_group": event["review_group"]}
     head = (f"INIT {args.slate} lenses={','.join(event['lenses']) or '-'} "
             f"angles={len(rows)} path={path}")
     for key in ("pass", "snapshot"):
@@ -224,7 +244,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         data["since"], data["diff"] = event["since"]["slate"], delta
         lines.append(f"DIFF since {event['since']['slate']}: {delta}")
     slate_seats = event.get("seats", {})
-    drivers = _drivers(args.slate, args.dir, slate_seats, event.get("advisor"))
+    drivers = _drivers(args.slate, args.dir, slate_seats, event.get("advisor"),
+                       review_group=event["review_group"], r2_workers=r2_workers)
     if drivers or notes:
         data.update(seats=slate_seats, drivers=drivers, notes=notes)
         lines.append("SEATS " + " ".join(f"{seat}={m}" for seat, m in slate_seats.items()))

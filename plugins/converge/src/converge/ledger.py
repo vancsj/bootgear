@@ -17,7 +17,14 @@ from typing import Any
 
 from bootgear_cli.clikit import current_program
 
-from . import model, protocol, protocol_event_checks, protocol_replay, seats
+from . import (
+    assignments,
+    model,
+    protocol,
+    protocol_event_checks,
+    protocol_replay,
+    seats,
+)
 from .model import Claim, Slate
 
 DEFAULT_DIR = Path("~/.bootgear/converge")
@@ -32,6 +39,7 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "escalate": ("claim",),
     "find-run": ("lens", "angle", "tell", "searches", "positive_control", "result"),
     "angle-na": ("phase", "angle", "reason"),
+    "gap-hunt-done": (),
     "clean": ("claim", "batch", "checks"),
     "attack": ("claim", "batch", "angle", "tell", "evidence", "searches",
                "positive_control"),
@@ -44,11 +52,12 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "fix-check": ("claim", "outcome", "evidence"),
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
-    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root"),
+    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "review_group"),
     "file": ("lens", "angle", "depends", "rule"),
     "escalate": ("wider", "evidence"),
     "find-run": (),
     "angle-na": ("lens", "claim"),
+    "gap-hunt-done": (),
     "clean": ("last",),
     "attack": ("last",),
     "reply": ("evidence", "evidence_sha256", "text"),
@@ -171,6 +180,8 @@ def roles(slate: Slate, claim: Claim, agent: Any, kind: str, problems: list[str]
         problems.append(f"{kind}: {agent} cut {claim.id}; refuters and cutters are disjoint")
     if kind == "cut" and agent in state.refuters:
         problems.append(f"cut: {agent} attacked {claim.id}; refuters and cutters are disjoint")
+    if kind == "cut" and assignments.parallel(slate) and agent in assignments.workers(slate):
+        problems.append(f"cut: {agent} holds a finder or refuter worker assignment")
 
 
 # ---------------------------------------------------------------------------
@@ -200,14 +211,15 @@ def validate_event(slate: Slate, event: dict[str, Any]) -> list[str]:
 
 
 def _agent_budget(slate: Slate, agent: Any, problems: list[str]) -> None:
-    """At most caps.agents distinct agent ids per slate, the init writer included."""
+    """Limit distinct writers, with one additional slot per extra worker."""
     if agent in model.NON_AGENT_IDS:
         return
     seen = slate.agent_ids()
-    cap = slate.cap("agents")
+    cap = slate.agent_cap
     if agent not in seen and len(seen) >= cap:
+        limit = "effective agent cap" if cap != slate.cap("agents") else "caps.agents"
         problems.append(f"agent budget: {agent} would be agent {len(seen) + 1} on this slate; "
-                        f"caps.agents is {cap} ({', '.join(seen)}); reuse one of them")
+                        f"{limit} is {cap} ({', '.join(seen)}); reuse one of them")
 
 
 def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
@@ -230,8 +242,17 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
     if "refuters" in event and not (isinstance(refuters, int) and not isinstance(refuters, bool)
                                     and refuters in (1, 2)):
         problems.append(f"`refuters` must be 1 or 2; got {refuters!r}")
-    problems.extend(f"config snapshot: {p}"
-                    for p in validate_config(event.get("config"), "snapshot", complete=True))
+    config = event.get("config")
+    config_problems = validate_config(config, "snapshot", complete=True)
+    problems.extend(f"config snapshot: {p}" for p in config_problems)
+    if not config_problems and isinstance(config, dict) and type(refuters) is int and refuters in (1, 2):
+        initial = Slate("init", config=config, init_refuters=refuters)
+        if assignments.parallel(initial) and event.get("as") in assignments.workers(initial):
+            problems.append("init: main must use an ID outside the worker assignments")
+    if "review_group" in event:
+        group = event["review_group"]
+        if not isinstance(group, str) or not group.strip() or group.startswith("-"):
+            problems.append("review_group must be nonempty and cannot start with '-'")
     if "project_root" in event:
         root = event["project_root"]
         if not (isinstance(root, str) and root.startswith("/")):
@@ -306,6 +327,7 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.snapshot = event.get("snapshot")
     slate.project_root = event.get("project_root")
     slate.review_pass = event.get("pass")
+    slate.review_group = event.get("review_group")
     slate.since = event.get("since")
     slate.seats = event.get("seats") or {}
     slate.advisor = event.get("advisor")

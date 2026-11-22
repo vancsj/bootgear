@@ -6,7 +6,6 @@ import argparse
 import fcntl
 import json
 import math
-import os
 import signal
 import time
 from pathlib import Path
@@ -40,14 +39,22 @@ from channel_output import (
     script_command,
     session_flag,
 )
+from channel_reservations import (
+    invited_channel,
+    public_record,
+    require_owner,
+    validate_invitation,
+)
 from channel_store import (
     ROLES,
+    allocator_lock,
     atomic_write,
     channel_dir,
     channel_lock,
     closed_channel,
     fail,
     new_record,
+    next_channel,
     other_role,
     read_channel_record,
     read_json_object,
@@ -63,6 +70,9 @@ def register(args: argparse.Namespace) -> None:
     root = root_from(args)
     session = args.session
 
+    invited = invited_channel(args, root)
+    if invited is not None:
+        args.channel = invited
     if args.channel:
         path = channel_dir(root, args.channel)
         lock = channel_lock(path)
@@ -70,6 +80,7 @@ def register(args: argparse.Namespace) -> None:
             record = read_channel_record(path) if (path / "channel.json").exists() else new_record(args.channel)
             if record.get("state") == "closed":
                 fail(f"channel {args.channel} is closed", category="channel_closed")
+            validate_invitation(args, record)
             current_owner = record.get(owner_key)
             if current_owner not in (None, session):
                 fail(
@@ -88,23 +99,13 @@ def register(args: argparse.Namespace) -> None:
         return
 
     # No --channel: allocate the next number and create fresh, claiming `role`.
-    allocator_lock_path = root / "allocator.lock"
-    allocator_lock_path.touch(mode=0o600, exist_ok=True)
-    os.chmod(allocator_lock_path, 0o600)
-    with allocator_lock_path.open("r+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        existing = [
-            int(p.name)
-            for p in (root / "channels").iterdir()
-            if p.is_dir() and p.name.isdigit()
-        ]
-        channel = f"{max(existing, default=0) + 1:04d}"
+    with allocator_lock(root):
+        channel = next_channel(root)
         path = channel_dir(root, channel)
         record = new_record(channel)
         record[owner_key] = session
         record[f"{args.role}_seen_at"] = time.time()
         atomic_write(path / "channel.json", json.dumps(record) + "\n")
-        fcntl.flock(lock, fcntl.LOCK_UN)
     print_registered(args, root, record)
 
 
@@ -116,6 +117,7 @@ def write_state(args: argparse.Namespace, value: str, check=None) -> None:
     lock = channel_lock(path)
     try:
         record = read_channel_record(path)
+        require_owner(record, args.role)
         if record.get("state") == "closed" and value != "closed":
             closed_channel(args.channel)
         if check is not None:
@@ -128,7 +130,7 @@ def write_state(args: argparse.Namespace, value: str, check=None) -> None:
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
-    emit(args, record)
+    emit(args, public_record(record))
 
 
 def state(args: argparse.Namespace) -> None:
@@ -166,7 +168,7 @@ def status(args: argparse.Namespace) -> None:
     root = root_from(args)
     path = channel_dir(root, args.channel, create=False)
     record = read_channel_record(path)
-    output = dict(record)
+    output = dict(public_record(record))
     output["listener_alive"] = seat_live(record, "listener")
     output["asker_alive"] = seat_live(record, "asker")
     emit(args, output)
@@ -295,7 +297,7 @@ def list_channels(args: argparse.Namespace) -> None:
     root = root_from(args)
 
     if not args.live_for:
-        emit(args, {"channels": all_channels(root)})
+        emit(args, {"channels": [public_record(record) for record in all_channels(root)]})
         return
 
     role = args.live_for

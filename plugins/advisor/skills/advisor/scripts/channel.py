@@ -22,6 +22,7 @@ from channel_output import (
     heartbeat_command,  # noqa: F401
     resolve_session,
 )
+from channel_reservations import launch, reservations, reserve, wait_listener
 from channel_seats import (  # noqa: F401
     channel_status,
     close,
@@ -66,9 +67,34 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser = subparsers.add_parser("register")
     add_channel(register_parser, required=False)
     register_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat to register")
+    register_parser.add_argument("--group", help="review group for an invited listener")
+    register_parser.add_argument("--worker", help="worker ID for an invited listener")
+    register_parser.add_argument("--invitation", help="reservation token for an invited listener")
     add_session(register_parser, required=True)
     add_output(register_parser)
     register_parser.set_defaults(handler=register)
+
+    for name, handler in (("reserve", reserve), ("launch", launch), ("wait-listener", wait_listener)):
+        reserved = subparsers.add_parser(name)
+        reserved.add_argument("--group", required=True, metavar="GROUP", help="saved review group")
+        reserved.add_argument("--worker", required=True, metavar="ID", help="worker's assigned agent ID")
+        add_session(reserved, required=True)
+        add_output(reserved)
+        reserved.set_defaults(handler=handler)
+        if name == "launch":
+            reserved.add_argument("--template", required=True,
+                                  help="approved command with separate {group}, {worker}, {invitation} arguments")
+            reserved.add_argument("--retry", action="store_true",
+                                  help="use the single recovery attempt before any listener claims the seat")
+        elif name == "wait-listener":
+            reserved.add_argument("--timeout", type=float, default=300,
+                                  help="maximum seconds to wait for this listener's heartbeat (default: 300)")
+
+    reservations_parser = subparsers.add_parser("reservations")
+    reservations_parser.add_argument("--group", required=True, metavar="GROUP", help="saved review group")
+    add_session(reservations_parser, required=True)
+    add_output(reservations_parser)
+    reservations_parser.set_defaults(handler=reservations)
 
     init_parser = subparsers.add_parser("init")
     add_channel(init_parser)

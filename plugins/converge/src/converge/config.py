@@ -43,12 +43,14 @@ DEFAULTS: dict[str, Any] = {
              "angles_per_claim": 5, "batch_items": 30},
     "angles": {"files": [], "disable": []},
     "steps": {"escalate": True, "gap_hunt": True, "cut": "both"},
+    "parallelism": model.DEFAULT_PARALLELISM.copy(),
 }
 SCHEMA = {
     "cutoff": ("report_rules", "lenses", "rereview", "cheap", "difficulty_basis"),
     "caps": ("cut_rounds", "per_lens", "agents", "angles_per_claim", "batch_items"),
     "angles": ("files", "disable"),
     "steps": ("escalate", "gap_hunt", "cut"),
+    "parallelism": tuple(model.DEFAULT_PARALLELISM),
 }
 # When the cutter rates: before the attack, after it, both, or never.
 CUT_MODES = ("before", "after", "both", "none")
@@ -197,7 +199,7 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
             problems.append(f"{label}: unknown key {key!r} (allowed: {', '.join(SCHEMA)})")
     for section, keys in SCHEMA.items():
         if section not in value:
-            if complete:
+            if complete and section != "parallelism":
                 problems.append(f"{label}: missing section {section!r}")
             continue
         body = value[section]
@@ -237,12 +239,23 @@ def validate_config(value: Any, label: str, complete: bool = False) -> list[str]
             elif section == "steps":
                 if not isinstance(item, bool):
                     problems.append(f"{where} must be true or false; got {item!r}")
+            elif section == "parallelism":
+                if not isinstance(item, int) or isinstance(item, bool) or item < 1:
+                    problems.append(f"{where} must be a positive integer; got {item!r}")
             elif not isinstance(item, list) or not all(isinstance(x, str) and x for x in item):
                 problems.append(f"{where} must be a list of non-empty strings")
     cutoff = value.get("cutoff")
     if (complete and isinstance(cutoff, dict) and cutoff.get("difficulty_basis") == "implementation"
             and isinstance(cutoff.get("cheap"), dict) and cutoff["cheap"].get("enabled") is not False):
         problems.append(f"{label}: implementation requires cutoff.cheap.enabled false")
+    parallelism = value.get("parallelism")
+    if complete and isinstance(parallelism, dict):
+        ceiling = parallelism.get("max_workers")
+        if type(ceiling) is int and ceiling >= 1:
+            for seat in model.WORKER_SEATS:
+                count = parallelism.get(seat)
+                if type(count) is int and count > ceiling:
+                    problems.append(f"{label}: parallelism.{seat} is {count}, above max_workers {ceiling}")
     return problems
 
 

@@ -184,6 +184,8 @@ Keep separate listeners for debate and `r2`.
 
 For early failure, report the diagnostic and settle another available choice before writing.
 For deferred startup, settle launcher failures here. Show the launcher and planned uses at sign-off.
+When Converge uses multiple advisor workers, defer early pairing to its reserved worker setup before their first assignments.
+Approve the full invitation-aware command if a launcher is used for parallel workers.
 
 Write task configs for both settings. Set selected debate parties to `advisor` and the rest to `native_subagent`.
 Name all five Converge seats. Use `advisor` only for `r2` when refuter or gap hunter is selected.
@@ -195,7 +197,7 @@ Use the following route. Add `--task-config-file <task-config-file>` for each ta
 
 For `debate-parties`, add `--report models`. Show `model_report`. Follow `next` and store `debate_party_config`, never `effective`.
 For `converge-seats`, follow `next` and store `converge_seats`.
-Record `advisor_roles: {roles, brief, startup}`, with one line for the brief. For deferred startup, add the approved one-line `launcher`.
+Record `advisor_roles: {roles, brief, startup}`, with one line for the brief. Add an approved one-line `launcher` when supplied.
 With no roles, omit startup and launcher.
 
 ### Confirm and initialize

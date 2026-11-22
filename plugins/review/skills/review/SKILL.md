@@ -93,7 +93,9 @@ Pass enabled packs to init. On a duplicate angle ID naming a pack, remove that p
 If `.bootgear/config/review-standard.md` exists, write `<converge-dir>/<slate>.yaml` before init.
 Set `cutoff: {report_rules: [<rule IDs at or above cutoff>]}`. Pass it with `--config`.
 
-In Engine, export the settlement and pass it with `--settlement`.
+In Engine, export the settlement and pass it with `--settlement`. Pass the run ID with `--review-group`.
+For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
+For later standalone visits, pass the prior slate ID with `--continue-from`.
 
 ```text
 <gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml

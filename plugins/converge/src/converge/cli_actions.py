@@ -7,6 +7,7 @@ import json
 import shlex
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from .cli_common import (
     _ids,
     _next_step,
     _opt,
+    _path,
     _read,
     _refuse,
     _refuse_next,
@@ -53,6 +55,11 @@ def cmd_escalate(args: argparse.Namespace) -> None:
     wider = "yes" if "wider" in written else "no"
     _written(args, {"seq": written["seq"], "claim": args.claim, "wider": wider == "yes"},
              f"ESCALATE seq={written['seq']} {args.claim} wider={wider}")
+
+
+def cmd_gap_hunt_done(args: argparse.Namespace) -> None:
+    written = _write(args, {"event": "gap-hunt-done"})
+    _written(args, {"seq": written["seq"]}, f"GAP HUNT DONE seq={written['seq']}")
 
 
 def cmd_find_run(args: argparse.Namespace) -> None:
@@ -130,16 +137,46 @@ def cmd_attack(args: argparse.Namespace) -> None:
              "outcome=refuted")
 
 
+def _slate_size(path: Path) -> int | None:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
 def cmd_work(args: argparse.Namespace) -> None:
+    path = _path(args)
+    size = _slate_size(path) if args.wait is not None else None
     slate = _read(args)
     try:
         package = work.package(slate, args.agent, args.role_host, args.role)
+        if args.wait is not None:
+            if args.wait < 1 or "assignment" not in package:
+                raise ledger.LedgerError(["work: --wait requires positive seconds and a parallel worker"])
+            deadline = time.monotonic() + args.wait
+            while package["state"] == "waiting" and not package.get("waiting_for_reply"):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(remaining, 0.1))
+                observed_size = _slate_size(path)
+                if observed_size != size:
+                    size = observed_size
+                    slate = _read(args)
+                    package = work.package(slate, args.agent, args.role_host, args.role)
     except ledger.LedgerError as exc:
         _refuse(exc.problems)
     submit = _role_command(args, args.role_host, "act")
     package["submit"] = submit + " --input <action.json>"
     lines = [(f"WORK {args.agent} seat={package['seat']} phase={package['phase']} "
               f"state={package['state']} seq={package['source_seq']}")]
+    if "assignment" in package:
+        lines.append("ASSIGNMENT " + dumps(package["assignment"]))
+    for worker in package.get("workers", []):
+        if worker["mechanism"] == "native_subagent":
+            worker["work"] = (_role_command(args, args.role_host, "work", actor=worker["id"])
+                              + f" --role-host {args.role_host}")
+        lines.append("WORKER " + dumps(worker))
     for item in package["items"]:
         lines.append("ITEM " + dumps(item))
     for definition in package["definitions"]:
@@ -160,9 +197,19 @@ def cmd_work(args: argparse.Namespace) -> None:
     if package["actions"]:
         step = "choose an action, supply its evidence, then " + package["submit"]
     elif package["seat"] == "main":
-        step = (f"{_step(args, 'render')}; then {_step(args, 'gate')}; "
-                f"then {_step(args, 'converged')}; hand back the result" if package["phase"] == "done"
-                else _next_step(args, slate))
+        if any(worker["ready"] for worker in package.get("workers", [])):
+            step = "start or resume each ready worker with its full assignment"
+        else:
+            step = (f"{_step(args, 'render')}; then {_step(args, 'gate')}; "
+                    f"then {_step(args, 'converged')}; hand back the result" if package["phase"] == "done"
+                    else _next_step(args, slate))
+    elif package.get("waiting_for_reply"):
+        step = "report pending finder replies to main: " + ", ".join(package["waiting_for_reply"])
+    elif package["state"] == "waiting" and "assignment" in package:
+        step = (_role_command(args, args.role_host, "work") + " --role-host "
+                + args.role_host + f" --wait {args.wait or 30}")
+    elif "assignment" in package:
+        step = "report completion to main"
     else:
         step = f"report {package['state']} to main; wait for assigned work"
     package["next"] = step

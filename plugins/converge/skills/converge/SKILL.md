@@ -32,6 +32,13 @@ Use the printed seat mechanisms. Start each native role once and reuse it.
 For an advisor, call `advisor:advisor` and follow the printed driver.
 Honor deferred startup. Reuse the recorded channel until shared work ends. Act on heartbeat `next` when it stops.
 
+For parallel seats, read the worker assignments from main's `work` output.
+Start each ready worker once with its ID, full assignment, and work command.
+Keep the same native worker for a reply handoff. Report a refused launch with its assignment and host diagnostic.
+For parallel advisors, use the printed reservation and driver for that worker ID.
+Use the listener host returned by Gear. Keep one receipt for its active request.
+Close the reserved channels when the outer review ends. Keep them open between visits.
+
 Give each role its artifact, brief, rules, saved evidence, and public work. Tell it to read the principles and standards.
 Keep author hypotheses and other roles' reasoning out. Allow assigned action files, own slate events, and memory-ledger use.
 Preserve source, artifact, and production write limits.
@@ -54,11 +61,15 @@ An orchestrator supplies the role's receiving host. The advisor uses its own hos
 Read relevant claims, saved angles, evidence, conditions, and actions. Fill evidence or judgment.
 Submit action file or stdin through `act`. Refresh after a stale refusal. Report waiting or completion to main.
 
+Parallel workers continue ready actions in the same turn. Use `work --wait` for ordinary waiting.
+Report completion, an open finder reply, or a blocked assignment to main.
+
 ### Apply the role rules
 
 - **Finder:** check each applicable tell. Search and run a positive control before filing.
   Record coverage or why a tell is absent. Use observed output or complete source paths. Classify reproduced, traced, or inferred.
-- **Gap hunter:** find what lenses missed. Report completion.
+- **Gap hunter:** find what lenses missed. Record the completion action if Gear offers it, even with zero claims.
+  Report completion.
 - **Claim finder:** check for higher severity and record the check even if the claim stays the same.
   Use a concrete route to support widening.
   Answer refutations and cuts with new evidence or the applicable acceptance action.

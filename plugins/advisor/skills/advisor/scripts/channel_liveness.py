@@ -70,6 +70,11 @@ def seat_live(record: dict[str, object], role: str) -> bool | None:
     return seat_fresh(record, role) or seat_restarting(record, role)
 
 
+def reserved_listener_live(record: dict[str, object]) -> bool:
+    return (_within_ttl(record.get("listener_heartbeat_at"))
+            or seat_restarting(record, "listener"))
+
+
 def seat_busy(record: dict[str, object], role: str) -> bool:
     """Whether `role` last set the channel to busy: it is working on a request, not silent."""
     return record.get("state") == "busy" and record.get("state_role") == role
@@ -91,6 +96,7 @@ def live_candidates(root: Path, my_role: str, session: str) -> list[dict[str, ob
     candidates = [
         c for c in all_channels(root)
         if c.get("state") != "closed"
+        and "reservation" not in c
         and max(_as_float(c.get("created_at")) or 0, _as_float(c.get("updated_at")) or 0) >= cutoff
         and seat_live(c, other) is True
         and c.get(f"{my_role}_owner") in (None, session)
@@ -196,6 +202,8 @@ def beat(path: Path, role: str, session: str, expired: bool) -> str | None:
             atomic_write(path / "channel.json", json.dumps(record) + "\n")
             return "max_age"
         record[f"{role}_seen_at"] = time.time()
+        if role == "listener" and "reservation" in record:
+            record["listener_heartbeat_at"] = record["listener_seen_at"]
         record.pop(f"{role}_restart_until", None)
         atomic_write(path / "channel.json", json.dumps(record) + "\n")
         return None

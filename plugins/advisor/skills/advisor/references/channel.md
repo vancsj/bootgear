@@ -15,6 +15,17 @@ Keep channel mode.
 Only the registering session can reclaim a seat, including after staleness or restart. A closed channel refuses registration.
 Follow the skill's heartbeat rules.
 
+### Invited worker
+
+Asker uses `reserve --group GROUP --worker ID`. Keep the reserved channel through the review group's visits.
+Start the asker heartbeat that `reserve` prints if it is absent.
+Use the approved `launch` template or pass the invitation to the operator for early startup.
+Use `wait-listener` for this group and worker. Use its channel and receiving host.
+Listener passes all three invitation fields to `register --role listener` using its own host and session.
+Reuse the same invitation fields for registration after interruption. Follow the printed heartbeat command.
+Use `reservations --group GROUP` to find channels for continuation or final closure.
+The original asker keeps one active request per worker. Resume it from the saved receipt.
+
 ## Send and track
 
 ```sh

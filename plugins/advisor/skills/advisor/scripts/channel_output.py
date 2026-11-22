@@ -27,12 +27,16 @@ from channel_store import (
 )
 
 COMMANDS = ("register", "init", "send", "receive", "fetch", "state", "close", "heartbeat", "list", "status",
-            "whoami")
+            "whoami", "reserve", "launch", "wait-listener", "reservations")
 EXAMPLES = {
     "register": "register --role asker --channel 0001",
     "init": "init --channel 0001",
     "send": "send --channel 0001 --from asker --to listener --kind request --body-file -",
     "receive": "receive --channel 0001 --for asker --timeout 300",
+    "reserve": "reserve --group GROUP --worker r2-2",
+    "launch": 'launch --group GROUP --worker r2-2 --template "start-listener {group} {worker} {invitation}"',
+    "wait-listener": "wait-listener --group GROUP --worker r2-2 --timeout 120",
+    "reservations": "reservations --group GROUP",
     "fetch": "fetch --channel 0001 --message-id MESSAGE_ID",
     "state": "state --channel 0001 --role listener --value waiting",
     "close": "close --channel 0001 --role listener",

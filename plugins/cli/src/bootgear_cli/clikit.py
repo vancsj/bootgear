@@ -65,6 +65,18 @@ def current_program(plugin: str, command: str) -> str:
     return os.environ.get(ENV_PROG) or gear_command(plugin, command)
 
 
+def argv_template(template: str, markers: tuple[str, ...]) -> list[str]:
+    """Parse a command with each marker in exactly one whole argument."""
+    argv = shlex.split(template)
+    if not argv or not argv[0] or argv[0].startswith("-") or argv[0] in markers:
+        raise ValueError("the template must start with an executable")
+    invalid = [marker for marker in markers if argv.count(marker) != 1
+               or sum(arg.count(marker) for arg in argv) != 1]
+    if invalid:
+        raise ValueError(f"expected each as one whole argument: {', '.join(invalid)}")
+    return argv
+
+
 # ---------------------------------------------------------------------------
 # mode
 

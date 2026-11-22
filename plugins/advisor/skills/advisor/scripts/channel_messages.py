@@ -21,6 +21,7 @@ from channel_output import (
     refuse,
     script_command,
 )
+from channel_reservations import require_owner
 from channel_store import (
     atomic_write,
     channel_dir,
@@ -83,7 +84,11 @@ def send(args: argparse.Namespace) -> None:
         refuse(args, "message body is empty")
     lock = channel_lock(path)
     try:
-        if args.kind != "stop" and seat_live(read_channel_record(path), args.recipient) is not True:
+        current_record = read_channel_record(path)
+        require_owner(current_record, args.sender)
+        if current_record.get("state") == "closed":
+            closed_channel(args.channel)
+        if args.kind != "stop" and seat_live(current_record, args.recipient) is not True:
             fail(
                 f"{args.recipient} on channel {args.channel} has no live heartbeat",
                 category="peer_not_live",
@@ -96,16 +101,19 @@ def send(args: argparse.Namespace) -> None:
                 category="unknown_parent_id",
                 next_step="reply with the message_id of a request you received on this channel",
             )
-        pending = [
-            f for f in message_files(path)
-            if (loaded := json.loads(f.read_text(encoding="utf-8"))).get("recipient") == args.recipient
-            and loaded.get("kind") != "stop"
-            and not loaded.get("read")
-        ]
+        messages = [json.loads(f.read_text(encoding="utf-8")) for f in message_files(path)]
+        if "reservation" in current_record and args.kind == "request":
+            answered = {message.get("parent_id") for message in messages if message.get("kind") == "response"}
+            if any(message.get("kind") == "request" and message.get("message_id") not in answered
+                   for message in messages):
+                fail("the reserved channel already has an active request", "request_outstanding")
+        pending = sum(1 for message in messages
+                      if message.get("recipient") == args.recipient and message.get("kind") != "stop"
+                      and not message.get("read"))
         cap = args.cap if args.cap is not None else DEFAULT_PENDING_CAP
-        if len(pending) >= cap:
+        if pending >= cap:
             fail(
-                f"{args.recipient} inbox already has {len(pending)} message(s) "
+                f"{args.recipient} inbox already has {pending} message(s) "
                 f"(cap {cap}); wait for it to catch up before sending more"
             )
         message_id = uuid.uuid4().hex
@@ -159,6 +167,7 @@ def receive(args: argparse.Namespace) -> None:
     root = root_from(args)
     path = channel_dir(root, args.channel)
     record = read_channel_record(path)
+    require_owner(record, args.recipient)
     if record.get("state") == "closed":
         closed_channel(args.channel)
 
@@ -216,6 +225,8 @@ def receive(args: argparse.Namespace) -> None:
         "messages": [summarize_for(m, answered) for m in recent],
         "peer_live": peer_live,
     }
+    if "reservation" in record:
+        output["unread"] = [summarize_for(message, answered) for message in messages if not message.get("read")]
     script = script_command(args, root)
     if pending == 0:
         read = "; the messages listed were already read" if recent else ""
@@ -273,6 +284,7 @@ def fetch(args: argparse.Namespace) -> None:
     lock = channel_lock(path)
     try:
         message = json.loads(message_path.read_text(encoding="utf-8"))
+        require_owner(read_channel_record(path), message["recipient"])
         output = {"body": message.get("body"), "kind": message.get("kind"),
                   "next": receive_next(args, root, message["recipient"])}
         if message.get("parent_id"):

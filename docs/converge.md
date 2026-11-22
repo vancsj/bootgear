@@ -54,18 +54,18 @@ flowchart LR
   X --> G[render, gate, converged]
 ```
 
-- **Declared agent ids** (`--as`). The CLI allows at most `caps.agents` distinct ids per
-  slate (default and maximum 5), the `init` writer included; the reserved id `converge`
-  does not count. A claim's finder never attacks or cuts it, its refuters and cutters are
+- **Declared agent ids** (`--as`). The base `caps.agents` budget defaults to 5 and includes
+  the `init` writer. Each extra worker on an active seat adds one slot. The computed
+  `converge` events are exempt. A claim's finder never attacks or cuts it, its refuters and cutters are
   disjoint, and only the finder may `reply`, `rebut` or `accept`. Ids are trusted as
   declared: the checks stop accidental self-judging, not a lying agent.
-- **Allocation.** The skill uses `main`, one `finder` for all lenses, `r1`, `r2` and one
-  `cutter`; quick review depth drops `r2`. Each agent is spawned once and continued for
-  the whole slate. `r2` is also the gap-hunt finder (`origin: gap-hunt`) right after find
+- **Allocation.** The default uses `main`, `finder`, `r1`, `r2`, and `cutter`.
+  Parallel workers on a seat use its name followed by numbered IDs, such as `r1-2`.
+  `r2` is also the gap-hunt finder (`origin: gap-hunt`) right after find
   coverage, and acts as finder for those claims. `init --refuters 1` or
-  `steps.gap_hunt: false` turns the gap hunt off; it is orchestration, with no event of its
-  own. `r1` runs every table batch; `r2` runs the fresh-eye batch, except on claims it filed
-  or on a slate with one refuter, where `r1` does.
+  `steps.gap_hunt: false` turns the gap hunt off. Parallel slates use `gap-hunt-done` before escalation.
+  The `r1` seat runs fixed batches. The `r2` seat runs fresh-eye.
+  The `r1` seat also runs fresh-eye for gap-hunt claims and on slates with one refuter.
 - **Seats.** Each seat a slate holds (`main`, `finder`, `r1`, `r2`, `cutter`) has a
   mechanism, `native_subagent` or `advisor`. `init --settlement <file>` reads
   `converge_seats` and `advisor_roles` from the engine settlement, re-checks the engine's
@@ -78,13 +78,14 @@ flowchart LR
 - **Startup.** Early timing reclaims the run's existing pairing during initialization.
   Deferred timing lets finder work proceed and prepares the listener at its first assigned task.
   Recorded channels are reused; a failed pairing does not select a different mechanism.
-- **Advisor driver.** For an `advisor` seat, `init` and `status` print the driver: one
-  background step that sends the request over the advisor channel and starts one
-  `receive --timeout 300`, the receive budget, how to discard a late reply, the request
-  template whose SCOPE has the listener write its own events with the absolute converge path
-  and `--as r2`, and the check that ends the slate `blocked` naming the seat when a write is
-  denied or the seat's events are missing. The orchestrator never runs an advisor seat as a
-  native subagent.
+- **Single advisor driver.** `init` and `status` print one background step to send a request and start a bounded receive.
+  The driver sets the receive budget and the action for late replies.
+  The request directs the advisor to write its own events with `--as r2`.
+  The driver names the seat as blocked when a write is denied or required events are missing.
+- **Parallel advisor driver.** The asker reserves one channel per worker under the review group.
+  The approved launcher receives `{group}`, `{worker}`, and `{invitation}` as whole arguments.
+  Gear waits for the exact listener. `advisor-wait` counts five quiet receives and resets on corresponding slate progress.
+  Engine supplies its run ID with `--review-group`. A standalone continuation inherits the group through `--continue-from`.
 - **Angles** are rows `{id, tag, tell, asks, field?, lens?, cost?}` with tag `find`,
   `attack`, `evaluate` or `decide`; `(tag, id)` is unique. The built-in table has no `find`
   rows; callers supply them, as review does. The resolved table is builtin + `--angles`
@@ -167,7 +168,7 @@ flowchart LR
 - One JSONL file per slate, `<dir>/<slate>.jsonl`. `--dir` defaults to
   `~/.bootgear/converge`; review runs use `<session-dir>/converge`.
 - Each line is one event `{seq, ts, event, as, ...fields}`. Types: `init`, `file`,
-  `escalate`, `find-run`, `angle-na`, `attack`, `reply`, `verdict`, `cut`, `rebut`, `accept`,
+  `escalate`, `find-run`, `angle-na`, `gap-hunt-done`, `clean`, `attack`, `reply`, `verdict`, `cut`, `rebut`, `accept`,
   `cutoff`, `fix-check`. `seq` is gapless from 1, and `init` is written once, first; it records the
   refuter count (`init --refuters`, 1 or 2). Claims get ids `F001`, `F002`, …; `loc` is
   `path:line`.
@@ -235,6 +236,22 @@ Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 `test_globs`. Unknown keys, bad enum values, non-positive caps, a `per_lens` or
 `cutoff.lenses` without `default`, and non-boolean `escalate`, `gap_hunt` or
 `cheap.enabled` are rejected. `init` snapshots the effective config into the slate.
+
+### Parallel workers
+
+Set worker counts in the same `converge.yaml` layers. The defaults are:
+
+```yaml
+parallelism:
+  finder: 1
+  r1: 1
+  r2: 1
+  max_workers: 4
+```
+
+Set `max_workers` explicitly to use a higher ceiling. Host capacity limits how many workers can launch.
+Main's `work` lists ready workers and their full assignments. Assignments follow init angle order and claim filing order.
+Workers refresh Gear directly after ordinary actions. `work --wait` returns when work, completion, or a finder reply is ready.
 
 ## Shared provider
 

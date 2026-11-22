@@ -121,11 +121,15 @@ def cmd_status(args: argparse.Namespace) -> None:
         data: dict[str, Any] = {
             "slate": slate.slate_id, "lenses": slate.lenses, "refuters": slate.init_refuters,
             "difficulty_basis": slate.config["cutoff"]["difficulty_basis"],
-            "cutoff": cutoff, "agents": agents, "agent_cap": slate.cap("agents"),
+            "cutoff": cutoff, "agents": agents, "agent_cap": slate.agent_cap,
+            "parallelism": slate.parallelism,
+            "review_group": slate.review_group,
+            "gap_hunt_done": slate.gap_hunt_done,
             "phase": phase, "steps": slate.config["steps"], "caps": slate.config["caps"],
             "plan": plan,
             "seats": slate.seats,
-            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor),
+            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor,
+                                review_group=slate.review_group, r2_workers=slate.parallelism["r2"]),
             "claims": claims, "adhoc_angles": adhoc, "next": step}
         emit(args.output_mode, {}, [], json_text=json.dumps(data, indent=2))
         return
@@ -133,7 +137,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     lines = [(f"SLATE {slate.slate_id} lenses={','.join(slate.lenses) or '-'} "
               f"phase={phase} cutoff={cutoff} claims={len(claims)} "
               f"difficulty_basis={slate.config['cutoff']['difficulty_basis']} "
-              f"agents={len(agents)}/{slate.cap('agents')} advisor={advisor or '-'}"),
+              f"agents={len(agents)}/{slate.agent_cap} advisor={advisor or '-'}"),
              *map(_claim_line, claims), _adhoc_line(adhoc), *_plan_lines(plan)]
     emit(args.output_mode, {}, lines, step)
 

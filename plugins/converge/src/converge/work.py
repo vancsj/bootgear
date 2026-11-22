@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from . import ledger, model, protocol, protocol_event_checks, render, seats
+from . import assignments, ledger, model, protocol, protocol_event_checks, render, seats
 from .model import Claim, Slate
 
 ACTION_KINDS = tuple(kind for kind in model.EVENTS if kind != "init")
@@ -13,6 +13,14 @@ COMPUTED = {"event", "as", "seq", "ts", "id", "results", "evidence_sha256"}
 
 
 def seat(slate: Slate, actor: str, requested: str | None = None) -> str:
+    if assignments.parallel(slate):
+        assigned = assignments.workers(slate).get(actor)
+        if assigned is not None:
+            if requested not in (None, assigned):
+                raise ledger.LedgerError([f"work: {actor} belongs to seat {assigned}"])
+            return assigned
+        if requested in model.WORKER_SEATS or actor in model.WORKER_SEATS:
+            raise ledger.LedgerError([f"work: {actor} has no configured worker assignment"])
     if requested is not None:
         return requested
     if actor == slate.events[0]["as"]:
@@ -61,15 +69,90 @@ def _claim(claim: Claim, row: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+def _assignment(slate: Slate, actor: str, role: str,
+                find_owners: dict[tuple[str, str], str]) -> dict[str, Any]:
+    fixed = []
+    fresh_eye = []
+    if role in ("r1", "r2"):
+        for claim in slate.claims.values():
+            if assignments.claim_owner(slate, claim, role) != actor:
+                continue
+            if role == "r1":
+                fixed.append(claim.id)
+            if protocol.fresh_eye_role(slate, claim) == role:
+                fresh_eye.append(claim.id)
+    return {"find": [list(pair) for pair, owner in find_owners.items() if owner == actor],
+            "fixed": fixed, "fresh_eye": fresh_eye,
+            "gap_hunt": actor == "r2" and assignments.needs_gap_hunt(slate)}
+
+
+def _workers(slate: Slate, phase: str, plan: list[list[dict[str, Any]]],
+             find_owners: dict[tuple[str, str], str]) -> list[dict[str, Any]]:
+    ready = {row.get("agent") for chunk in plan for row in chunk}
+    if phase == "find":
+        ready.update(find_owners[lens, angle] for lens, coverage in render.coverage(slate).items()
+                     for angle in coverage.missing)
+    if protocol.gap_hunt_open(slate, phase):
+        ready.add("r2")
+    result = []
+    for actor, role in assignments.workers(slate).items():
+        scope = _assignment(slate, actor, role, find_owners)
+        if any(scope.values()):
+            result.append({"id": actor, "seat": role, "mechanism": slate.mechanism(role),
+                           "ready": actor in ready, "assignment": scope})
+    return result
+
+
+def _worker_pending(slate: Slate, actor: str, phase: str, scope: dict[str, Any]) -> bool:
+    if scope["gap_hunt"] and not slate.gap_hunt_done:
+        return True
+    if any(claim.finder == actor and protocol.claim_phase(slate, claim) is not None
+           for claim in slate.claims.values() if claim.live):
+        return True
+    if phase in ("find", "gap-hunt", "escalate", "cut-before"):
+        return bool(scope["fixed"] or scope["fresh_eye"])
+    unverified = protocol.unverified_ids(slate)
+    fixed_batches = range(1, len(protocol.table_batches(slate)) + 1)
+    for claim in slate.live_claims():
+        if claim.id in unverified:
+            continue
+        if claim.id in scope["fixed"] and any(
+            protocol.batch_state(slate, claim, batch) != "done" for batch in fixed_batches
+        ):
+            return True
+        if claim.id in scope["fresh_eye"] and protocol.batch_state(
+            slate, claim, protocol.FRESH_EYE
+        ) != "done":
+            return True
+    return False
+
+
+def _waiting_replies(slate: Slate, actor: str, role: str,
+                     plan: list[list[dict[str, Any]]]) -> list[str]:
+    claims = []
+    for chunk in plan:
+        for row in chunk:
+            if row["action"] != "reply":
+                continue
+            claim = slate.claims[row["claim"]]
+            refuter = protocol.fresh_eye_role(slate, claim) if row["batch"] == protocol.FRESH_EYE else "r1"
+            if role == refuter and assignments.claim_owner(slate, claim, role) == actor:
+                claims.append(claim.id)
+    return claims
+
+
 def package(slate: Slate, actor: str, role_host: str,
             requested: str | None = None) -> dict[str, Any]:
     role = seat(slate, actor, requested)
     if role == "main" and actor != slate.events[0]["as"]:
         raise ledger.LedgerError([f"work: main is {slate.events[0]['as']}; use that --as value"])
-    bound = protocol.role_agents(slate).get(role)
+    parallel = assignments.parallel(slate)
+    bound = None if parallel else protocol.role_agents(slate).get(role)
     if bound is not None and bound != actor:
         raise ledger.LedgerError([f"work: {role} is {bound}; use that --as value"])
     phase = protocol.slate_phase(slate)
+    find_owners = assignments.find_owners(slate) if parallel else {}
+    plan = protocol.batch_plan(slate)
     actions: list[dict[str, Any]] = []
     definitions: set[tuple[str, str]] = set()
     items: list[dict[str, Any]] = []
@@ -84,6 +167,8 @@ def package(slate: Slate, actor: str, role_host: str,
     if phase == "find" and role == "finder":
         for lens, coverage in render.coverage(slate).items():
             for angle in coverage.missing:
+                if parallel and find_owners[lens, angle] != actor:
+                    continue
                 definitions.add(("find", angle))
                 items.append({"lens": lens, "angle": angle, "action": "find"})
                 add("file", {"lens": lens, "angle": angle, "origin": "lens", "loc": "",
@@ -97,20 +182,19 @@ def package(slate: Slate, actor: str, role_host: str,
                 add("angle-na", {"phase": "find", "lens": lens, "angle": angle, "reason": ""},
                     ["reason"], ["use only when the angle's tell does not apply"])
 
-    gap_open = (slate.init_refuters == 2 and slate.config["steps"]["gap_hunt"]
-                and phase not in ("find", "done")
-                and not any(event["event"] in ("escalate", "cut", "clean", "attack")
-                                                for event in slate.events))
-    if role == "r2" and gap_open:
+    gap_open = protocol.gap_hunt_open(slate, phase)
+    if role == "r2" and gap_open and (not parallel or actor == "r2"):
         items.append({"action": "gap-hunt", "rule": "find what the lenses missed; report when done"})
         definitions.update(("find", angle["id"]) for angle in slate.angles if angle["tag"] == "find")
         add("file", {"origin": "gap-hunt", "lens": "", "angle": "", "loc": "", "claim": "",
                      "trigger": "", "evidence": "", "tier": ""},
             ["lens", "angle", "loc", "claim", "trigger", "evidence", "tier"])
+        if parallel:
+            add("gap-hunt-done", {}, conditions=["record after gap hunt, including with zero claims"])
 
-    for chunk in protocol.batch_plan(slate):
+    for chunk in plan:
         for row in chunk:
-            if row["agent_role"] != role:
+            if row["agent_role"] != role or row.get("agent", actor) != actor:
                 continue
             claim = slate.claims[row["claim"]]
             if row["action"] in ("cut-before", "cut-after", "attack", "verdict"):
@@ -197,7 +281,8 @@ def package(slate: Slate, actor: str, role_host: str,
                         add("fix-check", values, ["evidence", *(["review_slate"] if outcome == "pass" else [])])
 
     state = "ready" if actions else "complete" if phase == "done" else "waiting"
-    return {"slate": slate.slate_id, "source_seq": len(slate.events), "role": actor, "seat": role,
+    result: dict[str, Any] = {
+            "slate": slate.slate_id, "source_seq": len(slate.events), "role": actor, "seat": role,
             "role_host": role_host, "phase": phase, "state": state, "items": items,
             "definitions": [copy.deepcopy(angle) for angle in slate.angles
                             if (angle["tag"], angle["id"]) in definitions],
@@ -208,6 +293,18 @@ def package(slate: Slate, actor: str, role_host: str,
                          if role in ("main", "cutter")},
             "patch_limits": slate.config["cutoff"]["cheap"] if role == "cutter" else None,
             "actions": actions}
+    if parallel:
+        if role == "main":
+            result["workers"] = _workers(slate, phase, plan, find_owners)
+        elif role in model.WORKER_SEATS:
+            scope = _assignment(slate, actor, role, find_owners)
+            result["assignment"] = scope
+            if state == "waiting":
+                if not _worker_pending(slate, actor, phase, scope):
+                    result["state"] = "complete"
+                else:
+                    result["waiting_for_reply"] = _waiting_replies(slate, actor, role, plan)
+    return result
 
 
 def event(slate: Slate, value: dict[str, Any], actor: str) -> dict[str, Any]:
