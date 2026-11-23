@@ -1,4 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 hook_dir="$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)"
-exec python3 "$hook_dir/gear.py" "$@"
+record="$HOME/.bootgear/python"
+if [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    record="$XDG_DATA_HOME/bootgear/python"
+fi
+question=false
+if [[ "${3:-}" = adapter && "${4:-}" = --handler && "${5:-}" = question_boundary ]]; then
+    question=true
+fi
+if [[ -r "$record" ]] && IFS= read -r interpreter < "$record" &&
+        [[ "$interpreter" = /* && -f "$interpreter" && -x "$interpreter" ]]; then
+    if [[ "$question" = false ]]; then
+        exec "$interpreter" "$hook_dir/gear.py" "$@"
+    elif "$interpreter" "$hook_dir/gear.py" "$@"; then
+        exit 0
+    fi
+fi
+if [[ "$question" = true ]]; then
+    printf '%s\n' 'Gear could not check the question. Run cli:setup, then retry.' >&2
+    exit 2
+fi
+if [[ "${3:-}" = session-start ]]; then
+    printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Managed Python is unavailable. Run cli:setup, then restart."}}'
+else
+    printf '%s\n' 'Gear: Managed Python is unavailable. Run cli:setup, then retry.' >&2
+fi

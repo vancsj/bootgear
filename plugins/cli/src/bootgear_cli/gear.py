@@ -7,12 +7,11 @@ import argparse
 import json
 import os
 import shlex
-import shutil
 import signal
 import subprocess
 import sys
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -56,8 +55,6 @@ def _session_key() -> str | None:
 
 def _host_inventory(host: str, source: str, session: str | None, *,
                     refresh: bool) -> tuple[object | None, bool, str | None]:
-    if shutil.which(host) is None:
-        return None, False, None
     try:
         inventory, stored = hook_loader.host_inventory(host, session, refresh=refresh)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -90,17 +87,23 @@ def _host_plugin_roots(root: Path, *,
         raise GearError("claude plugin list --json returned an invalid installed plugin list.")
     if isinstance(claude_data, list):
         caller = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
+        activation = hook_loader.inventory_activation("claude", session, caller)
+        seen_ids: set[str] = set()
         for record in claude_data:
             if not isinstance(record, dict) or not record.get("enabled"):
                 continue
-            project_path = record.get("projectPath")
-            if project_path:
-                project = Path(project_path).resolve()
-                if project != root.resolve() and not caller.is_relative_to(project):
+            if not hook_loader.applies_to(record, activation):
+                continue
+            identity = record.get("id")
+            if isinstance(identity, str):
+                if identity in seen_ids:
                     continue
+                seen_ids.add(identity)
             install_path = record.get("installPath")
-            if isinstance(install_path, str):
+            if isinstance(install_path, str) and Path(install_path).is_dir():
                 roots.append(Path(install_path))
+            else:
+                warnings.append(f"Claude: installed plugin {identity or 'unknown'} is missing; run cli:setup.")
 
     codex_data, codex_stored, warning = ((None, False, None) if host == "claude"
                                          else _host_inventory("codex", "Codex", session, refresh=refresh))
@@ -117,13 +120,12 @@ def _host_plugin_roots(root: Path, *,
                 continue
             installed = hook_loader.codex_cache_root(record)
             if installed is None:
-                if not codex_stored:
-                    warnings.append("Codex: installed plugin has incomplete cache identity; run cli:setup.")
+                warnings.append("Codex: installed plugin has incomplete cache identity; run cli:setup.")
                 continue
             if installed.is_dir():
                 roots.append(installed)
-            elif not codex_stored:
-                warnings.append(f"Codex: installed plugin {record['name']} is missing; run its setup skill.")
+            else:
+                warnings.append(f"Codex: installed plugin {record['name']} is missing; run cli:setup.")
 
     seen: set[Path] = set()
     unique: list[Path] = []
@@ -144,7 +146,11 @@ def reconcile(root: Path, *, refresh: bool = False) -> Reconciliation:
         registration = plugin_root / "gear.toml"
         if not registration.is_file():
             continue
-        plugin = _load_plugin(registration.resolve(), repository_root=root)
+        try:
+            plugin = _load_plugin(registration.resolve(), repository_root=root)
+        except GearError as exc:
+            warnings += (f"{exc}. Run cli:setup to repair that plugin.",)
+            continue
         if plugin.name in plugins:
             continue
         if plugin.name in installed_plugins:
@@ -204,7 +210,9 @@ def _run(plugin: Plugin, command: Sequence[str], *, context: dict[str, str],
     try:
         if Path(executable[0]).name in {"python", "python3", "python3.12"}:
             if plugin.name == "cli" and context.get("COMMAND") == "setup":
-                result = _invoke((sys.executable, *executable[1:]), cwd=plugin.root, env=env)
+                env["PYTHONPATH"] = str(CLI_ROOT / "src")
+                result = _invoke((sys.executable, "-P", *executable[1:]),
+                                 cwd=Path(env["GEAR_CALLER_CWD"]), env=env)
             else:
                 with runtime.prepared() as interpreter:
                     env["VIRTUAL_ENV"] = str(interpreter.parent.parent)
@@ -228,30 +236,16 @@ def _plugin_context(plugin: Plugin, **extra: str) -> dict[str, str]:
     }
 
 
-def _refreshed_plugins(refresh: Callable[[], Reconciliation | dict[str, Plugin]]) -> dict[str, Plugin]:
-    result = refresh()
-    return result.plugins if isinstance(result, Reconciliation) else result
-
-
 def route_command(
     plugins: dict[str, Plugin],
     plugin_name: str,
     command_name: str,
     args: Sequence[str],
     *,
-    refresh: Callable[[], Reconciliation | dict[str, Plugin]] | None = None,
     caller_cwd: Path | None = None,
 ) -> int:
     plugin = plugins.get(plugin_name)
     command = plugin.commands.get(command_name) if plugin is not None else None
-    if command is None and refresh is not None:
-        return route_command(
-            _refreshed_plugins(refresh),
-            plugin_name,
-            command_name,
-            args,
-            caller_cwd=caller_cwd,
-        )
     if plugin is None:
         raise GearError(f"unknown plugin {plugin_name!r}; use Gear list or reconcile")
     if command is None:
@@ -269,7 +263,6 @@ def route_event(
     plugins: dict[str, Plugin],
     event: str,
     *,
-    refresh: Callable[[], Reconciliation | dict[str, Plugin]] | None = None,
     caller_cwd: Path | None = None,
 ) -> int:
     reminders = [
@@ -278,8 +271,6 @@ def route_event(
         for reminder in plugin.reminders
         if reminder.event == event
     ]
-    if not reminders and refresh is not None:
-        return route_event(_refreshed_plugins(refresh), event, caller_cwd=caller_cwd)
     seen: set[str] = set()
     for plugin, reminder in sorted(reminders, key=lambda item: (item[1].order, item[0].name, item[1].dedupe)):
         if reminder.dedupe in seen:
@@ -366,8 +357,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         root = args.root.resolve()
         caller_cwd = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
         # An installed Gear needs host plugins, except for a `cli` route, which loads from CLI_ROOT.
-        installed = root == CLI_ROOT and args.route[:1] != ["cli"]
-        plugins = _reconcile_for_route(root).plugins if installed else discover(root)
+        installed = root == CLI_ROOT and route[:1] != ["cli"]
+        explicit_refresh = route[:1] == ["reconcile"]
+        plugins = discover(root)
+        use_inventory = installed or (root != DEFAULT_ROOT and route and route[0] not in plugins
+                                       and route[0] not in BUILT_IN_COMMANDS and route[0] != "cli")
+        if use_inventory and not explicit_refresh:
+            plugins = _reconcile_for_route(root).plugins
         if "cli" not in plugins and (CLI_ROOT / "gear.toml").is_file():
             plugins["cli"] = _load_plugin(CLI_ROOT / "gear.toml", repository_root=root)
         route = args.route
@@ -396,6 +392,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"plugins: {', '.join(sorted(plugins)) or 'none'}")
             return 0
         if route[0] == "reconcile":
+            if os.environ.get("BOOTGEAR_HOOK_ACTIVE") == "1":
+                raise GearError("Run reconcile outside the hook, then retry.")
             report = reconcile(root, refresh=True)
             _print_warnings(report.warnings)
             _print_list(report.plugins, mode)
@@ -403,15 +401,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if route[0] == "event":
             if len(route) != 2:
                 raise GearError("usage: gear event <event>")
-            return route_event(plugins, route[1], refresh=lambda: _reconcile_for_route(root, refresh=True),
-                               caller_cwd=caller_cwd)
+            return route_event(plugins, route[1], caller_cwd=caller_cwd)
         if route[0] in BUILT_IN_COMMANDS:
             raise GearError(f"built-in command {route[0]!r} has invalid arguments")
         if len(route) < 2:
             raise GearError("usage: gear <plugin> <command> [arguments...]")
-        return route_command(plugins, route[0], route[1], route[2:],
-                             refresh=lambda: _reconcile_for_route(root, refresh=True),
-                             caller_cwd=caller_cwd)
+        return route_command(plugins, route[0], route[1], route[2:], caller_cwd=caller_cwd)
     except GearError as exc:
         from bootgear_cli.clikit import gear_command
 
@@ -445,8 +440,6 @@ def resolve_command(command: str) -> list[str] | None:
     if not matches:
         report = reconcile(root)
         matches = owners(report.plugins)
-        if not matches and report.stored:
-            matches = owners(reconcile(root, refresh=True).plugins)
     return gear_argv(matches[0], command) if len(matches) == 1 else None
 
 

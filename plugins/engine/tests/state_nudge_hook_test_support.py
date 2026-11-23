@@ -10,11 +10,13 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from bootgear_cli import runtime
+from bootgear_cli import hook_loader, runtime
 from gear_commands import HOST
 from gear_commands import TASK as TASK_COMMAND
 from settlement_fixture import valid_settlement
@@ -56,6 +58,7 @@ class StateNudgeHookTestCase(unittest.TestCase):
         self.data = self.tmp / "data"
         runtimes = self.data / "bootgear" / "runtimes"
         runtimes.parent.mkdir(parents=True)
+        (runtimes.parent / "python").write_text(f"{sys.executable}\n")
         runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.session_dir = self.home / ".bootgear" / "session"
         self.session_dir.mkdir(parents=True)
@@ -76,6 +79,10 @@ class StateNudgeHookTestCase(unittest.TestCase):
         env.setdefault("UV_CACHE_DIR", str(Path.home() / ".cache" / "uv"))
         env["HOME"] = str(home or self.home)
         env["XDG_DATA_HOME"] = str(self.data)
+        with patch.dict(os.environ, env):
+            path = hook_loader.store_path(HOST, self.run_id)
+            inventory = {"installed": []} if HOST == "codex" else []
+            hook_loader._write_entry(path, inventory, self.session_dir)
         return env
 
     def _hook_argv(self):

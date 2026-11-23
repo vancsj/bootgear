@@ -1,44 +1,37 @@
 ---
 name: setup
-description: Prepare the shared Python runtime and required plugins. Use before a workflow needs them or when Gear requests setup.
+description: Install, repair, or configure Bootgear plugins and managed Python. Use on explicit setup requests or when Gear requests setup.
 ---
 
 ## Inputs and outcomes
 
-Take the host and an optional installed target plugin name.
-Return the runtime path, checked plugins, and pending user actions to the caller, or return the setup error.
+Take the host, operation, and any selected Bootgear plugins.
+Return the verified plugins, paths, pending actions, or setup error to the user or calling skill.
 
 ## Procedure
 
-1. Check for Python 3.12 and uv. Report missing prerequisites.
-2. Get the absolute Gear path from `cli:gear`.
-3. Run `<gear> --host <host> cli setup`. Add `--plugin <name>` when the caller supplies a target.
-4. Return the result and its next step.
+1. Get the Gear path from cli:gear.
+2. Run the command below. Repeat the plugin flag for more choices.
+3. Relay the result. After success, tell the user to restart their host sessions.
+
+```sh
+<gear> --host <host> cli setup --operation install --plugin <name>
+```
+
+Use install for selected plugins. Use repair to refresh plugins and their runtime.
+Use configure to fill missing settings for installed plugins.
+Without plugin flags, install and configure target the CLI. Repair uses the selected host profile.
 
 ## Rules
 
-Run setup only on explicit request or when Gear requests it.
-Keep dependency changes out of normal commands and hooks.
-Report installation, hook trust, and session loading separately.
-Keep the caller's blocker open while required user actions remain.
+Run setup as a separate step on explicit request.
 
 ## Fallbacks
 
-If setup fails, return the error and next action.
-If a sandbox denies Gear, stop. Tell the user to restart the host without its sandbox.
+If uv is missing, help the user install uv before retrying setup.
+If Gear is missing, use the Bootgear macOS launcher or install cli@bootgear through the host.
+Report any native trust action printed by setup.
 
 ## Host mechanics
 
-Read only the current host's section.
-
-### Claude Code
-
-Use `--host claude`. If absent, install with `/plugin install cli@bootgear`, then retry.
-Let Claude install declared dependencies. If setup reports missing plugins, install them through Claude and retry.
-
-### Codex CLI
-
-Use `--host codex`. If absent, run `codex plugin add cli@bootgear`, then retry.
-Targeted setup installs declared plugins and checks their enabled roots.
-Relay follow-up actions for all new or changed plugins.
-Keep user actions pending if setup reports `activation: unverified`.
+Use claude for Claude Code and codex for Codex.

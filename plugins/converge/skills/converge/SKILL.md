@@ -107,7 +107,7 @@ An unavailable advisor cannot be replaced with a native role. Keep all other wri
 
 If a role or advisor is unavailable, return `blocked` with its diagnostic and pending claims. Do not write its events.
 If memory ledger is missing, unconfigured, or broken, report its status and diagnostic. Use checked sources when it cannot help.
-For missing siblings, run `cli:setup` for `converge` and retry. Use only public interfaces.
+For missing siblings, report cli:setup for converge. Resume after setup and restart.
 
 ## Host mechanics
 

@@ -10,6 +10,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -105,6 +106,7 @@ class CliOutputTestCase(unittest.TestCase):
         self.data = self.tmp / "data"
         runtimes = self.data / "bootgear" / "runtimes"
         runtimes.parent.mkdir(parents=True)
+        (runtimes.parent / "python").write_text(f"{sys.executable}\n")
         runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         for name, value in (("BOOTGEAR_TEST_HOME", str(self.home)),
                             ("BOOTGEAR_TEST_DATA", str(self.data))):

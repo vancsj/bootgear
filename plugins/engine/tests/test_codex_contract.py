@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,6 +56,7 @@ class CodexPackageContractTest(CodexPackageContractTestCase):
             data = root / "data"
             runtimes = data / "bootgear" / "runtimes"
             runtimes.parent.mkdir(parents=True)
+            (runtimes.parent / "python").write_text(f"{sys.executable}\n")
             runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
             for host in ("claude", "codex"):
                 for override in (False, True):

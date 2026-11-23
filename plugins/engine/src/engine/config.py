@@ -11,6 +11,7 @@ from typing import Any, NoReturn
 
 import yaml
 from bootgear_cli.clikit import caller_cwd, caller_path, emit, host
+from bootgear_cli.hook_loader import profile_root
 
 from engine import seats
 
@@ -103,9 +104,8 @@ def resolve(name: str, project_root: Path, user_path: Path | None,
     if not project_root.is_dir():
         _fail(f"project root is not a directory: {project_root}")
 
-    host_dir = (".codex" if host() == "codex" else ".claude")
     paths = {
-        "user": (user_path or (Path.home() / host_dir / f"{name}.yaml")).expanduser(),
+        "user": (user_path or (profile_root(host() or "claude") / f"{name}.yaml")).expanduser(),
         "project": project_path or (project_root / ".bootgear" / "config" / f"{name}.yaml"),
         "task": task_path,
     }

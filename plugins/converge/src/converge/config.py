@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from bootgear_cli.hook_loader import profile_root
 
 from . import finder_routing, model
 
@@ -67,8 +68,7 @@ class ConfigError(Exception):
 
 
 def user_path() -> Path:
-    host_dir = ".codex" if os.environ.get("BOOTGEAR_HOST") == "codex" else ".claude"
-    return Path.home() / host_dir / f"{NAME}.yaml"
+    return profile_root(os.environ.get("BOOTGEAR_HOST", "claude")) / f"{NAME}.yaml"
 
 
 def _load(path: Path, label: str) -> tuple[Any, bool]:

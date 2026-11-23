@@ -5,17 +5,17 @@ import argparse
 import contextlib
 import fcntl
 import hashlib
-import json
 import os
 import shutil
-import subprocess
 import sys
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import NoReturn
 
+from bootgear_cli.native_process import SetupError, run
+
 CLI_ROOT = Path(__file__).resolve().parents[2]
-PYTHON_VERSION = "3.12"
 
 
 class RuntimeNotReady(Exception):
@@ -27,11 +27,49 @@ class SetupParser(argparse.ArgumentParser):
         self.exit(2, f"example: {self.prog} --help\ncommands: setup, session-start\ngear: {message}\n")
 
 
-def environment_path(cli_root: Path = CLI_ROOT) -> Path:
-    digest = hashlib.sha256(PYTHON_VERSION.encode() + (cli_root / "uv.lock").read_bytes()).hexdigest()[:20]
+def data_root() -> Path:
     data = os.environ.get("XDG_DATA_HOME")
-    root = Path(data).expanduser() / "bootgear" if data else Path.home() / ".bootgear"
-    return root / "runtimes" / digest
+    return Path(data).expanduser() / "bootgear" if data else Path.home() / ".bootgear"
+
+
+def interpreter_path() -> Path:
+    return Path(sys.executable).resolve()
+
+
+def environment_path(cli_root: Path = CLI_ROOT, *, interpreter: Path | None = None) -> Path:
+    base = interpreter.resolve() if interpreter else interpreter_path()
+    digest = hashlib.sha256()
+    digest.update(os.fsencode(base))
+    digest.update(b"\0")
+    digest.update((cli_root / "uv.lock").read_bytes())
+    return data_root() / "runtimes" / digest.hexdigest()[:20]
+
+
+def record_interpreter() -> Path:
+    base = interpreter_path()
+    directory = data_root()
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(f"{base}\n")
+            stream.close()
+            temporary.replace(directory / "python")
+        finally:
+            temporary.unlink(missing_ok=True)
+    return base
+
+
+@contextlib.contextmanager
+def setup_lock() -> Iterator[None]:
+    root = data_root()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (root / "setup.lock").open("a+b") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeNotReady("Another setup is running. Retry when it finishes.") from exc
+        yield
 
 
 def _python(environment: Path) -> Path:
@@ -42,91 +80,65 @@ def _ready(environment: Path) -> bool:
     return (environment / ".ready").is_file() and _python(environment).is_file()
 
 
-def setup(cli_root: Path = CLI_ROOT) -> Path:
+def setup(cli_root: Path = CLI_ROOT, *, repair: bool = False) -> Path:
     environment = environment_path(cli_root)
-    if _ready(environment):
-        return environment
-    uv = shutil.which("uv")
+    uv = os.environ.get("BOOTGEAR_SETUP_UV") or shutil.which("uv")
     if uv is None:
-        raise RuntimeNotReady("uv is missing. Install uv, then run cli:setup.")
+        raise RuntimeNotReady("uv is missing. Claude Code or Codex can help install uv. Then retry setup.")
     environment.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with environment.with_suffix(".lock").open("a+b") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        if _ready(environment):
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            if not repair and _ready(environment):
+                return environment
+            raise RuntimeNotReady("A Gear command is using the runtime. Retry when it finishes.") from exc
+        if _ready(environment) and not repair:
             return environment
-        found = subprocess.run(
-            [uv, "python", "find", "--system", "--no-project", "--no-python-downloads", "--no-config", PYTHON_VERSION],
-            stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False,
-        )
-        if found.returncode:
-            raise RuntimeNotReady(found.stderr.strip() or "Python 3.12 is missing. Install it, then run cli:setup.")
-        env = os.environ.copy()
-        env["UV_PROJECT_ENVIRONMENT"] = str(environment)
-        result = subprocess.run(
-            [uv, "sync", "--locked", "--no-install-project", "--no-config", "--project", str(cli_root),
-             "--python", found.stdout.strip()],
-            env=env, stdin=subprocess.DEVNULL, check=False,
-        )
-        if result.returncode:
-            raise RuntimeNotReady(f"uv setup failed with exit code {result.returncode}; retry cli:setup.")
-        temporary = environment / ".ready.tmp"
-        temporary.write_text("ready\n", encoding="utf-8")
-        temporary.replace(environment / ".ready")
+        marker = environment / ".ready"
+        marker.unlink(missing_ok=True)
+        base_python = interpreter_path()
+        installation = base_python.parent.parent
+        env = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment),
+               "UV_PYTHON_INSTALL_DIR": str(installation.parent)}
+        env.pop("VIRTUAL_ENV", None)
+        command = [
+            uv, "sync", "--locked", "--no-install-project", "--no-config", "--managed-python",
+            "--no-python-downloads", "--project", str(cli_root), "--python", installation.name,
+        ]
+        if repair:
+            command.append("--reinstall")
+        try:
+            run(command, env=env)
+            base = run([
+                str(_python(environment)), "-I", "-c",
+                "import sys, yaml; print(sys._base_executable)",
+            ], env=env).strip()
+        except SetupError as exc:
+            raise RuntimeNotReady(str(exc)) from exc
+        if Path(base) != base_python:
+            raise RuntimeNotReady("The provider runtime did not use the selected managed Python. Retry Repair.")
+        pending = environment / ".ready.pending"
+        try:
+            pending.write_text("ready\n", encoding="utf-8")
+            pending.replace(marker)
+        finally:
+            pending.unlink(missing_ok=True)
     return environment
 
 
 @contextlib.contextmanager
 def prepared(cli_root: Path = CLI_ROOT) -> Iterator[Path]:
-    environment = environment_path(cli_root)
     try:
+        environment = environment_path(cli_root)
         lock = environment.with_suffix(".lock").open("rb")
     except FileNotFoundError as exc:
         raise RuntimeNotReady("Shared runtime is missing. Run cli:setup, then retry.") from exc
     with lock:
-        fcntl.flock(lock, fcntl.LOCK_SH)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeNotReady("Shared runtime setup is in progress. Retry when it finishes.") from exc
         if not _ready(environment):
             raise RuntimeNotReady("Shared runtime is not ready. Run cli:setup, then retry.")
         yield _python(environment)
-
-
-def main() -> int:
-    from bootgear_cli import clikit, dependencies
-
-    program = clikit.current_program("cli", "setup")
-    parser = SetupParser(prog=program, description=__doc__,
-                         epilog=f"example: {program} --plugin engine",
-                         formatter_class=argparse.RawDescriptionHelpFormatter)
-    flags = parser.add_mutually_exclusive_group()
-    flags.add_argument("--json", action="store_true")
-    flags.add_argument("--prose", action="store_true")
-    parser.add_argument("--plugin", help="installed provider name from gear list; prepare its declared sibling dependencies")
-    args = parser.parse_args()
-    mode = clikit.resolve_mode(args.json, args.prose)
-    try:
-        environment = setup()
-        plugins = dependencies.prepare(args.plugin) if args.plugin else ()
-    except (OSError, RuntimeNotReady, dependencies.DependencySetupError) as exc:
-        error = json.dumps({"error": str(exc)}) if mode == "json" else f"gear: {exc}"
-        print(error, file=sys.stderr)
-        return 2
-    result: dict[str, object] = {"runtime": str(environment)}
-    prose = f"Shared runtime ready: {environment}"
-    if args.plugin:
-        result["plugins"] = list(plugins)
-        prose += f"\nRequired plugin installations verified: {', '.join(plugins)}"
-    next_step = ("Return to the calling skill." if args.plugin else
-                 "Use cli:gear to get the Gear path, then run a registered command.")
-    if clikit.host() == "codex":
-        result["activation"] = "unverified"
-        prose += "\nPlugin activation is unverified. Setup did not check hook trust or session loading."
-        next_step = (
-            "Ask the user to review and trust new or changed plugin hooks in /hooks. "
-            "Restart Codex first if the new hooks are not listed. "
-            "Then ask them to start a fresh Codex session before continuing the workflow."
-        )
-    clikit.emit(mode, result, prose, next=next_step)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

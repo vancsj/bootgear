@@ -97,7 +97,7 @@ class CodexPackageContractTest(CodexPackageContractTestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("uv is missing", result.stderr)
-        self.assertIn("run cli:setup", result.stderr)
+        self.assertIn("Claude Code or Codex", result.stderr)
 
     def test_converge_command_runs_through_gear(self):
         result = subprocess.run(
@@ -111,6 +111,9 @@ class CodexPackageContractTest(CodexPackageContractTestCase):
 
     def test_converge_without_runtime_reports_setup_guidance(self):
         with tempfile.TemporaryDirectory(prefix="converge-runtime-") as tmp:
+            record = Path(tmp) / "xdg/bootgear/python"
+            record.parent.mkdir(parents=True)
+            record.write_text(f"{sys.executable}\n")
             result = subprocess.run(
                 [*CONVERGE, "--help"],
                 capture_output=True,

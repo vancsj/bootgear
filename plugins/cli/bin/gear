@@ -1,4 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 gear_plugin_dir="$(cd -- "${BASH_SOURCE[0]%/*}/.." && pwd)"
-exec python3 "$gear_plugin_dir/bootstrap.py" "$@"
+is_setup() {
+    while (( $# )); do
+        case "$1" in
+            --host|--root)
+                (( $# >= 2 )) || return 1
+                shift 2
+                ;;
+            --host=*|--root=*|--json|--prose) shift ;;
+            cli) [[ ${2:-} == setup ]]; return ;;
+            *) return 1 ;;
+        esac
+    done
+    return 1
+}
+
+if is_setup "$@"; then
+    if [[ "${BOOTGEAR_HOOK_ACTIVE:-}" = 1 ]]; then
+        printf '%s\n' 'gear: Run setup outside the hook, then retry.' >&2
+        exit 2
+    fi
+    if ! uv_path="$(command -v uv)"; then
+        printf '%s\n' 'gear: uv is missing. Claude Code or Codex can help install uv. Then retry setup.' >&2
+        exit 2
+    fi
+    if [[ "$uv_path" != /* ]]; then
+        printf '%s\n' 'gear: Put uv on PATH from an absolute directory, then retry setup.' >&2
+        exit 2
+    fi
+    export BOOTGEAR_SETUP_UV="$uv_path"
+    export UV_HTTP_TIMEOUT=120
+    source "$gear_plugin_dir/bin/setup-deadline.sh"
+    find_python() {
+        setup_with_deadline 120 "$uv_path" python find --managed-python --no-project --no-config --no-python-downloads 3.12
+    }
+    if interpreter="$(find_python 2>/dev/null)"; then
+        :
+    elif [[ $? = 124 ]]; then
+        printf '%s\n' 'gear: Managed Python discovery timed out. Retry setup.' >&2
+        exit 2
+    else
+        if ! setup_with_deadline 120 "$uv_path" python install --no-bin --no-config 3.12 >&2 ||
+                ! interpreter="$(find_python)"; then
+            printf '%s\n' 'gear: Could not prepare managed Python 3.12. Retry setup.' >&2
+            exit 2
+        fi
+    fi
+    interpreter="$("$interpreter" -I -c 'import os, sys; print(os.path.realpath(sys.executable))')"
+    exec "$interpreter" -I "$gear_plugin_dir/bootstrap.py" "$@"
+fi
+record="${HOME}/.bootgear/python"
+if [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    record="$XDG_DATA_HOME/bootgear/python"
+fi
+if [[ -r "$record" ]] && IFS= read -r interpreter < "$record" &&
+        [[ "$interpreter" = /* && -f "$interpreter" && -x "$interpreter" ]]; then
+    exec "$interpreter" "$gear_plugin_dir/bootstrap.py" "$@"
+fi
+printf '%s\n' 'gear: Managed Python is unavailable. Run cli:setup, then retry.' >&2
+exit 2

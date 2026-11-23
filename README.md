@@ -109,23 +109,19 @@ Both hosts use its shared skills and providers. Hook registrations retain each h
 
 ## Install
 
-Prerequisites: `git`, Python 3.12, and [`uv`](https://docs.astral.sh/uv/).
-Python plugins use the shared CLI runtime. An engine run's advisor roles (a debate
-reviewer, or the converge refuter and gap hunter) go to the other vendor's host through
-`advisor`: on Claude Code they need the Codex CLI installed and signed in; on Codex, a
-Claude Code session listening through `advisor`.
+On macOS, open Bootgear Setup from a terminal:
 
-Each plugin installs on its own — you do not need the rest of bootgear. The table's
-"installs … with it" notes describe Claude Code's declared dependencies.
-Codex uses explicit setup to install the same dependencies (see [Codex CLI](#codex-cli)).
-
-After installation, call `cli:setup` once to prepare the shared runtime.
-Call `cli:gear` to get the literal Gear path.
-
+```sh
+launcher="$(mktemp)" && curl -fsSL --max-time 120 https://raw.githubusercontent.com/vancsj/bootgear/main/setup-macos.sh -o "$launcher" && /bin/bash "$launcher"
 ```
-/plugin marketplace add vancsj/bootgear
-/plugin install memory-ledger@bootgear
-```
+
+Choose Claude Code or Codex, select your plugins, and choose Install.
+Setup uses uv-managed Python 3.12 and prepares the shared Gear runtime.
+Repair refreshes plugins and the runtime. Configure fills missing user settings.
+
+If the CLI plugin is already installed, use cli:setup in your host session.
+On success, restart your host sessions so they load the current plugins.
+Use cli:gear to find the literal Gear path.
 
 | gear | what it does |
 |---|---|
@@ -141,19 +137,8 @@ Call `cli:gear` to get the literal Gear path.
 
 ### Codex CLI
 
-Both marketplaces contain every plugin and point to the same source directories.
-Codex does not install transitive dependencies. Install the target and CLI first:
-
-```sh
-codex plugin marketplace add vancsj/bootgear
-codex plugin add cli@bootgear
-codex plugin add engine@bootgear
-```
-
-Call `cli:setup` with target `engine`. It runs `<gear> --host codex cli setup --plugin engine`.
-Setup reads the installed target's declared dependencies, installs missing peers, and verifies their enabled installed roots.
-Choose another installed plugin as the target for a standalone workflow.
-Normal commands and hooks never install dependencies.
+Use the launcher for first setup. To set up from an existing Codex CLI installation, use cli:setup.
+The same installer prepares selected plugins and their declared dependencies.
 
 Start an engine run with `$engine:start`. Set up the ledger with `$memory-ledger:setup`.
 Trust plugin hooks through the native `/hooks` interface when Codex requests it.

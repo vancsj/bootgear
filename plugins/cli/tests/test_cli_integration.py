@@ -129,6 +129,8 @@ class GearIntegrationTests(GearIntegrationTestsCase):
         (checkout / "bin" / "probe").write_text(
             "#!/bin/sh\nprintf '%s\\n' 'marketplace-edited'\n", encoding="utf-8"
         )
+        refreshed = self._run("codex", "--root", str(empty_root), "reconcile")
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
         result = self._run("codex", "--root", str(empty_root), "fixture-provider", "probe")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -146,6 +148,8 @@ class GearIntegrationTests(GearIntegrationTestsCase):
         empty_root = self.base / "empty-root"
         empty_root.mkdir()
 
+        refreshed = self._run("claude", "--root", str(empty_root), "reconcile")
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
         result = self._run("claude", "--root", str(empty_root), "fixture-provider", "probe")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -170,6 +174,8 @@ class GearIntegrationTests(GearIntegrationTestsCase):
 
         for caller in (project, child):
             with self.subTest(caller=caller.name):
+                refreshed = self._run("claude", "--root", str(empty_root), "reconcile", cwd=caller)
+                self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
                 current = self._run(
                     "claude", "--root", str(empty_root), "current-provider", "probe", cwd=caller
                 )

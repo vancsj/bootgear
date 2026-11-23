@@ -185,38 +185,9 @@ name = "same"
             with self.assertRaises(gear.GearError):
                 gear.discover(root)
 
-    def test_retries_missing_route_after_reconciliation(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.make_plugin(root, "demo", """
-[plugin]
-name = "demo"
-
-[commands.probe]
-exec = ["python3", "probe.py"]
-""", {"probe.py": ""})
-            refreshes = []
-
-            def refresh() -> dict[str, gear.Plugin]:
-                refreshes.append(True)
-                return gear.discover(root)
-
-            result = gear.route_command({}, "demo", "probe", [], refresh=refresh)
-
-            self.assertEqual(result, 0)
-            self.assertEqual(refreshes, [True])
-
-    def test_route_miss_reconciles_only_once(self) -> None:
-        refreshes = []
-
-        def refresh() -> dict[str, gear.Plugin]:
-            refreshes.append(True)
-            return {}
-
-        with self.assertRaises(gear.GearError):
-            gear.route_command({}, "missing", "probe", [], refresh=refresh)
-
-        self.assertEqual(refreshes, [True])
+    def test_route_miss_reports_explicit_reconcile(self) -> None:
+        with self.assertRaisesRegex(gear.GearError, "list or reconcile"):
+            gear.route_command({}, "missing", "probe", [])
 
     def test_reconcile_adds_host_plugin_and_prefers_local_registration(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

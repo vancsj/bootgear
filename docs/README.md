@@ -92,41 +92,23 @@ discovers registrations from `gear.toml` and does not use a fixed plugin list.
   host whose session variable is set. With both variables set, it takes the
   nearest `claude` or `codex` ancestor process, else `claude`.
 - **Runtime.** Python commands use the prepared shared interpreter and imports.
-  `cli:setup` prepares the Python runtime. With a target plugin, setup verifies its transitive plugin dependencies.
+  `cli:setup` prepares selected plugins and their dependencies. It records the managed Python path.
   Codex setup installs missing peers through the native CLI and refreshes enabled installed roots.
 - **Events.** `<gear> --host <host> event <event>` runs every matching reminder in
   (`order`, plugin name, `dedupe`) order, skipping repeated `dedupe` keys. A
   failing `gate` reminder stops the run and returns its code. A failing
   `reminder` is reported on stderr and routing continues.
-- **Reconciliation.** A checkout Gear reconciles on a route miss: a plugin or
-  command is unknown, or an event has no reminders. An installed Gear
-  reconciles on every call except a `cli` route, with the stored host plugin list. A routed call
-  queries the host only when no list is stored, or at a route miss. Reconciliation adds enabled host-installed plugin
-  roots from `claude plugin list --json`. Codex lists configured marketplaces,
-  then queries each with `codex plugin list --marketplace NAME --json`.
-  Other cached Gear registrations require the full `codex plugin list --json` query.
-  Cache files never decide which plugins are enabled or which version runs. A
-  repository-local registration wins over an installed one with the same name.
-  After a miss, Gear reconciles again and retries the original route exactly
-  once. A second miss on a plugin or command is a final error. An event that
-  still has no reminders exits 0 silently. Reconciliation only reads host
-  metadata. It never installs, enables or trusts anything. Host query failures
-  are warnings on stderr.
-- **Host plugin store.** Gear and the hook loaders share one host plugin list
-  for each session. Each entry is `<data>/host-plugins/<host>/<session-id>.json`.
-  `<data>` is `$XDG_DATA_HOME/bootgear`, else `~/.bootgear`. Only the user can
-  read and write the store. Gear keys the entry by the session id from the
-  environment. A hook loader keys it by the hook payload `session_id`. Without
-  a safe session id, Gear and the loaders skip the store. They then query the
-  host for each list. A stored list stays in use until the next session
-  start, resume or route miss. The miss queries the host once more and rewrites the
-  entry. The `reconcile` built-in always queries the host. Only a fresh query
-  warns about a missing plugin folder. Each fresh write deletes entries older
-  than 7 days.
-- **Session-start refresh.** A cli `SessionStart` hook queries the host on
-  startup and resume. It rewrites the entry of that session and prints nothing.
-  A plugin install, upgrade or disable takes effect at the next session start
-  or resume, or at a route miss. Codex skips this hook until the user trusts it.
+- **Reconciliation.** Gear reads the prepared inventory to route installed plugins.
+  A repository-local registration wins over an installed one with the same name.
+  Outside hooks, `gear reconcile` refreshes the inventory through the host CLI.
+  A host session must have an inventory from `SessionStart` before it can refresh it.
+- **Host plugin store.** The store lives under `host-plugins` in the Bootgear data directory.
+  Gear and the hook loaders share entries by host, host profile, and session id.
+  Setup and explicit reconcile outside a host session prepare an entry for the project directory.
+- **Session-start refresh.** The first startup or fork hook builds the session inventory.
+  Resume, clear, and compact refresh it. Routine hooks read the prepared inventory.
+  After setup, restart open sessions to pick up plugin changes.
+  Codex runs the hook after the user grants trust.
 - **Built-ins.** `list` prints commands and `@event` reminders. `doctor`
   prints the root and the plugin names. `reconcile` runs a reconciliation and
   exits 1 when it produced warnings.

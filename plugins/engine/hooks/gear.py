@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -16,7 +17,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 SESSION_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
-STORE_MAX_AGE = 7 * 24 * 60 * 60
+LOCK_TIMEOUT = 30
 QUERY_TIMEOUT = 5
 CODEX_REMOTE_MARKETPLACE = "openai-curated-remote"
 
@@ -26,52 +27,58 @@ def safe_session(value: object) -> str | None:
     return value if isinstance(value, str) and SESSION_PATTERN.match(value) else None
 
 
-def store_path(host: str, session: str) -> Path:
-    """The store entry of one host session under the bootgear data root."""
+def profile_root(host: str) -> Path:
+    variable, default = ("CODEX_HOME", ".codex") if host == "codex" else ("CLAUDE_CONFIG_DIR", ".claude")
+    configured = os.environ.get(variable)
+    return Path(configured).expanduser().resolve() if configured else Path.home() / default
+
+
+def _path_key(path: Path) -> str:
+    return hashlib.sha256(os.fsencode(path.resolve())).hexdigest()[:24]
+
+
+def store_path(host: str, session: str | None, activation: Path | None = None) -> Path:
     data = os.environ.get("XDG_DATA_HOME")
     base = Path(data).expanduser() / "bootgear" if data else Path.home() / ".bootgear"
-    return base / "host-plugins" / host / f"{session}.json"
+    directory = base / "host-plugins" / host / _path_key(profile_root(host))
+    if session:
+        return directory / "sessions" / f"{session}.json"
+    return directory / "projects" / f"{_path_key(activation or Path.cwd())}.json"
 
 
-def _read_entry(path: Path) -> tuple[bool, object]:
+def _read_entry(path: Path) -> dict | None:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return False, None
+        return None
     if isinstance(document, dict) and isinstance(document.get("inventory"), (list, dict)):
-        return True, document["inventory"]
-    return False, None
+        activation = document.get("activation")
+        if isinstance(activation, str) and Path(activation).is_absolute():
+            return document
+    return None
 
 
-def _write_entry(path: Path, inventory: object) -> None:
-    """Replace the entry in one step, then prune old entries; failures are ignored."""
-    try:
-        path.parent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path.parent.mkdir(exist_ok=True, mode=0o700)
-        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.stem}.", suffix=".tmp", dir=path.parent)
-    except OSError:
-        return
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump({"inventory": inventory}, stream)
-        os.replace(temporary, path)
-    except OSError:
-        with contextlib.suppress(OSError):
-            os.unlink(temporary)
-        return
-    cutoff = time.time() - STORE_MAX_AGE
-    with contextlib.suppress(OSError):
-        for entry in path.parent.iterdir():
-            with contextlib.suppress(OSError):
-                if entry.is_file() and entry.stat().st_mtime < cutoff:
-                    entry.unlink()
+def _write_entry(path: Path, inventory: object, activation: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            json.dump({"inventory": inventory, "activation": str(activation.resolve())}, output)
+            output.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
-def _query_inventory(command: list[str]) -> object:
+def write_profile_inventory(host: str, activation: Path, inventory: object) -> None:
+    _write_entry(store_path(host, None, activation), inventory, activation)
+
+
+def _query_inventory(command: list[str], cwd: Path | None = None) -> object:
     label = " ".join(command)
     try:
         result = subprocess.run(
-            command, stdin=subprocess.DEVNULL,
+            command, cwd=cwd, stdin=subprocess.DEVNULL,
             capture_output=True, text=True, timeout=QUERY_TIMEOUT, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -85,9 +92,9 @@ def _query_inventory(command: list[str]) -> object:
         raise ValueError(f"{label} returned invalid JSON: {exc}") from exc
 
 
-def _codex_inventory() -> object:
+def _codex_inventory(cwd: Path) -> object:
     command = ["codex", "plugin", "marketplace", "list", "--json"]
-    listing = _query_inventory(command)
+    listing = _query_inventory(command, cwd)
     marketplaces = listing.get("marketplaces") if isinstance(listing, dict) else None
     if not isinstance(marketplaces, list) or any(
         not isinstance(record, dict) or not isinstance(record.get("name"), str) or not record["name"]
@@ -96,15 +103,15 @@ def _codex_inventory() -> object:
         raise ValueError("codex plugin marketplace list --json returned an invalid marketplace list.")
     names = list(dict.fromkeys(record["name"] for record in marketplaces
                                if record["name"] != CODEX_REMOTE_MARKETPLACE))
-    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    home = profile_root("codex")
     cache = home / "plugins" / "cache"
     if any(path.relative_to(cache).parts[0] not in names for path in cache.glob("*/*/*/gear.toml")
            if path.is_file()):
-        return _query_inventory(["codex", "plugin", "list", "--json"])
+        return _query_inventory(["codex", "plugin", "list", "--json"], cwd)
     installed = []
     for name in names:
         command = ["codex", "plugin", "list", "--marketplace", name, "--json"]
-        inventory = _query_inventory(command)
+        inventory = _query_inventory(command, cwd)
         records = inventory.get("installed") if isinstance(inventory, dict) else None
         if not isinstance(records, list):
             raise TypeError(f"{' '.join(command)} returned an invalid installed plugin list.")
@@ -114,41 +121,110 @@ def _codex_inventory() -> object:
 
 @contextlib.contextmanager
 def _inventory_lock(path: Path) -> Iterator[None]:
-    lock_path = path.parent.parent / ".locks" / path.parent.name / f"{path.stem}.lock"
+    lock_path = path.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    deadline = time.monotonic() + LOCK_TIMEOUT
+    with lock_path.open("a+b") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Inventory refresh is busy. Start a fresh host session.") from exc
+                time.sleep(0.05)
+        yield
+
+
+def _local_claude_roots() -> dict[str, str]:
+    path = profile_root("claude") / "plugins" / "known_marketplaces.json"
     try:
-        lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock = lock_path.open("a+b")
-    except OSError:
-        # Inventory queries still work when the optional cache is unwritable.
-        yield
-        return
-    with lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        yield
+        marketplaces = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(marketplaces, dict):
+        return {}
+    roots = {}
+    for marketplace, config in marketplaces.items():
+        source = config.get("source") if isinstance(config, dict) else None
+        if not isinstance(source, dict) or source.get("source") != "directory":
+            continue
+        location = config.get("installLocation")
+        if not isinstance(location, str) or not Path(location).is_absolute():
+            continue
+        root = Path(location).resolve()
+        try:
+            catalog = json.loads((root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for entry in catalog.get("plugins", []) if isinstance(catalog, dict) else ():
+            name, relative = (entry.get("name"), entry.get("source")) if isinstance(entry, dict) else (None, None)
+            if isinstance(name, str) and isinstance(relative, str) and not Path(relative).is_absolute():
+                resolved = (root / relative).resolve()
+                if resolved.is_relative_to(root):
+                    roots[f"{name}@{marketplace}"] = str(resolved)
+    return roots
+
+
+def query_inventory(host: str, activation: Path) -> object:
+    if host == "codex":
+        inventory = _codex_inventory(activation)
+        if not isinstance(inventory, dict) or not isinstance(inventory.get("installed"), list):
+            raise ValueError("Codex returned an invalid installed plugin list.")
+        return inventory
+    inventory = _query_inventory(["claude", "plugin", "list", "--json"], activation)
+    if not isinstance(inventory, list):
+        raise TypeError("Claude returned an invalid installed plugin list.")
+    roots = _local_claude_roots()
+    return [{**record, "installPath": roots[record["id"]]}
+            if isinstance(record, dict) and isinstance(record.get("id"), str) and record["id"] in roots
+            else record for record in inventory]
+
+
+@contextlib.contextmanager
+def session_start_inventory(host: str, session: str, activation: Path, source: str) -> Iterator[object]:
+    path = store_path(host, session)
+    with _inventory_lock(path):
+        if source in {"startup", "fork"} and (previous := _read_entry(path)):
+            yield previous["inventory"]
+            return
+        path.unlink(missing_ok=True)
+        inventory = query_inventory(host, activation)
+        _write_entry(path, inventory, activation)
+        yield inventory
 
 
 def host_inventory(host: str, session: str | None, *, refresh: bool = False) -> tuple[object, bool]:
-    """The host's installed plugin data, and True when it came from the session store.
-
-    Without `refresh`, a valid stored entry wins. Otherwise query the host, then store the
-    result when `session` is safe. Raises RuntimeError, TypeError or ValueError that names the host
-    command when the query fails, cannot run, times out, or prints invalid JSON."""
     key = safe_session(session)
-    path = store_path(host, key) if key else None
-    if path is not None and not refresh:
-        found, inventory = _read_entry(path)
-        if found:
-            return inventory, True
-    with _inventory_lock(path) if path is not None else contextlib.nullcontext():
-        if path is not None and not refresh:
-            found, inventory = _read_entry(path)
-            if found:
-                return inventory, True
-        inventory = (_codex_inventory() if host == "codex"
-                     else _query_inventory([host, "plugin", "list", "--json"]))
-        if path is not None:
-            _write_entry(path, inventory)
+    activation = Path(os.environ.get("GEAR_CALLER_CWD") or Path.cwd()).resolve()
+    path = store_path(host, key, activation)
+    previous = _read_entry(path)
+    if refresh and os.environ.get("BOOTGEAR_HOOK_ACTIVE") != "1":
+        if key:
+            if not previous:
+                raise RuntimeError("Session inventory is missing. Start a fresh host session.")
+            with session_start_inventory(host, key, Path(previous["activation"]), "resume") as inventory:
+                return inventory, False
+        inventory = query_inventory(host, activation)
+        write_profile_inventory(host, activation, inventory)
         return inventory, False
+    if previous:
+        return previous["inventory"], True
+    if key:
+        raise RuntimeError("Session inventory is missing. Start a fresh host session.")
+    raise RuntimeError(f"Plugin inventory is missing. Run gear --host {host} reconcile, then retry.")
+
+
+def applies_to(record: dict, activation: Path) -> bool:
+    project = record.get("projectPath")
+    if record.get("scope") in {"project", "local"} and not isinstance(project, str):
+        return False
+    return not project or (isinstance(project, str) and activation.is_relative_to(Path(project).resolve()))
+
+
+def inventory_activation(host: str, session: str | None, default: Path) -> Path:
+    entry = _read_entry(store_path(host, safe_session(session), default))
+    return Path(entry["activation"]) if entry else default
 
 
 def codex_cache_root(record: dict) -> Path | None:
@@ -157,11 +233,11 @@ def codex_cache_root(record: dict) -> Path | None:
     if not all(isinstance(value, str) and value and value not in {".", ".."}
                and "/" not in value and "\\" not in value for value in values):
         return None
-    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    home = profile_root("codex")
     return home.joinpath("plugins", "cache", *(str(value) for value in values))
 
 
-def _cli_gear(host: str, inventory: object) -> Path | None:
+def _cli_gear(host: str, inventory: object, activation: Path) -> Path | None:
     if isinstance(inventory, list):
         records = inventory
     elif isinstance(inventory, dict):
@@ -174,14 +250,14 @@ def _cli_gear(host: str, inventory: object) -> Path | None:
         if not isinstance(record, dict) or not record.get("enabled"):
             continue
         if host == "claude":
-            if str(record.get("id", "")).split("@")[0] != "cli":
+            if not applies_to(record, activation) or str(record.get("id", "")).split("@")[0] != "cli":
                 continue
             location = record.get("installPath")
             if not isinstance(location, str):
                 continue
             candidate = Path(location) / "bin" / "gear"
         else:
-            installed = codex_cache_root(record) if record.get("name") == "cli" else None
+            installed = codex_cache_root(record) if record.get("name") == "cli" and record.get("installed", True) else None
             if installed is None:
                 continue
             candidate = installed / "bin" / "gear"
@@ -190,26 +266,58 @@ def _cli_gear(host: str, inventory: object) -> Path | None:
     return None
 
 
-def _find_gear(root: Path, host: str, plugin: str, session: str | None) -> Path | None:
+def _find_gear(root: Path, host: str, plugin: str, inventory: object, activation: Path) -> Path | None:
     for ancestor in root.parents:
         candidate = ancestor / "plugins" / "cli" / "bin" / "gear"
         if candidate.is_file():
             return candidate
     if plugin == "cli" and (root / "bin" / "gear").is_file():
         return root / "bin" / "gear"
-    inventory, stored = host_inventory(host, session)
-    gear = _cli_gear(host, inventory)
-    if gear is None and stored:
-        gear = _cli_gear(host, host_inventory(host, session, refresh=True)[0])
-    return gear
+    return _cli_gear(host, inventory, activation)
 
 
-def _payload_session(payload: bytes) -> str | None:
+def _event(payload: bytes) -> dict:
     try:
         event = json.loads(payload)
     except ValueError:
-        return None
-    return safe_session(event.get("session_id")) if isinstance(event, dict) else None
+        return {}
+    return event if isinstance(event, dict) else {}
+
+
+def _activation(host: str, live: Path) -> Path:
+    project = os.environ.get("CLAUDE_PROJECT_DIR") if host == "claude" else None
+    return Path(project).resolve() if project and Path(project).is_absolute() else live
+
+
+@contextlib.contextmanager
+def _hook_inventory(host: str, session: str, event: dict, activation: Path) -> Iterator[object]:
+    if event.get("hook_event_name") == "SessionStart":
+        with session_start_inventory(host, session, activation, event.get("source", "startup")) as inventory:
+            yield inventory
+    else:
+        yield host_inventory(host, session)[0]
+
+
+def _forward(args: argparse.Namespace, root: Path, payload: bytes) -> subprocess.CompletedProcess:
+    plugin = tomllib.loads((root / "gear.toml").read_text())["plugin"]["name"]
+    event = _event(payload)
+    session = safe_session(event.get("session_id"))
+    if not session:
+        raise RuntimeError("Session id is missing. Start a fresh host session.")
+    cwd = event.get("cwd")
+    live = Path(cwd).resolve() if isinstance(cwd, str) and Path(cwd).is_absolute() else Path.cwd()
+    activation = _activation(args.host, live)
+    with _hook_inventory(args.host, session, event, activation) as inventory:
+        activation = inventory_activation(args.host, session, activation)
+        gear = _find_gear(root, args.host, plugin, inventory, activation)
+        if gear is None:
+            raise RuntimeError("The shared CLI plugin is missing.")
+        env = {**os.environ, "BOOTGEAR_SESSION_ID": session, "BOOTGEAR_HOOK_ACTIVE": "1",
+               "GEAR_CALLER_CWD": str(live)}
+        return subprocess.run(
+            [str(gear), "--host", args.host, plugin, args.command, *args.arguments],
+            input=payload, capture_output=True, env=env, cwd=live, check=False,
+        )
 
 
 def _remind(payload: bytes, detail: str) -> int:
@@ -242,16 +350,7 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     payload = sys.stdin.buffer.read()
     try:
-        plugin = tomllib.loads((root / "gear.toml").read_text())["plugin"]["name"]
-        session = _payload_session(payload)
-        gear = _find_gear(root, args.host, plugin, session)
-        if gear is None:
-            return _remind(payload, "The shared CLI plugin is missing.")
-        env = {**os.environ, **({"BOOTGEAR_SESSION_ID": session} if session else {})}
-        result = subprocess.run(
-            [str(gear), "--host", args.host, plugin, args.command, *args.arguments],
-            input=payload, capture_output=True, env=env, check=False,
-        )
+        result = _forward(args, root, payload)
         if result.returncode == 2 and b"Shared runtime" in result.stderr:
             return _remind(payload, result.stderr.decode(errors="replace").strip())
         if result.returncode != 0:

@@ -1,6 +1,7 @@
 """Fake host executables, their query log and the shared runtime link for the cli tests."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from bootgear_cli import runtime
@@ -58,5 +59,6 @@ def query_count(queries: Path, host: str) -> int:
 def link_shared_runtime(data: Path) -> None:
     """Use the prepared runtime under the data root `data`; the store stays in `data`."""
     (data / "bootgear").mkdir(parents=True, exist_ok=True)
+    (data / "bootgear" / "python").write_text(f"{sys.executable}\n")
     (data / "bootgear" / "runtimes").symlink_to(runtime.environment_path().parent,
                                                 target_is_directory=True)

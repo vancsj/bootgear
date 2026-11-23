@@ -206,6 +206,7 @@ class InstalledCopyTest(unittest.TestCase):
         self.data = self.base / "data"
         runtimes = self.data / "bootgear" / "runtimes"
         runtimes.parent.mkdir(parents=True)
+        (runtimes.parent / "python").write_text(f"{sys.executable}\n")
         runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         env = {key: value for key, value in os.environ.items()
                if key not in ("BOOTGEAR_HOST", "BOOTGEAR_PROG", "GEAR_PLUGIN", "VIRTUAL_ENV")}

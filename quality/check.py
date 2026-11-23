@@ -6,7 +6,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
-from importlib import import_module
 import json
 import os
 from pathlib import Path
@@ -74,7 +73,7 @@ CHECKS = (
     ),
     Check(
         "pytest-cli",
-        ("python", "-m", "pytest", "plugins/cli/tests"),
+        ("python", "-m", "pytest", "--confcutdir=.", "plugins/cli/tests"),
     ),
     Check(
         "pytest-quality",
@@ -177,18 +176,6 @@ def _run_checks(
         return list(pool.map(run_one, CHECKS))
 
 
-def _setup_shared_runtime() -> bool:
-    if str(CLI_SOURCE) not in sys.path:
-        sys.path.insert(0, str(CLI_SOURCE))
-    runtime = import_module("bootgear_cli.runtime")
-    try:
-        runtime.setup()
-    except (OSError, runtime.RuntimeNotReady) as exc:
-        print(f"shared runtime setup failed: {exc}", file=sys.stderr)
-        return False
-    return True
-
-
 def _report(results: Sequence[Result], baseline: Sequence[dict[str, str]]) -> int:
     identity = _identity()
     baseline_keys = {
@@ -219,8 +206,6 @@ def _report(results: Sequence[Result], baseline: Sequence[dict[str, str]]) -> in
 def main() -> int:
     if Path.cwd().resolve() != REPOSITORY_ROOT:
         print(f"quality check must run from {REPOSITORY_ROOT}", file=sys.stderr)
-        return 2
-    if not _setup_shared_runtime():
         return 2
     try:
         baseline = _load_baseline(BASELINE_PATH)

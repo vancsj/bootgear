@@ -38,6 +38,9 @@ class GearIntegrationTestsCase(unittest.TestCase):
         self.claude_list.write_text("[]\n", encoding="utf-8")
         self.queries = self.base / "queries.log"
         self.data = self.base / "data"
+        root = self.data / "bootgear"
+        root.mkdir(parents=True)
+        (root / "python").write_text(f"{sys.executable}\n")
         for host in HOSTS:
             write_fake_host(self.bin, host)
         self.env = {

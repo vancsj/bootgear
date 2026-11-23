@@ -171,6 +171,7 @@ class Scratch(unittest.TestCase):
         self.data = self.tmp / "data"
         runtimes = self.data / "bootgear" / "runtimes"
         runtimes.parent.mkdir(parents=True)
+        (runtimes.parent / "python").write_text(f"{sys.executable}\n")
         runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.session_dir = self.tmp / "session"
         self.ledgers = self.tmp / "ledgers"

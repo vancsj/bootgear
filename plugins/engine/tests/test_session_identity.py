@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,6 +37,7 @@ class SessionIdentityTest(unittest.TestCase):
         self.data = self.tmp / "data"
         runtimes = self.data / "bootgear" / "runtimes"
         runtimes.parent.mkdir(parents=True)
+        (runtimes.parent / "python").write_text(f"{sys.executable}\n")
         runtimes.symlink_to(runtime.environment_path().parent, target_is_directory=True)
         self.default_dir = self.home / ".bootgear" / "session"
         self.custom_dir = self.tmp / "custom-session"

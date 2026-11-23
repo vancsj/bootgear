@@ -8,6 +8,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from bootgear_cli import hook_loader
 
 WORKER = """
 import json, os, sys, time
@@ -15,12 +18,7 @@ from pathlib import Path
 from bootgear_cli import hook_loader
 
 base, host = Path(sys.argv[1]), sys.argv[2]
-read_entry = hook_loader._read_entry
-def observed_read(path):
-    result = read_entry(path)
-    (base / ('reader-' + str(os.getpid()))).touch()
-    return result
-hook_loader._read_entry = observed_read
+(base / ('reader-' + str(os.getpid()))).touch()
 
 inventory = {'installed': []} if host == 'codex' else []
 def query(*args):
@@ -35,7 +33,12 @@ def query(*args):
 hook_loader._codex_inventory = query
 hook_loader._query_inventory = query
 session = os.environ.get('INVENTORY_TEST_SESSION', 'same-session')
-print(json.dumps(hook_loader.host_inventory(host, session, refresh='refresh' in sys.argv)[0]))
+if 'read' in sys.argv:
+    print(json.dumps(hook_loader.host_inventory(host, session)[0]))
+else:
+    source = 'resume' if 'refresh' in sys.argv else 'startup'
+    with hook_loader.session_start_inventory(host, session, base, source) as result:
+        print(json.dumps(result))
 """
 
 
@@ -67,16 +70,16 @@ class InventoryConcurrencyTests(unittest.TestCase):
                             worker.kill()
                         worker.communicate()
 
-    def test_cached_read_does_not_wait_for_resume_refresh(self) -> None:
+    def test_resume_invalidates_inventory_before_query_without_locking_readers(self) -> None:
         for host in ('codex', 'claude'):
             with self.subTest(host=host), tempfile.TemporaryDirectory() as folder:
                 base = Path(folder)
                 env = {**os.environ, 'XDG_DATA_HOME': str(base / 'data')}
                 env['PYTHONPATH'] = str(Path(__file__).resolve().parents[1] / 'src')
-                cache = base / 'data/bootgear/host-plugins' / host / 'same-session.json'
-                cache.parent.mkdir(parents=True)
                 old_inventory = {'installed': [{'name': 'old'}]} if host == 'codex' else [{'id': 'old'}]
-                cache.write_text(json.dumps({'inventory': old_inventory}))
+                with patch.dict(os.environ, env):
+                    cache = hook_loader.store_path(host, "same-session")
+                    hook_loader._write_entry(cache, old_inventory, base)
                 command = [sys.executable, '-c', WORKER, str(base), host]
                 refresh = subprocess.Popen(
                     [*command, 'refresh'], env=env, stdin=subprocess.DEVNULL,
@@ -90,9 +93,9 @@ class InventoryConcurrencyTests(unittest.TestCase):
                         if time.monotonic() > deadline:
                             self.fail('refresh did not reach the inventory query')
                         time.sleep(.01)
-                    cached = subprocess.run(command, env=env, capture_output=True, text=True, timeout=5, check=False)
-                    self.assertEqual(cached.returncode, 0, cached.stderr)
-                    self.assertEqual(json.loads(cached.stdout), old_inventory)
+                    cached = subprocess.run([*command, "read"], env=env, capture_output=True, text=True, timeout=5, check=False)
+                    self.assertNotEqual(cached.returncode, 0, cached.stderr)
+                    self.assertIn("fresh host session", cached.stderr)
                     (base / 'release').touch()
                     stdout, stderr = refresh.communicate(timeout=10)
                     self.assertEqual(refresh.returncode, 0, stderr)
