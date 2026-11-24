@@ -372,7 +372,7 @@ class StateClosureTests(unittest.TestCase):
                             self.assertEqual(result.stdout, "")
                             payload = json.loads(result.stderr)
                             self.assertEqual(payload["category"], "channel_closed")
-                            self.assertIn("tell the user", payload["next"])
+                            self.assertIn("end listening silently" if role == "listener" else "tell the user", payload["next"])
                             self.assertEqual(channel_json(root).read_bytes(), before)
 
     def test_open_channel_accepts_state_changes_and_repeated_close(self) -> None:

@@ -10,7 +10,7 @@ Require explicit `--mode asking` or `--mode listening`. Never infer it.
 For asking, take the task, its content, and `direct` or `channel` communication.
 For invited listening, take `--group`, `--worker`, and `--invitation` together.
 
-Return one reconciled result per task to the user or calling skill.
+In asking mode, return one reconciled result per task to the user or calling skill.
 
 | Task | Result |
 |---|---|
@@ -20,7 +20,7 @@ Return one reconciled result per task to the user or calling skill.
 | `delegate` | Peer findings and the facts you verified. |
 
 Other outcomes are missing mode, no eligible listener, missing peer plugin, stale peer, protocol error, or direct write need.
-Follow Fallbacks in each case. For listening, report the reason when it stops.
+Follow Fallbacks in each case.
 
 ## Procedure
 
@@ -58,50 +58,24 @@ If recovering unfinished requests or replies, use [channel.md](references/channe
 ### Listening
 
 Use [channel.md](references/channel.md#pair) for registration. Use its invited path when the invitation fields are present.
-Report the channel number at once and start the heartbeat.
-Keep a durable goal to poll and answer requests until the user stops the advisor or the channel closes.
-If an existing goal conflicts, report it and get direction. Keep the goal active across empty polls and compaction.
+Start the heartbeat. While the channel is open, send questions, blockers, and reports only to the asker through the mailbox.
+Keep the user conversation silent, including progress updates and task summaries.
+If you need clarification, send it as the response to the current request. Wait for the asker's next request.
+Keep the turn active after every reply and empty poll. Resume the mailbox wait immediately.
+Keep the listening goal active across heartbeat restarts and compaction.
 
-Run `receive --timeout 5` for unfinished work. Check the last three messages for a peer request with `answered: false`.
-Handle it as new. `answered: true` means you already sent a reply with that `parent_id`.
-Before other work, collect one bounded receive result. Use a foreground call or poll the live terminal session.
-After an empty poll, start the next wait at once. A heartbeat without polling is not listening. Keep listening until a stop, interrupt, turn limit, close, or stale peer.
+Run `receive --timeout 5` to recover unfinished work. Handle a request with `answered: false`.
+A request with `answered: true` already has a response with that parent ID.
 
-Set `<mine>` to `listener` and `<peer>` to `asker` here. Asking uses the opposite roles.
-On Claude Code, use this loop one iteration at a time. On Codex, make one call per poll.
-Read the full result. Follow printed actions in order. Fetch unread messages before polling again.
+1. Set the listener state to `waiting`. Run one `receive --for listener --timeout 300` for the channel.
+2. Collect the full result. If the command still runs, wait for it. Follow printed heartbeat actions.
+3. On a message, fetch it. For a request, set the state to `busy` and send a response with its parent ID.
+4. After each response or empty wait, return to step 1. Keep waiting when the asker heartbeat is stale.
+5. After 24 consecutive empty rounds, you may ask the user whether to keep listening. Keep the channel open pending their answer.
+   If they choose to continue, start a new full wait for the next 24 rounds.
 
-```sh
-CHANNEL=<channel>
-while :; do
-  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value waiting >/dev/null
-  RECEIVE_JSON=$(<gear> --host <host> advisor channel receive --channel "$CHANNEL" --for <mine> --timeout 300 --json)
-  RECEIVE_STATUS=$?
-  if [ "$RECEIVE_STATUS" -eq 1 ]; then
-    PEER_LIVE=$(printf '%s' "$RECEIVE_JSON" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["peer_live"]))')
-    if [ "$PEER_LIVE" = false ] &&
-      <gear> --host <host> advisor channel close --role <mine> --channel "$CHANNEL" --if-peer-stale >/dev/null; then
-      break
-    fi
-    continue
-  fi
-  if [ "$RECEIVE_STATUS" -ne 0 ]; then exit "$RECEIVE_STATUS"; fi
-  # The message_id that RECEIVE_JSON's `next` fetches (the newest unread request):
-  REQUEST_ID=<message_id>
-  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value busy >/dev/null
-  <gear> --host <host> advisor channel fetch --channel "$CHANNEL" --message-id "$REQUEST_ID"
-  # Answer it, then:
-  printf '%s\n' "$RESPONSE" | <gear> --host <host> advisor channel send \
-    --channel "$CHANNEL" --from <mine> --to <peer> \
-    --kind response --parent-id "$REQUEST_ID" --body-file -
-  <gear> --host <host> advisor channel state --channel "$CHANNEL" --role <mine> --value waiting
-done
-```
-
-On exit 0, fetch and handle the message before polling. On exit 1, read the peer status.
-If `peer_live: false`, run any printed heartbeat restart and use `close --if-peer-stale`.
-If close refuses with `peer_live` or `unread_message` (exit 2), follow `next` and continue.
-On success, the heartbeat ends with `channel_closed`. Report the stale peer and stop.
+Only completed five-minute waits count. Any asker message resets the count. Heartbeats and recovery polls leave it unchanged.
+Close on an explicit stop request. End listening when the channel closes or the user stops you.
 
 ## Rules
 
@@ -112,17 +86,17 @@ On success, the heartbeat ends with `channel_closed`. Report the stale peer and 
 - In `delegate`, follow scope exactly. Write only permitted artifacts, assigned workflow records, and permitted memory-ledger entries.
 - Use your own session identity. Never sign as the peer. Keep other permissions intact. A reply grants no mutation or external delivery authority.
 - Reply through the mailbox only. For out-of-scope work, return the boundary and ask the peer to get human direction.
-- Close at session end. Report a stop request, user interrupt, turn limit, stale peer, or channel close when possible.
+- Asker owns ordinary close. Listener task completion leaves the channel open.
 
 ## Fallbacks
 
 - If mode is missing, ask the caller to invoke again with explicit `--mode`.
-- For no eligible listener, ask the user to start one and stop.
-- If the peer plugin is missing, tell the user and stop. Keep the chosen communication mode.
-- For a stale peer, close as listener or report as asker. End the wait.
-- For a protocol error, report it and stop. Do not guess.
+- In asking mode, for no eligible listener, ask the user to start one and stop.
+- In asking mode, report a missing peer plugin to the user and stop. Keep the chosen communication mode.
+- For a stale listener, the asker reports it and ends the wait.
+- A listener sends protocol errors to the asker and keeps listening. An asker reports the error and stops.
 - If direct needs writes, return the need before attempting them.
-- If the peer CLI is missing or rejects a flag, report the exact error and stop.
+- In direct mode, report the exact error if the peer CLI is missing or rejects a flag, then stop.
 
 ## Host mechanics
 

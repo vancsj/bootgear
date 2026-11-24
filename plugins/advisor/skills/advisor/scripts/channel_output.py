@@ -217,7 +217,8 @@ def script_command(args: argparse.Namespace, root: Path) -> str:
 def receive_next(args: argparse.Namespace, root: Path, role: str) -> str:
     """Tell the caller how to keep receiving after a message changes the inbox."""
     receive = f"{script_command(args, root)} receive --channel {args.channel} --for {role} --timeout 300"
-    return (f"fetch and answer each message before running `{receive}` again; "
+    routing = "Send questions and reports only to the asker. " if role == "listener" else ""
+    return (f"{routing}fetch and answer each message before running `{receive}` again; "
             "a receive call with a message still unread returns it at once")
 
 
@@ -262,5 +263,7 @@ def print_registered(args: argparse.Namespace, root: Path, record: dict[str, obj
     output = brief_record(record)
     output["note"] = ("run next in the background for as long as this session uses the channel; "
                       "the seat reads stale without it")
+    if args.role == "listener":
+        output["note"] += ". Keep listening silently. Send questions and reports only to the asker."
     output["next"] = heartbeat_command(args, root, str(record["channel"]))
     emit(args, output)

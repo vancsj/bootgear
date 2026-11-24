@@ -13,7 +13,7 @@ from channel_liveness import (  # noqa: F401
     hook_touch,
     owned_channels,
 )
-from channel_messages import DEFAULT_PENDING_CAP, fetch, receive, send
+from channel_messages import DEFAULT_PENDING_CAP, listener_can_ask, fetch, receive, send  # noqa: F401
 from channel_output import (
     EXAMPLES,
     RefusingParser,
@@ -137,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_channel(close_parser)
     close_parser.add_argument("--role", required=True, metavar="{asker,listener}", help="seat closing the channel")
     close_parser.add_argument("--if-peer-stale", dest="if_peer_stale", action="store_true",
-                              help="close only if the peer is not live and nothing unread waits for --role")
+                              help="require a stale peer and empty inbox; a listener also needs 24 empty rounds")
     add_output(close_parser)
     close_parser.set_defaults(handler=close)
 

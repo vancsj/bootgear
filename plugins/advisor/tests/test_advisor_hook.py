@@ -166,13 +166,35 @@ class AdvisorHookTests(unittest.TestCase):
         text = self.context(self.event("UserPromptSubmit", prompt="hi"), "UserPromptSubmit")
         self.assertIn("heartbeat --channel 0001", text)
 
-    def test_stop_stamps_and_prints_nothing(self) -> None:
+    def test_listener_stop_requires_24_empty_rounds(self) -> None:
         self.pair()
         self.stop_heartbeat()
         before = time.time()
+        record = self.record()
+        record["listener_idle_rounds"] = 23
+        self.write_record(record)
         result = self.event("Stop")
-        self.assertEqual((result.stdout, result.stderr), ("", ""))
+        self.assertEqual(json.loads(result.stdout)["decision"], "block")
+        self.assertIn("asker", json.loads(result.stdout)["reason"])
         self.assertGreaterEqual(self.record()["listener_hook_seen_at"], before)
+        self.assertEqual(self.event("Stop", session="c1").stdout, "")
+        record["listener_idle_rounds"] = 24
+        self.write_record(record)
+        self.assertEqual(self.event("Stop").stdout, "")
+        self.send("asker", "listener")
+        self.assertEqual(json.loads(self.event("Stop").stdout)["decision"], "block")
+
+    def test_repeated_stop_after_reply_keeps_the_turn_running(self) -> None:
+        self.pair()
+        request = self.send("asker", "listener")
+        self.channel("fetch", "--channel", "0001", "--message-id", request)
+        self.send("listener", "asker", "response", "--parent-id", request)
+        for continued in (False, True):
+            decision = json.loads(self.event("Stop", stop_hook_active=continued).stdout)
+            self.assertEqual(decision["decision"], "block")
+            self.assertIn("receive --channel 0001 --for listener --timeout 300", decision["reason"])
+        self.channel("close", "--role", "asker", "--channel", "0001")
+        self.assertEqual(self.event("Stop").stdout, "")
 
     def test_hook_never_writes_the_heartbeat_fields(self) -> None:
         self.pair()
@@ -259,7 +281,8 @@ class AdvisorHookTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(HOOK)], input=json.dumps({"session_id": "s1", "hook_event_name": "Stop"}),
             capture_output=True, text=True, check=False, env=env, timeout=10)
-        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["decision"], "block")
         record = json.loads((self.home / ".bootgear" / "advisor" / "channels" / "0001" / "channel.json").read_text())
         self.assertIn("listener_hook_seen_at", record)
 

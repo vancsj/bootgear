@@ -38,9 +38,10 @@ def safe_name(value: str) -> bool:
     )
 
 
-def closed_channel(channel: str) -> NoReturn:
+def closed_channel(channel: str, role: str | None = None) -> NoReturn:
     fail(f"channel is closed: {channel}", category="channel_closed",
-         next_step=f"stop using channel {channel} and tell the user; continuing needs a new pairing")
+         next_step=("end listening silently" if role == "listener" else
+                    f"stop using channel {channel} and tell the user; continuing needs a new pairing"))
 
 
 def safe_channel(value: str) -> str:

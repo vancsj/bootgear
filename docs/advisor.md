@@ -36,15 +36,11 @@ The asker returns one reconciled answer to the user. It never returns the
 banner, streamed reasoning, or the raw exchange. Advisor output is advisory:
 the asker checks every checkable claim before relying on it.
 
-**Listening** is a read-only advisor loop. The listener registers a fresh
-channel and reports its number. It then waits on the mailbox, answers one
-request at a time, and keeps listening until it receives a `stop`, the user
-interrupts, or the channel closes; when the asker's seat reads dead it
-runs `close --if-peer-stale`, which closes the channel and ends its own
-heartbeat unless the asker is live again or a request is waiting, in which
-case it keeps listening. It never starts a conversation, never
-answers the human directly for a mailbox request, and takes no irreversible
-action unless the request's scope authorizes it.
+**Listening** keeps the user conversation silent while the channel is open.
+The listener sends questions and reports to the asker through the mailbox.
+After 24 consecutive empty five-minute receives, it may ask the user whether to keep listening.
+Any asker message resets the count. Heartbeats and short recovery checks leave it unchanged.
+An explicit stop or channel closure ends the wait.
 
 ## Mailbox model
 
@@ -105,8 +101,8 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
   never start a process. The `receive` restart reminder and its "restarting
   its heartbeat" note read the heartbeat stamp alone. When `seen_at` is
   stale, PostToolUse and UserPromptSubmit inject the exact `heartbeat`
-  restart command at most once a minute (`<role>_hook_nudged_at`); Stop and
-  subagent calls never inject. After compaction, SessionStart injects the
+  restart command at most once a minute (`<role>_hook_nudged_at`); subagent calls never inject. Stop continues a listener below the idle limit.
+  After compaction, SessionStart injects the
   seat status that `whoami` prints. The status holds the channel, role,
   state, peer liveness, heartbeat and unread count. It also holds the last
   read message and the read request still owed a response. Its `next` is a
@@ -139,21 +135,15 @@ The mailbox root defaults to `~/.bootgear/advisor`. `--root` or
 - **Reading.** `receive` blocks until an unread message arrives or the
   timeout passes. It returns the last three messages as previews and prints a
   runnable `next` command and `peer_live` (`true`, `false`, or `null` when the
-  peer seat has no owner). When `peer_live` is false, `next` is omitted and a
-  note tells the caller to report to the user; while the peer is live only
-  through its restart grace, the note says it is restarting its heartbeat
-  and to keep waiting. Exit code `1` means no new
-  message; the caller waits again unless `peer_live` is false. `receive` never changes
-  state, so it is safe after compaction.
-  `fetch` returns the full body, marks the message read, and reminds the caller
-  to continue with either a synchronous 300-second `receive` or an infinite
-  background polling loop. Successful `send` returns the same reminder for the
-  sending role.
+  peer seat has no owner). A stale listener ends the asker's wait. A stale asker leaves the listener waiting.
+  Exit code `1` means no new message. Each full empty listener receive records one idle round.
+  The short recovery receive preserves the count across compaction.
+  `fetch` reads the full body and marks the message read.
 - **Lifecycle.** `state` records `waiting`, `busy`, or `closed` for a role.
   `close` sets `closed` and clears both seats' `<role>_restart_until`, so no
   seat reads live on a closed channel once its stamp passes the TTL.
   `close --if-peer-stale` is the listener's stale-peer close: under the
-  channel lock it closes only if the peer seat is not live (the restart
+  channel lock the listener needs 24 idle rounds. It closes only if the peer seat is not live (the restart
   grace counts as live) and no unread message is addressed to the closing
   role, and otherwise refuses with `peer_live` or `unread_message`, leaving
   the channel open, with a `next` that runs `receive` again. A request sent

@@ -40,6 +40,13 @@ MESSAGE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 DEFAULT_PENDING_CAP = 2
 PREVIEW_WORDS = 10
 HISTORY_SIZE = 3
+LISTENER_ROUND_SECONDS = 300
+LISTENER_IDLE_LIMIT = 24
+IDLE_QUESTION = "ask the user whether to keep listening"
+
+
+def listener_can_ask(record: dict) -> bool:
+    return record.get("listener_idle_rounds", 0) >= LISTENER_IDLE_LIMIT
 
 
 def message_files(path: Path):
@@ -74,7 +81,7 @@ def send(args: argparse.Namespace) -> None:
     path = channel_dir(root, args.channel)
     record = read_channel_record(path)
     if record.get("state") == "closed":
-        closed_channel(args.channel)
+        closed_channel(args.channel, args.sender)
 
     try:
         body = read_body(args.body_file)
@@ -87,12 +94,13 @@ def send(args: argparse.Namespace) -> None:
         current_record = read_channel_record(path)
         require_owner(current_record, args.sender)
         if current_record.get("state") == "closed":
-            closed_channel(args.channel)
+            closed_channel(args.channel, args.sender)
         if args.kind != "stop" and seat_live(current_record, args.recipient) is not True:
             fail(
                 f"{args.recipient} on channel {args.channel} has no live heartbeat",
                 category="peer_not_live",
-                next_step=f"tell the user the {args.recipient} is gone; a new {args.recipient} has to start and pair",
+                next_step=("keep listening and retry delivery when the asker returns" if args.sender == "listener"
+                           else "tell the user the listener is gone; a new listener has to start and pair"),
             )
         if args.parent_id is not None and not is_request_between(
                 path, args.parent_id, sender=args.recipient, recipient=args.sender):
@@ -128,6 +136,10 @@ def send(args: argparse.Namespace) -> None:
             "created_at": time.time(),
             "body": body,
         }
+        if args.sender == "asker":
+            current_record["listener_idle_rounds"] = 0
+            current_record["last_asker_message"] = message_id
+            atomic_write(path / "channel.json", json.dumps(current_record) + "\n")
         atomic_write(path / "messages" / f"{message_id}.json", json.dumps(message, ensure_ascii=False) + "\n")
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN)
@@ -169,7 +181,7 @@ def receive(args: argparse.Namespace) -> None:
     record = read_channel_record(path)
     require_owner(record, args.recipient)
     if record.get("state") == "closed":
-        closed_channel(args.channel)
+        closed_channel(args.channel, args.recipient)
 
     wait_lock_path = path / f"receive-{args.recipient}.lock"
     wait_lock_path.touch(mode=0o600, exist_ok=True)
@@ -198,16 +210,33 @@ def receive(args: argparse.Namespace) -> None:
 
         peer = other_role(args.recipient)
         deadline = time.monotonic() + args.timeout
+        full_round = args.recipient == "listener" and args.timeout >= LISTENER_ROUND_SECONDS
+        if full_round and listener_can_ask(record):
+            with channel_lock(path):
+                record = read_channel_record(path)
+                if listener_can_ask(record) and record.get("state") != "closed":
+                    record["listener_idle_rounds"] = 0
+                    atomic_write(path / "channel.json", json.dumps(record) + "\n")
         while True:
             peer_record = read_channel_record(path)
+            if peer_record.get("state") == "closed":
+                closed_channel(args.channel, args.recipient)
             peer_live = seat_live(peer_record, peer)
             current = inbox()
             pending = unread_count(current)
-            if pending > 0 or args.timeout <= 0 or peer_live is False:
+            if pending > 0 or args.timeout <= 0 or (args.recipient == "asker" and peer_live is False):
                 break
             if time.monotonic() >= deadline:
-                current = inbox()
-                pending = unread_count(current)
+                with channel_lock(path):
+                    peer_record = read_channel_record(path)
+                    if peer_record.get("state") == "closed":
+                        closed_channel(args.channel, args.recipient)
+                    current = inbox()
+                    pending = unread_count(current)
+                    if (full_round and not pending
+                            and record.get("last_asker_message") == peer_record.get("last_asker_message")):
+                        peer_record["listener_idle_rounds"] = peer_record.get("listener_idle_rounds", 0) + 1
+                        atomic_write(path / "channel.json", json.dumps(peer_record) + "\n")
                 break
             time.sleep(args.poll)
     finally:
@@ -231,7 +260,7 @@ def receive(args: argparse.Namespace) -> None:
     if pending == 0:
         read = "; the messages listed were already read" if recent else ""
         reminder = heartbeat_reminder(args, root, peer_record)
-        if peer_live is False:
+        if args.recipient == "asker" and peer_live is False:
             output["note"] = (
                 f"no new message for {args.recipient} on channel {args.channel} "
                 f"within {args.timeout:g}s{read} — peer heartbeat stale; tell the user instead of waiting again"
@@ -240,6 +269,8 @@ def receive(args: argparse.Namespace) -> None:
                 output["next"] = reminder
             emit(args, output, ensure_ascii=False)
             raise SystemExit(1)
+        if args.recipient == "listener":
+            output["listener_idle_rounds"] = peer_record.get("listener_idle_rounds", 0)
         if args.recipient == "asker" and seat_busy(peer_record, peer):
             wait = ("the listener is busy on this request, so keep waiting: run receive again "
                     "with --timeout 300; busy waits do not count toward the 12 quiet waits, "
@@ -259,6 +290,11 @@ def receive(args: argparse.Namespace) -> None:
         )
         receive_again = f"{script} receive --channel {args.channel} --for {args.recipient} --timeout 300"
         output["next"] = f"{reminder}\nthen run: {receive_again}" if reminder else receive_again
+        if args.recipient == "listener" and listener_can_ask(peer_record):
+            output["note"] = f"{LISTENER_IDLE_LIMIT} consecutive empty listener rounds without an asker message"
+            output["next"] = IDLE_QUESTION
+            if reminder:
+                output["next"] = f"{reminder}\nthen: {output['next']}"
         emit(args, output, ensure_ascii=False)
         raise SystemExit(1)
     unread = next(m for m in messages if not m.get("read"))
@@ -287,6 +323,8 @@ def fetch(args: argparse.Namespace) -> None:
         require_owner(read_channel_record(path), message["recipient"])
         output = {"body": message.get("body"), "kind": message.get("kind"),
                   "next": receive_next(args, root, message["recipient"])}
+        if message.get("kind") == "stop" and message["recipient"] == "listener":
+            output["next"] = f"{script_command(args, root)} close --channel {args.channel} --role listener"
         if message.get("parent_id"):
             output["parent_id"] = message["parent_id"]
         if not message.get("read"):

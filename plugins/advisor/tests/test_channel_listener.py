@@ -1,26 +1,22 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
-import signal
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
 from channel_test_support import (
     CHANNEL,
-    GEAR,
     GEAR_PREFIX,
     age_seat,
     channel_json,
     channel_liveness,
     quoted_command,
     run,
-    wait_until,
+    set_fields,
 )
 
 
@@ -104,6 +100,8 @@ class ConditionalCloseTests(unittest.TestCase):
         )
         self.processes.append(heartbeat)
         age_seat(self.root, "asker", 600)
+        self.assert_refused(self.close(), "listener_waiting")
+        set_fields(self.root, listener_idle_rounds=24)
         closed = self.close()
         self.assertEqual(closed.returncode, 0, closed.stderr)
         self.assertEqual(json.loads(closed.stdout)["state"], "closed")
@@ -196,109 +194,3 @@ class PairingEndToEndTests(unittest.TestCase):
         first_channel = json.loads(first.stdout)["channel"]
         second_channel = json.loads(second.stdout)["channel"]
         self.assertNotEqual(first_channel, second_channel)
-
-
-
-class ListenerLoopTests(unittest.TestCase):
-    """Runs the listener loop from SKILL.md against a real mailbox, with short receive waits."""
-
-    def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="advisor-test-"))
-        run(self.root, "register", "--role", "listener", "--session", "s1")
-        skill = (CHANNEL.parent.parent / "SKILL.md").read_text()
-        loop = skill[skill.index("CHANNEL=<channel>\n"):skill.index("done\n") + len("done\n")]
-        self.loop_template = (loop.replace("<mine>", "listener").replace("<peer>", "asker")
-                              .replace("<message_id>", "none").replace("--timeout 300", "--timeout 0.1"))
-
-    def start_loop(self, gear: Path = GEAR) -> subprocess.Popen[str]:
-        loop = (self.loop_template.replace("<gear>", shlex.quote(str(gear))).replace("<host>", "claude")
-                .replace("<channel>", "0001"))
-        env = {name: value for name, value in os.environ.items() if name != "CHANNEL"}
-        env["BOOTGEAR_ADVISOR_DIR"] = str(self.root)
-        process = subprocess.Popen(["bash", "-c", loop], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True, env=env, start_new_session=True)
-
-        def stop_loop() -> None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            if process.poll() is None:
-                process.wait(timeout=5)
-            process.communicate()
-
-        self.addCleanup(stop_loop)
-        return process
-
-    def test_stops_when_the_asker_heartbeat_is_stale(self) -> None:
-        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
-        age_seat(self.root, "asker", 600)
-        process = self.start_loop()
-        _, stderr = process.communicate(timeout=10)
-        self.assertEqual(process.returncode, 0, stderr)
-
-    def test_stopping_on_a_stale_asker_closes_the_channel_and_ends_the_heartbeat(self) -> None:
-        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
-        heartbeat = subprocess.Popen(
-            [sys.executable, str(CHANNEL), "--root", str(self.root), "heartbeat", "--channel", "0001",
-             "--role", "listener", "--session", "s1", "--interval", "0.1"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-        self.addCleanup(lambda: (heartbeat.poll() is None and heartbeat.kill(), heartbeat.communicate()))
-        age_seat(self.root, "asker", 600)
-        process = self.start_loop()
-        _, stderr = process.communicate(timeout=10)
-        self.assertEqual(process.returncode, 0, stderr)
-        self.assertEqual(json.loads(channel_json(self.root).read_text())["state"], "closed")
-        stdout, _ = heartbeat.communicate(timeout=5)
-        self.assertEqual(json.loads(stdout)["stopped"], "channel_closed")
-
-    def test_keeps_waiting_while_the_asker_restarts_its_heartbeat(self) -> None:
-        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
-        expired = run(self.root, "heartbeat", "--channel", "0001", "--role", "asker", "--session", "c1",
-                      "--interval", "0.1", "--max-age", "0.2", timeout=5)
-        self.assertEqual(json.loads(expired.stdout)["stopped"], "max_age")
-        age_seat(self.root, "asker", 600)
-        process = self.start_loop()
-        time.sleep(1.5)
-        running = process.poll() is None
-        process.kill()
-        _, stderr = process.communicate()
-        self.assertTrue(running, stderr)
-        self.assertNotEqual(json.loads(channel_json(self.root).read_text())["state"], "closed")
-
-    def test_keeps_listening_when_the_asker_returns_before_the_close(self) -> None:
-        run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
-        age_seat(self.root, "asker", 600)
-        marker = self.root / "asker-returned"
-        wrapper = self.root / "channel-wrapper.py"
-        wrapper.write_text(
-            "#!/usr/bin/env python3\nimport os, subprocess, sys\n"
-            f"real, marker = {str(GEAR)!r}, {str(marker)!r}\n"
-            "if 'close' in sys.argv[1:] and not os.path.exists(marker):\n"
-            "    open(marker, 'w').close()\n"
-            "    subprocess.run([real, '--host', 'claude', 'advisor', 'channel', 'register',\n"
-            "                    '--channel', '0001', '--role', 'asker',\n"
-            "                    '--session', 'c1'], check=True, capture_output=True)\n"
-            "os.execv(real, [real, *sys.argv[1:]])\n")
-        wrapper.chmod(0o755)
-        process = self.start_loop(wrapper)
-        self.assertTrue(wait_until(marker.exists, timeout=10))
-        running = process.poll() is None
-        process.kill()
-        _, stderr = process.communicate()
-        self.assertTrue(marker.exists(), stderr)
-        self.assertTrue(running, stderr)
-        self.assertNotEqual(json.loads(channel_json(self.root).read_text())["state"], "closed")
-
-    def test_keeps_waiting_while_the_asker_is_live_or_absent(self) -> None:
-        for label in ("absent", "live"):
-            with self.subTest(asker=label):
-                if label == "live":
-                    run(self.root, "register", "--channel", "0001", "--role", "asker", "--session", "c1")
-                process = self.start_loop()
-                time.sleep(1.5)
-                running = process.poll() is None
-                process.kill()
-                _, stderr = process.communicate()
-                self.assertTrue(running, stderr)

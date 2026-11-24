@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code and Codex hook for advisor seats: stamps the session's seat on SessionStart
-(compact), PostToolUse, UserPromptSubmit and Stop, reminds the session to restart a stopped
-heartbeat, and restores the channel status after compaction. Every failure exits 0 silently."""
+"""Guard listener turns, refresh seat activity, and restore channel guidance after compaction."""
 
 from __future__ import annotations
 
@@ -68,7 +66,17 @@ def main() -> None:
     due = channel.hook_touch(root, session, time.time(), remind=event in REMINDER_EVENTS and not payload.get("agent_id"))
     if payload.get("agent_id"):
         return
-    if compact:
+    if event == "Stop":
+        for record, role in channel.owned_channels(root, session):
+            if role == "listener" and not channel.listener_can_ask(record):
+                next_step = channel.channel_status(root, record, role)["next"]
+                reason = (f"Keep this turn running. Advisor channel {record['channel']} is open. "
+                          "Send any questions or reports to the asker through the mailbox. "
+                          "Do not wait for the user to reply. Collect any running receive. "
+                          f"Otherwise continue now: {next_step}")
+                print(json.dumps({"decision": "block", "reason": reason}))
+                break
+    elif compact:
         statuses = [channel.channel_status(root, record, role) for record, role in channel.owned_channels(root, session)]
         if statuses:
             run = engine_run(channel, session)

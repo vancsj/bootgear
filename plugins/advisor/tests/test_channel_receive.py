@@ -282,7 +282,7 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertEqual(fetch[fetch.index("--root") + 1], str(caller / "mbox"))
 
     def _receive_with_poll_clock(self, channel: str, recipient: str,
-                                 after_poll: Callable[[], None] | None = None
+                                 after_poll: Callable[[], None] | None = None, timeout: int = 5
                                  ) -> tuple[dict, float, int | str | None]:
         elapsed = 0.0
 
@@ -294,7 +294,7 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
 
         args = channel_module.build_parser().parse_args([
             "--root", str(self.root), "receive", "--channel", channel, "--for", recipient,
-            "--timeout", "5", "--poll", "1", "--json",
+            "--timeout", str(timeout), "--poll", "1", "--json",
         ])
         clock = mock.Mock(wraps=time, monotonic=lambda: elapsed, sleep=poll)
         stdout = io.StringIO()
@@ -370,10 +370,35 @@ class ReceiveNoNewMessageTests(unittest.TestCase):
         self.assertIn("a request can come at any time", output["note"])
         self.assertIn("receive --channel 0002 --for listener --timeout 300", output["next"])
 
-    def test_listener_with_stale_asker_gets_the_stale_note(self) -> None:
+    def test_listener_counts_full_rounds_even_with_a_stale_asker(self) -> None:
         age_seat(self.root, "asker", 600, self.channel)
-        result = run(self.root, "receive", "--channel", self.channel, "--for", "listener", "--timeout", "0")
-        output = json.loads(result.stdout)
-        self.assertIs(output["peer_live"], False)
-        self.assertIn("peer heartbeat stale; tell the user instead of waiting again", output["note"])
-        self.assertNotIn("next", output)
+        for count in range(1, 25):
+            output, elapsed, status = self._receive_with_poll_clock(self.channel, "listener", timeout=300)
+            self.assertEqual((elapsed, status), (300, 1))
+            self.assertEqual(output["listener_idle_rounds"], count)
+            self.assertIs(output["peer_live"], False)
+            if count < 24:
+                self.assertIn("--for listener --timeout 300", output["next"])
+            else:
+                self.assertIn("ask the user whether to keep listening", output["next"])
+        probe, _, _ = self._receive_with_poll_clock(self.channel, "listener")
+        self.assertEqual(probe["listener_idle_rounds"], 24)
+        resumed, _, _ = self._receive_with_poll_clock(self.channel, "listener", timeout=300)
+        self.assertEqual(resumed["listener_idle_rounds"], 1)
+
+    def test_asker_message_resets_idle_rounds_even_after_fetch(self) -> None:
+        output, _, _ = self._receive_with_poll_clock(self.channel, "listener", timeout=300)
+        self.assertEqual(output["listener_idle_rounds"], 1)
+
+        def send_and_fetch() -> None:
+            body = self.root / "question.txt"
+            body.write_text("new request")
+            sent = run(self.root, "send", "--channel", self.channel, "--from", "asker", "--to", "listener",
+                       "--kind", "request", "--body-file", str(body))
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            result = run(self.root, "fetch", "--channel", self.channel,
+                         "--message-id", json.loads(sent.stdout)["message_id"])
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+        output, _, _ = self._receive_with_poll_clock(self.channel, "listener", send_and_fetch, timeout=300)
+        self.assertEqual(output["listener_idle_rounds"], 0)

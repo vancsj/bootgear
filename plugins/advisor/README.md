@@ -45,15 +45,11 @@ infers the mode from which host is running or from the task; without one, it sto
 | Communication | `direct`, `channel` |
 | Task | `rewrite` polishes a draft before posting · `ask` gets a straight opinion or answer · `review` asks for objections and attack angles on a decision · `delegate` hands off investigation or scoped work the advisor does itself (almost always over `channel`) |
 
-**Listening** is a read-only advisor loop. The listener registers a fresh channel, reports its
-number, and waits on the mailbox. It answers one request at a time and keeps listening until
-it receives a `stop`, the user interrupts, or the channel closes; when the asker's seat reads
-dead it closes the channel with `close --if-peer-stale`, which refuses and keeps it listening
-if the asker is live again or a request is waiting. An asker silent past the 10-second TTL at
-that moment counts as dead and cannot rejoin the closed channel. It never starts a
-conversation, never answers the human directly for a mailbox request, and takes no commit,
-push, external contact, production mutation or irreversible action unless the request's scope
-explicitly authorizes it.
+**Listening** keeps the user conversation silent while the channel is open.
+The listener sends questions and reports to the asker through the mailbox.
+After 24 consecutive empty five-minute receives, it may ask the user whether to keep listening.
+Any asker message resets the count. Heartbeats and short recovery checks leave it unchanged.
+An explicit stop or channel closure ends the wait.
 
 ---
 
@@ -65,7 +61,7 @@ sequenceDiagram
     participant M as Mailbox
     participant A as Asker session
     L->>M: register --role listener (always a new channel)
-    L-->>L: report the channel number, start heartbeat
+    L-->>L: start heartbeat
     A->>M: list --live-for asker
     A->>M: register --role asker on the most recently updated channel
     A-->>A: start heartbeat
@@ -135,7 +131,7 @@ send      post a request, response or stop
 receive   wait for an unread message; prints previews of the last three and a next command
 fetch     read a message's full body, mark it read, and remind the caller to receive
 state     record waiting, busy or closed for a role
-close     close the channel; --if-peer-stale closes only if the peer is not live and nothing unread waits
+close     close the channel; --if-peer-stale requires a stale peer and an empty inbox, plus 24 idle rounds for a listener
 status    show a channel's record
 whoami    show this session's seat: role, unread, last read, owed request, and the next command
 ```

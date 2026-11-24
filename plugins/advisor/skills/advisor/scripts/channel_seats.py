@@ -25,7 +25,7 @@ from channel_liveness import (
     seat_beating,
     seat_live,
 )
-from channel_messages import message_files
+from channel_messages import IDLE_QUESTION, listener_can_ask, message_files
 from channel_output import (
     check_role,
     check_session,
@@ -119,7 +119,7 @@ def write_state(args: argparse.Namespace, value: str, check=None) -> None:
         record = read_channel_record(path)
         require_owner(record, args.role)
         if record.get("state") == "closed" and value != "closed":
-            closed_channel(args.channel)
+            closed_channel(args.channel, args.role)
         if check is not None:
             check(root, path, record)
         record.update({"state": value, "state_role": args.role, "updated_at": time.time()})
@@ -155,6 +155,8 @@ def close(args: argparse.Namespace) -> None:
         elif any(not (m := json.loads(f.read_text(encoding="utf-8"))).get("read")
                  and m.get("recipient") == args.role for f in message_files(path)):
             message, category = f"channel {args.channel} has an unread message for {args.role}", "unread_message"
+        elif args.role == "listener" and not listener_can_ask(record):
+            message, category = "the listener has fewer than 24 empty rounds", "listener_waiting"
         else:
             return
         fail(f"{message}; the channel stays open", category=category,
@@ -185,6 +187,8 @@ def channel_status(root: Path, record: dict[str, object], role: str) -> dict[str
     owed_id = owed[-1].get("message_id") if owed else None
     if owed_id is not None:
         step = f"answer request {owed_id}: fetch it again and send the response"
+    elif role == "listener" and listener_can_ask(record):
+        step = IDLE_QUESTION
     else:
         step = (f"{script_command(argparse.Namespace(root=None), root)} receive --channel {channel} "
                 f"--for {role} --timeout 300")

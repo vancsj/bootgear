@@ -38,12 +38,14 @@ class SendLivenessTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         payload = json.loads(result.stderr)
         self.assertEqual(payload["category"], "peer_not_live")
-        self.assertIn("tell the user", payload["next"])
+        self.assertIn("next", payload)
         self.assertEqual(result.stdout, "")
         self.assertEqual(self.messages(), [])
 
     def test_send_to_unowned_recipient_fails_peer_not_live(self) -> None:
-        self.assert_refused(self.send("listener", "asker"))
+        result = self.send("listener", "asker")
+        self.assert_refused(result)
+        self.assertIn("keep listening", json.loads(result.stderr)["next"])
 
     def test_send_to_stale_recipient_fails_peer_not_live(self) -> None:
         age_seat(self.root, "listener", 600)

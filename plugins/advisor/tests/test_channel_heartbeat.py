@@ -375,15 +375,14 @@ class ReceiveHeartbeatReminderTests(unittest.TestCase):
         self.assertIn("fetch --channel 0001 --message-id", next_text)
         self.assertNotIn("heartbeat --channel", next_text)
 
-    def test_stale_own_seat_and_stale_peer_gets_heartbeat_only(self) -> None:
+    def test_listener_restarts_its_heartbeat_then_keeps_waiting_for_a_stale_asker(self) -> None:
         age_seat(self.root, "listener", 600)
         age_seat(self.root, "asker", 600)
         result = self.receive()
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertIn("tell the user", payload["note"])
         self.assertIn(self.heartbeat(), payload["next"])
-        self.assertNotIn("receive --channel", payload["next"])
+        self.assertIn("receive --channel", payload["next"])
 
 
 class HookStampLivenessTests(unittest.TestCase):
