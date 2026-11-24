@@ -31,6 +31,8 @@ class RoundTripTest(unittest.TestCase):
         self.root = Path(self._tmp.name) / "deputy"
         self.root.mkdir()
         subprocess.run(["git", "-C", str(self.root), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Deputy Fixture"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "deputy@example.test"], check=True)
         out = io.StringIO()
         with redirect_stdout(out):
             code = deputy.main(["--deputy-root", str(self.root), "record",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from workflow_output_test_support import (
     AFTER_ONLY,
     BATCH_1,
@@ -16,7 +17,7 @@ from workflow_output_test_support import (
     _stamp,
 )
 
-from conftest import HOST
+from conftest import GEAR_COMMAND, HOST
 
 
 def test_shared_fix_now_flow(tmp_path: Path) -> None:
@@ -96,7 +97,10 @@ def test_shared_fix_check_compares_against_last_cutoff_before_the_first_fix_chec
     assert out[0].endswith(" fix-now=0 fixed=2 findings=0 follow-up=0 killed=0")
 
 
-def test_shared_cut_rate_help_points_to_the_evaluate_angles(tmp_path: Path) -> None:
+def test_shared_cut_rate_help_points_to_the_evaluate_angles(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Account for argparse's option column when setting the help width.
+    monkeypatch.setenv("COLUMNS", str(len(GEAR_COMMAND) + 32))
     out = " ".join(_ok(tmp_path, "cut", "--help").stdout.split())
     assert "call sites" not in out and "production queries" not in out
     assert "--rate RATE the count an evaluate angle with field rate asks for" in out

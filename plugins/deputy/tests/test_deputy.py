@@ -32,6 +32,8 @@ FIXED_BECAUSE = "The user confirmed this canonical decision."
 def git_root(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "-C", str(path), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.name", "Deputy Fixture"], check=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.email", "deputy@example.test"], check=True)
     return path
 
 
