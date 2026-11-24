@@ -120,7 +120,7 @@ class Slate:
     init_refuters: int = 2
     gap_hunt_done: bool = False
     finder_plan: Plan | None = None
-    finder_launches: dict[str, dict[str, Any]] = field(default_factory=dict)
+    native_launches: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def initialised(self) -> bool:

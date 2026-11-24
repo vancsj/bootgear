@@ -46,7 +46,7 @@ def test_routed_finders_use_the_saved_host_policy(cv: Converge) -> None:
     cv.init(lenses="correctness,security,architecture,architecture-fit")
 
     personal.write_text('{"parallelism":{"finder":1},"finder_routing":null}')
-    assert cv.events()[0]["finder_host"] == HOST
+    assert cv.events()[0]["native_host"] == HOST
     workers = _finders(cv)
     assert list(workers) == ["finder", "finder-2", "finder-3"]
     specialist = policy["finder_routing"]["groups"][0]
@@ -77,7 +77,7 @@ def test_main_launch_and_refusal_use_the_saved_host(cv: Converge) -> None:
     refusal = cv(*cv.with_dir("launch", "s1", "--as", MAIN, "--input", str(proposal), "--json"),
                  env=caller, code=2)
     assert cv.path().read_bytes() == before
-    assert f"use the slate's finder host {HOST}" in refusal.stderr
+    assert f"use the slate's native host {HOST}" in refusal.stderr
     assert f"--host {HOST} " in json.loads(wrong_host_work.stdout)["next"]
     retry = json.loads(refusal.stderr)["error"]["next"]
     assert f"--host {HOST} " in retry and retry.endswith(f"--role-host {HOST}")
@@ -155,10 +155,10 @@ def test_launch_reserves_full_batches_and_blocks_on_native_mismatch(cv: Converge
     assert "effort" in saved["reason"]
     blocked = json.loads(cv.ok("work", "s1", "--as", "finder-2", "--role-host", HOST, "--json").stdout)
     assert blocked["state"] == "blocked"
-    assert blocked["next"] == "report the blocked finder assignment and its reason to main"
+    assert blocked["next"] == "report the blocked native assignment and its reason to main"
     coverage = json.loads(cv.ok("coverage", "s1", "--json").stdout)
     assert coverage["lenses"]["correctness"]["missing"] == []
-    assert "finder-2 blocked" in coverage["finder_turns_pending"][0]
+    assert "finder-2 blocked" in coverage["native_turns_pending"][0]
     gate = cv.ok("gate", "s1", code=1).stdout
     assert "finder-2" in gate and "effort" in gate
 

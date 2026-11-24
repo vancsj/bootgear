@@ -85,6 +85,23 @@ def validate(value: Any, host: str, where: str, *, complete: bool) -> list[str]:
     return problems
 
 
+def validate_native(value: Any, host: str, where: str, *, complete: bool) -> list[str]:
+    if value is None:
+        return []
+    if host not in EFFORTS:
+        return [f"{where}: expected a Claude or Codex host; got {host!r}"]
+    problems: list[str] = []
+    if not _mapping(value, ("r1", "r2", "cutter"), where, problems, complete=False):
+        return problems
+    for seat, profile in value.items():
+        if seat not in ("r1", "r2", "cutter") or profile is None:
+            continue
+        item = f"{where}.{seat}"
+        if _mapping(profile, PROFILE_FIELDS, item, problems, complete=complete):
+            _profile(profile, host, item, problems)
+    return problems
+
+
 @dataclass
 class Plan:
     owners: dict[Pair, str] = field(default_factory=dict)

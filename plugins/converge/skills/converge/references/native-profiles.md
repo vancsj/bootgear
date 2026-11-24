@@ -1,6 +1,6 @@
-# Routed finder handoff
+# Native profile handoff
 
-Read main's `work` output. Use the planned host, model and effort for each routed finder.
+Read main's `work` output, including serial cutter handoffs. Use the planned host, model and effort for each configured native identity.
 Follow the host section below. Before reservation, confirm the native arguments, unshadowed role and supported lifecycle.
 If the host cannot honor the profile, report a blocked assignment with the worker and the cause.
 
@@ -8,7 +8,9 @@ Send `launch` one JSON `launches` list. Use each ready worker's `id`, `host`, `m
 Include only workers that fit the available native slots. On refusal, correct the batch and retry.
 Start each accepted worker once. Pass the exact returned arguments, slate and worker IDs, and full assignment.
 Keep the native handle from that worker's own call. Match each receipt to the worker ID in that call.
-Tell the finder to complete its assigned coverage and return. Use its same native identity for later actions.
+Tell each role to complete its available work and return. Reuse its native identity for later actions.
+Keep R2 on the same handle for gap hunt, refutations, and replies to its own claims.
+Keep cutter serial. Do not add cutter workers.
 
 Send `launch-result` one JSON `outcomes` list. Follow public help for the fields.
 Use `finished` after the native turn returns. Include its handle and original worker ID as `receipt_worker`.
@@ -24,7 +26,7 @@ If recovery fails, record a block and its cause. Follow main's work for the next
 
 Use native `Agent` with `model` and `effort`. Use unshadowed `general-purpose`.
 Inspect loaded project, user and plugin agent definitions and effective settings for overrides.
-Check `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` and `CLAUDE_CODE_EFFORT_LEVEL` before reserving a finder.
+Check `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` and `CLAUDE_CODE_EFFORT_LEVEL` before reserving a native identity.
 Use the original Agent ID with `SendMessage` for later work. Release the slot through native turn completion.
 Use available resolved model and `SubagentStop` effort for that Agent ID.
 

@@ -53,6 +53,7 @@ SCHEMA = {
     "steps": ("escalate", "gap_hunt", "cut"),
     "parallelism": tuple(model.DEFAULT_PARALLELISM),
     "finder_routing": ("default", "groups"),
+    "native_profiles": ("r1", "r2", "cutter"),
 }
 # When the cutter rates: before the attack, after it, both, or never.
 CUT_MODES = ("before", "after", "both", "none")
@@ -191,7 +192,7 @@ def _cheap(item: Any, where: str, complete: bool, problems: list[str]) -> None:
 
 
 def validate_config(value: Any, label: str, complete: bool = False, *,
-                    finder_host: str | None = None) -> list[str]:
+                    native_host: str | None = None) -> list[str]:
     """Problems in one layer, or with `complete` in the effective config or a snapshot."""
     problems: list[str] = []
     if not isinstance(value, dict):
@@ -201,13 +202,14 @@ def validate_config(value: Any, label: str, complete: bool = False, *,
             problems.append(f"{label}: unknown key {key!r} (allowed: {', '.join(SCHEMA)})")
     for section, keys in SCHEMA.items():
         if section not in value:
-            if complete and section not in ("parallelism", "finder_routing"):
+            if complete and section not in ("parallelism", "finder_routing", "native_profiles"):
                 problems.append(f"{label}: missing section {section!r}")
             continue
         body = value[section]
-        if section == "finder_routing":
-            host = os.environ.get("BOOTGEAR_HOST", "claude") if finder_host is None else finder_host
-            problems.extend(finder_routing.validate(body, host, f"{label}: {section}", complete=complete))
+        if section in ("finder_routing", "native_profiles"):
+            host = os.environ.get("BOOTGEAR_HOST", "claude") if native_host is None else native_host
+            validator = finder_routing.validate if section == "finder_routing" else finder_routing.validate_native
+            problems.extend(validator(body, host, f"{label}: {section}", complete=complete))
             continue
         if not isinstance(body, dict):
             problems.append(f"{label}: {section} must be a mapping")

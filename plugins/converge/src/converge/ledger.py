@@ -55,7 +55,7 @@ REQUIRED: dict[str, tuple[str, ...]] = {
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
     "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "review_group", "task_config",
-             "finder_host"),
+             "native_host"),
     "file": ("lens", "angle", "depends", "rule"),
     "escalate": ("wider", "evidence"),
     "find-run": (),
@@ -248,22 +248,27 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
                                     and refuters in (1, 2)):
         problems.append(f"`refuters` must be 1 or 2; got {refuters!r}")
     config = event.get("config")
-    finder_host = event.get("finder_host")
+    native_host = event.get("native_host")
     routed = isinstance(config, dict) and config.get("finder_routing") is not None
-    if routed and finder_host not in ("claude", "codex"):
-        problems.append("init: finder routing requires a saved host of claude or codex")
-    if not routed and "finder_host" in event:
-        problems.append("init: finder_host requires finder routing")
-    config_problems = validate_config(config, "snapshot", complete=True, finder_host=finder_host)
+    profiled = isinstance(config, dict) and bool(config.get("native_profiles"))
+    if (routed or profiled) and native_host not in ("claude", "codex"):
+        problems.append("init: native profiles require a saved host of claude or codex")
+    if not (routed or profiled) and "native_host" in event:
+        problems.append("init: native_host requires finder routing or native profiles")
+    config_problems = validate_config(config, "snapshot", complete=True, native_host=native_host)
     problems.extend(f"config snapshot: {p}" for p in config_problems)
     if not problems:
         initial = Slate("init", lenses=event["lenses"], angles=event["angles"], config=event["config"],
                         init_refuters=event["refuters"])
         if routed:
-            initial.finder_plan = assignments.finder_plan(initial, event["finder_host"])
+            initial.finder_plan = assignments.finder_plan(initial, event["native_host"])
             problems.extend(initial.finder_plan.problems)
-        if ((assignments.parallel(initial) or routed)
-                and event.get("as") in assignments.workers(initial)):
+        identities = assignments.workers(initial)
+        configured = initial.config.get("native_profiles") or {}
+        native_identities = {actor for actor, seat in {**identities, "cutter": "cutter"}.items()
+                             if configured.get(seat) and (event.get("seats") or {}).get(seat) != "advisor"}
+        if ((assignments.parallel(initial) or routed) and event.get("as") in identities
+                or event.get("as") in native_identities):
             problems.append("init: main must use an ID outside the worker assignments")
     if "review_group" in event:
         group = event["review_group"]
@@ -349,8 +354,8 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.since = event.get("since")
     slate.seats = event.get("seats") or {}
     slate.advisor = event.get("advisor")
-    if "finder_host" in event:
-        slate.finder_plan = assignments.finder_plan(slate, event["finder_host"])
+    if slate.config.get("finder_routing") is not None:
+        slate.finder_plan = assignments.finder_plan(slate, event["native_host"])
 
 
 # ---------------------------------------------------------------------------

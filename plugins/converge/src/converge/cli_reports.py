@@ -14,7 +14,7 @@ from bootgear_cli.clikit import (
 
 from . import angles as angles_mod
 from . import config as config_mod
-from . import finder_launch, ledger, model, protocol, render
+from . import ledger, model, native_launch, protocol, render
 from .cli_advisor import _drivers
 from .cli_common import (
     _MISSING,
@@ -150,7 +150,7 @@ def cmd_converged(args: argparse.Namespace) -> None:
     phase = protocol.slate_phase(slate)
     flags = protocol.cut_flags(slate)
     open_ids = {claim.id: claim_phase for claim, claim_phase in slate.open_claims()}
-    pending, disputed = finder_launch.pending(slate), []
+    pending, disputed = native_launch.pending(slate), []
     for claim in slate.claims.values():
         if claim.id in open_ids:
             pending.append(f"{claim.id} open in {open_ids[claim.id]}")
@@ -179,7 +179,7 @@ def cmd_coverage(args: argparse.Namespace) -> None:
         lines.append(f"LENS {lens} ran={','.join(row.ran) or '-'} na={','.join(row.na) or '-'} "
                      f"missing={','.join(row.missing) or '-'}")
         lines.extend(f"NA {lens} {angle_id} {reason}" for angle_id, reason in row.na.items())
-    pending = finder_launch.pending(slate)
+    pending = native_launch.pending(slate)
     if pending:
         lines.extend(pending)
         step = _next_step(args, slate)
@@ -189,8 +189,8 @@ def cmd_coverage(args: argparse.Namespace) -> None:
         step = _step(args, "status", "--json")
     data: dict[str, Any] = {"lenses": {lens: {"ran": row.ran, "na": row.na, "missing": row.missing}
                                      for lens, row in coverage.items()}}
-    if slate.finder_plan is not None:
-        data["finder_turns_pending"] = pending
+    if native_launch.saved_host(slate) is not None:
+        data["native_turns_pending"] = pending
     emit(args.output_mode, data, lines, step)
 
 

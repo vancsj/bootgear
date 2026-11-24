@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import finder_launch
+from . import native_launch
 from .model import Claim, Slate
 from .protocol import ClaimState, worst
 
@@ -16,7 +16,7 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     """Replay one event after init; the event is already in `slate.events`."""
     kind = event["event"]
     if kind in ("launch", "launch-result"):
-        finder_launch.apply_event(slate, event)
+        native_launch.apply_event(slate, event)
         return
     if kind == "cutoff":
         slate.cutoff = event

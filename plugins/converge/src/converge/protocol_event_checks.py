@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import assignments, finder_launch, ledger, model
+from . import assignments, ledger, model, native_launch
 from .model import Claim, Slate
 from .protocol import (
     FRESH_EYE,
@@ -42,8 +42,9 @@ def validate_event(slate: Slate, event: dict[str, Any], problems: list[str]) -> 
      "verdict": _validate_verdict, "cut": _validate_cut, "accept": _validate_accept,
      "rebut": _validate_rebut, "cutoff": ledger.validate_cutoff,
      "fix-check": _validate_fix_check,
-     "launch": finder_launch.validate_event, "launch-result": finder_launch.validate_event,
+     "launch": native_launch.validate_event, "launch-result": native_launch.validate_event,
      }[event["event"]](slate, event, problems)
+    native_launch.admit(slate, event, problems)
     _gate(slate, event, problems)
 
 
@@ -185,7 +186,7 @@ def _find_owner(slate: Slate, agent: Any, lens: str, angle: str, kind: str,
             problems.append(f"{kind}: no find assignment for {lens}/{angle}")
         elif owner != agent:
             problems.append(f"{kind}: {lens}/{angle} is assigned to {owner}")
-        elif slate.finder_plan is not None and slate.finder_launches.get(owner, {}).get("state") != "attempted":
+        elif slate.finder_plan is not None and slate.native_launches.get(owner, {}).get("state") != "attempted":
             problems.append(f"{kind}: {owner} needs an active finder launch reservation")
 
 

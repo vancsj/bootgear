@@ -12,7 +12,7 @@ from typing import Any
 
 from bootgear_cli.clikit import current_program
 
-from . import assignments, effort, finder_launch, model
+from . import assignments, effort, model, native_launch
 from .model import Claim, Slate
 
 
@@ -237,7 +237,7 @@ def claim_phase(slate: Slate, claim: Claim) -> str | None:
 def _find_open(slate: Slate) -> bool:
     from .render import coverage
 
-    return bool(finder_launch.unfinished(slate)) or any(row.missing for row in coverage(slate).values())
+    return bool(native_launch.unfinished_finders(slate)) or any(row.missing for row in coverage(slate).values())
 
 
 def slate_phase(slate: Slate) -> str:
@@ -440,7 +440,7 @@ def cutoff_results(rows: list[model.CutoffRow]) -> list[dict[str, Any]]:
 
 def converged(slate: Slate) -> bool:
     """The slate is done and no claim is `disputed` with `cut: no`."""
-    if slate_phase(slate) != "done":
+    if slate_phase(slate) != "done" or native_launch.pending(slate):
         return False
     flags = cut_flags(slate)
     return not any(claim.state.status == "disputed" and not flags[claim.id]

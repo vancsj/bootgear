@@ -231,7 +231,7 @@ flowchart LR
 (`<project-root>/.bootgear/config/converge.yaml`) < task (`--config FILE`).
 Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 `caps.{cut_rounds, per_lens, agents, angles_per_claim, batch_items}`,
-`steps.{escalate, gap_hunt, cut}`, `angles.{files, disable}`. `cutoff.cheap` holds
+`steps.{escalate, gap_hunt, cut}`, `angles.{files, disable}`, `finder_routing`, and `native_profiles`. `cutoff.cheap` holds
 `enabled` (default true), `files` (1), `lines` (10), `trivial_lines` (3), `tests` (1) and
 `test_globs`. Unknown keys, bad enum values, non-positive caps, a `per_lens` or
 `cutoff.lenses` without `default`, and non-boolean `escalate`, `gap_hunt` or
@@ -252,6 +252,29 @@ parallelism:
 Set `max_workers` explicitly to use a higher ceiling. Host capacity limits how many workers can launch.
 Main's `work` lists ready workers and their full assignments. Assignments follow init angle order and claim filing order.
 Workers refresh Gear directly after ordinary actions. `work --wait` returns when work, completion, or a finder reply is ready.
+
+### Native profiles
+
+`native_profiles` maps `r1`, `r2`, and `cutter` to `{model, effort}` profiles.
+Profiles use the finder routing model and effort rules for the executing host.
+Partial layer overrides merge before final validation. A null entry or section clears the corresponding profiles.
+The init event snapshots effective profiles and `native_host`. Later config changes cannot alter an active slate.
+
+The shared native launch state holds routed finders and configured native judges.
+Main receives each profile, readiness, and launch state, including serial cutter.
+Advisor R2 has no native profile or reservation. Its launcher settings remain separate.
+R2 is native without a settlement, or with `converge_seats.r2: native_subagent` and no conflicting advisor roles.
+
+Only main reserves and records receipts. Complete batches validate before any write.
+Role work requires reservation. Later turns reuse the original handle, profile, and identity.
+R2 retains its identity for gap hunt, refutations, and its own claims.
+Observed model and effort determine verification. Missing metadata remains unverified; known mismatches block the slate.
+Claude model aliases also match observed IDs with the `claude-<alias>-` prefix.
+Codex models and all effort values match exactly.
+
+Finder coverage and finder turn completion determine the find phase.
+Attempted judging turns require finished receipts at completion, without changing phase selection.
+Unused judging seats do not block an empty review.
 
 ## Shared provider
 

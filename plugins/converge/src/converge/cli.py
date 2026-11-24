@@ -286,11 +286,12 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     config_args(p)
 
     p = command("launch", cmd_launch, write=True)
-    p.description = "Reserve a batch of ready routed finders. Only the saved main actor can reserve a worker."
+    p.description = "Reserve configured native identities, including serial cutter and native refuters. Only the saved main actor can reserve them."
     p.add_argument("--input", required=True, metavar="FILE",
-                   help="JSON object with launches: [{id, host, model, effort}]; use '-' for stdin")
+                   help="JSON object with launches: [{id, host: claude|codex, model, effort}]; use '-' for stdin. "
+                        "Use saved work profiles. Returns model with effort on Claude or reasoning_effort on Codex.")
     p = command("launch-result", cmd_launch, write=True)
-    p.description = "Record native finder results. A known effective mismatch blocks the worker."
+    p.description = "Record native role results. A known effective mismatch blocks the slate."
     p.add_argument("--input", required=True, metavar="FILE",
                    help="JSON object with outcomes: [{id, state: finished|blocked, handle, receipt_worker, "
                         "effective: {model, effort}, reason}]; use '-' for stdin. A native handle and receipt_worker "

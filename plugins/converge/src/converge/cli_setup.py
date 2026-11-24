@@ -258,7 +258,9 @@ def cmd_init(args: argparse.Namespace) -> None:
         plan = assignments.finder_plan(initial, host)
         if plan.problems:
             _refuse(plan.problems, "finder capacity")
-        event["finder_host"] = host
+        event["native_host"] = host
+    if effective.get("finder_routing") is not None or effective.get("native_profiles"):
+        event["native_host"] = os.environ.get("BOOTGEAR_HOST", "claude")
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
@@ -299,7 +301,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     early = event.get("advisor", {}).get("startup") != "deferred"
     step = (("; ".join(driver["prepare"] for driver in drivers) or None) if early
             else _next_step(args, _read(args)))
-    if step is None and "finder_host" in event:
+    if step is None and "native_host" in event:
         step = _next_step(args, _read(args))
     emit(args.output_mode, data, lines, step)
 

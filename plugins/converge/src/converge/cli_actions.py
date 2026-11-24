@@ -18,7 +18,7 @@ from bootgear_cli.clikit import (
     host,
 )
 
-from . import finder_launch, ledger, model, protocol, render, work
+from . import ledger, model, native_launch, protocol, render, work
 from .cli_advisor import _converge_command
 from .cli_common import (
     CATALOG,
@@ -173,6 +173,8 @@ def cmd_work(args: argparse.Namespace) -> None:
               f"state={package['state']} seq={package['source_seq']}")]
     if "assignment" in package:
         lines.append("ASSIGNMENT " + dumps(package["assignment"]))
+    if "profile" in package:
+        lines.append("PROFILE " + dumps(package["profile"]))
     if "launch" in package:
         lines.append("LAUNCH " + dumps(package["launch"]))
     if package.get("unused_finder_lenses"):
@@ -200,20 +202,23 @@ def cmd_work(args: argparse.Namespace) -> None:
                            if key in value})
             action["path"] = str(path)
         lines.append("ACTION " + dumps(action))
-    if package["actions"]:
+    if package["seat"] == "main" and native_launch.pending(slate) and package["phase"] in ("cutoff", "done"):
+        step = _next_step(args, slate)
+    elif package["actions"]:
         step = "choose an action, supply its evidence, then " + package["submit"]
     elif package["seat"] == "main":
         workers = package.get("workers", [])
         if package["state"] == "blocked":
             step = _next_step(args, slate)
-        elif package["phase"] == "find" and (saved_host := finder_launch.saved_host(slate)):
-            if any(worker["ready"] and "profile" in worker for worker in workers):
-                command = _role_command(args, saved_host, "launch") + " --input <launches.json>"
-                step = "reserve the ready finder profiles for available native slots: " + command
-            else:
-                step = "recover the original native finder receipts and record the launch outcomes"
+        elif (saved_host := native_launch.saved_host(slate)) and any(
+                worker["ready"] and "profile" in worker and worker["launch"]["state"] == "ready"
+                for worker in workers):
+            command = _role_command(args, saved_host, "launch") + " --input <launches.json>"
+            step = "reserve the ready native profiles for available native slots: " + command
         elif any(worker["ready"] for worker in workers):
             step = "start or resume each ready worker with its full assignment"
+        elif native_launch.pending(slate):
+            step = "recover the original native receipts and record launch-result outcomes as main"
         else:
             step = (f"{_step(args, 'render')}; then {_step(args, 'gate')}; "
                     f"then {_step(args, 'converged')}; hand back the result" if package["phase"] == "done"
@@ -224,7 +229,7 @@ def cmd_work(args: argparse.Namespace) -> None:
         step = (_role_command(args, args.role_host, "work") + " --role-host "
                 + args.role_host + f" --wait {args.wait or 30}")
     elif package["state"] == "blocked":
-        step = "report the blocked finder assignment and its reason to main"
+        step = "report the blocked native assignment and its reason to main"
     elif "assignment" in package:
         step = "report completion to main"
     else:
@@ -239,23 +244,23 @@ def cmd_work(args: argparse.Namespace) -> None:
 def cmd_launch(args: argparse.Namespace) -> None:
     reservation = args.command == "launch"
     field = "launches" if reservation else "outcomes"
-    refresh_host = finder_launch.saved_host(_read(args)) or host() or "claude"
+    refresh_host = native_launch.saved_host(_read(args)) or host() or "claude"
     refresh = _work_step(args, refresh_host, args.agent)
     try:
         raw = sys.stdin.read() if args.input == "-" else caller_path(args.input).read_text()
         value = json.loads(raw)
     except (OSError, ValueError) as exc:
-        _refuse_next(args, "invalid finder launch input", [str(exc)], refresh)
+        _refuse_next(args, "invalid native launch input", [str(exc)], refresh)
     if not isinstance(value, dict) or set(value) != {field}:
-        _refuse_next(args, "invalid finder launch input", [f"expected one JSON object with {field!r}"], refresh)
+        _refuse_next(args, "invalid native launch input", [f"expected one JSON object with {field!r}"], refresh)
 
     def build(slate: Slate) -> dict[str, Any]:
-        saved_host = finder_launch.saved_host(slate)
+        saved_host = native_launch.saved_host(slate)
         if saved_host is not None and host() != saved_host:
-            raise ledger.LedgerError([f"use the slate's finder host {saved_host}"])
+            raise ledger.LedgerError([f"use the slate's native host {saved_host}"])
         if reservation:
             return value
-        results, problems = finder_launch.outcomes(slate, value[field])
+        results, problems = native_launch.outcomes(slate, value[field])
         if problems:
             raise ledger.LedgerError(problems)
         return {field: results}
@@ -264,7 +269,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
     event = _write(args, {"event": args.command}, build=build)
     if reservation:
         accepted = [{"id": entry["id"], "host": entry["host"],
-                     "arguments": finder_launch.native_arguments(entry)} for entry in event[field]]
+                     "arguments": native_launch.native_arguments(entry)} for entry in event[field]]
         step = "start each accepted worker with these arguments and its full assignment, then record its launch result"
         emit(args.output_mode, {"seq": event["seq"], "accepted": accepted},
              [f"LAUNCH seq={event['seq']}", *["ACCEPTED " + dumps(entry) for entry in accepted]], step)

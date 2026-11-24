@@ -170,8 +170,8 @@ Claude Code uses `--host claude converge converge`; Codex uses
 
 ```
 init        start a slate: lenses, angle files, refuters; --snapshot pins the work tree
-launch      reserve ready routed finders and return their native launch arguments
-launch-result  record native finder results and observed model and effort
+launch      reserve configured native identities and return their native launch arguments
+launch-result  record native role results and observed model and effort
 file        file a claim
 escalate    the finder widens a claim with a route to the worse outcome, or declines
 find-run    record that a find angle was run
@@ -250,6 +250,34 @@ Set `default` with `model` and `effort`. Each `groups` entry takes `lenses`, `wo
 Groups take only the workers their angle pairs can use. The default receives any remaining pairs within the budget.
 On Claude Code, use `haiku`, `sonnet`, or `opus` as the model. On Codex, use a native model ID.
 Set `finder_routing: null` in a later layer to clear the routing policy for that review.
+
+Configure native judging seats with `native_profiles` in the same layers:
+
+```yaml
+native_profiles:
+  cutter: {model: haiku, effort: xhigh}
+  r1: {model: haiku, effort: xhigh}
+  r2: {model: sonnet, effort: high}
+```
+
+This example uses Claude models. Codex accepts native model IDs.
+Claude efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
+Codex efforts are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`.
+Each effective profile needs both fields. Later layers can override one field.
+Set one entry or the whole `native_profiles` section to `null` to clear it.
+Omitted profiles keep native defaults. Initialization saves profiles and the executing host.
+
+Without a settlement, R2 is native. In a settlement, set `converge_seats.r2: native_subagent`.
+Remove `refuter` and `gap-hunter` from `advisor_roles.roles` when switching R2 to native.
+An advisor R2 ignores `native_profiles.r2` and keeps its approved launcher settings.
+
+Main's `work` includes profiles, readiness, and launch state for configured native identities, including serial cutter.
+Reserve each identity through `launch` before its work. Start it with the returned native arguments.
+Claude receives `model` and `effort`; Codex receives `model` and `reasoning_effort`.
+Main records each receipt through `launch-result`, then reuses that handle for later turns.
+R2 keeps its handle for gap hunt, refutations, and replies to its claims.
+Missing observed metadata remains unverified. A known model or effort mismatch blocks the slate.
+Completion requires finished receipts for attempted turns. Unused judging seats need no launch.
 
 Use `init --report-rule ID` to add a missing report rule without replacing task settings. Repeat it in the order you want.
 Use `--continue-from` to reuse the prior standalone slate's saved `--config` path. Supply `--config` to select an approved replacement.

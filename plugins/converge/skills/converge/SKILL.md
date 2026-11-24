@@ -37,7 +37,9 @@ For an advisor, call `advisor:advisor` and follow the printed driver.
 Honor deferred startup. Reuse the recorded channel until shared work ends. Act on heartbeat `next` when it stops.
 
 For parallel seats, read the worker assignments from main's `work` output.
-When main's work shows finder profiles, use the [routed finder handoff](references/finder-routing.md).
+When main's work shows native profiles, use the [native profile handoff](references/native-profiles.md).
+Apply it to routed finders, cutter, native R1, and native R2. Omitted profiles keep native defaults.
+Keep advisor R2 on its approved launcher settings; ignore its native profile.
 Start each ready worker once with its ID, full assignment, and work command.
 Keep the same native worker for a reply handoff. Report a refused launch with its assignment and host diagnostic.
 For parallel advisors, use the printed reservation and driver for that worker ID.
