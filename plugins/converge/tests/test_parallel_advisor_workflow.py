@@ -51,7 +51,7 @@ def test_two_invited_advisors_each_receive_one_assignment(cv: Converge) -> None:
                           "startup": "deferred", "launcher": launcher},
     }))
     config = {"parallelism": {"r2": 2},
-              "steps": {"gap_hunt": False, "escalate": False, "cut": "none"},
+              "steps": {"gap_hunt": True, "escalate": True, "cut": "none"},
               "angles": {"disable": DISABLED}}
     cv.init("s1", "correctness", MAIN, "--review-group", group, "--settlement", str(settlement), config=config)
     cv.file(claim="first claim")
@@ -59,11 +59,8 @@ def test_two_invited_advisors_each_receive_one_assignment(cv: Converge) -> None:
     for angle in ("changed-contract", "failure-path"):
         cv.ok("angle-na", "s1", "--as", "finder", "--phase", "find", "--lens", "correctness",
               "--angle", angle, "--reason", "coverage complete")
-    for claim in ("F001", "F002"):
-        for angle in BATCH_1:
-            cv.check_cli(claim, angle)
-
     channels = []
+    main_work = ("work", "s1", "--as", MAIN, "--role-host", HOST, "--json")
     reply_body = cv.root / "reply.txt"
     reply_body.write_text("fresh-eye recorded\n")
     for driver, claim in zip(cv.status()["drivers"], ("F001", "F002"), strict=True):
@@ -79,9 +76,9 @@ def test_two_invited_advisors_each_receive_one_assignment(cv: Converge) -> None:
         exact = advisor(HOST, "asker", "wait-listener", *key, "--timeout", "0")
         assert exact["channel"] == channel and exact["listener_host"] == listener_host
 
-        worker_work = subprocess.run([*shlex.split(driver[f"work_{listener_host}"]), "--json"],
-                                     cwd=cv.project, env=env, text=True, capture_output=True, check=True)
-        package = json.loads(worker_work.stdout)
+        worker_work = [*shlex.split(driver[f"work_{listener_host}"]), "--json"]
+        package = json.loads(subprocess.run(worker_work, cwd=cv.project, env=env, text=True,
+                                            capture_output=True, check=True).stdout)
         assert package["assignment"]["fresh_eye"] == [claim]
         assert package["role"] == worker
         body = cv.root / f"{worker}.txt"
@@ -90,6 +87,28 @@ def test_two_invited_advisors_each_receive_one_assignment(cv: Converge) -> None:
                           "--to", "listener", "--kind", "request", "--body-file", str(body))
         request_id = request["message_id"]
         advisor(listener_host, listener, "fetch", "--channel", channel, "--message-id", request_id)
+
+        if worker == "r2":
+            assert package["phase"] == "gap-hunt"
+            cv("gap-hunt-done", "s1", "--dir", str(cv.dir), "--as", worker,
+               env={"BOOTGEAR_HOST": listener_host})
+            waited = json.loads(cv.ok(*main_work, "--wait", "2", "--after-seq",
+                                      str(package["source_seq"]), "--active-worker", worker).stdout)
+            assert (waited["wait_result"], waited["phase"]) == ("dispatch", "escalate")
+            assert {row["agent"] for row in waited["items"]} == {"finder"}
+            for claim_id in ("F001", "F002"):
+                cv.ok("escalate", "s1", "--as", "finder", "--claim", claim_id)
+            fixed = json.loads(cv.ok(*main_work, "--wait", "2", "--after-seq",
+                                     str(waited["source_seq"]), "--active-worker", worker).stdout)
+            assert (fixed["wait_result"], fixed["phase"]) == ("dispatch", "attack")
+            assert {row["agent"] for row in fixed["items"]} == {"r1"}
+            for claim_id in ("F001", "F002"):
+                for angle in BATCH_1:
+                    cv.check_cli(claim_id, angle)
+            package = json.loads(subprocess.run(worker_work, cwd=cv.project, env=env, text=True,
+                                                capture_output=True, check=True).stdout)
+            assert package["items"][0]["batch"] == "fresh-eye"
+
         duplicate = advisor(HOST, "asker", "send", "--channel", channel, "--from", "asker",
                             "--to", "listener", "--kind", "request", "--body-file", str(body), code=2)
         assert duplicate["category"] == "request_outstanding"

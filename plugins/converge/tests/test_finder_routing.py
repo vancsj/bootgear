@@ -156,6 +156,10 @@ def test_launch_reserves_full_batches_and_blocks_on_native_mismatch(cv: Converge
     blocked = json.loads(cv.ok("work", "s1", "--as", "finder-2", "--role-host", HOST, "--json").stdout)
     assert blocked["state"] == "blocked"
     assert blocked["next"] == "report the blocked native assignment and its reason to main"
+    main_work = ("work", "s1", "--as", MAIN, "--role-host", HOST, "--json")
+    main = json.loads(cv.ok(*main_work).stdout)
+    waited = json.loads(cv.ok(*main_work, "--wait", "300", "--after-seq", str(main["source_seq"])).stdout)
+    assert (waited["wait_result"], waited["state"], waited["next"]) == ("state", "blocked", main["next"])
     coverage = json.loads(cv.ok("coverage", "s1", "--json").stdout)
     assert coverage["lenses"]["correctness"]["missing"] == []
     assert "finder-2 blocked" in coverage["native_turns_pending"][0]

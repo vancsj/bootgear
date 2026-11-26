@@ -64,15 +64,18 @@ def _parallel_driver(slate_id: str, ledger_dir: Path, group: str,
                  f"--kind request --cap 1 --body-file {path} --json"),
         "receive": wait,
         "then": ("Start the reserve output's asker heartbeat if needed before launch. "
-                 "Use the reserved channel returned by wait-listener. Save the send receipt and run receive "
-                 "with its message ID. Resume by receiving the same ID. Never send a second active request."),
+                 "Use the reserved channel returned by wait-listener. Save the send receipt. "
+                 "Run receive in the background with its message ID. Continue main's slate work while it runs. "
+                 "Use main's printed wait when ready work has been dispatched. Include this worker while its receipt "
+                 "is unanswered. Resume receiving the same ID. Keep one active request."),
         "request": "\n".join((
             "TYPE: delegate",
             f"USER_REQUEST: Act as worker {worker} in seat r2. {brief} <full worker assignment and role brief>",
             "CONTEXT: <artifact, assigned claims, evidence and applicable standards>",
             f"SCOPE: Use the work command for your actual host: {work['claude']} or {work['codex']}.",
-            ("Keep the same worker ID for direct Gear actions. Continue ready work and use work --wait "
-             "for ordinary prerequisites. Report completion, a finder reply handoff, or blocked work."),
+            ("Keep the same worker ID for direct Gear actions. When Gear offers gap-hunt-done, record it before replying. "
+             "Continue ready work and use work --wait for ordinary prerequisites. "
+             "Report completion, a finder reply handoff, or blocked work."),
             "Respect the assigned write scope. Report WRITE-DENIED and the exact refusal if a write fails.",
             "Tests already ran:",
             "- latest test: <recorded command>; result: <one recorded result line>",

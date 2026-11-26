@@ -208,7 +208,11 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--role", choices=seats.SEATS,
                    help="seat for a custom agent id not yet present in the slate")
     p.add_argument("--wait", type=int, metavar="SECONDS",
-                   help="parallel workers wait up to this positive duration for work or a reply handoff")
+                   help="positive duration for parallel work or main dispatch; main requires --after-seq")
+    p.add_argument("--after-seq", type=int, metavar="SEQ",
+                   help="main wait only: source_seq from the last work package main handled on this slate")
+    p.add_argument("--active-worker", action="append", default=[], metavar="ID",
+                   help="main wait only: repeat for each worker with an active turn or unanswered receipt on this slate")
     p.add_argument("--out", type=caller_path,
                    help="optional: save work.json and separate editable actions in an assigned workflow directory outside the target artifact")
 

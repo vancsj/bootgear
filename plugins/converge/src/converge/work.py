@@ -348,6 +348,15 @@ def package(slate: Slate, actor: str, role_host: str,
     return result
 
 
+def dispatch_choices(package: dict[str, Any], active: set[str]) -> set[tuple[str, str, str]]:
+    phase = package["phase"]
+    ready = {worker["id"] for worker in package["workers"] if worker["ready"]}
+    if any(item.get("agent_role") == "cutter" for item in package["items"]):
+        ready.add("cutter")
+    return ({(phase, "worker", actor) for actor in ready - active}
+            | {(phase, "action", action["input"]["action"]) for action in package["actions"]})
+
+
 def event(slate: Slate, value: dict[str, Any], actor: str) -> dict[str, Any]:
     """Build one event while append holds the current slate's write lock."""
     problems = []

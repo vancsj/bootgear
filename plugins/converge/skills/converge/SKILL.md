@@ -44,6 +44,10 @@ Start each ready worker once with its ID, full assignment, and work command.
 Keep the same native worker for a reply handoff. Report a refused launch with its assignment and host diagnostic.
 For parallel advisors, use the printed reservation and driver for that worker ID.
 Use the listener host returned by Gear. Keep one receipt for its active request.
+Continue main's work while the advisor receive runs in the background.
+Use main's printed wait after dispatch. Include each worker with an active turn or unanswered receipt on this slate.
+Refresh main's work after a worker reports completion or a finder reply handoff.
+Keep one main wait in flight. Recover its handle before you start another wait.
 Close the reserved channels when the outer review ends. Keep them open between visits.
 
 Give each role its artifact, brief, rules, saved evidence, and public work. Tell it to read the principles and standards.
@@ -119,11 +123,13 @@ Get the absolute path from `cli:gear`. Read only the current host's section.
 
 Use `--host claude` for Claude commands and `--role-host claude` for Claude work.
 Use Agent and SendMessage for native roles. Run the printed advisor background step through Bash.
+Run main waits as background Bash tasks. Use the task completion notification.
 Install missing `cli@bootgear` through the host.
 
 ### Codex
 
 Use `--host codex` for Codex commands and `--role-host codex` for Codex work.
 Use clean `spawn_agent` roles and host messaging. Keep advisor terminals visible.
+Run main waits and advisor receives in background tool calls. Collect shell completion inside the same call and notify main.
 Install missing plugins with `codex plugin add cli@bootgear` or `codex plugin add advisor@bootgear`.
 A fresh approval in a headless role makes that role unavailable.

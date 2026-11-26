@@ -252,6 +252,10 @@ parallelism:
 Set `max_workers` explicitly to use a higher ceiling. Host capacity limits how many workers can launch.
 Main's `work` lists ready workers and their full assignments. Assignments follow init angle order and claim filing order.
 Workers refresh Gear directly after ordinary actions. `work --wait` returns when work, completion, or a finder reply is ready.
+Main's wait compares dispatch choices with the last handled sequence and excludes in-flight workers.
+Coverage and batch completion can open dispatch. Gap hunt records `gap-hunt-done`.
+Main advances the slate during the mailbox receive, and the worker keeps its receipt through ordinary prerequisites.
+The generated waits default to 300 seconds and return early for applicable work.
 
 ### Native profiles
 

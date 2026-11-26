@@ -55,6 +55,11 @@ def _work(cv: Converge, actor: str, *options: str) -> dict[str, Any]:
                             "--json", *options).stdout)
 
 
+def _main_wait(cv: Converge, source_seq: int, *active: str, seconds: str = "1") -> dict[str, Any]:
+    workers = [arg for actor in active for arg in ("--active-worker", actor)]
+    return _work(cv, MAIN, "--wait", seconds, "--after-seq", str(source_seq), *workers)
+
+
 def _find_run(cv: Converge, actor: str, angle: str, claim: str) -> None:
     cv.ok("find-run", "s1", "--as", actor, "--lens", "correctness", "--angle", angle,
           "--tell", "caller uses changed path", "--searches", "rg caller",
@@ -130,6 +135,90 @@ def test_parallel_gap_hunt_requires_completion_even_without_claims(cv: Converge)
     assert cv.status()["phase"] == "attack"
 
 
+def test_main_wait_ignores_find_and_active_workers_in_a_new_phase(cv: Converge) -> None:
+    _init_workers(cv, gap_hunt=False)
+    baseline = _work(cv, MAIN)
+    assert "--wait 300" in baseline["wait"]
+
+    claim = cv.file()
+    filed = _main_wait(cv, baseline["source_seq"], "finder", "finder-2")
+    assert (filed["wait_result"], filed["phase"]) == ("timeout", "find")
+    assert filed["source_seq"] == cv.events()[-1]["seq"]
+
+    _find_run(cv, "finder", "changed-contract", claim)
+    _find_run(cv, "finder-2", "failure-path", "none")
+    before = cv.path().read_bytes()
+    started = time.monotonic()
+    advanced = _main_wait(cv, filed["source_seq"], "finder", "finder-2", "r1")
+    assert (advanced["wait_result"], advanced["phase"]) == ("timeout", "attack")
+    assert advanced["source_seq"] == cv.events()[-1]["seq"]
+    assert "--wait 1 " in advanced["wait"]
+    assert time.monotonic() - started >= 1
+    assert cv.path().read_bytes() == before
+
+
+def test_main_wait_dispatches_idle_fresh_eye_worker_in_same_phase(cv: Converge) -> None:
+    cv.ready(claims=2, config={"parallelism": {"r1": 2, "r2": 2}})
+    baseline = _work(cv, MAIN)["source_seq"]
+    for angle in BATCH_1[:-1]:
+        cv.check_cli("F002", angle, agent="r1-2")
+    partial = _main_wait(cv, baseline, "r1", "r1-2")
+    assert partial["wait_result"] == "timeout"
+    assert partial["source_seq"] == cv.events()[-1]["seq"]
+
+    cv.check_cli("F002", BATCH_1[-1], agent="r1-2")
+    before = cv.path().read_bytes()
+    dispatched = _main_wait(cv, partial["source_seq"], "r1", "r1-2", seconds="300")
+    assert (dispatched["wait_result"], dispatched["phase"]) == ("dispatch", "attack")
+    assert [row["id"] for row in dispatched["workers"] if row["ready"]] == ["r2-2"]
+    fresh_eyes = [item for item in dispatched["items"] if item["batch"] == "fresh-eye"]
+    assert [(item["claim"], item["agent"]) for item in fresh_eyes] == [("F002", "r2-2")]
+    assert cv.path().read_bytes() == before
+
+
+def test_main_wait_refuses_invalid_options_without_writing(cv: Converge) -> None:
+    _init_workers(cv, gap_hunt=False)
+    before = cv.path().read_bytes()
+    main = ("--as", MAIN, "--role-host", HOST)
+    missing = cv.refused("work", "s1", *main, "--after-seq", "1")
+    assert "--wait" in missing and "positive" in missing
+    combined = cv.refused("work", "s1", *main, "--wait", "0", "--after-seq", "2",
+                          "--active-worker", "r2-8", "--active-worker", "r1-9", "--active-worker", "cutter")
+    assert "--wait requires positive seconds" in combined
+    assert "--after-seq must be an existing source_seq" in combined
+    assert "unknown --active-worker IDs: cutter, r1-9, r2-8" in combined
+    no_cursor = cv.refused("work", "s1", *main, "--wait", "1")
+    assert "--after-seq" in no_cursor
+    wrong_actor = cv.refused("work", "s1", "--as", "finder", "--role-host", HOST,
+                             "--wait", "1", "--after-seq", "1")
+    assert "main" in wrong_actor and "--after-seq" in wrong_actor
+    assert cv.path().read_bytes() == before
+
+
+def test_main_wait_keeps_manual_cutter_valid_until_its_turn_returns(cv: Converge) -> None:
+    cv.ready(cut="before", config={"parallelism": {"r1": 2}})
+    plan = _work(cv, MAIN)
+    assert plan["phase"] == "cut-before"
+    assert any(item["agent_role"] == "cutter" for item in plan["items"])
+    assert _main_wait(cv, plan["source_seq"], "cutter")["wait_result"] == "timeout"
+
+    cv.cut("F001", 1, when="before")
+    cv.ok("accept", "s1", "--as", "finder", "--claim", "F001", "--when", "before", "--round", "1")
+    waited = _main_wait(cv, cv.events()[-1]["seq"], "cutter", "r1")
+    assert (waited["wait_result"], waited["phase"]) == ("timeout", "attack")
+
+
+def test_main_wait_returns_done_with_existing_next_step(cv: Converge) -> None:
+    _init_workers(cv, gap_hunt=False)
+    _find_run(cv, "finder", "changed-contract", "none")
+    _find_run(cv, "finder-2", "failure-path", "none")
+    cv.ok("cutoff", "s1")
+    done = _work(cv, MAIN)
+    waited = _main_wait(cv, done["source_seq"], seconds="300")
+    assert (waited["wait_result"], waited["phase"]) == ("state", "done")
+    assert waited["next"] == done["next"]
+
+
 def test_parallel_finders_append_distinct_claim_ids(cv: Converge) -> None:
     _init_workers(cv, gap_hunt=False)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -146,6 +235,7 @@ def test_parallel_finders_append_distinct_claim_ids(cv: Converge) -> None:
 
 def test_refuter_continues_other_assigned_claims_during_a_dispute(cv: Converge) -> None:
     cv.ready(claims=3, config={"parallelism": {"r1": 2}})
+    before_refutation = cv.events()[-1]["seq"]
     cv.check_cli("F001", BATCH_1[0], outcome="refuted")
     for angle in BATCH_1[1:]:
         cv.check_cli("F001", angle)
@@ -157,6 +247,9 @@ def test_refuter_continues_other_assigned_claims_during_a_dispute(cv: Converge) 
         cv.check_cli("F003", angle)
     dispute = _work(cv, "r1", "--wait", "1")
     assert dispute["waiting_for_reply"] == ["F001"]
+    handed_off = _main_wait(cv, before_refutation, "r1", "r1-2")
+    assert handed_off["wait_result"] == "dispatch"
+    assert any(item["claim"] == "F001" and item["action"] == "reply" for item in handed_off["items"])
     cv.ok("reply", "s1", "--as", "finder", "--claim", "F001", "--batch", "1",
           "--stance", "rebut", "--evidence", "new counterexample evidence")
     cv.ok("verdict", "s1", "--as", "r1", "--claim", "F001", "--batch", "1", "--verdict", "agree")
@@ -177,6 +270,8 @@ def test_parallel_work_waits_for_ordinary_prerequisites_and_reports_worker_compl
     assert waiting["state"] == "waiting"
     assert time.monotonic() - started >= 1
     assert waiting["assignment"]["fresh_eye"] == ["F001"]
+    assert waiting["next"].endswith("--wait 1")
+    assert _work(cv, "r2")["next"].endswith("--wait 300")
 
     for angle in BATCH_1:
         cv.check_cli("F001", angle)
@@ -185,10 +280,12 @@ def test_parallel_work_waits_for_ordinary_prerequisites_and_reports_worker_compl
     assert _work(cv, "r1-2")["items"][0]["id"] == "F002"
 
 
+@pytest.mark.parametrize("actor", ["r2", MAIN])
 def test_wait_replays_only_when_the_slate_changes(
-    cv: Converge, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    cv: Converge, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], actor: str,
 ) -> None:
     cv.ready(config={"parallelism": {"r1": 2}})
+    options = ["--after-seq", str(cv.events()[-1]["seq"]), "--active-worker", "r1"] if actor == MAIN else []
     read = cli_actions._read
     read_count = 0
     polls = 0
@@ -209,8 +306,12 @@ def test_wait_replays_only_when_the_slate_changes(
 
     monkeypatch.setattr(cli_actions, "_read", count_read)
     monkeypatch.setattr(cli_actions, "time", SimpleNamespace(monotonic=lambda: elapsed, sleep=advance))
-    cli.main(["work", "s1", "--dir", str(cv.dir), "--as", "r2", "--role-host", HOST, "--wait", "1", "--json"])
-    assert json.loads(capsys.readouterr().out)["state"] == "ready"
+    cli.main(["work", "s1", "--dir", str(cv.dir), "--as", actor, "--role-host", HOST, "--wait", "1", "--json", *options])
+    package = json.loads(capsys.readouterr().out)
+    if actor == MAIN:
+        assert package["wait_result"] == "dispatch"
+    else:
+        assert package["state"] == "ready"
     assert read_count == 2
 
 

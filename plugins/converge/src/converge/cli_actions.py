@@ -18,7 +18,7 @@ from bootgear_cli.clikit import (
     host,
 )
 
-from . import ledger, model, native_launch, protocol, render, work
+from . import assignments, ledger, model, native_launch, protocol, render, work
 from .cli_advisor import _converge_command
 from .cli_common import (
     CATALOG,
@@ -37,6 +37,8 @@ from .cli_common import (
     _written,
 )
 from .model import Slate
+
+DEFAULT_WORK_WAIT = 300
 
 
 def cmd_file(args: argparse.Namespace) -> None:
@@ -145,32 +147,98 @@ def _slate_size(path: Path) -> int | None:
         return None
 
 
+def _check_wait(args: argparse.Namespace, slate: Slate, package: dict[str, Any], main: bool) -> None:
+    problems = []
+    cursor = args.after_seq
+    if cursor is not None or args.active_worker:
+        if not main:
+            problems.append("--after-seq and --active-worker require the main actor of a parallel slate")
+        if args.wait is None:
+            problems.append("--after-seq and --active-worker require a positive --wait duration")
+    if args.wait is not None:
+        if args.wait < 1:
+            problems.append("--wait requires positive seconds")
+        if main and cursor is None:
+            problems.append("main --wait requires --after-seq")
+        if not main and "assignment" not in package:
+            problems.append("--wait requires a parallel worker or the main actor of a parallel slate")
+    if cursor is not None and not 1 <= cursor <= len(slate.events):
+        problems.append(f"--after-seq must be an existing source_seq (1 to {len(slate.events)})")
+    if args.active_worker:
+        known = {worker["id"] for worker in package.get("workers", [])}
+        if (any(item.get("agent_role") == "cutter" for item in package["items"])
+                or any(claim.state.cutters for claim in slate.claims.values())):
+            known.add("cutter")
+        unknown = set(args.active_worker) - known
+        if unknown:
+            problems.append("unknown --active-worker IDs: " + ", ".join(sorted(unknown)))
+    if problems:
+        raise ledger.LedgerError([f"work: {problem}" for problem in problems])
+
+
+def _wait_for_work(
+    args: argparse.Namespace, slate: Slate, package: dict[str, Any], path: Path, size: int | None,
+) -> tuple[Slate, dict[str, Any]]:
+    active = set(args.active_worker)
+    previous = None
+    if args.after_seq is not None:
+        baseline = package
+        if args.after_seq < package["source_seq"]:
+            prefix = Slate(slate.slate_id)
+            for event in slate.events[:args.after_seq]:
+                ledger.apply_event(prefix, event)
+            baseline = work.package(prefix, args.agent, args.role_host, args.role)
+        previous = work.dispatch_choices(baseline, active)
+    deadline = time.monotonic() + args.wait
+    while True:
+        if previous is not None:
+            if package["state"] == "blocked" or package["phase"] == "done":
+                package["wait_result"] = "state"
+                break
+            if work.dispatch_choices(package, active) - previous:
+                package["wait_result"] = "dispatch"
+                break
+        elif package["state"] != "waiting" or package.get("waiting_for_reply"):
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            if previous is not None:
+                package["wait_result"] = "timeout"
+            break
+        time.sleep(min(remaining, 0.1))
+        observed_size = _slate_size(path)
+        if observed_size != size:
+            size = observed_size
+            slate = _read(args)
+            package = work.package(slate, args.agent, args.role_host, args.role)
+    return slate, package
+
+
 def cmd_work(args: argparse.Namespace) -> None:
     path = _path(args)
     size = _slate_size(path) if args.wait is not None else None
     slate = _read(args)
     try:
         package = work.package(slate, args.agent, args.role_host, args.role)
+        main_wait = (package["seat"] == "main" and args.agent == slate.events[0]["as"]
+                     and assignments.parallel(slate))
+        _check_wait(args, slate, package, main_wait)
         if args.wait is not None:
-            if args.wait < 1 or "assignment" not in package:
-                raise ledger.LedgerError(["work: --wait requires positive seconds and a parallel worker"])
-            deadline = time.monotonic() + args.wait
-            while package["state"] == "waiting" and not package.get("waiting_for_reply"):
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
-                time.sleep(min(remaining, 0.1))
-                observed_size = _slate_size(path)
-                if observed_size != size:
-                    size = observed_size
-                    slate = _read(args)
-                    package = work.package(slate, args.agent, args.role_host, args.role)
+            slate, package = _wait_for_work(args, slate, package, path, size)
     except ledger.LedgerError as exc:
         _refuse(exc.problems)
     submit = _role_command(args, args.role_host, "act")
     package["submit"] = submit + " --input <action.json>"
     lines = [(f"WORK {args.agent} seat={package['seat']} phase={package['phase']} "
               f"state={package['state']} seq={package['source_seq']}")]
+    if "wait_result" in package:
+        lines.append(f"WAIT RESULT {package['wait_result']}")
+    if main_wait and package["state"] == "waiting":
+        active_flags = "".join(f" --active-worker {shlex.quote(actor)}" for actor in args.active_worker)
+        package["wait"] = (_work_step(args, args.role_host, args.agent)
+                           + f" --wait {args.wait or DEFAULT_WORK_WAIT} --after-seq {package['source_seq']}"
+                           + active_flags)
+        lines.append("WAIT " + package["wait"])
     if "assignment" in package:
         lines.append("ASSIGNMENT " + dumps(package["assignment"]))
     if "profile" in package:
@@ -179,13 +247,18 @@ def cmd_work(args: argparse.Namespace) -> None:
         lines.append("LAUNCH " + dumps(package["launch"]))
     if package.get("unused_finder_lenses"):
         lines.append("UNUSED FINDER LENSES " + ", ".join(package["unused_finder_lenses"]))
+    active = set(args.active_worker)
     for worker in package.get("workers", []):
+        if worker["id"] in active:
+            worker.update(ready=False, active=True)
         if worker["mechanism"] == "native_subagent":
             worker_host = worker.get("profile", {}).get("host", args.role_host)
             worker["work"] = (_role_command(args, worker_host, "work", actor=worker["id"])
                               + f" --role-host {worker_host}")
         lines.append("WORKER " + dumps(worker))
     for item in package["items"]:
+        if item.get("agent", item.get("agent_role")) in active:
+            item["active"] = True
         lines.append("ITEM " + dumps(item))
     for definition in package["definitions"]:
         lines.append("ANGLE " + dumps(definition))
@@ -210,6 +283,8 @@ def cmd_work(args: argparse.Namespace) -> None:
         workers = package.get("workers", [])
         if package["state"] == "blocked":
             step = _next_step(args, slate)
+        elif package.get("wait_result") == "timeout" and "wait" in package:
+            step = package["wait"]
         elif (saved_host := native_launch.saved_host(slate)) and any(
                 worker["ready"] and "profile" in worker and worker["launch"]["state"] == "ready"
                 for worker in workers):
@@ -226,8 +301,7 @@ def cmd_work(args: argparse.Namespace) -> None:
     elif package.get("waiting_for_reply"):
         step = "report pending finder replies to main: " + ", ".join(package["waiting_for_reply"])
     elif package["state"] == "waiting" and "assignment" in package:
-        step = (_role_command(args, args.role_host, "work") + " --role-host "
-                + args.role_host + f" --wait {args.wait or 30}")
+        step = _work_step(args, args.role_host, args.agent) + f" --wait {args.wait or DEFAULT_WORK_WAIT}"
     elif package["state"] == "blocked":
         step = "report the blocked native assignment and its reason to main"
     elif "assignment" in package:
