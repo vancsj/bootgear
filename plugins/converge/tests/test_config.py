@@ -444,3 +444,204 @@ def test_implementation_difficulty_disables_automatic_cheap_fixes(cv: Converge) 
         cv, "cutoff: {difficulty_basis: implementation, cheap: {enabled: false}}\n", code=0)
     assert "difficulty_basis must be one of artifact, implementation" in _validate(
         cv, "cutoff: {difficulty_basis: document}\n")
+
+
+# -- list append: `{append: [...]}` at a lens rule list ---------------------------------
+
+DEFAULT_LENS = config_mod.DEFAULTS["cutoff"]["lenses"]["default"]
+R1_RULE = {"impact": ["cosmetic"]}
+R2_RULE = {"reach": ["crafted"]}
+R3_RULE = {"rate_at_least": 2}
+
+
+def _user_layer(cv: Converge, text: str) -> None:
+    (cv.home / f".{HOST}").mkdir(exist_ok=True)
+    (cv.home / f".{HOST}" / "converge.yaml").write_text(text)
+
+
+def _task_layer(cv: Converge, text: str) -> str:
+    path = cv.root / "task.yaml"
+    path.write_text(text)
+    return str(path)
+
+
+def _lens_append(key: str, rule: str) -> str:
+    return f"cutoff: {{lenses: {{default: {{{key}: {{append: [{rule}]}}}}}}}}\n"
+
+
+def test_project_append_follows_the_default_rules(cv: Converge) -> None:
+    _project_layer(cv, _lens_append("attack_if", "{impact: [cosmetic]}"))
+    lens = _effective(cv)["cutoff"]["lenses"]["default"]
+    assert lens["attack_if"] == [*DEFAULT_LENS["attack_if"], R1_RULE]
+    assert lens["report_if"] == DEFAULT_LENS["report_if"]
+    assert lens["choice_if"] == DEFAULT_LENS["choice_if"]
+
+
+def test_init_snapshot_holds_plain_lists(cv: Converge) -> None:
+    _project_layer(cv, _lens_append("report_if", "{impact: [cosmetic]}"))
+    cv.init("s1", "correctness", MAIN, config={"cutoff": {"lenses": {
+        "default": {"choice_if": {"append": [R2_RULE]}}}}})
+    lens = cv.events()[0]["config"]["cutoff"]["lenses"]["default"]
+    assert lens["report_if"] == [*DEFAULT_LENS["report_if"], R1_RULE]
+    assert lens["choice_if"] == [R2_RULE]
+    assert ledger.read(cv.path(), "s1").lens_policy("correctness")["choice_if"] == [R2_RULE]
+
+
+def test_user_and_project_appends_keep_layer_order(cv: Converge) -> None:
+    _user_layer(cv, _lens_append("attack_if", "{impact: [cosmetic]}"))
+    _project_layer(cv, _lens_append("attack_if", "{reach: [crafted]}"))
+    assert _effective(cv)["cutoff"]["lenses"]["default"]["attack_if"] == [
+        *DEFAULT_LENS["attack_if"], R1_RULE, R2_RULE]
+
+
+def test_task_append_follows_a_project_plain_list(cv: Converge) -> None:
+    _project_layer(cv, "cutoff: {lenses: {default: {attack_if: [{reach: [crafted]}]}}}\n")
+    task = _task_layer(cv, _lens_append("attack_if", "{impact: [cosmetic]}"))
+    assert _effective(cv, "--config", task)["cutoff"]["lenses"]["default"]["attack_if"] == [
+        R2_RULE, R1_RULE]
+
+
+def test_task_plain_list_replaces_a_project_append(cv: Converge) -> None:
+    _project_layer(cv, _lens_append("attack_if", "{impact: [cosmetic]}"))
+    task = _task_layer(cv, "cutoff: {lenses: {default: {attack_if: [{reach: [crafted]}]}}}\n")
+    assert _effective(cv, "--config", task)["cutoff"]["lenses"]["default"]["attack_if"] == [R2_RULE]
+
+
+def test_appended_rule_equal_to_an_inherited_rule_stays_twice(cv: Converge) -> None:
+    first = DEFAULT_LENS["attack_if"][0]
+    _project_layer(cv, "cutoff:\n  lenses:\n    default:\n      attack_if:\n        append:\n"
+                       "          - {reach: [normal, crafted], "
+                       "impact: [security, data-loss, wrong-output]}\n")
+    assert _effective(cv)["cutoff"]["lenses"]["default"]["attack_if"] == [
+        *DEFAULT_LENS["attack_if"], first]
+
+
+def test_append_on_a_new_lens_table_gets_no_default_rules(cv: Converge) -> None:
+    _project_layer(cv, "cutoff:\n  lenses:\n    security:\n"
+                       "      attack_if: {append: [{impact: [cosmetic]}]}\n"
+                       "      report_if: {append: [{reach: [crafted]}]}\n"
+                       "      choice_if: {append: [{rate_at_least: 2}]}\n")
+    lenses = _effective(cv)["cutoff"]["lenses"]
+    assert lenses["security"] == {"attack_if": [R1_RULE], "report_if": [R2_RULE],
+                                  "choice_if": [R3_RULE]}
+    assert lenses["default"] == DEFAULT_LENS
+
+
+def test_caller_append_follows_the_inherited_list(cv: Converge) -> None:
+    caller = _defaults_file(cv, _lens_append("attack_if", "{impact: [cosmetic]}"))
+    cv.init("s1", "correctness", MAIN, "--defaults", caller)
+    lens = cv.events()[0]["config"]["cutoff"]["lenses"]["default"]
+    assert lens["attack_if"] == [*DEFAULT_LENS["attack_if"], R1_RULE]
+
+
+def test_empty_append_in_any_layer_changes_nothing(cv: Converge) -> None:
+    empty = "cutoff: {lenses: {default: {attack_if: {append: []}, report_if: {append: []}}}}\n"
+    _user_layer(cv, empty)
+    assert _effective(cv) == config_mod.DEFAULTS
+    (cv.home / f".{HOST}" / "converge.yaml").unlink()
+    _project_layer(cv, empty)
+    assert _effective(cv) == config_mod.DEFAULTS
+    assert _effective(cv, "--config", _task_layer(cv, empty)) == config_mod.DEFAULTS
+    cv.init("s1", "correctness", MAIN, "--defaults", _defaults_file(cv, empty))
+    assert cv.events()[0]["config"] == config_mod.DEFAULTS
+
+
+APPEND_MISTAKES = """\
+cutoff:
+  lenses:
+    default:
+      attack_if: {append: [{speed: [fast]}], extra: 1, other: 2}
+      report_if: {append: rule}
+      choice_if: {append: [{impact: [catastrophic]}, {}]}
+    tests:
+      attack_if: {}
+"""
+
+
+def test_validate_groups_every_append_problem(cv: Converge) -> None:
+    err = _validate(cv, APPEND_MISTAKES)
+    for fragment in ("cutoff.lenses.default.attack_if must be a list of rules",
+                     "cutoff.lenses.default.attack_if: unknown key 'extra' (allowed: append)",
+                     "cutoff.lenses.default.attack_if: unknown key 'other' (allowed: append)",
+                     "cutoff.lenses.default.attack_if.append[0]: unknown field 'speed'",
+                     "cutoff.lenses.default.report_if.append must be a list of rules",
+                     "cutoff.lenses.default.choice_if.append[0].impact: bad value 'catastrophic'",
+                     "cutoff.lenses.default.choice_if.append[1] must be a non-empty mapping",
+                     "cutoff.lenses.tests.attack_if must be a list of rules"):
+        assert fragment in err, err
+    assert "unknown key 'append'" not in err, err
+
+
+def test_validate_checks_append_items_like_a_plain_list(cv: Converge) -> None:
+    err = _validate(cv, "cutoff: {lenses: {default: {attack_if: {append: [{speed: [fast]}]}}}}\n")
+    assert "cutoff.lenses.default.attack_if.append[0]: unknown field 'speed'" in err
+    assert "CONFIG valid" in _validate(cv, _lens_append("choice_if", "{impact: [cosmetic]}"), code=0)
+
+
+def test_init_refuses_an_append_layer_with_problems(cv: Converge) -> None:
+    """A layer with append problems is refused and leaves no slate."""
+    task = _task_layer(cv, APPEND_MISTAKES)
+    err = cv.refused("init", "s1", "--as", MAIN, "--lenses", "correctness",
+                     "--angles", str(cv.angles), "--project-root", str(cv.project),
+                     "--config", task)
+    assert "must be a list of rules" in err
+    assert not cv.path().exists()
+
+
+def test_mapping_at_other_list_keys_keeps_the_existing_refusal(cv: Converge) -> None:
+    """A mapping at any other list key keeps that key's own refusal."""
+    for layer, fragment in (
+            ("cutoff: {report_rules: {append: [R001]}}",
+             "cutoff.report_rules must be a list of non-empty strings"),
+            ("angles: {files: {append: [a.md]}}",
+             "angles.files must be a list of non-empty strings"),
+            ("angles: {disable: {append: [x]}}",
+             "angles.disable must be a list of non-empty strings"),
+            ("cutoff: {cheap: {test_globs: {append: ['x/**']}}}",
+             "cutoff.cheap.test_globs must be a list of non-empty strings"),
+            ("finder_routing: {groups: {append: [{lenses: [security]}]}}",
+             "finder_routing.groups must be a list")):
+        assert fragment in _validate(cv, layer + "\n"), layer
+
+
+def test_mapping_in_a_rereview_overlay_is_refused(cv: Converge) -> None:
+    """A rereview overlay refuses a mapping at every rule list."""
+    for key in ("attack_if", "report_if", "choice_if"):
+        err = _validate(cv, f"cutoff: {{rereview: {{lenses: {{default: {{{key}: "
+                            f"{{append: [{{impact: [cosmetic]}}]}}}}}}}}}}\n")
+        assert f"cutoff.rereview.lenses.default.{key} must be a list of rules" in err
+
+
+def test_snapshot_with_an_append_mapping_is_refused() -> None:
+    """A snapshot that holds an append mapping fails validation."""
+    for key in ("attack_if", "report_if", "choice_if"):
+        snapshot = copy.deepcopy(config_mod.DEFAULTS)
+        snapshot["cutoff"]["lenses"]["default"][key] = {"append": [R1_RULE]}
+        assert config_mod.validate_config(snapshot, "snapshot", complete=True) == [
+            f"snapshot: cutoff.lenses.default.{key} must be a list of rules"]
+
+
+def test_plain_overlay_replaces_one_rule_list_at_pass_2(cv: Converge) -> None:
+    """A plain overlay replaces one rule list at pass 2 and keeps the others."""
+    _project_layer(cv, "cutoff:\n  lenses:\n    security:\n"
+                       "      attack_if: [{impact: [security]}]\n"
+                       "      report_if: [{reach: [crafted]}]\n"
+                       "  rereview: {lenses: {security: {attack_if: [{reach: [unreachable]}]}}}\n")
+    cv.init("s1", "security", MAIN, "--pass", "2")
+    assert cv.events()[0]["config"]["cutoff"]["lenses"]["security"] == {
+        "attack_if": [{"reach": ["unreachable"]}], "report_if": [R2_RULE]}
+
+
+def test_plain_overlay_replaces_the_appended_rule_list_at_pass_2(cv: Converge) -> None:
+    _project_layer(cv, "cutoff:\n  lenses:\n    security:\n"
+                       "      attack_if: [{impact: [security]}]\n"
+                       "      report_if: [{reach: [crafted]}]\n"
+                       "      choice_if: [{rate_at_least: 2}]\n"
+                       "  rereview: {lenses: {security: {attack_if: [{reach: [unreachable]}]}}}\n")
+    task = {"cutoff": {"lenses": {"security": {"attack_if": {"append": [R1_RULE]}}}}}
+    cv.init("s1", "security", MAIN, "--pass", "1", config=task)
+    assert cv.events("s1")[0]["config"]["cutoff"]["lenses"]["security"]["attack_if"] == [
+        {"impact": ["security"]}, R1_RULE]
+    cv.init("s2", "security", MAIN, "--pass", "2", config=task)
+    assert cv.events("s2")[0]["config"]["cutoff"]["lenses"]["security"] == {
+        "attack_if": [{"reach": ["unreachable"]}], "report_if": [R2_RULE], "choice_if": [R3_RULE]}

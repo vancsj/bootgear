@@ -1,9 +1,11 @@
 """Layered `converge.yaml`: built-in defaults < caller < user < project < task.
 
-`resolve`/`_merge` are copied from engine's `config.py` (not imported: converge
-ships standalone). The caller layer is the file a skill passes to `init --defaults`.
-The user layer is `~/.claude/converge.yaml`, or `~/.codex/converge.yaml` when
-`BOOTGEAR_HOST=codex`.
+Layers merge key by key; a list replaces the inherited list. A layer can instead give
+`{append: [rule, ...]}` at `attack_if`, `report_if` or `choice_if` under `cutoff.lenses.<lens>`.
+The merge adds those rules after the inherited ones (an empty list when no lower layer sets the
+list), so the effective config and a slate snapshot hold plain lists only. The caller layer is
+the file a skill passes to `init --defaults`. The user layer is `~/.claude/converge.yaml`, or
+`~/.codex/converge.yaml` when `BOOTGEAR_HOST=codex`.
 """
 from __future__ import annotations
 
@@ -84,11 +86,24 @@ def _load(path: Path, label: str) -> tuple[Any, bool]:
     return {} if value is None else value, True
 
 
+def _is_append_shape(value: Any) -> bool:
+    """A mapping whose only key is `append`; the validator checks its value."""
+    return isinstance(value, dict) and set(value) == {"append"}
+
+
+def _is_append(value: Any) -> bool:
+    return _is_append_shape(value) and isinstance(value["append"], list)
+
+
 def _merge(base: Any, override: Any) -> Any:
-    if isinstance(base, dict) and isinstance(override, dict):
-        result = copy.deepcopy(base)
+    """`override` over `base`; an append form becomes `base` plus its rules, even when `base` is absent."""
+    if _is_append(override):
+        inherited = base if isinstance(base, list) else []
+        return copy.deepcopy(inherited) + copy.deepcopy(override["append"])
+    if isinstance(override, dict):
+        result = copy.deepcopy(base) if isinstance(base, dict) else {}
         for key, value in override.items():
-            result[key] = _merge(result[key], value) if key in result else copy.deepcopy(value)
+            result[key] = _merge(result.get(key), value)
         return result
     return copy.deepcopy(override)
 
@@ -133,8 +148,10 @@ def _per_lens(item: Any, where: str, complete: bool, problems: list[str]) -> Non
         problems.append(f"{where} needs a `default` key")
 
 
-def _lens_tables(item: Any, where: str, complete: bool, problems: list[str]) -> None:
-    """A map of lens -> {attack_if, report_if, choice_if}; `complete` needs `default`."""
+def _lens_tables(item: Any, where: str, complete: bool, problems: list[str],
+                 allow_append: bool = False) -> None:
+    """A map of lens -> {attack_if, report_if, choice_if}; `complete` needs `default`.
+    `allow_append` accepts `{append: [rule, ...]}` for a rule list."""
     if not isinstance(item, dict):
         problems.append(f"{where} must be a map of lens -> {', '.join(LENS_KEYS)}")
         return
@@ -149,6 +166,12 @@ def _lens_tables(item: Any, where: str, complete: bool, problems: list[str]) -> 
             if key not in LENS_KEYS:
                 problems.append(f"{where}.{lens}: unknown key {key!r} "
                                 f"(allowed: {', '.join(LENS_KEYS)})")
+            elif allow_append and isinstance(rules, dict) and "append" in rules:
+                if not _is_append_shape(rules):
+                    problems.append(f"{where}.{lens}.{key} must be a list of rules")
+                    problems.extend(f"{where}.{lens}.{key}: unknown key {extra!r} "
+                                    "(allowed: append)" for extra in rules if extra != "append")
+                _rules(rules["append"], f"{where}.{lens}.{key}.append", problems)
             else:
                 _rules(rules, f"{where}.{lens}.{key}", problems)
     if complete and "default" not in item:
@@ -228,7 +251,7 @@ def validate_config(value: Any, label: str, complete: bool = False, *,
                 if item not in ("artifact", "implementation"):
                     problems.append(f"{where} must be one of artifact, implementation; got {item!r}")
             elif section == "cutoff" and key == "lenses":
-                _lens_tables(item, where, complete, problems)
+                _lens_tables(item, where, complete, problems, allow_append=not complete)
             elif section == "cutoff" and key == "rereview":
                 _rereview(item, where, complete, problems)
             elif section == "cutoff" and key == "cheap":

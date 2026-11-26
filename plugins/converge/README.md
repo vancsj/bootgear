@@ -219,7 +219,8 @@ Ledgers are one JSONL file per slate under `~/.bootgear/converge/` unless `--dir
 otherwise. Configuration layers deep-merge, later winning: built-in defaults, then a calling
 skill's file passed with `init --defaults`, then the user file (`~/.claude/converge.yaml`, or
 `~/.codex/converge.yaml` on Codex), then the project's `.bootgear/config/converge.yaml`, then
-a task file passed with `--config`:
+a task file passed with `--config`. A plain list replaces the inherited list. Write
+`{append: [...]}` instead of a list at a lens rule list to add rules after the inherited ones:
 
 ```yaml
 cutoff:
@@ -227,10 +228,10 @@ cutoff:
   lenses:                   # per lens, else `default`; a rule maps fields to allowed values
     default:
       attack_if: [...]      # gate 1: attack the claim
-      report_if: [...]      # gate 2: report it as a finding
+      report_if: {append: [...]}  # gate 2: report it as a finding; adds to the inherited rule list
       choice_if: [...]      # the after cut needs a choice
   rereview:
-    lenses: {...}           # from --pass 2, replaces the named lists of a lens
+    lenses: {...}           # from --pass 2, plain lists only; replaces the named rule lists of a lens
   cheap: {enabled: true, files: 1, lines: 10, trivial_lines: 3, tests: 1, test_globs: [...]}
 caps:
   cut_rounds: 5

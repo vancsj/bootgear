@@ -237,6 +237,15 @@ Keys: `cutoff.{report_rules, lenses, rereview.lenses, cheap}`,
 `cutoff.lenses` without `default`, and non-boolean `escalate`, `gap_hunt` or
 `cheap.enabled` are rejected. `init` snapshots the effective config into the slate.
 
+A layer replaces a rule list with a plain list. It adds to the inherited rule list with
+`{append: [rule, ...]}` at `attack_if`, `report_if` or `choice_if` under `cutoff.lenses.<lens>`.
+The merge puts the appended rules after the inherited rules, in layer order, and keeps
+duplicates. A list that no lower layer set counts as empty. A lens table replaces `default`
+as a whole, so an append on a new lens gives that lens only the appended rules. The effective
+config and the snapshot hold plain lists. A mapping at any other list is rejected, and
+`cutoff.rereview.lenses` takes plain lists only. At pass 2, a plain rereview list replaces that
+rule list of the lens, and the rules that a layer appended to it do not remain.
+
 ### Parallel workers
 
 Set worker counts in the same `converge.yaml` layers. The defaults are:
