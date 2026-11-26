@@ -198,37 +198,10 @@ def _blank_fences_and_comments(text: str) -> str:
     return "".join(out)
 
 
-# A line that carries no prose of its own: a genuine fence marker (its
-# contents are already blanked by _blank_fences_and_comments by the time
-# _split_rules runs, but the marker line itself, e.g. "```text", survives as
-# literal text) or a complete one-line HTML comment. Used only to decide
-# whether a rule's body has real prose — a body that is only fence markers
-# and/or comments around blanked fence content is empty in substance even
-# though `body.strip()` is non-empty, so checking `if not body` alone would
-# wrongly accept it. Reuses FENCE_RE itself for the fence-marker half (not a
-# second, looser backtick/tilde pattern) so a line FENCE_RE rejects as a
-# fence at all — e.g. a backtick run whose info string itself contains a
-# backtick, which CommonMark treats as ordinary text, not a fence opener —
-# is never wrongly excluded from prose here either; the two checks must
-# agree on what counts as a fence, or a line the fence logic already decided
-# was real text could still be silently treated as a marker by this helper.
-# The HTML-comment half is defensive, not load-bearing, when called from
-# `validate()`: comments are already blanked by `_blank_fences_and_comments`
-# in `validate()` itself before `_split_rules` ever runs, so a comment
-# survives here only as content, but keeping the check makes `_has_prose`
-# correct on its own if ever called without that preprocessing.
-_NON_PROSE_LINE_RE = re.compile(r"^\s*<!--.*-->\s*$")
-
-
 def _has_prose(body: str) -> bool:
-    # RAW_HTML_OPEN_RE is checked too, the same reason FENCE_RE is: a raw
-    # HTML block's opener survives _blank_fences_and_comments as literal
-    # text (its own contents and closing tag are fully blanked), so a rule
-    # whose body is only that opener — e.g. an empty "<script>...</script>"
-    # pair with nothing between — has no real prose even though the
-    # opener's own text makes `body.strip()` non-empty.
+    """Check for prose in a rule body after _blank_fences_and_comments."""
+    # Fence markers and raw HTML openers survive preprocessing.
     return any(line.strip()
-               and not _NON_PROSE_LINE_RE.match(line)
                and not FENCE_RE.match(line)
                and not RAW_HTML_OPEN_RE.match(line)
                for line in body.split("\n"))

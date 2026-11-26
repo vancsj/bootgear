@@ -24,7 +24,7 @@ class RuleFileGuardTests(TempLedgerCase):
         super().setUp()
         self.outside = self.temp / "outside"
         self.outside.mkdir()
-        self.secret = "OUTSIDE-SECRET-CONTENT"
+        self.outside_content = "outside fixture content"
 
     def dangling(self, kind: str) -> Path:
         target = self.outside / f"{kind}-target.txt"
@@ -33,7 +33,7 @@ class RuleFileGuardTests(TempLedgerCase):
 
     def outside_link(self, kind: str) -> Path:
         target = self.outside / f"{kind}-existing.txt"
-        target.write_text(self.secret + "\n", encoding="utf-8")
+        target.write_text(self.outside_content + "\n", encoding="utf-8")
         self.rules_file(kind).symlink_to(target)
         return target
 
@@ -50,7 +50,7 @@ class RuleFileGuardTests(TempLedgerCase):
         both = result.stdout + result.stderr
         self.assertNotIn("Traceback", both)
         self.assertNotIn(str(self.outside), both)
-        self.assertNotIn(self.secret, both)
+        self.assertNotIn(self.outside_content, both)
 
     def assert_outside_untouched(self, shape: str) -> None:
         names = sorted(p.name for p in self.outside.iterdir())
@@ -58,7 +58,7 @@ class RuleFileGuardTests(TempLedgerCase):
         self.assertEqual(names, expected)
         if shape == "outside_link":
             self.assertEqual((self.outside / "shared-existing.txt").read_text(encoding="utf-8"),
-                             self.secret + "\n")
+                             self.outside_content + "\n")
 
     def run_mode(self, mode: str, *args: str) -> subprocess.CompletedProcess[str]:
         env = {**self.env(), clikit.ENV_MODE: mode}
