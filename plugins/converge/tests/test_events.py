@@ -10,8 +10,7 @@ from conftest import BATCH_1, CUTTER, FINDER, GEAR_COMMAND, MAIN, R1, R2, Conver
 
 def test_event_kinds() -> None:
     assert model.EVENTS == ("init", "file", "escalate", "find-run", "angle-na", "gap-hunt-done", "clean",
-                            "attack", "reply", "verdict", "cut", "rebut", "accept", "cutoff", "fix-check",
-                            "launch", "launch-result")
+                            "attack", "reply", "verdict", "cut", "rebut", "accept", "cutoff", "fix-check")
 
 
 def test_filed_claim_starts_survived(cv: Converge) -> None:

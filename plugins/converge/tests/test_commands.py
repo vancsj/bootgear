@@ -15,7 +15,6 @@ from conftest import (
     FILE_EVIDENCE,
     FINDER,
     GEAR_COMMAND,
-    HOST,
     MAIN,
     R1,
     R2,
@@ -36,7 +35,7 @@ def _plan(cv: Converge) -> str:
 
 def _role_next(cv: Converge, actor: str, *, structured: bool = False) -> str:
     prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
-    return "next: " + prefix + _cmd(cv, f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
+    return "next: " + prefix + GEAR_COMMAND.removesuffix(" converge converge") + " cli coordination poll"
 
 
 def _lines(cv: Converge, *args: str, code: int = 0) -> list[str]:
@@ -261,14 +260,14 @@ def test_status_prints_phase_cutoff_when_no_plan_row_is_left(cv: Converge) -> No
     assert (data["phase"], data["plan"]) == ("cutoff", [])
 
 
-def test_status_names_the_gap_hunt_until_the_first_escalate(cv: Converge) -> None:
+def test_status_requires_gap_hunt_before_escalation(cv: Converge) -> None:
     cv.init(config={**TASK, "steps": {"cut": "both", "gap_hunt": True, "escalate": True}})
     cv.file()
     cv.cover()
     assert _lines(cv, "status", "s1")[-1] == (
-        "next: gap hunt: continue r2 with work and its explicit executing host; "
-        "r2 submits generated act actions, then reports completion to main; "
-        f"before the first escalate, cut or attack; then escalate: finder escalate F001; plan: {_plan(cv)}")
+        "next: give r2 its gap hunt assignment on its executing host, including the completion action")
+    assert "phase gap-hunt" in cv.refused("escalate", "s1", "--as", FINDER, "--claim", "F001")
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
     assert _lines(cv, "status", "s1")[-1] == (
         f"next: cut-before: cutter cut-before F001; plan: {_plan(cv)}")
@@ -299,6 +298,7 @@ def test_gap_hunt_files_only_between_coverage_and_the_first_escalate(cv: Converg
     assert err.splitlines()[-1] == (
         _role_next(cv, R2, structured=False))
     cv.cover()
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", "F001")
     err = cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries", code=2)
     assert "file: claims are filed before the first escalate, cut or attack event" in err

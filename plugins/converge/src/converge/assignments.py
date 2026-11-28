@@ -46,4 +46,4 @@ def claim_owner(slate: Slate, claim: Claim, seat: str) -> str:
 
 
 def needs_gap_hunt(slate: Slate) -> bool:
-    return parallel(slate) and slate.init_refuters == 2 and slate.config["steps"]["gap_hunt"]
+    return slate.init_refuters == 2 and slate.config["steps"]["gap_hunt"]

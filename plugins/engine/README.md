@@ -127,8 +127,8 @@ roster is three parties — the main agent, an independent reviewer and an adver
 A reviewer runs as a native subagent or through the advisor, the other vendor's host: Codex
 on Claude Code, a Claude Code listener on Codex. `clarify` asks which roles the advisor takes
 (debate reviewer, or refuter and gap hunter on converge seat `r2`) and records them with the
-converge seats. For channel uses, the user chooses early pairing for unattended work, or
-deferred startup with an approved launcher. Deferred listeners start when their first task is due.
+converge seats. For persistent advice, the user chooses early seat binding or deferred startup.
+A deferred advisor starts for its first assignment through the approved launcher.
 Round 0 settles scope; later rounds answer each other; the debate closes
 by unanimous convergence, a consented stop, the round cap (10 by default), or degraded
 convergence when parties are unavailable.

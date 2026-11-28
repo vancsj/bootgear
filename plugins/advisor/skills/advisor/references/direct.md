@@ -1,9 +1,9 @@
 # Direct communication
 
-Call the other CLI once. Use a fresh working directory, with no mailbox or saved conversation.
+Call the other CLI once. Use a fresh working directory, with a fresh conversation.
 Put every task fact in the prompt. Mark uncertainty. Give the peer its role and scope.
 For review, forbid Engine loops, other advisors, and work beyond the role.
-Select channel for workflow-record or memory-ledger writes. Return unexpected write needs before attempting them.
+Use persistent advice for workflow-record or memory-ledger writes. Return unexpected write needs before attempting them.
 Keep the chosen mode and honor sandbox limits. Use only the current host's example.
 
 ## Claude Code calls Codex

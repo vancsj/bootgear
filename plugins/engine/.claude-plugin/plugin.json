@@ -1,6 +1,6 @@
 {
   "name": "engine",
-  "version": "0.30.10",
+  "version": "0.31.0",
   "description": "Autonomous task execution through a clarified goal, session ledger, and validated state machine.",
   "author": {
     "name": "vancsj",

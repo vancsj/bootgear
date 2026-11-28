@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli import coordination
 from bootgear_cli.clikit import current_program
 
 from . import (
@@ -50,12 +51,10 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "accept": ("claim", "when", "round"),
     "cutoff": ("results",),
     "fix-check": ("claim", "outcome", "evidence"),
-    "launch": ("launches",),
-    "launch-result": ("outcomes",),
 }
 OPTIONAL: dict[str, tuple[str, ...]] = {
-    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "review_group", "task_config",
-             "native_host"),
+    "init": ("snapshot", "pass", "since", "seats", "advisor", "project_root", "task_config",
+             "native_host", "coordinated"),
     "file": ("lens", "angle", "depends", "rule"),
     "escalate": ("wider", "evidence"),
     "find-run": (),
@@ -70,10 +69,8 @@ OPTIONAL: dict[str, tuple[str, ...]] = {
     "accept": (),
     "cutoff": (),
     "fix-check": ("review_slate",),
-    "launch": (),
-    "launch-result": (),
 }
-ENVELOPE = ("seq", "ts", "event", "as")
+ENVELOPE = ("seq", "ts", "event", "as", "action_id", "action_hash")
 
 
 class LedgerError(Exception):
@@ -270,10 +267,6 @@ def _validate_init(event: dict[str, Any], problems: list[str]) -> None:
         if ((assignments.parallel(initial) or routed) and event.get("as") in identities
                 or event.get("as") in native_identities):
             problems.append("init: main must use an ID outside the worker assignments")
-    if "review_group" in event:
-        group = event["review_group"]
-        if not isinstance(group, str) or not group.strip() or group.startswith("-"):
-            problems.append("review_group must be nonempty and cannot start with '-'")
     for field in ("project_root", "task_config"):
         if field in event:
             path = event[field]
@@ -349,11 +342,11 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
     slate.snapshot = event.get("snapshot")
     slate.project_root = event.get("project_root")
     slate.review_pass = event.get("pass")
-    slate.review_group = event.get("review_group")
     slate.task_config = event.get("task_config")
     slate.since = event.get("since")
     slate.seats = event.get("seats") or {}
     slate.advisor = event.get("advisor")
+    slate.coordinated = bool(event.get("coordinated"))
     if slate.config.get("finder_routing") is not None:
         slate.finder_plan = assignments.finder_plan(slate, event["native_host"])
 
@@ -362,19 +355,24 @@ def apply_event(slate: Slate, event: dict[str, Any]) -> None:
 # read / append
 
 
-def _parse(lines: list[bytes], slate_id: str) -> Slate:
+def _parse(lines: list[bytes], slate_id: str, workflow: list[dict[str, Any]]) -> Slate:
     slate = Slate(slate_id)
     problems: list[str] = []
-    for index, raw in enumerate(lines, start=1):
+    claim_lines = iter(lines)
+    workflow_by_seq = {event["seq"]: event for event in workflow}
+    for index in range(1, len(lines) + len(workflow) + 1):
         where = f"line {index}"
-        if not raw.endswith(b"\n"):
-            problems.append(f"{where}: truncated (no trailing newline)")
-            break
-        try:
-            event = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            problems.append(f"{where}: not valid JSON: {exc}")
-            break
+        if index in workflow_by_seq:
+            event = workflow_by_seq[index]
+        else:
+            if not (raw := next(claim_lines, b"")).endswith(b"\n"):
+                problems.append(f"{where}: truncated (no trailing newline)")
+                break
+            try:
+                event = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                problems.append(f"{where}: not valid JSON: {exc}")
+                break
         if not isinstance(event, dict):
             problems.append(f"{where}: an event must be a JSON object")
             break
@@ -404,7 +402,14 @@ def _read_all(fd: int) -> list[bytes]:
     return data.splitlines(keepends=True)
 
 
-def read(path: Path, slate_id: str) -> Slate:
+def read(path: Path, slate_id: str, *, workflow: list[dict[str, Any]] | None = None) -> Slate:
+    if workflow is None:
+        with coordination.saved_workflow(path, slate_id) as saved:
+            return _read(path, slate_id, saved)
+    return _read(path, slate_id, workflow)
+
+
+def _read(path: Path, slate_id: str, workflow: list[dict[str, Any]]) -> Slate:
     if not path.is_file():
         raise LedgerError([f"no slate {slate_id!r} in {path.parent} (expected {path})"])
     fd = os.open(path, os.O_RDONLY)
@@ -413,7 +418,7 @@ def read(path: Path, slate_id: str) -> Slate:
         lines = _read_all(fd)
     finally:
         os.close(fd)
-    slate = _parse(lines, slate_id)
+    slate = _parse(lines, slate_id, workflow)
     if not slate.initialised:
         raise LedgerError([f"slate {slate_id!r} has no init event: {path}"])
     return slate
@@ -438,7 +443,8 @@ def _file_duplicate(slate: Slate, event: dict[str, Any]) -> list[str]:
 
 
 def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = False,
-           build: Any = None) -> dict[str, Any]:
+           build: Any = None, workflow: list[dict[str, Any]] | None = None,
+           workflow_event: bool = False) -> dict[str, Any]:
     """Lock, replay, validate, append one line, fsync. Returns the written event.
 
     `build(slate)` may fill computed fields from the replayed state before validation.
@@ -459,7 +465,8 @@ def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = F
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         try:
-            slate = _parse(_read_all(fd), slate_id)
+            saved_workflow = coordination.workflow_for(path, slate_id) if workflow is None else workflow
+            slate = _parse(_read_all(fd), slate_id, saved_workflow)
             event = dict(event)
             if build is not None:
                 event.update(build(slate))
@@ -469,6 +476,10 @@ def append(path: Path, slate_id: str, event: dict[str, Any], *, create: bool = F
                 problems.extend(_file_duplicate(slate, event))
             if problems:
                 raise LedgerError(problems)
+            if workflow_event:
+                assert workflow is not None
+                workflow.append(event)
+                return event
             line = json.dumps(event, sort_keys=False, ensure_ascii=False) + "\n"
             data = line.encode("utf-8")
             while data:

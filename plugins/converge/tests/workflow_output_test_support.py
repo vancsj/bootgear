@@ -8,7 +8,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from conftest import GEAR_COMMAND, HOST, gear_args
+from conftest import GEAR_COMMAND, gear_args
 
 CONVERGE_COMMAND = gear_args()
 
@@ -87,7 +87,7 @@ class Slate:
 
     def role_next(self, actor: str, *, structured: bool = False) -> str:
         prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
-        return "next: " + prefix + self.cmd(f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
+        return "next: " + prefix + PROGRAM.removesuffix(" converge converge") + " cli coordination poll"
 
     def init(self, *extra: str, config: str = STEPS) -> None:
         path = self.root / "task.yaml"
@@ -186,7 +186,7 @@ def _example(lines: list[str]) -> str:
 # -- advisor seats: init --settlement / --refuters and status ---------------------------
 
 ADVISOR_SETTLEMENT = ("converge_seats:\n  r2: advisor\n"
-                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: early\n")
+                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: direct\n")
 FIX_NEXT = ("next: correct converge_seats or advisor_roles in {path} so they agree, then rerun "
             "init; in an engine run the settlement is fixed: stop blocked and report this refusal")
 

@@ -39,12 +39,14 @@ class ResolveCommandTests(unittest.TestCase):
 
 
 class HookManifestPopulationTests(unittest.TestCase):
-    def test_only_engine_declares_a_pre_tool_use_hook(self) -> None:
+    def test_cli_and_engine_declare_pre_tool_use_hooks(self) -> None:
         manifests = sorted(REPO.glob("plugins/*/hooks/*.json"))
         self.assertTrue(manifests)
         declaring = [str(path.relative_to(REPO)) for path in manifests
                      if "PreToolUse" in json.loads(path.read_text(encoding="utf-8")).get("hooks", {})]
         self.assertEqual(set(declaring), {
+            "plugins/cli/hooks/codex-hooks.json",
+            "plugins/cli/hooks/hooks.json",
             "plugins/engine/hooks/codex-hooks.json",
             "plugins/engine/hooks/hooks.json",
         })

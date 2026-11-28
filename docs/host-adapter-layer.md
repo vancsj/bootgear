@@ -28,7 +28,7 @@ The engine has one shared source directory for both hosts:
 
 The active host selects its native hook registration. Native hook loaders supply host
 paths, input contracts, and output envelopes. The engine layer does not import
-advisor, mailbox, or memory-ledger implementation modules.
+advisor, coordination store, or memory-ledger implementation modules.
 
 ## V1 events
 

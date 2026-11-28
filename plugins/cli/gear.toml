@@ -6,3 +6,9 @@ exec = ["python3", "-m", "bootgear_cli.native_setup"]
 
 [commands.session-start]
 exec = ["python3", "-m", "bootgear_cli.session_start"]
+
+[commands.coordination]
+exec = ["python3", "-m", "bootgear_cli.coordination_cli"]
+
+[commands.coordination-hook]
+exec = ["python3", "-m", "bootgear_cli.coordination_hook"]

@@ -39,6 +39,7 @@ def test_escalate_rows_name_each_claims_finder(cv: Converge) -> None:
     assert _plan(cv) == []
     cv.cover()
     cv.file(agent=R2, origin="gap-hunt")
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     assert _plan(cv) == [[_row("F001", "escalate", "finder"), _row("F002", "escalate", "r2")]]
 
 

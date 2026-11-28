@@ -28,7 +28,7 @@ EXPECTED_SKILLS = {"clarify", "debate", "execute", "recall", "resolve", "start"}
 
 
 def _roles(*roles: str) -> str:
-    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n  startup: early\n"
+    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n  startup: direct\n"
 
 
 class CodexPackageContractTestCase(unittest.TestCase):

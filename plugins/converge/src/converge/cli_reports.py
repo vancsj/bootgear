@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli import coordination
 from bootgear_cli.clikit import (
     emit,
+    host,
 )
 
 from . import angles as angles_mod
 from . import config as config_mod
-from . import ledger, model, native_launch, protocol, render
-from .cli_advisor import _drivers
+from . import ledger, model, protocol, render, work
 from .cli_common import (
     _MISSING,
     CATALOG,
@@ -27,8 +30,10 @@ from .cli_common import (
     _refuse,
     _refuse_next,
     _step,
+    _workflow,
 )
 from .cli_setup import _git, _git_error, _git_root, _ref
+from .coordination_commands import advisor_covered
 from .model import Slate
 from .triage_report import report_problems
 
@@ -117,21 +122,41 @@ def cmd_status(args: argparse.Namespace) -> None:
     plan = protocol.batch_plan(slate)
     adhoc = protocol.adhoc_angles(slate)
     step = _next_step(args, slate)
+    ready = []
+    advisor_gaps = {}
+    if (store := getattr(args, "coordination_store", None)) is not None:
+        active = coordination.active_slate(store)
+        assert active is not None
+        advisor_gaps = active.get("advisor_gaps", {})
+        for seat, role in active.get("roster", {}).items():
+            record = store.state["seats"][seat]
+            occupant = record["occupant"]
+            role_host = occupant["host"] if occupant else (host() or "claude")
+            if work.package(slate, seat, role_host, requested=role)["actions"]:
+                member = {"seat": seat, "role": role, "joined": occupant is not None,
+                          "occupant": occupant, "mechanism": record.get("mechanism", slate.mechanism(role))}
+                if member["mechanism"] == "advisor" and record["invitation"]:
+                    invitation = f"{store.path.name}/{record['invitation']}"
+                    member["invitation"] = invitation
+                    if launch := active.get("advisor_launch"):
+                        values = {"{seat}": seat, "{invitation}": invitation}
+                        member["launch"] = shlex.join([values.get(word, word) for word in launch])
+                ready.append(member)
     if args.json:
         data: dict[str, Any] = {
             "slate": slate.slate_id, "lenses": slate.lenses, "refuters": slate.init_refuters,
             "difficulty_basis": slate.config["cutoff"]["difficulty_basis"],
             "cutoff": cutoff, "agents": agents, "agent_cap": slate.agent_cap,
             "parallelism": slate.parallelism,
-            "review_group": slate.review_group,
             "task_config": slate.task_config,
             "gap_hunt_done": slate.gap_hunt_done,
             "phase": phase, "steps": slate.config["steps"], "caps": slate.config["caps"],
             "plan": plan,
             "seats": slate.seats,
-            "drivers": _drivers(slate.slate_id, args.dir, slate.seats, slate.advisor,
-                                review_group=slate.review_group, r2_workers=slate.parallelism["r2"]),
             "claims": claims, "adhoc_angles": adhoc, "next": step}
+        if store is not None:
+            data["ready"] = ready
+            data["advisor_gaps"] = advisor_gaps
         emit(args.output_mode, {}, [], json_text=json.dumps(data, indent=2))
         return
     advisor = ",".join(seat for seat in slate.seats if slate.mechanism(seat) == "advisor")
@@ -142,6 +167,13 @@ def cmd_status(args: argparse.Namespace) -> None:
              *map(_claim_line, claims), _adhoc_line(adhoc), *_plan_lines(plan)]
     if slate.task_config is not None:
         lines[0] += f" task_config={slate.task_config}"
+    for seat in ready:
+        lines.append(f"READY {seat['seat']} joined={str(seat['joined']).lower()}")
+        if invitation := seat.get("invitation"):
+            lines.append(f"INVITATION {seat['seat']} {invitation}")
+        if launch := seat.get("launch"):
+            lines.append(f"LAUNCH {seat['seat']} {launch}")
+    lines.extend(f"ADVISOR GAP {seat} {message}" for seat, message in advisor_gaps.items())
     emit(args.output_mode, {}, lines, step)
 
 
@@ -150,7 +182,7 @@ def cmd_converged(args: argparse.Namespace) -> None:
     phase = protocol.slate_phase(slate)
     flags = protocol.cut_flags(slate)
     open_ids = {claim.id: claim_phase for claim, claim_phase in slate.open_claims()}
-    pending, disputed = native_launch.pending(slate), []
+    pending, disputed = [], []
     for claim in slate.claims.values():
         if claim.id in open_ids:
             pending.append(f"{claim.id} open in {open_ids[claim.id]}")
@@ -179,18 +211,12 @@ def cmd_coverage(args: argparse.Namespace) -> None:
         lines.append(f"LENS {lens} ran={','.join(row.ran) or '-'} na={','.join(row.na) or '-'} "
                      f"missing={','.join(row.missing) or '-'}")
         lines.extend(f"NA {lens} {angle_id} {reason}" for angle_id, reason in row.na.items())
-    pending = native_launch.pending(slate)
-    if pending:
-        lines.extend(pending)
-        step = _next_step(args, slate)
-    elif any(row.missing for row in coverage.values()):
+    if any(row.missing for row in coverage.values()):
         step = _MISSING + _step(args, "coverage")
     else:
         step = _step(args, "status", "--json")
     data: dict[str, Any] = {"lenses": {lens: {"ran": row.ran, "na": row.na, "missing": row.missing}
                                      for lens, row in coverage.items()}}
-    if native_launch.saved_host(slate) is not None:
-        data["native_turns_pending"] = pending
     emit(args.output_mode, data, lines, step)
 
 
@@ -199,7 +225,8 @@ def _base_slate(args: argparse.Namespace) -> Slate | None:
     if args.base_slate is None:
         return None
     try:
-        return ledger.read(ledger.slate_path(args.dir, args.base_slate), args.base_slate)
+        return ledger.read(ledger.slate_path(args.dir, args.base_slate), args.base_slate,
+                           workflow=_workflow(args, args.base_slate))
     except ledger.LedgerError as exc:
         _refuse(exc.problems)
 
@@ -237,8 +264,14 @@ def cmd_gate(args: argparse.Namespace) -> None:
     path = _path(args)
     if not path.is_file():
         _refuse([f"no slate {args.slate!r} in {args.dir} (expected {path})"])
-    slate = _read(args)
-    problems = _coverage_problems(slate)
+    live = getattr(args, "coordination_store", None)
+    with (nullcontext(live) if live else coordination.saved_store(path)) as saved:
+        args.coordination_store = saved
+        slate = _read(args)
+        problems = _coverage_problems(slate)
+        if (saved and (record := saved.state["slates"].get(args.slate))
+                and record.get("advisor_required") and not advisor_covered(saved, record)):
+            problems.append("this task requires an external advisor")
     for claim, phase in slate.open_claims():
         problems.append(f"{claim.id} is open in {phase}")
     if not slate.cutoff_valid:

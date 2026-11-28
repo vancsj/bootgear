@@ -15,7 +15,7 @@ ALL_NATIVE = ("converge_seats: {main: native_subagent, finder: native_subagent, 
 
 
 def _roles(*roles: str) -> str:
-    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n  startup: early\n"
+    return f"advisor_roles:\n  roles: [{', '.join(roles)}]\n  brief: Act only in these roles.\n  startup: direct\n"
 
 
 class ClaudePackageContractTestCase(unittest.TestCase):

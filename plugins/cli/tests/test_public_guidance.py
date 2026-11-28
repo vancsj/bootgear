@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[3]
 GEAR = ROOT / "plugins/cli/bin/gear"
 LEAVES = [
     ("cli", "setup"),
-    *(("advisor", "channel", name) for name in
-      ("register", "init", "send", "receive", "fetch", "state", "close", "heartbeat", "list", "status", "whoami")),
+    *(("cli", "coordination", name) for name in
+      ("init", "reserve", "join", "replace", "release",
+       "heartbeat", "send", "poll", "complete", "blocked")),
     *(("deputy", "deputy", name) for name in ("candidates", "record", "assert")),
     *(("engine", "task", "session", name) for name in
       ("init", "validate", "read", "recall", "record-decision", "update-todo", "next-question-id", "record-pitch", "close", "write-ticket")),
@@ -48,6 +49,7 @@ def test_provider_help_has_a_working_call_shape(host, route):
 @pytest.mark.parametrize("host", ["claude", "codex"])
 @pytest.mark.parametrize("route", [
     ("cli", "session-start"),
+    ("cli", "coordination-hook"),
     ("advisor", "hook"),
     ("deputy", "hook"),
     ("engine", "adapter"),
@@ -64,11 +66,10 @@ def test_gear_builtin_help_is_guidance(command):
     help_for("codex", command)
 
 
-def test_advisor_help_exposes_values_and_response_condition():
-    output = help_for("codex", "advisor", "channel", "send")
-    for value in ("asker", "listener", "request", "response", "stop", "stdin"):
-        assert value in output
-    assert "parent" in output.lower()
+def test_coordination_help_exposes_delivery_acknowledgement():
+    output = help_for("codex", "cli", "coordination", "poll")
+    assert "--ack" in output
+    assert "delivery ID" in output
 
 
 def test_engine_force_help_names_the_preserved_boundary():

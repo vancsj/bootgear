@@ -12,7 +12,7 @@ from typing import Any
 
 from bootgear_cli.clikit import current_program
 
-from . import assignments, effort, model, native_launch
+from . import assignments, effort, model
 from .model import Claim, Slate
 
 
@@ -237,7 +237,7 @@ def claim_phase(slate: Slate, claim: Claim) -> str | None:
 def _find_open(slate: Slate) -> bool:
     from .render import coverage
 
-    return bool(native_launch.unfinished_finders(slate)) or any(row.missing for row in coverage(slate).values())
+    return any(row.missing for row in coverage(slate).values())
 
 
 def slate_phase(slate: Slate) -> str:
@@ -251,15 +251,6 @@ def slate_phase(slate: Slate) -> str:
         if any(claim_open(slate, c, phase, unverified) for c in slate.claims.values()):
             return phase
     return "done" if slate.cutoff_valid else "cutoff"
-
-
-def gap_hunt_open(slate: Slate, phase: str) -> bool:
-    if assignments.parallel(slate):
-        return phase == "gap-hunt"
-    return (slate.init_refuters == 2 and slate.config["steps"]["gap_hunt"]
-            and phase not in ("find", "done")
-            and not any(event["event"] in ("escalate", "cut", "clean", "attack")
-                        for event in slate.events))
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +431,7 @@ def cutoff_results(rows: list[model.CutoffRow]) -> list[dict[str, Any]]:
 
 def converged(slate: Slate) -> bool:
     """The slate is done and no claim is `disputed` with `cut: no`."""
-    if slate_phase(slate) != "done" or native_launch.pending(slate):
+    if slate_phase(slate) != "done":
         return False
     flags = cut_flags(slate)
     return not any(claim.state.status == "disputed" and not flags[claim.id]

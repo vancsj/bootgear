@@ -156,8 +156,6 @@ For a native mechanism, use a subagent.
 
 Use `--host codex`. If Gear is absent, run `codex plugin add cli@bootgear`.
 Use a native subagent for a native seat. Treat a spawn timeout as unavailability.
-For an advisor, use a Claude Code listener with `--mode asking`, `channel`, and `review`.
-Use the recorded debate channel, never `r2`. A missing live listener makes the party unavailable.
-For deferred startup without a pairing, run the settled launcher at the first advisor request.
-Pair through Advisor and record the debate channel. Preserve the `r2` channel in the decision.
-For early startup, require the existing pairing. Reclaim its live seat before each request through Advisor's scan and claim.
+Use direct advice when the settlement selects `direct`.
+For persistent advice, send the first request to the debate seat and run the approved launcher.
+Reuse the seat for later requests. Report a missing listener through the unavailable-party path.

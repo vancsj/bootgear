@@ -46,6 +46,7 @@ def test_full_depth_allocation_with_gap_hunt(cv: Converge) -> None:
     cv.cover()
     lens_claim = cv.file(agent=FINDER, claim="None crashes the parser")
     gap = cv.file(agent=R2, origin="gap-hunt", claim="ticket asks for retries")
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     cv.ok("escalate", "s1", "--as", FINDER, "--claim", lens_claim)
     cv.ok("escalate", "s1", "--as", R2, "--claim", gap)
     _cut(cv, lens_claim, "before", 1, "wrong-output")

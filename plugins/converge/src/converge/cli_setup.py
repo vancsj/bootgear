@@ -8,14 +8,15 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
-from bootgear_cli.clikit import emit
+from bootgear_cli import coordination
+from bootgear_cli.clikit import argv_template, emit, gear_command
 
 from . import angles as angles_mod
-from . import assignments, ledger, seats
+from . import assignments, ledger, native_profiles, seats
 from . import config as config_mod
-from .cli_advisor import _driver_lines, _drivers, launcher_problems
 from .cli_common import (
     CATALOG,
     _ids,
@@ -24,6 +25,7 @@ from .cli_common import (
     _read,
     _refuse,
     _refuse_next,
+    _workflow,
     _write,
 )
 from .model import Slate
@@ -91,7 +93,7 @@ def _since_problems(args: argparse.Namespace, root: Path | None
     if not prev_path.is_file():
         return None, [f"--since: prev exists: no slate {args.since!r} in {args.dir}"]
     try:
-        prev = ledger.read(prev_path, args.since)
+        prev = ledger.read(prev_path, args.since, workflow=_workflow(args, args.since))
     except ledger.LedgerError as exc:
         return None, [f"--since: prev exists: slate {args.since!r} is unreadable: "
                       + "; ".join(exc.problems)]
@@ -169,7 +171,7 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
         else:
             named, brief, defaulted = seats.seat_roles(roles, seats.ADVISOR_SEAT)
             fields["advisor"] = {"roles": named, "brief": brief,
-                                 "startup": roles.get("startup", "early") if roles is not None else "early"}
+                                 "startup": roles.get("startup", "direct") if roles is not None else "direct"}
             if roles and "launcher" in roles:
                 fields["advisor"]["launcher"] = roles["launcher"]
             if defaulted:
@@ -182,38 +184,38 @@ def _init_seats(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
 # write commands
 
 
-def _review_inputs(args: argparse.Namespace, project_root: Path) -> tuple[str, Path | None]:
-    if args.review_group is not None:
-        return args.review_group, args.config
-    prior = args.continue_from
-    if prior is None:
-        return str(_path(args).resolve()), args.config
-    try:
-        path = ledger.slate_path(args.dir, prior)
-        previous = ledger.read(path, prior)
-    except ledger.LedgerError as error:
-        _refuse(error.problems, "cannot continue standalone review")
-    if previous.project_root != str(project_root):
-        _refuse([f"preceding slate {prior!r} belongs to a different project"])
-    saved = Path(previous.task_config) if previous.task_config is not None else None
-    return previous.review_group or str(path.resolve()), args.config or saved
-
-
-def _r2_retry_problems(counts: dict[str, int], approved: list[int]) -> list[str]:
-    expected = {"finder": approved[0], "r1": approved[1], "r2": 1}
-    problems = []
-    for seat, value in expected.items():
-        if value < 1:
-            problems.append(f"approved {seat} count must be positive; got {value}")
-        elif counts[seat] != value:
-            problems.append(f"parallelism.{seat} is {counts[seat]}, expected {value} for this r2-only retry")
-    return problems
-
-
 def cmd_init(args: argparse.Namespace) -> None:
+    if args.slate is not None:
+        if args.require_advisor:
+            _refuse(["--require-advisor needs an active coordination store"])
+        args.dir = args.dir or ledger.DEFAULT_DIR.expanduser()
+        if args.agent is None:
+            _refuse(["explicit slate initialization requires --as"])
+        _init(args)
+        return
+    if args.dir is not None or args.agent is not None:
+        _refuse(["the active slate derives its directory and seat from the coordination store"])
+    with coordination.transaction(coordination.Caller.from_environment()) as store:
+        args.slate = f"review-{uuid4().hex[:16]}"
+        args.dir = store.path / "slates"
+        args.agent = "main"
+        args.coordination_store = store
+        coordination.activate(store, args.slate, "converge", "plan")
+        _init(args, store)
+
+
+def _init(args: argparse.Namespace, store: coordination.Store | None = None) -> None:
     seat_fields, notes = _init_seats(args)
+    launcher = seat_fields.get("advisor", {}).get("launcher")
+    launch_argv = None
+    if store is not None and launcher:
+        try:
+            markers = ("{invitation}", "{seat}") if "{seat}" in launcher else ("{invitation}",)
+            launch_argv = argv_template(launcher, markers)
+        except ValueError as error:
+            _refuse([f"advisor launcher: {error}"])
     project_root = args.project_root.expanduser().resolve()
-    review_group, task_config = _review_inputs(args, project_root)
+    task_config = args.config
     try:
         resolved = config_mod.resolve(project_root, task_config, args.defaults)
     except config_mod.ConfigError as exc:
@@ -226,20 +228,6 @@ def cmd_init(args: argparse.Namespace) -> None:
     if any(not rule.strip() for rule in args.report_rule):
         _refuse(["--report-rule requires a nonempty rule ID"])
     counts = effective["parallelism"]
-    if args.r2_only_retry is not None:
-        problems = _r2_retry_problems(counts, args.r2_only_retry)
-        if problems:
-            _refuse_next(args, "invalid r2-only retry", problems,
-                         "Restore the approved finder and r1 counts and set r2 to 1 before retrying init.")
-    r2_workers = counts["r2"]
-    if r2_workers > 1 and seat_fields.get("seats", {}).get("r2") == "advisor":
-        problems = launcher_problems(seat_fields["advisor"])
-        if problems:
-            _refuse_next(args, "invalid parallel advisor launcher", problems,
-                         "For a parallel launch, use an approved invitation-aware launcher. "
-                         "For an approved task override of parallelism.r2 only, set r2 to 1. "
-                         f"Retry with --r2-only-retry {counts['finder']} {counts['r1']}. "
-                         "Preserve finder and r1 counts and other task settings.")
     try:
         rows = angles_mod.resolve(args.angles, effective, Path(resolved["project_root"]))
     except angles_mod.AngleError as exc:
@@ -248,8 +236,9 @@ def cmd_init(args: argparse.Namespace) -> None:
         effective = config_mod.rereview(effective)
     event: dict[str, Any] = {"event": "init", "lenses": _ids(args.lenses), "angles": rows,
                              "config": effective, "refuters": args.refuters,
-                             "project_root": resolved["project_root"],
-                             "review_group": review_group}
+                             "project_root": resolved["project_root"]}
+    if store is not None:
+        event["coordinated"] = True
     if task_config is not None:
         event["task_config"] = str(task_config.resolve())
     if effective.get("finder_routing") is not None:
@@ -264,6 +253,14 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.review_pass is not None:
         event["pass"] = args.review_pass
     event.update(seat_fields)
+    participants = None
+    if store is not None:
+        slate = Slate(args.slate)
+        initial = {**event, "as": args.agent}
+        if problems := ledger.validate_event(slate, initial):
+            _refuse(problems)
+        ledger.apply_event(slate, initial)
+        participants = _prepare_seats(store, slate, launch_argv, args.require_advisor)
     problems = _snapshot_problems(args)
     if not args.snapshot:
         if problems:
@@ -273,7 +270,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         event = _init_snapshot(args, event, problems)
     path = _path(args)
     data: dict[str, Any] = {"slate": args.slate, "lenses": event["lenses"], "angles": len(rows),
-                            "path": str(path), "review_group": event["review_group"],
+                            "path": str(path),
                             "parallelism": effective["parallelism"]}
     workers = " ".join(f"{seat}={counts[seat]}" for seat in ("finder", "r1", "r2"))
     head = (f"INIT {args.slate} lenses={','.join(event['lenses']) or '-'} "
@@ -289,21 +286,61 @@ def cmd_init(args: argparse.Namespace) -> None:
         delta = f"git diff {event['since']['snapshot']} {event['snapshot']}"
         data["since"], data["diff"] = event["since"]["slate"], delta
         lines.append(f"DIFF since {event['since']['slate']}: {delta}")
+    if participants is not None:
+        data["participants"] = participants
+        lines.extend("SEAT " + " ".join(f"{key}={value}" for key, value in member.items()
+                                        if value is not None) for member in participants)
+        emit(args.output_mode, data, lines, "start the invited native participants. Check status for ready advisors. Run "
+             + gear_command("cli", "coordination") + " poll")
+        return
     slate_seats = event.get("seats", {})
-    drivers = _drivers(args.slate, args.dir, slate_seats, event.get("advisor"),
-                       review_group=event["review_group"], r2_workers=r2_workers)
-    if drivers or notes:
-        data.update(seats=slate_seats, drivers=drivers, notes=notes)
+    if event.get("advisor") or notes:
+        data.update(seats=slate_seats, notes=notes)
         lines.append("SEATS " + " ".join(f"{seat}={m}" for seat, m in slate_seats.items()))
-        for driver in drivers:
-            lines.extend(_driver_lines(driver))
         lines.extend(f"NOTE {note}" for note in notes)
-    early = event.get("advisor", {}).get("startup") != "deferred"
-    step = (("; ".join(driver["prepare"] for driver in drivers) or None) if early
-            else _next_step(args, _read(args)))
-    if step is None and "native_host" in event:
-        step = _next_step(args, _read(args))
-    emit(args.output_mode, data, lines, step)
+    next_step = _next_step(args, _read(args)) if "native_host" in event else None
+    emit(args.output_mode, data, lines, next_step)
+
+
+def _prepare_seats(store: coordination.Store, slate: Slate,
+                   launch_argv: list[str] | None, require_advisor: bool) -> list[dict[str, Any]]:
+    roster = {**assignments.workers(slate), "cutter": "cutter"}
+    active = coordination.active_slate(store)
+    assert active is not None
+    active["roster"] = roster
+    advisors = [seat for seat, role in roster.items() if slate.mechanism(role) == "advisor"]
+    if require_advisor and not advisors:
+        _refuse(["this task requires an external advisor seat in its settlement"])
+    if require_advisor and all(
+            (entry := store.state["seats"].get(seat)) and entry["occupant"] and not coordination.linked(store, seat)
+            for seat in advisors):
+        _refuse(["release a seated native refuter before opening a review that requires an external advisor"])
+    active.update(advisors=advisors, advisor_launch=launch_argv, advisor_required=require_advisor, advisor_gaps={})
+    profiles = native_profiles.profiles(slate)
+    participants = []
+    for seat, role in roster.items():
+        reservation = _seat_invitation(store, seat, role)
+        record = store.state["seats"][seat]
+        if seat in advisors:
+            if record["occupant"] and not coordination.linked(store, seat):
+                active["advisor_gaps"][seat] = "Using the seated native participant."
+                record["mechanism"] = "native_subagent"
+            else:
+                record["mechanism"] = "advisor"
+                reservation.pop("invitation", None)
+        else:
+            record.pop("mechanism", None)
+        member = {**reservation, "mechanism": record.get("mechanism", slate.mechanism(role)),
+                  "profile": profiles.get(seat)}
+        participants.append(member)
+    return participants
+
+
+def _seat_invitation(store: coordination.Store, seat: str, role: str) -> dict[str, Any]:
+    previous = store.state["seats"].get(seat)
+    if previous and previous["occupant"] and previous["role"] == role:
+        return {"seat": seat, "role": role, "status": "joined"}
+    return coordination.reserve(store, seat, role)
 
 
 def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
@@ -320,7 +357,7 @@ def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
     path = _path(args)
     if path.is_file():
         try:
-            ledger.read(path, args.slate)
+            ledger.read(path, args.slate, workflow=_workflow(args, args.slate))
             problems.append(f"slate {args.slate!r} is already initialised in {args.dir}")
         except ledger.LedgerError as exc:
             if path.stat().st_size:

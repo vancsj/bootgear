@@ -8,7 +8,7 @@ from . import (
     assignments,
     ledger,
     model,
-    native_launch,
+    native_profiles,
     protocol,
     protocol_event_checks,
     render,
@@ -16,13 +16,13 @@ from . import (
 )
 from .model import Claim, Slate
 
-ACTION_KINDS = tuple(kind for kind in model.EVENTS if kind not in ("init", "launch", "launch-result"))
+ACTION_KINDS = tuple(kind for kind in model.EVENTS if kind != "init")
 META = {"slate", "source_seq", "role", "seat", "action", "context"}
 COMPUTED = {"event", "as", "seq", "ts", "id", "results", "evidence_sha256"}
 
 
 def seat(slate: Slate, actor: str, requested: str | None = None) -> str:
-    routed = (slate.finder_plan is not None and (requested == "finder" or actor == "finder")) or actor in native_launch.profiles(slate)
+    routed = (slate.finder_plan is not None and (requested == "finder" or actor == "finder")) or actor in native_profiles.profiles(slate)
     if assignments.parallel(slate) or routed:
         assigned = assignments.workers(slate).get(actor)
         if assigned is not None:
@@ -31,7 +31,7 @@ def seat(slate: Slate, actor: str, requested: str | None = None) -> str:
             return assigned
         if requested in model.WORKER_SEATS or actor in model.WORKER_SEATS:
             raise ledger.LedgerError([f"work: {actor} has no configured worker assignment"])
-    if requested in ("r1", "r2", "cutter") and actor != requested and requested in native_launch.profiles(slate):
+    if requested in ("r1", "r2", "cutter") and actor != requested and requested in native_profiles.profiles(slate):
         raise ledger.LedgerError([f"work: {requested} belongs to native identity {requested}"])
     if requested is not None:
         return requested
@@ -107,22 +107,17 @@ def _workers(slate: Slate, phase: str, plan: list[list[dict[str, Any]]],
     if phase == "find":
         ready.update(find_owners[lens, angle] for lens, coverage in render.coverage(slate).items()
                      for angle in coverage.missing)
-    if protocol.gap_hunt_open(slate, phase):
+    if phase == "gap-hunt":
         ready.add("r2")
-    blocked = bool(native_launch.blocked(slate))
     result = []
-    profiles = native_launch.profiles(slate)
+    profiles = native_profiles.profiles(slate)
     for actor, role in {**assignments.workers(slate), **({"cutter": "cutter"} if "cutter" in profiles else {})}.items():
         scope = _assignment(slate, actor, role, find_owners)
         if any(scope.values()) or actor in profiles:
             row = {"id": actor, "seat": role, "mechanism": slate.mechanism(role),
-                   "ready": not blocked and actor in ready, "assignment": scope}
+                   "ready": actor in ready, "assignment": scope}
             if actor in profiles:
                 row["profile"] = profiles[actor]
-                row["launch"] = native_launch.work_state(slate, actor)
-                row["ready"] = not blocked and row["ready"] and row["launch"]["state"] != "blocked"
-                if role == "finder" and phase == "find":
-                    row["ready"] = not blocked and row["launch"]["state"] == "ready"
             result.append(row)
     return result
 
@@ -176,7 +171,7 @@ def package(slate: Slate, actor: str, role_host: str,
     if bound is not None and bound != actor:
         raise ledger.LedgerError([f"work: {role} is {bound}; use that --as value"])
     phase = protocol.slate_phase(slate)
-    profiles = native_launch.profiles(slate)
+    profiles = native_profiles.profiles(slate)
     find_owners = assignments.find_owners(slate) if parallel or routed or profiles else {}
     plan = protocol.batch_plan(slate)
     actions: list[dict[str, Any]] = []
@@ -190,8 +185,7 @@ def package(slate: Slate, actor: str, role_host: str,
                  **fields}
         actions.append({"input": value, "required": required or [], "conditions": conditions or []})
 
-    launch = native_launch.work_state(slate, actor) if actor in profiles else None
-    if phase == "find" and role == "finder" and (launch is None or launch["state"] == "attempted"):
+    if phase == "find" and role == "finder":
         for lens, coverage in render.coverage(slate).items():
             for angle in coverage.missing:
                 if (parallel or routed) and find_owners[lens, angle] != actor:
@@ -209,14 +203,13 @@ def package(slate: Slate, actor: str, role_host: str,
                 add("angle-na", {"phase": "find", "lens": lens, "angle": angle, "reason": ""},
                     ["reason"], ["use only when the angle's tell does not apply"])
 
-    gap_open = protocol.gap_hunt_open(slate, phase)
-    if role == "r2" and gap_open and (not parallel or actor == "r2"):
+    if actor == "r2" and phase == "gap-hunt":
         items.append({"action": "gap-hunt", "rule": "find what the lenses missed; report when done"})
         definitions.update(("find", angle["id"]) for angle in slate.angles if angle["tag"] == "find")
         add("file", {"origin": "gap-hunt", "lens": "", "angle": "", "loc": "", "claim": "",
                      "trigger": "", "evidence": "", "tier": ""},
             ["lens", "angle", "loc", "claim", "trigger", "evidence", "tier"])
-        if parallel:
+        if not slate.coordinated:
             add("gap-hunt-done", {}, conditions=["record after gap hunt, including with zero claims"])
 
     for chunk in plan:
@@ -307,9 +300,6 @@ def package(slate: Slate, actor: str, role_host: str,
                             values["review_slate"] = ""
                         add("fix-check", values, ["evidence", *(["review_slate"] if outcome == "pass" else [])])
 
-    if native_launch.blocked(slate) or launch is not None and launch["state"] == "ready":
-        actions.clear()
-        items.clear()
     state = "ready" if actions else "complete" if phase == "done" else "waiting"
     result: dict[str, Any] = {
             "slate": slate.slate_id, "source_seq": len(slate.events), "role": actor, "seat": role,
@@ -328,8 +318,6 @@ def package(slate: Slate, actor: str, role_host: str,
             result["workers"] = _workers(slate, phase, plan, find_owners)
             if slate.finder_plan is not None:
                 result["unused_finder_lenses"] = slate.finder_plan.unused_lenses
-            if blocked := native_launch.blocked(slate):
-                result.update(state="blocked", blocked=blocked)
         elif role in model.WORKER_SEATS:
             scope = _assignment(slate, actor, role, find_owners)
             result["assignment"] = scope
@@ -338,23 +326,9 @@ def package(slate: Slate, actor: str, role_host: str,
                     result["state"] = "complete"
                 else:
                     result["waiting_for_reply"] = _waiting_replies(slate, actor, role, plan)
-    if launch is not None:
+    if actor in profiles:
         result["profile"] = profiles[actor]
-        result["launch"] = launch
-        if phase == "find" and not actions and launch["state"] == "attempted":
-            result["state"] = "complete"
-        elif launch["state"] == "blocked":
-            result["state"] = "blocked"
     return result
-
-
-def dispatch_choices(package: dict[str, Any], active: set[str]) -> set[tuple[str, str, str]]:
-    phase = package["phase"]
-    ready = {worker["id"] for worker in package["workers"] if worker["ready"]}
-    if any(item.get("agent_role") == "cutter" for item in package["items"]):
-        ready.add("cutter")
-    return ({(phase, "worker", actor) for actor in ready - active}
-            | {(phase, "action", action["input"]["action"]) for action in package["actions"]})
 
 
 def event(slate: Slate, value: dict[str, Any], actor: str) -> dict[str, Any]:

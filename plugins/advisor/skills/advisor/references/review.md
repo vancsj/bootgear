@@ -8,7 +8,7 @@ For direct communication, start with:
 
 > You are an adversarial advisor. Use only the text below. Do not run commands, read files, or fetch web sources.
 
-For a channel, start with:
+For persistent advice, start with:
 
 > You are an adversarial advisor. Inspect the named primary artifacts and sources independently within the assigned scope.
 

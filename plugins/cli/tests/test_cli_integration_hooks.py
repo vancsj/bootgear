@@ -47,7 +47,10 @@ class GearIntegrationTests(GearIntegrationTestsCase):
         ):
             with self.subTest(manifest=manifest):
                 hooks = json.loads((CLI_ROOT / "hooks" / manifest).read_text(encoding="utf-8"))["hooks"]
-                self.assertEqual(sorted(hooks), ["SessionStart"])
+                self.assertEqual(sorted(hooks), ["PreToolUse", "SessionStart"])
+                self.assertEqual(hooks["PreToolUse"][0]["matcher"], "Bash")
+                self.assertEqual(hooks["PreToolUse"][0]["hooks"][0]["command"],
+                                 f'"{variable}/hooks/gear" --host {host} coordination-hook')
                 groups = hooks["SessionStart"]
                 self.assertEqual([group.get("matcher") for group in groups], [matcher])
                 self.assertEqual([hook["command"] for group in groups for hook in group["hooks"]],

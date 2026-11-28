@@ -3,3 +3,6 @@ name = "converge"
 
 [commands.converge]
 exec = ["python3", "-m", "converge.cli"]
+
+[commands.plan]
+exec = ["python3", "-m", "converge.plan"]

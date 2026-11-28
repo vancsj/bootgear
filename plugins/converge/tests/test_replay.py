@@ -65,6 +65,7 @@ def _hydrate(cv: Converge, slate: str, review_pass: int, rows: list[dict[str, ob
         finders[row["id"]] = R2
         assert cv.file(slate, R2, str(row["lens"]), origin="gap-hunt", claim=str(row["claim"]),
                        tier=str(row["tier"])) == row["id"]
+    cv.ok("gap-hunt-done", slate, "--as", R2)
     for row in rows:
         cid = str(row["id"])
         cv.cut(cid, 1, CUTTER, "before", str(row["impact"]), str(row["size"]), str(row["reach"]),

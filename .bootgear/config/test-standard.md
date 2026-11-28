@@ -28,6 +28,10 @@ Such a change can be to the manifest, dependencies, hooks, `bin/` script wrapper
 Test valid caller inputs and common caller mistakes through the affected public CLI.
 Verify required output fields, grouped problems, and unchanged persistent state after a refusal.
 Cover shared behavior on both supported hosts. Do not test document wording as behavior.
+For coordination changes, test default lookup and delivery through the public commands.
+Where a change affects seat replacement or retries, check retained work and refusal of the former occupant.
+For hook changes, verify the output and unchanged store state. Check the Stop guard with the store lock held.
+For planner changes, drive a nonempty slate through successive assignments.
 
 ## R007 [must]
 Test forced and ordinary transitions separately.

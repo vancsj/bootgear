@@ -3,12 +3,14 @@
 
 ## Plugins and skills
 
-- Each plugin must install and work on its own. A Claude plugin that needs another plugin declares it in `dependencies`. Codex has no dependencies. A Codex skill that calls a sibling skill states what to do if the sibling is missing. A plugin never assumes that a sibling is installed.
+- Each plugin installs and works on its own. Claude plugins declare dependencies. Codex skills give fallback steps for missing siblings. Plugins never assume siblings are installed.
 - Reference only these items. They are the skills, plugins and tools of bootgear, host built-ins, and well-known skills or plugins from outside this repo. Never reference a local personal skill or plugin. The local denylist can carry those names.
 - Skills use only the public interface of other skills. It includes the skill name, modes, handbacks, and `settings`. Run `settings` to learn the callee's settings. Keep callee file reads out of skills. Skill prose must avoid references to and dependencies on the callee's files, internals, or script flags. A CLI may print a driver step that calls another plugin's script.
 - Built-in defaults (state machines, angles, skills) are project-free. Keep anything that is specific to one project in the `.bootgear/config/` of that project.
-- Host parity: when the Claude and Codex plugins share a behavior, change it on both hosts in the same change.
+- Change shared behavior on both hosts in one change.
 - No back compatibility. Do not keep an old version, mode, or format for compatibility or dogfooding. Replace the mechanism in place, delete its paths and tests, and hand-rewrite the run's own old ledgers to the new format.
+- Use one coordination store per shared host ID. Seat work survives replacement. Claim slates hold evidence and status.
+- Start persistent advisors on demand. The requester chooses their launcher, model, and effort.
 - Version bump on every plugin change. A commit that touches a file in a plugin's directory bumps that plugin's `.claude-plugin/plugin.json` `version`, in the same commit or the next one. Do not limit this to contract changes.
 - Shared sections of the Claude and Codex plugins and skills use host-neutral references, terms, paths, and invocation names. Put host-specific adapters in explicit host sections.
 

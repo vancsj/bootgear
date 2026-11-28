@@ -317,9 +317,9 @@ def _reconcile_for_route(root: Path, *, refresh: bool = False) -> Reconciliation
     return report
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    os.environ.pop("BOOTGEAR_PROG", None)
+def command_parser(*, add_help: bool = True, exit_on_error: bool = True) -> GearParser:
     parser = GearParser(prog="gear", description=__doc__,
+                        add_help=add_help, exit_on_error=exit_on_error,
                         epilog="commands: list, doctor, reconcile, event, <plugin> <command>; example: gear list")
     parser.add_argument("--host", choices=("claude", "codex"),
                         help="the calling host; default: $BOOTGEAR_HOST, else the host of the session environment")
@@ -328,6 +328,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_flags.add_argument("--json", action="store_true")
     output_flags.add_argument("--prose", action="store_true")
     parser.add_argument("route", nargs=argparse.REMAINDER)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    os.environ.pop("BOOTGEAR_PROG", None)
+    parser = command_parser()
     args = parser.parse_args(argv)
     from bootgear_cli import clikit
 

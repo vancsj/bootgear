@@ -1,6 +1,6 @@
 interface:
   display_name: "Advisor"
   short_description: "Ask Claude Code or serve as its advisor"
-  default_prompt: "Use $advisor:advisor --mode listening to listen for Claude Code requests. Send questions and reports through the mailbox and continue listening."
+  default_prompt: "Use $advisor:advisor --mode listening to take Claude Code assignments through the coordination store."
 policy:
   allow_implicit_invocation: true

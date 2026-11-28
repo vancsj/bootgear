@@ -71,7 +71,7 @@ Written once by `clarify` into the session ledger and never rewritten. It holds:
   `session validate` refuse every violation in one message; a `codex_role`
   string is accepted unchecked. `task config resolve --name converge-seats`
   prints the five-seat mapping;
-  startup is the user's `early` or `deferred` choice. Deferred channel startup also stores
+  startup is the user's `early` or `deferred` choice. Deferred advisor startup stores
   the approved single-line `launcher`. Early listeners are paired during clarify; deferred
   listeners start at their first advisor task. Direct calls need no paired listener;
 - `autonomy`: `no_further_questions` and an explicit list of permitted mutations;
@@ -111,8 +111,7 @@ then:
   (a fresh sub-agent) or `advisor` (the other vendor's host). On Claude Code an
   `advisor` party is a one-shot `advisor` call asking Codex for
   counterexamples, and `adversarial-reviewer` without a `mechanism` uses it. On
-  Codex an `advisor` party is a Claude Code listener over `channel`, on a debate
-  channel of its own, never the converge `r2` listener's;
+  Codex an `advisor` party is a Claude Code listener in a debate seat in the shared coordination store;
 - records unavailable or empty parties as `UNAVAILABLE` / `NO-RESPONSE` and
   owes one retry round per absence episode;
 - closes with one of `unanimous_convergence` (only after an angle round that

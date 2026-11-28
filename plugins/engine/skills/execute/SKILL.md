@@ -18,13 +18,10 @@ Return a final pitch and closed ledger to the user.
 
 ### Start or resume
 
-Honor settled `advisor_roles.startup` and `launcher`. Pass them unchanged to debate and Converge.
-Use recorded early pairings. Let the consumer start a deferred listener at its first advisor task.
-Record each pairing with `session record-decision` in `solo` mode, as `advisor channels: r2=<n>, debate=<m>`.
-Preserve the other channel. On a stale peer, use the consumer's unavailable outcome. Never start a replacement.
-For parallel `r2`, use the consumer's worker reservations. Use the run ID as their review group.
-Keep the original asker and worker IDs across visits. Record any reservation references as evidence.
-Keep direct dispatch unchanged.
+Honor the settled advisor startup and launcher. Pass them to Debate and Converge.
+Reuse the recorded seats. The consumer starts a deferred advisor when its first task is ready.
+Use the same seat to resume a stale participant. Replace its participant only when resume fails.
+Record advisor seat assignments in the run ledger. Direct advice follows the Advisor skill.
 
 ### Run each iteration
 

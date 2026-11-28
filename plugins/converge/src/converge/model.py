@@ -26,7 +26,7 @@ RESULT = ("fix-now", "fixed", "finding", "follow-up", "killed")
 PHASE = ("find", "attack")
 ORIGIN = ("lens", "gap-hunt")
 EVENTS = ("init", "file", "escalate", "find-run", "angle-na", "gap-hunt-done", "clean", "attack", "reply", "verdict", "cut",
-          "rebut", "accept", "cutoff", "fix-check", "launch", "launch-result")
+          "rebut", "accept", "cutoff", "fix-check")
 
 # Every cut rates these; `rate` is an integer `>= 0`. An after cut also rates `AFTER_FIELDS`.
 CUT_FIELDS = ("impact", "size", "reach", "rate")
@@ -104,7 +104,6 @@ class Slate:
     # The init's resolved --project-root, against which patch and loc paths resolve.
     project_root: str | None = None
     review_pass: int | None = None
-    review_group: str | None = None
     task_config: str | None = None
     since: dict[str, str] | None = None
     # Seat -> mechanism from init; a seat not recorded is native_subagent.
@@ -119,8 +118,8 @@ class Slate:
     # The init event's refuter seat count, 1 or 2.
     init_refuters: int = 2
     gap_hunt_done: bool = False
+    coordinated: bool = False
     finder_plan: Plan | None = None
-    native_launches: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def initialised(self) -> bool:

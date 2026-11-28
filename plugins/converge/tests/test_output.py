@@ -20,7 +20,6 @@ from conftest import (
     FINDER,
     GEAR_ARGS,
     GEAR_COMMAND,
-    HOST,
     MAIN,
     PLUGIN_DIR,
     R1,
@@ -90,7 +89,7 @@ def _next(cv: Converge, rest: str) -> str:
 
 def _writer_next(cv: Converge, actor: str, structured: bool = False) -> str:
     prefix = "refresh your work: " if structured else "report the result to main; refresh your work: "
-    return prefix + _next(cv, f"work s1 --dir {{dir}} --as {actor} --role-host {HOST}")
+    return prefix + GEAR_COMMAND.removesuffix(" converge converge") + " cli coordination poll"
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +102,7 @@ def test_explicit_json_is_json_for_every_command(cv: Converge) -> None:
     plan = _next(cv, "status s1 --dir {dir} --json")
     init = _json(cv, *_init_args(cv))
     assert init == {"slate": "s1", "lenses": ["correctness", "security"], "angles": init["angles"],
-                    "path": str(cv.path()), "review_group": str(cv.path().resolve()),
+                    "path": str(cv.path()),
                     "task_config": str(cv.root / "steps.yaml"),
                     "parallelism": {"finder": 1, "r1": 1, "r2": 1, "max_workers": 4}}
     assert isinstance(init["angles"], int) and init["angles"] > 0

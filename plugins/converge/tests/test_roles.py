@@ -40,5 +40,6 @@ def test_gap_hunt_finder_may_not_attack_its_claim(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "none", "escalate": False}})
     cv.cover()
     gap = cv.file(agent=R2, lens="gap-hunt", origin="gap-hunt", claim="ticket asks for retries")
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     assert any(("attack: r2 filed F001 and may not attack it") in problem for problem in cv.check(gap, BATCH_1[0], agent=R2))
     assert cv.check(gap, BATCH_1[0], agent=R1) == []

@@ -132,7 +132,7 @@ Use cli:gear to find the literal Gear path.
 | [review](plugins/review) | PR review: lens finders and a gap hunt, with every finding settled through `converge`; installs `converge` with it |
 | [spec](plugins/spec) | requirements and design for `engine`'s design-doc and ticket-to-pr runs. It works on its own too. |
 | [test](plugins/test) | test writing, running, and failure triage for `engine`'s triage and ticket-to-pr runs; works on its own too |
-| [advisor](plugins/advisor) | pairs Claude Code and Codex CLI through a shared mailbox, or makes a one-shot call to Codex |
+| [advisor](plugins/advisor) | pairs Claude Code and Codex CLI through the coordination store or sends a one-shot request |
 | [deputy](plugins/deputy) | answers a judgement question from your recorded decisions, or escalates it to you, and reminds the AI to ask it before it asks you; installs `memory-ledger` with it on Claude Code, and needs `memory-ledger` installed on Codex |
 
 ### Codex CLI
@@ -143,8 +143,7 @@ The same installer prepares selected plugins and their declared dependencies.
 Start an engine run with `$engine:start`. Set up the ledger with `$memory-ledger:setup`.
 Trust plugin hooks through the native `/hooks` interface when Codex requests it.
 
-`advisor` pairs a Codex session with a Claude Code listener through a shared mailbox.
-Claude Code can also send direct requests to Codex.
+`advisor` supports persistent advice and one-shot requests between Claude Code and Codex CLI.
 
 ## Status
 

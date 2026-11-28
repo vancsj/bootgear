@@ -1,7 +1,6 @@
 import json
 
 import yaml
-from gear_commands import HOST
 from task_types_test_support import (
     CUT_EVIDENCE,
     EVERY_CLAIM_RULE,
@@ -44,22 +43,15 @@ class GateChecks(Scratch):
                 self.assertEqual(status.returncode, 0, status.stderr)
                 self.assertNotIn("gap hunt", status.stdout)
                 self.assertIn("next: escalate: finder escalate F001", status.stdout)
-                work = self._converge("work", f"gap-{profile}", "--dir", str(self.ledgers),
-                                      "--as", "r2", "--role-host", HOST, "--json")
-                self.assertEqual(work.returncode, 0, work.stderr)
-                self.assertFalse(any(item["action"] == "gap-hunt"
-                                     for item in json.loads(work.stdout)["items"]))
         # Positive control: the same profile without its `steps` opens the gap hunt.
         without_steps = _load_yaml(TRIAGE_PROFILES["product"])
         without_steps.pop("steps", None)
         control = self.tmp / "cutoff-no-steps.yaml"
         control.write_text(yaml.safe_dump(without_steps))
         self._filed_and_covered("gap-on", control)
-        work = self._converge("work", "gap-on", "--dir", str(self.ledgers),
-                              "--as", "r2", "--role-host", HOST, "--json")
-        self.assertEqual(work.returncode, 0, work.stderr)
-        self.assertTrue(any(item["action"] == "gap-hunt"
-                            for item in json.loads(work.stdout)["items"]))
+        status = self._converge("status", "gap-on", "--dir", str(self.ledgers))
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertIn("gap hunt", status.stdout)
 
     def test_triage_profiles_attack_a_claim_rated_outside_the_product_rule(self):
         ratings = (("cosmetic", "normal"), ("clarity", "unreachable"), ("cosmetic", "unreachable"))

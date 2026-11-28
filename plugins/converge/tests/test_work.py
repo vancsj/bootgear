@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 from typing import Any
 
 import pytest
 from converge import ledger
+from converge import work as work_model
 from test_clean import checks, clean
 
 from conftest import (
@@ -22,10 +22,9 @@ from conftest import (
 )
 
 
-def work(cv: Converge, actor: str = R1, host: str = "claude", **extra: str) -> dict[str, Any]:
-    args = [part for key, value in extra.items() for part in (f"--{key}", value)]
-    return json.loads(cv.ok("work", "s1", "--as", actor, "--role-host", host,
-                            "--json", *args).stdout)
+def work(cv: Converge, actor: str = R1, host: str = "claude",
+         role: str | None = None) -> dict:
+    return work_model.package(ledger.read(cv.path(), "s1"), actor, host, requested=role)
 
 
 def action(package: dict[str, Any], kind: str, claim: str = "F001") -> dict[str, Any]:
@@ -53,55 +52,17 @@ def test_work_scopes_current_batches_and_saved_angle_definitions(cv: Converge) -
     assert [row["angle"] for row in value["checks"]] == list(BATCH_1)
     assert all(row["evidence"] == "" for row in value["checks"])
     assert value["source_seq"] == len(cv.events())
-    assert "--host claude" in package["submit"]
-    assert package["next"]
-
-
-@pytest.mark.parametrize("calling_host,role_host", [("codex", "claude"), ("claude", "codex")])
-def test_work_commands_use_explicit_receiving_host(cv: Converge, calling_host: str,
-                                                  role_host: str) -> None:
-    cv.ready()
-    result = cv("work", "s1", "--dir", str(cv.dir), "--as", R1,
-                "--role-host", role_host, "--json", env={"BOOTGEAR_HOST": calling_host})
-    package = json.loads(result.stdout)
-    assert f"--host {role_host}" in package["submit"]
-    assert f"--host {calling_host}" not in package["submit"]
-
-
-def test_missing_receiving_host_is_a_usage_refusal_without_files(cv: Converge) -> None:
-    cv.ready()
-    target = cv.root / "work"
-    before = cv.path().read_bytes()
-    result = cv.ok("work", "s1", "--as", R1, "--out", str(target), code=2)
-    assert "--role-host" in result.stderr
-    assert "example:" in result.stderr
-    assert not target.exists()
-    assert cv.path().read_bytes() == before
 
 
 def test_saved_clean_action_submits_one_event_and_keeps_evidence(cv: Converge) -> None:
     cv.ready()
-    package = work(cv, out=str(cv.root / "work"))
-    clean_row = next(row for row in package["actions"] if row["action"] == "clean")
-    path = Path(clean_row["path"])
-    value = json.loads(path.read_text())
+    value = action(work(cv), "clean")
     value["checks"] = checks(*BATCH_1)
-    path.write_text(json.dumps(value))
     before = len(cv.events())
-    cv.ok("act", "s1", "--as", R1, "--input", str(path))
+    submit(cv, value)
     assert len(cv.events()) == before + 1
     assert cv.events()[-1]["checks"] == checks(*BATCH_1)
     assert work(cv)["state"] == "waiting"
-
-
-def test_saved_work_shares_submission_and_bounds_alternatives(cv: Converge) -> None:
-    cv.ready()
-    package = work(cv, out=str(cv.root / "work"))
-    assert len(package["actions"]) == 3
-    assert {row["action"] for row in package["actions"]} == {"clean", "attack", "angle-na"}
-    assert all("submit" not in row and "input" not in row for row in package["actions"])
-    assert all(Path(row["path"]).is_file() for row in package["actions"])
-    assert "--input" in package["submit"]
 
 
 def test_direct_clean_accepts_the_generated_envelope(cv: Converge) -> None:
@@ -157,30 +118,6 @@ def test_action_rejects_role_mismatch_with_complete_evidence(cv: Converge) -> No
     before = cv.path().read_bytes()
     result = cv.ok("act", "s1", "--as", R1, "--input", str(path), code=2)
     assert "role must match --as r1" in result.stderr
-    assert cv.path().read_bytes() == before
-
-
-def test_saved_work_refresh_preserves_prepared_actions_and_old_references(cv: Converge) -> None:
-    cv.ready()
-    target = str(cv.root / "work")
-    original = work(cv, out=target)
-    row = next(row for row in original["actions"] if row["action"] == "clean")
-    path = Path(row["path"])
-    value = json.loads(path.read_text())
-    value["checks"] = checks(*BATCH_1)
-    path.write_text(json.dumps(value))
-    prepared = path.read_bytes()
-    refreshed = work(cv, out=target)
-    assert path.read_bytes() == prepared
-    assert {row["path"] for row in original["actions"]}.isdisjoint(
-        row["path"] for row in refreshed["actions"])
-    cv.ok("act", "s1", "--as", R1, "--input", str(path))
-    fresh = work(cv, actor=R2, out=target)
-    assert path.read_bytes() == prepared
-    assert {row["path"] for row in original["actions"]}.isdisjoint(
-        row["path"] for row in fresh["actions"])
-    before = cv.path().read_bytes()
-    cv.ok("act", "s1", "--as", R1, "--input", str(path), code=2)
     assert cv.path().read_bytes() == before
 
 
@@ -297,10 +234,15 @@ def test_gap_work_exposes_the_required_find_coordinates(cv: Converge) -> None:
     submit(cv, value)
 
 
-def test_empty_completed_slate_has_no_gap_hunt_work(cv: Converge) -> None:
+def test_empty_slate_requires_gap_hunt_before_completion(cv: Converge) -> None:
     cv.init(config={"steps": {"cut": "none", "gap_hunt": True, "escalate": True}})
     cv.cover()
     assert work(cv, actor=R2)["state"] == "ready"
+    assert cv.status()["phase"] == "gap-hunt"
+    assert "gap-hunt" in cv.refused("cutoff", "s1")
+    package = work(cv, actor=R2)
+    finish = next(row["input"] for row in package["actions"] if row["input"]["action"] == "gap-hunt-done")
+    submit(cv, finish)
     cv.ok("cutoff", "s1")
     package = work(cv, actor=R2)
     assert package["phase"] == "done"
@@ -350,15 +292,6 @@ def test_work_does_not_offer_judgment_on_the_actors_own_claim(cv: Converge) -> N
     package = work(cv, actor="finder", role="cutter")
     assert package["actions"] == []
     assert package["items"] == []
-
-
-def test_main_complete_work_includes_the_final_checks(cv: Converge) -> None:
-    cv.ready()
-    assert clean(cv, *BATCH_1) == []
-    assert clean(cv, "new route", agent=R2, batch="fresh-eye", last=True) == []
-    cv.ok("cutoff", "s1")
-    step = work(cv, actor=MAIN)["next"]
-    assert " gate " in step and " converged " in step
 
 
 def test_structured_fix_check_keeps_the_review_slate_gate(cv: Converge) -> None:

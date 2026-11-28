@@ -24,31 +24,17 @@ The caller routes choices through deputy, resolve, or debate. A handback adds no
 
 ### Prepare the slate and seats
 
-Use Gear's public `converge converge` commands. Read help for syntax.
-Create a slate with the supplied lenses, angles, config, and settlement. For an existing slate, read status and resume.
-Follow printed steps and role handoffs.
+Get Gear through `cli:gear`. Initialize the coordination store once.
+Open a slate with Converge `init`. Pass the lenses, angles, config, and settlement that apply.
+For an active slate, use `status` and resume it.
 
-Before launcher approval, use `config resolve` at the review project. Include its task config when present.
-Show the effective finder, r1, and r2 counts. For multiple r2 workers, approve an invitation-aware launcher.
-Give `{group}`, `{worker}`, and `{invitation}` as separate whole arguments. Use the retry options Gear prints on refusal.
-
-Use the printed seat mechanisms. Start each native role once and reuse it.
-For an advisor, call `advisor:advisor` and follow the printed driver.
-Honor deferred startup. Reuse the recorded channel until shared work ends. Act on heartbeat `next` when it stops.
-
-For parallel seats, read the worker assignments from main's `work` output.
-When main's work shows native profiles, use the [native profile handoff](references/native-profiles.md).
-Apply it to routed finders, cutter, native R1, and native R2. Omitted profiles keep native defaults.
-Keep advisor R2 on its approved launcher settings; ignore its native profile.
-Start each ready worker once with its ID, full assignment, and work command.
-Keep the same native worker for a reply handoff. Report a refused launch with its assignment and host diagnostic.
-For parallel advisors, use the printed reservation and driver for that worker ID.
-Use the listener host returned by Gear. Keep one receipt for its active request.
-Continue main's work while the advisor receive runs in the background.
-Use main's printed wait after dispatch. Include each worker with an active turn or unanswered receipt on this slate.
-Refresh main's work after a worker reports completion or a finder reply handoff.
-Keep one main wait in flight. Recover its handle before you start another wait.
-Close the reserved channels when the outer review ends. Keep them open between visits.
+Use the returned seats, invitations, and native profiles. Give each invitation only to its participant.
+Use native model and effort profiles as guidance. Keep each participant for its reply work.
+Use `advisor:advisor` for an advisor seat. Follow status when it shows ready work and a launch command.
+Give the requester's approved command the seat invitation. The configured count is the maximum number of advisor seats.
+Keep advisor seats while the outer review has more visits. Release them when the review ends.
+If a participant disconnects, try to resume it before replacing its stale seat.
+Use the new invitation to give the replacement the same seat.
 
 Give each role its artifact, brief, rules, saved evidence, and public work. Tell it to read the principles and standards.
 Keep author hypotheses and other roles' reasoning out. Allow assigned action files, own slate events, and memory-ledger use.
@@ -66,21 +52,19 @@ Use `none recorded` when absent. Tell roles to skip covered runs and probe uncov
 
 ### Get current work
 
-Run public `work` with actor, slate, directory, and receiving host.
-Use inline work or `--out` for editable actions and a compact work package. Save only in the assigned workflow directory.
-An orchestrator supplies the role's receiving host. The advisor uses its own host mechanics.
-Read relevant claims, saved angles, evidence, conditions, and actions. Fill evidence or judgment.
-Submit action file or stdin through `act`. Refresh after a stale refusal. Report waiting or completion to main.
-
-Parallel workers continue ready actions in the same turn. Use `work --wait` for ordinary waiting.
-Report completion, an open finder reply, or a blocked assignment to main.
+Join the assigned seat. Run the same coordination poll as main and the other roles.
+Use the assignment's evidence, angles, and action inputs. Fill only evidence and judgment fields.
+Keep the seat heartbeat active while you work.
+Submit each action through Converge `act`. Poll after a stale action refusal.
+Complete the assignment even when the work found zero claims. Poll again for work or results.
+Acknowledge each delivery on the next poll. Report blockers through the coordination command.
 
 ### Apply the role rules
 
 - **Finder:** check each applicable tell. Search and run a positive control before filing.
   Record coverage or why a tell is absent. Use observed output or complete source paths. Classify reproduced, traced, or inferred.
-- **Gap hunter:** find what lenses missed. Record the completion action if Gear offers it, even with zero claims.
-  Report completion.
+- **Gap hunter:** find what lenses missed. Complete the assignment even with zero claims.
+  Handle finder replies for your own gap-hunt claims.
 - **Claim finder:** check for higher severity and record the check even if the claim stays the same.
   Use a concrete route to support widening.
   Answer refutations and cuts with new evidence or the applicable acceptance action.
@@ -95,11 +79,11 @@ Let the CLI compute phases, role work, cutoff, and eligibility. Give evidence an
 
 ### Finish
 
-Follow main work and status for cutoff, render, gates, and convergence.
+Follow main poll and status for cutoff, render, gates, and convergence.
 Keep survived, disputed, killed, and unverified status separate from cutoff. Keep follow-ups visible.
 For an applied fix-now patch, the caller runs checks and an independent patch review. Record its fix check through the CLI.
 After a failed fix check, the caller reverts within its permissions.
-Refresh cutoff before handback. Record durable verified facts with `memory-ledger:ledger`. Keep run decisions and todos with the task.
+Finish the slate after the gate and handback. Record durable facts with `memory-ledger:ledger`. Keep run decisions and todos with the task.
 
 ## Rules
 
@@ -107,29 +91,34 @@ Keep finder, refuter, cutter, and main separate. Main must not write another rol
 Never give a refuter its own claim. Use trusted agents if CLI role checks alone provide insufficient identity assurance.
 Keep facts in Converge and remedy choices with the caller.
 Keep production changes, outward sends, irreversible actions, goal approval, and mutation permissions out of deputy.
-An unavailable advisor cannot be replaced with a native role. Keep all other write limits for read-only roles.
+Keep the settled seat mechanism when you replace a participant. Keep all other write limits for read-only roles.
 
 ## Fallbacks
 
-If a role or advisor is unavailable, return `blocked` with its diagnostic and pending claims. Do not write its events.
+For an optional launch failure, run `fallback` with the affected seat and its diagnostic.
+Use the native invitation the command returns. Report the advisor gaps from status.
+Pass `--require-advisor` at init if the task requires external coverage.
+Report a blocked wait with the seat and assignment. Resume or replace the participant before retrying.
+If a required participant is unavailable, return `blocked` with its diagnostic and pending claims.
 If memory ledger is missing, unconfigured, or broken, report its status and diagnostic. Use checked sources when it cannot help.
 For missing siblings, report cli:setup for converge. Resume after setup and restart.
 
 ## Host mechanics
 
 Get the absolute path from `cli:gear`. Read only the current host's section.
+Run one Gear command per Bash tool call. A literal `cd` path can precede Gear.
 
 ### Claude Code
 
-Use `--host claude` for Claude commands and `--role-host claude` for Claude work.
-Use Agent and SendMessage for native roles. Run the printed advisor background step through Bash.
+Use `--host claude` for Claude commands.
+Use Agent and SendMessage for native roles. Run waits and heartbeats through Bash.
 Run main waits as background Bash tasks. Use the task completion notification.
 Install missing `cli@bootgear` through the host.
 
 ### Codex
 
-Use `--host codex` for Codex commands and `--role-host codex` for Codex work.
+Use `--host codex` for Codex commands.
 Use clean `spawn_agent` roles and host messaging. Keep advisor terminals visible.
-Run main waits and advisor receives in background tool calls. Collect shell completion inside the same call and notify main.
+Run main waits and advisor polls as background tool calls. Collect their output and notify main.
 Install missing plugins with `codex plugin add cli@bootgear` or `codex plugin add advisor@bootgear`.
 A fresh approval in a headless role makes that role unavailable.

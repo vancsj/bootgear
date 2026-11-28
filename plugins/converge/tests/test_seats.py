@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import json
-import shlex
 from pathlib import Path
 from typing import Any
 
-import pytest
 from converge import ledger, model
 
-from conftest import GEAR, GEAR_COMMAND, HOST, PLUGIN_DIR, Converge
+from conftest import GEAR_COMMAND, PLUGIN_DIR, Converge
 
-ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
+ADVISOR = {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "direct"}
 FULL_SEATS = {"main": "native_subagent", "finder": "native_subagent", "r1": "native_subagent",
               "r2": "advisor", "cutter": "native_subagent"}
 
@@ -68,7 +66,7 @@ def test_init_without_seats_replays_all_native(cv: Converge, tmp_path: Path) -> 
 
 PIPE = {"BOOTGEAR_OUTPUT": ""}
 ADVISOR_SETTLEMENT = ("converge_seats:\n  r2: advisor\n"
-                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: early\n")
+                      "advisor_roles:\n  roles: [refuter, gap-hunter]\n  brief: Act only as r2.\n  startup: direct\n")
 
 
 def _settlement(cv: Converge, text: str) -> Path:
@@ -80,164 +78,6 @@ def _settlement(cv: Converge, text: str) -> Path:
 def _init_args(cv: Converge, *extra: str) -> list[str]:
     return ["init", "s1", "--dir", str(cv.dir), "--as", "orch", "--lenses", "correctness",
             "--angles", str(cv.angles), "--project-root", str(cv.project), *extra]
-
-
-def _line(lines: list[str], prefix: str) -> str:
-    found = [line for line in lines if line.startswith(prefix)]
-    assert len(found) == 1, (prefix, lines)
-    return found[0]
-
-
-def _scope_converge(scope: str) -> Path:
-    # SCOPE: write events only with: <abs-converge> <attack|...> ...
-    tail = scope.split("write events only with: ", 1)[1]
-    return Path(tail.split(" ", 1)[0])
-
-
-def _assert_driver(lines: list[str], cv: Converge, *, converge_path: Path | None = None) -> None:
-    step = _line(lines, "DRIVER r2 step (one background step per turn): ")
-    step = step.split(": ", 1)[1]
-    channel_command = shlex.join([str(GEAR), "--host", HOST, "advisor", "channel"])
-    assert step.startswith(f"{channel_command} send ")
-    assert ' send --channel "$CHANNEL" --from asker --to listener --kind request --body-file ' in step
-    assert f"--body-file {cv.dir}/s1.r2.request.txt && " in step
-    assert step.endswith(' receive --channel "$CHANNEL" --for asker --timeout 300')
-    assert 'python3 "$CHANNEL_SCRIPT"' not in step
-    assert step.count(" receive ") == 1 and "while" not in step
-    placeholders = _line(lines, "DRIVER r2 placeholders: ")
-    for fragment in ("Gear channel command and channel number", "pairing printed", '"$CHANNEL"'):
-        assert fragment in placeholders, placeholders
-    then = _line(lines, "DRIVER r2 then: ")
-    for fragment in ("do not run the while-loop next that send prints",
-                     "5 receives in total, the one in the step included",
-                     "on receive exit 1 run that receive alone again",
-                     "parent_id is this send's message_id and fetch it",
-                     "after the 5th receive", "stops the slate blocked naming r2"):
-        assert fragment in then, then
-    assert "at most 5 times" not in then
-    other = _line(lines, "DRIVER r2 other messages: ")
-    for fragment in ("parent_id is not this send's message_id is a late reply",
-                     "fetch it so it stops reappearing, discard it",
-                     "without counting it toward the 5",
-                     "any other kind is a protocol error: stop the slate blocked naming r2"):
-        assert fragment in other, other
-    assert ".sent" not in other
-    check = _line(lines, "DRIVER r2 check: ")
-    for fragment in (f"{GEAR_COMMAND} status s1 --dir ", "--json; a reply starting", "WRITE-DENIED",
-                     "absent from status", "blocked naming r2",
-                     "never redo the turn with a native subagent"):
-        assert fragment in check, check
-    head = lines.index(_line(lines, "REQUEST r2 (write to the body file before each send"))
-    assert lines[head + 1] == "TYPE: delegate"
-    assert lines[head + 2].startswith(
-        "USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1. Act only as r2.")
-    assert lines[head + 3].startswith("CONTEXT: <claims under test")
-    scope = lines[head + 4]
-    assert scope.startswith("SCOPE: Call cli:gear through your own host.")
-    assert "UV_CACHE_DIR" not in scope
-    for fragment in (f"--dir {cv.dir} --as r2", str(cv.dir / "s1.jsonl"),
-                     "--role-host <your executing host>", "Fill a generated action",
-                     'reply "WRITE-DENIED r2: <the error text>"'):
-        assert fragment in scope, scope
-    assert GEAR_COMMAND not in scope
-    if converge_path is not None:
-        assert converge_path.is_file()
-
-
-def test_init_with_advisor_settlement_prints_seats_and_driver(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
-    assert lines[0].startswith("INIT s1 lenses=correctness ")
-    assert lines[1] == ("SEATS main=native_subagent finder=native_subagent r1=native_subagent "
-                        "r2=advisor cutter=native_subagent")
-    _assert_driver(lines, cv)
-    nxt = lines[-1]
-    assert nxt.startswith("next: reclaim the advisor channel for r2 "), nxt
-    for fragment in ("advisor channels decision", "--mode asking",
-                     "prints the Gear command and channel number",
-                     "keep the channel open after this slate",
-                     "if it hands back no listener, stop blocked naming r2"):
-        assert fragment in nxt, nxt
-    event = cv.events()[0]
-    assert event["seats"] == {"main": "native_subagent", "finder": "native_subagent",
-                              "r1": "native_subagent", "r2": "advisor", "cutter": "native_subagent"}
-    assert event["advisor"] == {"roles": ["refuter", "gap-hunter"], "brief": "Act only as r2.", "startup": "early"}
-
-
-def test_init_with_advisor_settlement_json(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json"),
-                         env=PIPE).stdout)
-    assert data["seats"]["r2"] == "advisor"
-    assert [d["seat"] for d in data["drivers"]] == ["r2"]
-    assert data["drivers"][0]["step"].endswith("--timeout 300")
-    assert data["drivers"][0]["request"].startswith("TYPE: delegate\n")
-    assert data["notes"] == []
-    assert data["next"].startswith("reclaim the advisor channel for r2")
-
-
-def test_advisor_request_uses_the_listeners_own_host(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json"),
-                         env=PIPE).stdout)
-    request = data["drivers"][0]["request"]
-    assert "--role-host" in request
-    assert "your own host" in request
-    assert GEAR_COMMAND not in request
-    assert "generated action" in request
-
-
-def test_init_driver_names_the_gear_command(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
-    _assert_driver(lines, cv, converge_path=GEAR.resolve())
-
-
-@pytest.mark.parametrize("command", ["init", "status"])
-@pytest.mark.parametrize("output", ["--prose", "--json"])
-def test_advisor_request_requires_hand_filled_test_context(
-        cv: Converge, command: str, output: str) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT)
-    if command == "init":
-        result = cv(*_init_args(cv, "--settlement", str(settlement), output))
-    else:
-        cv(*_init_args(cv, "--settlement", str(settlement)))
-        cv.cover(lenses=("correctness",))
-        result = cv.ok("status", "s1", output)
-    if command == "status" and output == "--prose":
-        lines = result.stdout.splitlines()
-        assert lines[0].startswith("SLATE s1 lenses=correctness ")
-        assert lines[-1].startswith("next: ")
-        assert not any(line.startswith(("DRIVER", "REQUEST", "Tests already ran:")) for line in lines)
-        return
-    if output == "--json":
-        lines = json.loads(result.stdout)["drivers"][0]["request"].splitlines()
-    else:
-        lines = result.stdout.splitlines()
-        head = lines.index(_line(lines, "REQUEST r2 (write to the body file before each send"))
-        lines = lines[head + 1:]
-    assert lines[0] == "TYPE: delegate"
-    assert lines[1].startswith("USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge slate s1.")
-    assert lines[2].startswith("CONTEXT: <claims under test")
-    assert lines[3].startswith("SCOPE: Call cli:gear through your own host.")
-    assert lines[4:6] == [
-        "Tests already ran:",
-        "- latest test: <recorded command>; result: <one recorded result line>",
-    ]
-    for fragment in ("memory-ledger entries", "Preserve all other write limits",
-                     "--role-host <your executing host>",
-                     "If a write is denied, stop",
-                     'reply "WRITE-DENIED r2: <the error text>"'):
-        assert fragment in lines[3], lines[3]
-    request = "\n".join(lines[6:])
-    for fragment in ("Required: main agent fills this part by hand before each send.",
-                     "latest test command recorded in the run ledger", "only part of the tests",
-                     "one result line from that record", "no exit code or record path",
-                     "Do not combine commands that did not run together.",
-                     "If no test result is recorded, write none recorded.",
-                     "Skip redundant runs covered by recorded test commands.",
-                     "You can probe behaviour those commands did not cover."):
-        assert fragment in request, request
 
 
 def _refused_lines(cv: Converge, settlement: Path) -> list[str]:
@@ -252,7 +92,7 @@ NEXT_FIX = ("next: correct converge_seats or advisor_roles in {path} so they agr
 
 def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
     settlement = _settlement(cv, "converge_seats: {r2: native_subagent}\n"
-                                 "advisor_roles: {roles: [refuter], brief: Act only as r2., startup: early}\n")
+                                 "advisor_roles: {roles: [refuter], brief: Act only as r2., startup: direct}\n")
     lines = _refused_lines(cv, settlement)
     assert lines[0].startswith(f"example: {GEAR_COMMAND} init ")
     message = lines.index("converge: settlement seats do not match its advisor roles:")
@@ -267,7 +107,7 @@ def test_init_refuses_roles_without_advisor_seat(cv: Converge) -> None:
 
 
 def test_init_refusal_json_carries_example_and_next(cv: Converge) -> None:
-    settlement = _settlement(cv, "advisor_roles: {roles: [gap-hunter], brief: Act only as r2., startup: early}\n")
+    settlement = _settlement(cv, "advisor_roles: {roles: [gap-hunter], brief: Act only as r2., startup: direct}\n")
     result = cv(*_init_args(cv, "--settlement", str(settlement), "--json"), code=2, env=PIPE)
     error = json.loads(result.stderr)["error"]
     assert error["message"] == "converge: settlement seats do not match its advisor roles:"
@@ -308,13 +148,9 @@ def test_init_r2_advisor_without_roles_uses_defaults(cv: Converge) -> None:
     lines = cv(*_init_args(cv, "--settlement", str(settlement))).stdout.splitlines()
     assert ("NOTE r2 is advisor with no advisor role in the settlement; it takes refuter, "
             "gap-hunter and the stock brief") in lines
-    request = _line(lines, "USER_REQUEST: ")
-    assert request.startswith("USER_REQUEST: You are seat r2 (refuter, gap-hunter) on converge "
-                              "slate s1. Act only as this seat on this slate; do not extend the role.")
     assert cv.events()[0]["advisor"] == {
         "roles": ["refuter", "gap-hunter"],
-        "brief": "Act only as this seat on this slate; do not extend the role.", "startup": "early"}
-    assert lines[-1].startswith("next: reclaim the advisor channel for r2")
+        "brief": "Act only as this seat on this slate; do not extend the role.", "startup": "direct"}
 
 
 def test_init_one_refuter_notes_the_unseated_advisor(cv: Converge) -> None:
@@ -331,7 +167,7 @@ def test_init_one_refuter_notes_the_unseated_advisor(cv: Converge) -> None:
     assert "advisor" not in event
     data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--refuters", "1",
                                      "--dir", str(cv.root / "j"), "--json"), env=PIPE).stdout)
-    assert data["drivers"] == [] and len(data["notes"]) == 1
+    assert len(data["notes"]) == 1
 
 
 def test_init_refuters_out_of_range_is_a_usage_refusal(cv: Converge) -> None:
@@ -351,13 +187,11 @@ def test_codex_role_settlement_matches_plain_init(cv: Converge) -> None:
                                        for seat in ("main", "finder", "r1", "r2", "cutter")}
 
 
-def test_status_reprints_seats_and_drivers(cv: Converge) -> None:
+def test_status_reprints_seat_mechanisms(cv: Converge) -> None:
     settlement = _settlement(cv, ADVISOR_SETTLEMENT)
     cv(*_init_args(cv, "--settlement", str(settlement)))
     data = json.loads(cv.ok("status", "s1", "--json").stdout)
     assert data["seats"]["r2"] == "advisor"
-    assert [d["seat"] for d in data["drivers"]] == ["r2"]
-    assert data["drivers"][0]["request"].startswith("TYPE: delegate\n")
     head = cv.ok("status", "s1").stdout.splitlines()[0]
     assert head.startswith("SLATE s1 lenses=correctness ") and " advisor=r2" in head
 
@@ -365,7 +199,7 @@ def test_status_reprints_seats_and_drivers(cv: Converge) -> None:
 def test_status_of_a_native_slate_shows_no_advisor(cv: Converge) -> None:
     cv.init()
     data = json.loads(cv.ok("status", "s1", "--json").stdout)
-    assert data["seats"] == {} and data["drivers"] == []
+    assert data["seats"] == {}
     assert " advisor=-" in cv.ok("status", "s1").stdout.splitlines()[0]
 
 
@@ -374,23 +208,8 @@ def test_manifest_declares_advisor_dependency() -> None:
     assert manifest["dependencies"] == ["memory-ledger", "advisor", "deputy", "cli"]
 
 
-def test_deferred_advisor_waits_until_gap_hunt_and_preserves_startup(cv: Converge) -> None:
-    text = ADVISOR_SETTLEMENT.replace("  startup: early\n", "") + "  startup: deferred\n  launcher: start-advisor\n"
-    settlement = _settlement(cv, text)
-    data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json")).stdout)
-    assert "continue the finder" in data["next"]
-    assert "reclaim" not in data["next"] and "start-advisor" not in data["next"]
-    assert cv.events()[0]["advisor"]["startup"] == "deferred"
-    assert cv.events()[0]["advisor"]["launcher"] == "start-advisor"
-    cv.cover(lenses=("correctness",))
-    state = json.loads(cv.ok("status", "s1", "--json").stdout)
-    assert "start-advisor" in state["next"]
-    assert "gap hunt" in state["next"]
-    assert "reuse" in state["drivers"][0]["prepare"]
-
-
 def test_deferred_advisor_stays_unstarted_when_no_task_needs_it(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
+    settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: direct\n", "")
                              + "  startup: deferred\n  launcher: start-advisor\n")
     cv.init("s1", "correctness", "orch", "--settlement", str(settlement),
             config={"steps": {"gap_hunt": False, "escalate": False, "cut": "none"}})
@@ -405,35 +224,14 @@ def test_deferred_choice_is_preserved_when_seat_uses_stock_roles(cv: Converge) -
                              "advisor_roles: {roles: [], brief: Use stock roles., "
                              "startup: deferred, launcher: start-advisor}\n")
     data = json.loads(cv(*_init_args(cv, "--settlement", str(settlement), "--json")).stdout)
-    assert "continue the finder" in data["next"]
+    assert data["seats"]["r2"] == "advisor"
     assert cv.events()[0]["advisor"]["startup"] == "deferred"
-
-
-def test_deferred_advisor_first_use_can_be_fresh_eye_without_gap_hunt(cv: Converge) -> None:
-    settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "")
-                             + "  startup: deferred\n  launcher: start-advisor\n")
-    cv.init("s1", "correctness", "orch", "--settlement", str(settlement),
-            config={"steps": {"gap_hunt": False, "escalate": False, "cut": "none"}})
-    cv.file()
-    cv.cover(lenses=("correctness",))
-    while True:
-        state = json.loads(cv.ok("status", "s1", "--json").stdout)
-        batch = state["plan"][0]
-        if batch[0]["agent_role"] == "r2":
-            assert batch[0]["batch"] == "fresh-eye"
-            assert "start-advisor" in state["next"]
-            break
-        assert "start-advisor" not in state["next"]
-        for row in batch:
-            assert row["agent_role"] == "r1" and row["action"] == "attack"
-            for angle in row["angles"]:
-                assert cv.check(row["claim"], angle, agent="r1", batch=row["batch"]) == []
 
 
 def test_invalid_startup_refuses_without_writing_a_slate(cv: Converge) -> None:
     for options, field in (("  startup: later\n", "startup"),
                            ("  startup: deferred\n", "launcher")):
-        settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: early\n", "") + options)
+        settlement = _settlement(cv, ADVISOR_SETTLEMENT.replace("  startup: direct\n", "") + options)
         result = cv(*_init_args(cv, "--settlement", str(settlement)), code=2)
         assert f"advisor_roles.{field}" in result.stderr
         assert not cv.path().exists()

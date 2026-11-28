@@ -20,9 +20,9 @@ from gear_commands import command as gear_command
 
 class ClaudePackageContractTest(ClaudePackageContractTestCase):
     def test_advisor_startup_choice_validates_and_round_trips(self):
-        for startup in ("early", "deferred"):
+        for startup in ("direct", "deferred"):
             with self.subTest(startup=startup), tempfile.TemporaryDirectory() as tmp:
-                settings = _roles("refuter").replace("  startup: early\n", "") + f"  startup: {startup}\n"
+                settings = _roles("refuter").replace("  startup: direct\n", "") + f"  startup: {startup}\n"
                 if startup == "deferred":
                     settings += "  launcher: start-advisor\n"
                 settings += "converge_seats: {r2: advisor}\ndebate_party_config: {}\n"
@@ -45,7 +45,7 @@ class ClaudePackageContractTest(ClaudePackageContractTestCase):
         for options, field in (("", "startup"), ("  startup: later\n", "startup"),
                                ("  startup: deferred\n", "launcher")):
             with self.subTest(options=options):
-                settings = (_roles("refuter").replace("  startup: early\n", "") + options
+                settings = (_roles("refuter").replace("  startup: direct\n", "") + options
                             + "converge_seats: {r2: advisor}\ndebate_party_config: {}\n")
                 result = self._validate(settings)
                 self.assertEqual(result.returncode, 1, result.stdout)

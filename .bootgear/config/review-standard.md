@@ -67,6 +67,8 @@ Made-up values and edge-case values are out of scope. Examples are malformed num
 A CLI can find more than one problem of the same kind, for example bad entries in a list. The CLI must report all of them in one grouped message. The message must name each offending item.
 The CLI must list every problem in one run. It must not stop at the first problem.
 Validate the complete mutation before writing. A refused request must leave persistent workflow state unchanged.
+For a coordination operation, verify that seat authorization and state changes use the same lock.
+Check that compaction reads committed state. Verify the Stop guard with the coordination lock held.
 
 ## R012 [must]
 The default output format of a CLI must be short prose for each stdout sink.
@@ -82,6 +84,8 @@ A skill may include concise examples for common, stable commands. Use placeholde
 Keep the overall workflow outline in the skill.
 Role work must come from the current saved state, with relevant evidence, definitions, and valid action inputs.
 Generated role commands must use the role's explicit executing host, including delegated work packages.
+Ordinary coordination commands resolve the store and active slate from the current host and seat.
+When an advisor launch fails, report the coverage gap and preserve independent role work.
 Keep evidence and judgment fields for the role to fill. Refresh stale work before retrying a refused action.
 
 ## R014 [must]

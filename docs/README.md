@@ -24,12 +24,12 @@ project-specific knowledge; each project customizes them through
 |---|---|---|
 | `cli` | Shared Gear CLI, plugin discovery and Python runtime setup. | shared runtime under `~/.bootgear/runtimes/`; host plugin store under `~/.bootgear/host-plugins/` |
 | `engine` | Autonomous task loop: clarify once, then execute a state machine to `succeeded`/`failed`. | `~/.bootgear/session/<run-id>.md` |
-| `converge` | Settles facts behind a claim slate: find, attack, cut by separate agents; computes which claims are findings. | `~/.bootgear/converge/` |
+| `converge` | Settles facts through independent finding, attack, and cutting. | Claim slates under the coordination store |
 | `review` | Review domain skill: lens finders plus converge attack and cut, and applying accepted feedback. | via converge |
 | `spec` | Requirements domain skill: requirements, design, sign-off, task breakdown. | none |
 | `test` | Testing domain skill: write, run, and triage test results. | none |
 | `memory-ledger` | Append-only ledger of settled questions, each with a runnable evidence check and per-session signatures. | shared team ledger, a machine-local ledger and a deputy ledger |
-| `advisor` | Pairs Claude Code and Codex CLI through a file mailbox, or sends a one-shot prompt to either CLI. | mailbox files |
+| `advisor` | Pairs Claude Code and Codex CLI or sends a one-shot prompt. | `~/.bootgear/coordination/` |
 | `deputy` | Answers a judgement question from the user's recorded decisions, or escalates it; hooks remind the AI to ask it and to record the user's answer. | deputy ledger |
 
 Dependencies:
@@ -145,6 +145,6 @@ file is absent, the built-in default applies.
 - [converge.md](converge.md): the claims ledger, angles, cutoff and gate.
 - [memory-ledger.md](memory-ledger.md): the durable cross-session fact
   ledger.
-- [advisor.md](advisor.md): the Claude–Codex mailbox and one-shot calls.
+- [advisor.md](advisor.md): persistent advice and one-shot calls.
 - [skill-authoring.md](skill-authoring.md): rules for writing skills in this
   repository.

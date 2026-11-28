@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from bootgear_cli import coordination
 from bootgear_cli.clikit import (
     Catalog,
     add_mode_flags,
@@ -18,8 +19,7 @@ from bootgear_cli.clikit import (
 )
 
 from . import angles as angles_mod
-from . import ledger, model, protocol, seats
-from .advisor_wait import cmd_advisor_wait
+from . import ledger, model, protocol
 from .cli_actions import (
     _batch_arg,
     cmd_accept,
@@ -33,17 +33,16 @@ from .cli_actions import (
     cmd_find_run,
     cmd_fix_check,
     cmd_gap_hunt_done,
-    cmd_launch,
     cmd_rebut,
     cmd_reply,
     cmd_verdict,
-    cmd_work,
 )
 from .cli_common import (
     CATALOG,
     EXAMPLES,  # noqa: F401
     FIND_CATALOG,
     TRIAGE_CATALOG,
+    _refuse,
 )
 from .cli_reports import (
     cmd_angles,
@@ -56,6 +55,7 @@ from .cli_reports import (
     cmd_status,
 )
 from .cli_setup import cmd_init
+from .coordination_commands import cmd_fallback, cmd_finish
 
 # ---------------------------------------------------------------------------
 # parser
@@ -66,18 +66,19 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     def command(name: str, func: Any, *, write: bool = False, slate: bool = True,
-                dir_required: bool = False) -> argparse.ArgumentParser:
+                dir_required: bool = False, coordinated: bool = False) -> argparse.ArgumentParser:
         p = sub.add_parser(name)
         if slate:
-            p.add_argument("slate")
+            p.add_argument("slate", nargs="?" if coordinated else None)
             if dir_required:
                 # gate refuses a relative --dir rather than resolving it;
                 # leave_check passes the settlement's value.
-                p.add_argument("--dir", type=Path, required=True)
+                p.add_argument("--dir", type=Path)
             else:
-                p.add_argument("--dir", type=caller_path, default=ledger.DEFAULT_DIR.expanduser())
+                p.add_argument("--dir", type=caller_path,
+                               default=None if coordinated else ledger.DEFAULT_DIR.expanduser())
         if write:
-            p.add_argument("--as", dest="agent", required=True, help="declared agent id")
+            p.add_argument("--as", dest="agent", required=not coordinated, help="declared agent id")
         p.set_defaults(func=func)
         return p
 
@@ -86,7 +87,11 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
         p.add_argument("--config", type=caller_path, help="task-layer converge.yaml")
         p.add_argument("--project-root", type=caller_path, default=caller_cwd(), help=root_help)
 
-    p = command("init", cmd_init, write=True)
+    p = command("init", cmd_init, write=True, coordinated=True)
+    command("finish", cmd_finish, slate=False)
+    fallback = command("fallback", cmd_fallback, slate=False)
+    fallback.add_argument("seat", help="advisor seat whose launch failed")
+    fallback.add_argument("diagnostic", help="observed launch diagnostic")
     p.add_argument("--lenses", default="")
     p.add_argument("--angles", nargs="*", type=caller_path, default=[])
     p.add_argument("--snapshot", action="store_true",
@@ -97,19 +102,13 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="previous slate with a snapshot; requires --snapshot and --pass equal to the previous pass + 1; prints their git diff")
     p.add_argument("--settlement", type=caller_path, metavar="FILE",
                    help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
-    group = p.add_mutually_exclusive_group()
-    group.add_argument("--review-group", metavar="ID",
-                       help="Engine run ID for the shared advisor reservations")
-    group.add_argument("--continue-from", metavar="SLATE",
-                       help="preceding standalone slate in the same directory and project")
     p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
                    help="refuter seats on the slate; 1 drops r2")
+    p.add_argument("--require-advisor", action="store_true", help="require external advisor coverage")
     p.add_argument("--defaults", type=caller_path, metavar="FILE",
                    help="caller-layer converge.yaml, below the user layer: a skill's cutoff tables")
     p.add_argument("--report-rule", action="append", default=[], metavar="ID",
                    help="append a missing cutoff report rule; repeat in the required order")
-    p.add_argument("--r2-only-retry", nargs=2, type=int, metavar=("FINDER", "R1"),
-                   help="approved positive finder and r1 counts. Resolved counts must match and r2 must be 1.")
     config_args(p, root_help="project directory for .bootgear/config layers and git refs/converge/<slate> snapshots")
 
     p = command("file", cmd_file, write=True)
@@ -188,7 +187,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="close the fresh-eye batch with this attack")
 
     for name in ("clean", "act"):
-        p = command(name, cmd_action, write=True)
+        p = command(name, cmd_action, write=True, coordinated=name == "act")
         p.formatter_class = argparse.RawDescriptionHelpFormatter
         p.description = ("Submit a generated JSON action from work. Its envelope has slate, source_seq, role, and action. "
                          "Clean also has claim, batch, and checks. "
@@ -201,28 +200,6 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                          '"searches":"rg entry a.py","positive_control":"entry found at a.py:1"}]}')
         p.add_argument("--input", required=True, metavar="FILE|-",
                        help="one generated action object; - reads stdin; all checks validate before append")
-
-    p = command("work", cmd_work, write=True)
-    p.add_argument("--role-host", required=True, choices=("claude", "codex"),
-                   help="host that executes this role's commands; always explicit")
-    p.add_argument("--role", choices=seats.SEATS,
-                   help="seat for a custom agent id not yet present in the slate")
-    p.add_argument("--wait", type=int, metavar="SECONDS",
-                   help="positive duration for parallel work or main dispatch; main requires --after-seq")
-    p.add_argument("--after-seq", type=int, metavar="SEQ",
-                   help="main wait only: source_seq from the last work package main handled on this slate")
-    p.add_argument("--active-worker", action="append", default=[], metavar="ID",
-                   help="main wait only: repeat for each worker with an active turn or unanswered receipt on this slate")
-    p.add_argument("--out", type=caller_path,
-                   help="optional: save work.json and separate editable actions in an assigned workflow directory outside the target artifact")
-
-    p = command("advisor-wait", cmd_advisor_wait, write=True)
-    p.description = "Wait for one parallel advisor response with a quiet receive limit."
-    p.add_argument("--channel", required=True, help="reserved channel number")
-    p.add_argument("--request", required=True, metavar="MESSAGE_ID",
-                   help="message_id from the outstanding request's send receipt")
-    p.add_argument("--timeout", type=float, default=300, metavar="SECONDS",
-                   help="seconds per receive (default: 300)")
 
     p = command("reply", cmd_reply, write=True)
     p.description = "Reply to the batch's refutation. rebut requires new evidence; decline carries no evidence or text."
@@ -249,7 +226,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--when", required=True)
     p.add_argument("--round", required=True, type=int)
 
-    p = command("fix-check", cmd_fix_check, write=True)
+    p = command("fix-check", cmd_fix_check, write=True, coordinated=True)
     p.add_argument("--claim", required=True)
     p.add_argument("--outcome", required=True, metavar="{pass,fail}",
                    help="pass: the patch passed the tests and checks and the review slate "
@@ -258,12 +235,12 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--review-slate", metavar="SLATE",
                    help="the slate that re-reviewed only the patch; required with pass")
 
-    p = command("status", cmd_status)
+    p = command("status", cmd_status, coordinated=True)
     p.add_argument("--json", action="store_true", help="print JSON")
-    command("converged", cmd_converged)
-    command("cutoff", cmd_cutoff)
-    command("coverage", cmd_coverage)
-    p = command("gate", cmd_gate, dir_required=True)
+    command("converged", cmd_converged, coordinated=True)
+    command("cutoff", cmd_cutoff, coordinated=True)
+    command("coverage", cmd_coverage, coordinated=True)
+    p = command("gate", cmd_gate, dir_required=True, coordinated=True)
     p.add_argument("--kind", choices=("triage",),
                    help="triage: each surviving claim is reproduced, and --report backs it with "
                         "a row, a command, an output and a reproduction-rerun attack")
@@ -272,7 +249,7 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("--base-slate", metavar="SLATE",
                    help="triage: the first visit's slate; each report row must name one of its "
                         "claims, so a later visit adds no cause claim")
-    command("render", cmd_render)
+    command("render", cmd_render, coordinated=True)
 
     p = command("prune", cmd_prune, slate=False)
     p.add_argument("slates", nargs="+", metavar="slate",
@@ -289,17 +266,6 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     p.add_argument("action", choices=("validate", "resolve"))
     config_args(p)
 
-    p = command("launch", cmd_launch, write=True)
-    p.description = "Reserve configured native identities, including serial cutter and native refuters. Only the saved main actor can reserve them."
-    p.add_argument("--input", required=True, metavar="FILE",
-                   help="JSON object with launches: [{id, host: claude|codex, model, effort}]; use '-' for stdin. "
-                        "Use saved work profiles. Returns model with effort on Claude or reasoning_effort on Codex.")
-    p = command("launch-result", cmd_launch, write=True)
-    p.description = "Record native role results. A known effective mismatch blocks the slate."
-    p.add_argument("--input", required=True, metavar="FILE",
-                   help="JSON object with outcomes: [{id, state: finished|blocked, handle, receipt_worker, "
-                        "effective: {model, effort}, reason}]; use '-' for stdin. A native handle and receipt_worker "
-                        "are required for finished outcomes or native evidence. A blocked outcome needs a reason.")
     add_mode_flags(parser)
     guidance = {
         "slate": "saved slate id; lowercase letters, digits, dots, underscores, and hyphens",
@@ -344,13 +310,49 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
     return parser
 
 
+REPORTS = {"status", "converged", "cutoff", "coverage", "gate", "render", "fix-check"}
+MAIN_MUTATIONS = {"cutoff", "fix-check"}
+
+
+def _dispatch(args: argparse.Namespace) -> None:
+    if args.command not in REPORTS:
+        args.func(args)
+        return
+    if args.slate is not None and (args.command not in MAIN_MUTATIONS or args.dir is not None):
+        if args.dir is None and args.command == "gate":
+            _refuse(["a historical gate requires its absolute slate directory"])
+        args.dir = args.dir or ledger.DEFAULT_DIR.expanduser()
+        args.func(args)
+        return
+    if args.dir is not None:
+        _refuse(["a historical slate directory requires its slate ID"])
+    with coordination.transaction(coordination.Caller.from_environment()) as store:
+        store.require_main()
+        active = coordination.active_slate(store)
+        if args.slate is None and active is None:
+            _refuse(["no active coordination slate"])
+        if args.slate is None:
+            assert active is not None
+            args.slate = active["id"]
+        if args.slate not in store.state["slates"]:
+            _refuse(["this slate does not belong to the current coordination store"])
+        args.dir = store.path / "slates"
+        args.coordination_authorized = True
+        args.coordination_store = store
+        if args.command == "fix-check":
+            args.agent = "main"
+            if args.outcome == "pass" and args.review_slate is None and active:
+                args.review_slate = active["id"]
+        args.func(args)
+
+
 def main(argv: list[str] | None = None) -> None:
     raw = sys.argv[1:] if argv is None else argv
     find = "--phase=find" in raw or any(
         flag == "--phase" and value == "find" for flag, value in itertools.pairwise(raw))
     triage = any(arg.partition("=")[0] in ("--kind", "--report") for arg in raw)
     catalog = FIND_CATALOG if find else TRIAGE_CATALOG if triage else CATALOG
-    run(_parser(catalog), catalog, lambda a: a.command, argv)
+    run(_parser(catalog), catalog, lambda a: a.command, argv, dispatch=_dispatch)
 
 
 if __name__ == "__main__":

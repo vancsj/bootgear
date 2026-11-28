@@ -176,6 +176,7 @@ def test_fresh_eye_attacker_is_r1_on_a_gap_hunt_claim(cv: Converge) -> None:
     cv.file()
     cv.cover()
     assert cv.file(agent=R2, origin="gap-hunt") == "F002"
+    cv.ok("gap-hunt-done", "s1", "--as", R2)
     cv.batch_1("F001")
     cv.batch_1("F002")
     assert cv.check("F001", "angle 1", agent=R2, batch="fresh-eye", last=True) == []

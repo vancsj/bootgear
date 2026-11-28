@@ -9,7 +9,7 @@ WIDER = {"wider": "every caller passing None loses the row", "evidence": "api.py
 
 
 def _slate(cv: Converge) -> None:
-    cv.init()
+    cv.init(config={"steps": {"gap_hunt": False}})
     cv.file()
     cv.cover()
 
@@ -51,7 +51,7 @@ def test_only_the_finder_escalates_once(cv: Converge) -> None:
 
 
 def test_escalate_command(cv: Converge) -> None:
-    cv.init()
+    cv.init(config={"steps": {"gap_hunt": False}})
     cv.file()
     cv.file(claim="another supported claim")
     cv.cover()

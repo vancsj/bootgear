@@ -176,21 +176,16 @@ Resolve `converge-seats` without a task config. Offer only available roles among
 Recommend adversarial reviewer and gap hunter, or adversarial reviewer alone when `r2` is `native_subagent`.
 Take an explicit decline as no advisor for that role. Record `native_subagent` in its place only after that decline.
 
-For channel roles, show both startup choices. Reuse an explicit choice or ask.
-Keep separate listeners for debate and `r2`.
+Choose the advice mode before sign-off. Use a separate seat for debate and each persistent refuter.
 
 | Choice | Action |
 |---|---|
-| `early` | Pair before sign-off. Without an approved launcher, ask the user to start the listener. Keep each pairing for the run. |
-| `deferred` | Verify the exact launcher without running it. Get permission in item 7. Launch at the first advisor task. |
-| Direct-only | Record `startup: early` without a launcher. Use direct dispatch. |
+| `deferred` | Verify and settle the launcher now. Start the advisor when work first needs its seat. |
+| `direct` | Use one-shot advice. Omit the launcher. |
 
-For early failure, report the diagnostic and settle another available choice before writing.
-For deferred startup, settle launcher failures here. Show the launcher and planned uses at sign-off.
-When Converge uses multiple advisor workers, defer early pairing to its reserved worker setup before their first assignments.
-Approve the full invitation-aware command if a launcher is used for parallel workers.
-Give `{group}`, `{worker}`, and `{invitation}` as separate whole arguments.
-For an approved single r2 override, change only `parallelism.r2` in the task folder's `converge.yaml`.
+Use `{invitation}` as one whole launcher argument. Use `{seat}` only when the launcher needs the seat name.
+Use the requester's launch command to select the model and effort.
+Show the exact launcher and planned roles at sign-off. Report any failure with its diagnostic.
 
 Write task configs for both settings. Set selected debate parties to `advisor` and the rest to `native_subagent`.
 Name all five Converge seats. Use `advisor` only for `r2` when refuter or gap hunter is selected.
@@ -207,7 +202,7 @@ With no roles, omit startup and launcher.
 
 ### Confirm and initialize
 
-Show the goal, diagram, reminders, gate commands, advisor roles and seats, startup choice, launcher, and existing pairings.
+Show the goal, diagram, reminders, gate commands, advisor roles and seats, advice mode, and launcher.
 State concrete success and failure in one or two sentences. Keep a stall open while a path remains.
 Allow edits. Require explicit sign-off. Write `goal` with text values `succeeded` and `failed`.
 
@@ -215,9 +210,8 @@ Run `<gear> --host <host> engine task session init --settlement-file <file>` wit
 Let Gear set `session_dir`. Use the parent of the printed `INIT <ledger-file>` for all active-run handoffs.
 
 After init, record deputy answers as `solo` decisions with their slugs.
-For existing channels, use `session record-decision` in `solo` mode with `advisor channels: r2=<n>, debate=<m>`.
-Name only existing channels. Record deferred pairings at startup and preserve the other use's channel.
-While paired, run the heartbeat's printed `next` when it stops. Keep the 720-second restart grace.
+Initialize the coordination store for persistent advice. Record the assigned advisor seats for the run.
+Use Advisor to start seat heartbeats.
 Hand the confirmed run to `execute`.
 
 ## Rules

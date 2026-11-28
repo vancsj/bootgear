@@ -73,6 +73,7 @@ class ArtefactProgressionTestCase(unittest.TestCase):
         import yaml
         for row in yaml.safe_load(angles.read_text()):
             self.converge('find-run','review-facts','--as','finder','--lens','artefact','--angle',row['id'],'--tell',row['tell'],'--searches','Read the supplied guide; no factual candidate.','--positive-control','Present control occurs in the guide.','--result','none')
+        self.converge('gap-hunt-done','review-facts','--as','r2')
         self.converge('cutoff','review-facts')
         return {'slate':'review-facts','directory':str(self.root/'facts'),'mappings':{}}
 

@@ -49,7 +49,7 @@ Use the latest recorded command, even when narrow. Exclude exit code and record 
 Use `none recorded` if absent. Pass these instructions to overrides and require the block in each role brief.
 Tell roles to skip covered runs and probe gaps. Allow memory-ledger reads and writes within role limits.
 
-Give fresh roles confirmed intent, primary artifacts, relevant repo evidence, standards, and role scope.
+Give each role confirmed intent, primary artifacts, relevant repo evidence, standards, and role scope.
 Include raw observations when present. Keep author notes, transcripts, hypotheses, private lists, and other role reasoning out.
 Retain the advisor `r2` listener's earlier slate context.
 Name host user principles and project principles and standards, when present. Include settlement principles in Engine.
@@ -58,16 +58,10 @@ Tell roles to read them before finding, attacking, or cutting.
 ### Start or resume the slate
 
 Use separate finder, refuter, and cutter roles. Resume an existing slate through public role work.
-Each later visit starts a new slate and fresh roles except the retained advisor.
+Each later visit starts a new slate. Reuse the seated native judges and advisors.
 
-| Run | Slate | Directory |
-|---|---|---|
-| Engine | `<run-id>-spec-review-<n>` | `<session-dir>/converge` |
-| Standalone | `spec-review-<YYYYMMDD-HHMMSS>` | `$HOME/.bootgear/converge` |
-
-Use public `work` with actor and receiving host. Use its definitions, evidence, actions, and handoffs.
-Each role submits its own evidence and judgment through `act` or a direct public command.
-Refresh after each state change or stale refusal. Use the printed waiting and completion steps.
+Initialize the coordination store. Open one active slate with Converge.
+Use the returned invitations and role profiles. Let each role poll, act, and complete its own work.
 
 Supply the project root and lenses.
 
@@ -78,19 +72,16 @@ request-fit,clarity-completeness,architecture-fit,simplicity,proportionality,tes
 Pass absolute [angles.yaml](references/angles.yaml) and [design-patterns.yaml](references/design-patterns.yaml) paths in one `--angles`.
 Pass absolute [cutoff.yaml](references/cutoff.yaml) as `--defaults`. Let the CLI load these files.
 Use `--pass <n>` only in Engine from visit 3. Omit `--snapshot` and `--since`.
-In Engine, pass the exported settlement with `--settlement` and its run ID with `--review-group`.
-When the task folder has an approved `converge.yaml`, pass it once with `--config`.
+In Engine, pass the exported settlement with `--settlement`.
+If the task folder has an approved `converge.yaml`, pass it with `--config` on every visit.
 For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
 Before standalone launcher approval, use Converge's advisor startup steps. Show the effective worker counts.
-Copy an approved standalone config to `<converge-dir>/<slate>.task.yaml` and pass the copy once with `--config`.
-For later standalone visits, pass the prior slate ID with `--continue-from`.
-To replace its config after approval, save a new copy for this slate and pass that copy with `--config`.
-If Gear refuses the launcher, follow its retry options. Change only `parallelism.r2` for an approved single r2 override.
-Use the Converge worker plan for parallel seats. Keep invited channels until the outer review ends.
-When main's work shows finder profiles, use Converge's routed finder handoff.
+Save the approved standalone config with the task. Use it for later visits and approved retries.
+Follow Converge's launch failure path. Include advisor gaps in the handback.
+Use Converge's seat roster and retain invited advisors until the outer review ends.
 
 ```text
-<gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
+<gear> --host <host> engine task session read --section settlement --prose > <task-folder>/settlement.yaml
 ```
 
 Use only the selected lens sections of [lenses.md](references/lenses.md) when briefing.
@@ -144,6 +135,7 @@ Read public status. Apply the cutoff, then map in order.
 Send follow-ups with reason `unverified` to `unchecked`. Use `follow-up` for the rest.
 At visit five, block on remaining revise or choices. Before ready, run the public Converge gate.
 If observations apply, run their public gate too. Use only the selected exit's public check inputs.
+Finish the active slate after its gate.
 Keep the slate and directory in all results.
 
 ## Rules

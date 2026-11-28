@@ -2,9 +2,7 @@
 
 """Shared normalization, dispatch, and rendering for engine hooks.
 
-The adapter is intentionally small.  It owns the boundary between a host hook
-process and the host-neutral policy module; it does not know about advisors,
-mailboxes, or coordinator state.
+The adapter passes native hook events to the host-neutral Engine policy.
 """
 from __future__ import annotations
 

@@ -24,13 +24,13 @@ class RepoRegistrationTests(unittest.TestCase):
     def test_repo_registers_converge_and_advisor(self) -> None:
         plugins = gear.discover(REPO)
 
-        self.assertEqual(set(plugins["converge"].commands), {"converge"})
-        self.assertEqual(set(plugins["advisor"].commands), {"channel", "hook"})
+        self.assertEqual(set(plugins["converge"].commands), {"converge", "plan"})
+        self.assertEqual(set(plugins["advisor"].commands), {"hook"})
 
     def test_provider_commands_use_registered_python_entrypoints(self) -> None:
         plugins = gear.discover(REPO)
         expected = {
-            "advisor": {"channel": ("python3", "skills/advisor/scripts/channel.py")},
+            "cli": {"coordination": ("python3", "-m", "bootgear_cli.coordination_cli")},
             "deputy": {"deputy": ("python3", "scripts/deputy.py")},
             "memory-ledger": {"ledger": ("python3", "scripts/ledger.py")},
         }
@@ -131,7 +131,7 @@ print(json.dumps({
             })
 
     def test_routes_provider_commands_through_gear(self) -> None:
-        commands = (("advisor", "channel"), ("deputy", "deputy"),
+        commands = (("cli", "coordination"), ("deputy", "deputy"),
                     ("memory-ledger", "ledger"))
         env = {k: v for k, v in os.environ.items()
                if k not in ("BOOTGEAR_OUTPUT", "VIRTUAL_ENV")}

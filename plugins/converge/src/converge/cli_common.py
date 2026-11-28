@@ -20,13 +20,11 @@ from bootgear_cli.clikit import (
     dumps,
     emit,
     gear_command,
-    host,
     refuse,
     render_refusal,
 )
 
-from . import assignments, ledger, native_launch, protocol, render, seats
-from .cli_advisor import _reclaim_step
+from . import assignments, ledger, protocol, render
 from .model import Slate
 
 EXIT_NO = 1
@@ -35,8 +33,7 @@ _MISSING = "continue the finder with the missing angles, then "
 
 # Leaf command -> runnable argv after the program, shown in every refusal.
 EXAMPLES = {
-    "init": "init <slate> --dir <dir> --as main --lenses <a,b> --angles <file> "
-            "--settlement <file>",
+    "init": "init --lenses <a,b> --angles <file> --settlement <file>",
     "file": "file <slate> --dir <dir> --as finder --lens <lens> --angle <angle> --origin lens "
             '--loc <path:line> --claim "<claim>" --trigger "<trigger>" --evidence "<evidence>" '
             "--tier <tier>",
@@ -51,9 +48,7 @@ EXAMPLES = {
               '--tell "<tell>" --evidence "<evidence>" --searches "<searches>" '
               '--positive-control "<hit>"',
     "clean": "clean <slate> --dir <dir> --as r1 --input <action.json>",
-    "work": "work <slate> --dir <dir> --as r1 --role-host claude --out <work-dir>",
-    "act": "act <slate> --dir <dir> --as r1 --input <action.json>",
-    "advisor-wait": "advisor-wait <slate> --dir <dir> --as r2-2 --channel 0001 --request <message-id>",
+    "act": "act --input <action.json>",
     "reply": 'reply <slate> --dir <dir> --as finder --claim F001 --batch 1 --stance rebut '
              '--evidence "<new evidence>"',
     "verdict": "verdict <slate> --dir <dir> --as r1 --claim F001 --batch 1 --verdict agree",
@@ -71,11 +66,11 @@ EXAMPLES = {
     "coverage": "coverage <slate> --dir <dir>",
     "gate": "gate <slate> --dir <abs-dir>",
     "render": "render <slate> --dir <dir>",
+    "finish": "finish",
+    "fallback": 'fallback r2 "launcher exited 1"',
     "angles": "angles --tag find --angles <file>",
     "config": "config validate --project-root <dir>",
     "prune": "prune <slate> <slate> --project-root <dir>",
-    "launch": "launch <slate> --dir <dir> --as main --input <launches.json>",
-    "launch-result": "launch-result <slate> --dir <dir> --as main --input <outcomes.json>",
 }
 ANGLE_NA_FIND = ("angle-na <slate> --dir <dir> --as finder --phase find --lens <lens> "
                  '--angle <angle> --reason "<why>"')
@@ -126,9 +121,14 @@ def _path(args: argparse.Namespace) -> Path:
         _refuse(exc.problems)
 
 
+def _workflow(args: argparse.Namespace, slate: str) -> list[dict[str, Any]] | None:
+    store = getattr(args, "coordination_store", None)
+    return store.state["slates"].get(slate, {}).get("workflow", []) if store else None
+
+
 def _read(args: argparse.Namespace) -> Slate:
     try:
-        return ledger.read(_path(args), args.slate)
+        return ledger.read(_path(args), args.slate, workflow=_workflow(args, args.slate))
     except ledger.LedgerError as exc:
         _refuse(exc.problems)
 
@@ -137,13 +137,20 @@ def _write(args: argparse.Namespace, event: dict[str, Any], *, create: bool = Fa
            build: Any = None) -> dict[str, Any]:
     """Append one event; a refusal ends with the slate's next step when the slate reads."""
     event = {"as": args.agent, **event} if "as" not in event else event
+
+    def guarded(slate: Slate) -> dict[str, Any]:
+        if slate.coordinated and not getattr(args, "coordination_authorized", False):
+            _refuse(["submit active slate actions through the current coordination assignment"])
+        return build(slate) if build is not None else {}
+
     try:
-        return ledger.append(_path(args), args.slate, event, create=create, build=build)
+        return ledger.append(_path(args), args.slate, event, create=create, build=guarded,
+                             workflow=_workflow(args, args.slate))
     except ledger.LedgerError as exc:
         if create:
             _refuse(exc.problems)
         try:
-            slate = ledger.read(_path(args), args.slate)
+            slate = ledger.read(_path(args), args.slate, workflow=_workflow(args, args.slate))
         except ledger.LedgerError:
             _refuse(exc.problems)
         _refuse_next(args, "refused", exc.problems,
@@ -162,9 +169,7 @@ def _writer_next(args: argparse.Namespace, slate: Slate) -> str:
         return _next_step(args, slate)
     prefix = ("refresh your work: " if assignments.parallel(slate) and actor in assignments.workers(slate)
               else "report the result to main; refresh your work: ")
-    return (prefix
-            + _role_command(args, host() or "claude", "work")
-            + " --role-host " + (host() or "claude"))
+    return prefix + gear_command("cli", "coordination") + " poll"
 
 
 # ---------------------------------------------------------------------------
@@ -184,35 +189,17 @@ def _plan_text(slate: Slate) -> str:
 def _next_step(args: argparse.Namespace, slate: Slate) -> str:
     """The next legal action on the slate, from `protocol.slate_phase`."""
     phase = protocol.slate_phase(slate)
-    if native_launch.blocked(slate):
-        return "return the blocked native assignment and its reason to the review caller"
-    if phase in ("cutoff", "done") and native_launch.pending(slate):
-        return "recover the original native receipts and record launch-result outcomes as main"
+    if slate.coordinated:
+        return (f"{gear_command('converge', 'converge')} render" if phase == "done"
+                else f"{gear_command('cli', 'coordination')} poll")
     if phase == "find":
-        if (saved_host := native_launch.saved_host(slate)) and native_launch.profiles(slate):
-            return _work_step(args, saved_host, slate.events[0]["as"])
-        if assignments.parallel(slate):
-            return _step(args, "work", "--as", slate.events[0]["as"], "--role-host", host() or "claude")
         return _MISSING + _step(args, "coverage")
     if phase == "done":
         return _step(args, "render")
     step = (_step(args, "cutoff") if phase == "cutoff"
             else f"{phase}: {_plan_text(slate)}; plan: {_step(args, 'status', '--json')}")
-    gap_open = protocol.gap_hunt_open(slate, phase)
     if phase == "gap-hunt":
-        step = "give r2 its gap-hunt assignment on its executing host, including the completion action"
-    elif gap_open:
-        step = ("gap hunt: continue r2 with work and its explicit executing host; "
-                "r2 submits generated act actions, then reports completion to main; "
-                f"before the first escalate, cut or attack; then {step}")
-    plan = protocol.batch_plan(slate)
-    advisor_due = gap_open or any(row["agent_role"] == seats.ADVISOR_SEAT
-                                 for row in (plan[0] if plan else []))
-    if advisor_due and slate.mechanism(seats.ADVISOR_SEAT) == "advisor" and slate.advisor is not None:
-        if slate.parallelism["r2"] > 1:
-            step = f"use the ready advisor worker's reserved-channel driver from {_step(args, 'status', '--json')}"
-        elif slate.advisor.get("startup") == "deferred":
-            step = f"{_reclaim_step(seats.ADVISOR_SEAT, slate.advisor)}; then {step}"
+        step = "give r2 its gap hunt assignment on its executing host, including the completion action"
     return step
 
 
@@ -225,18 +212,7 @@ def _opt(event: dict[str, Any], **values: Any) -> dict[str, Any]:
     return event
 
 
-def _role_command(args: argparse.Namespace, role_host: str, command: str, *, actor: str | None = None) -> str:
-    return (f"{gear_command('converge', 'converge', host=role_host)} {command} "
-            f"{shlex.quote(args.slate)} --dir {shlex.quote(str(args.dir.resolve()))} "
-            f"--as {shlex.quote(actor or args.agent)}")
-
-
-def _work_step(args: argparse.Namespace, role_host: str, actor: str) -> str:
-    return _role_command(args, role_host, "work", actor=actor) + f" --role-host {role_host}"
-
-
 def _coverage_problems(slate: Slate) -> list[str]:
     problems = [f"lens {lens} has missing find angles: {', '.join(row.missing)}"
                 for lens, row in render.coverage(slate).items() if row.missing]
-    problems.extend(native_launch.pending(slate))
     return problems

@@ -68,12 +68,9 @@ Use the caller's depth or `full`.
 Reuse seats. Keep the depth's role budget. A later debate uses its own budget.
 Use one absolute directory throughout the slate.
 
-| Run | Slate | Directory |
-|---|---|---|
-| Engine | `<run-id>-review-<n>`, counted from 1 | `<session-dir>/converge` |
-| Standalone | `review-<UTC YYYYMMDD-HHMMSS>` | `$HOME/.bootgear/converge` |
+Open the active slate in the coordination store. Use the slate ID and path from init for historical checks.
 
-Use Converge `init` with the depth's lenses and worktree root. For quick use `--refuters 1`.
+Initialize the coordination store. Use Converge `init` with the depth's lenses and worktree root. For quick use `--refuters 1`.
 Pass [find-angles.yaml](references/find-angles.yaml) and each selected `references/angles-<lens>.yaml` when present.
 For architecture, also pass [design-patterns.yaml](references/design-patterns.yaml) and [evaluate-angles.yaml](references/evaluate-angles.yaml).
 Use the absolute [cutoff.yaml](references/cutoff.yaml) path as `--defaults`. Let Converge load these YAML files.
@@ -93,20 +90,18 @@ Pass enabled packs to init. On a duplicate angle ID naming a pack, remove that p
 If `.bootgear/config/review-standard.md` exists, pass `--report-rule ID` for each rule at or above cutoff.
 Use the order in the standard.
 
-In Engine, export the settlement and pass it with `--settlement`. Pass the run ID with `--review-group`.
-When the task folder has an approved `converge.yaml`, pass it once with `--config`.
+In Engine, export the settlement and pass it with `--settlement`.
+If the task folder has an approved `converge.yaml`, pass it with `--config` on every visit.
 For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
 Before standalone launcher approval, use Converge's advisor startup steps. Show the effective worker counts.
-Copy an approved standalone config to `<converge-dir>/<slate>.task.yaml` and pass the copy once with `--config`.
-For later standalone visits, pass the prior slate ID with `--continue-from`.
-To replace its config after approval, save a new copy for this slate and pass that copy with `--config`.
-If Gear refuses the launcher, follow its retry options. Change only `parallelism.r2` for an approved single r2 override.
+Save the approved standalone config with the task. Use it for later visits and approved retries.
+Follow Converge's launch failure path. Include advisor gaps in the handback.
 
 ```text
-<gear> --host <host> engine task session read --section settlement --prose > <converge-dir>/<slate>.settlement.yaml
+<gear> --host <host> engine task session read --section settlement --prose > <task-folder>/settlement.yaml
 ```
 
-Add `--snapshot --pass <n>`. From pass 2, add `--since <run-id>-review-<n-1>`.
+Add `--snapshot --pass <n>`. From pass 2, use the prior snapshot slate with `--since`.
 On a `--since` refusal, keep the pass number. Ask `execute` to settle the baseline and record the decision.
 Use changes since the previous snapshot. Expand to the full change only after approval. Otherwise return `blocked`.
 
@@ -119,8 +114,7 @@ review angle packs <slate>: <names or none>; <reason>
 
 ### Run Converge
 
-Use public `work` and `act`. Give prepared work the actor and receiving host. Refresh stale work.
-When main's work shows finder profiles, use Converge's routed finder handoff.
+Use Converge's seat roster. Ask each role to poll and submit its evidence with `act`.
 Give the finder the actual diff, linked ticket, and the selected lens rows from [lenses.md](references/lenses.md).
 Read the changed behavior checks that apply. Give the cutter its selected cut dimensions. Skip unused lens rows.
 Require find coverage for every selected angle. In full review, run gap hunt after find coverage, before escalation and cut.
@@ -165,6 +159,7 @@ Cite answered slugs and report the answer. If deputy is absent, record `no-deput
 In Engine, return choices for `review-debate`. Standalone, return them to the user. Keep factual disputes in Converge.
 
 After a patch-only pass, read [patch-checks.md](references/patch-checks.md) to record the previous slate's fix checks.
+Finish the active slate after its gate. Use its saved ID and directory in the handback.
 In Engine, record this solo decision and supply the selected exit's public leave inputs.
 
 ```text
