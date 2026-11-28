@@ -20,7 +20,7 @@ import os
 import shlex
 import sys
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, NoReturn, TextIO, TypeVar, overload
 
@@ -149,6 +149,7 @@ class Catalog:
     legacy_json: frozenset[str] = frozenset()
     own_json: frozenset[str] = frozenset()
     capture: frozenset[str] = frozenset()
+    invalid_command_hints: dict[str, str] = field(default_factory=dict)
 
     def display_prog(self) -> str:
         return os.environ.get(ENV_PROG) or self.prog
@@ -168,6 +169,8 @@ class _CatalogParser(argparse.ArgumentParser):
             super()._check_value(action, value)
         except argparse.ArgumentError as exc:
             if isinstance(action, argparse._SubParsersAction):
+                if hint := self.catalog.invalid_command_hints.get(value):
+                    raise argparse.ArgumentError(action, f"{exc.message}; {hint}") from exc
                 raise
             self._input_problems.append(str(exc))
 

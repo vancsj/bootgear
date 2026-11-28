@@ -18,9 +18,10 @@ from bootgear_cli.gear import DEFAULT_ROOT, command_parser
 
 COORDINATION = ("cli", "coordination")
 CONVERGE = ("converge", "converge")
-NATIVE_COMMANDS = {"join", "poll", "assign", "send", "complete", "heartbeat", "blocked"}
+MAIN_COORDINATION_COMMANDS = {"init", "reserve", "replace", "release"}
 REVIEW_COMMANDS = {"init", "act", "finish", "status", "coverage", "cutoff", "converged", "gate",
                    "render", "fix-check", "fallback"}
+HELP_FLAGS = {"-h", "--help"}
 DIRECTORY_CHANGE = re.compile(
     r"^[ \t]*cd[ \t]+(?:--[ \t]+)?"
     r"""(?P<path>'[^'\n]+'|"[^"$\x60\\\n]+"|[^\s;&|<>()'"$\x60\\*?\[\]{}~]+)[ \t]+&&[ \t]*"""
@@ -74,6 +75,15 @@ def is_waiting_poll(command: object) -> bool:
     return False
 
 
+def _requests_help(args: list[str]) -> bool:
+    for arg in args:
+        if arg == "--":
+            break
+        if arg in HELP_FLAGS:
+            return True
+    return False
+
+
 def _details(payload: dict[str, Any]) -> dict[str, Any] | None:
     participant = payload.get("agent_id")
     tool_input = payload.get("tool_input", {})
@@ -98,10 +108,10 @@ def _details(payload: dict[str, Any]) -> dict[str, Any] | None:
     if route not in {COORDINATION, CONVERGE}:
         return None
     verb = options.route[2] if len(options.route) > 2 else ""
-    if route == CONVERGE and verb not in REVIEW_COMMANDS:
+    if route == CONVERGE and verb not in REVIEW_COMMANDS | HELP_FLAGS:
         return None
-    allowed = verb in NATIVE_COMMANDS if route == COORDINATION else verb == "act"
-    if participant is not None and not allowed:
+    main_only = verb in MAIN_COORDINATION_COMMANDS if route == COORDINATION else verb != "act"
+    if participant is not None and main_only and not _requests_help(options.route[2:]):
         return {"permissionDecision": "deny",
                 "permissionDecisionReason": "This command requires the main coordination seat."}
     output = [flag for flag, enabled in (("--json", options.json), ("--prose", options.prose)) if enabled]

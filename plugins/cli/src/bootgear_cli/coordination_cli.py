@@ -18,6 +18,7 @@ CATALOG = clikit.Catalog(
      "complete": 'complete <assignment-id> "Review complete"',
      "blocked": 'blocked "The draft cannot be read"'},
     ("assign", "send", "poll", "complete"),
+    invalid_command_hints={"act": f"use {clikit.gear_command('converge', 'converge')} act --input action.json"},
 )
 
 
