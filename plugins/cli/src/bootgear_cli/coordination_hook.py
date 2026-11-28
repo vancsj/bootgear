@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shlex
@@ -17,13 +18,60 @@ from bootgear_cli.gear import DEFAULT_ROOT, command_parser
 
 COORDINATION = ("cli", "coordination")
 CONVERGE = ("converge", "converge")
-NATIVE_COMMANDS = {"join", "poll", "send", "complete", "heartbeat", "blocked"}
+NATIVE_COMMANDS = {"join", "poll", "assign", "send", "complete", "heartbeat", "blocked"}
 REVIEW_COMMANDS = {"init", "act", "finish", "status", "coverage", "cutoff", "converged", "gate",
                    "render", "fix-check", "fallback"}
 DIRECTORY_CHANGE = re.compile(
     r"^[ \t]*cd[ \t]+(?:--[ \t]+)?"
     r"""(?P<path>'[^'\n]+'|"[^"$\x60\\\n]+"|[^\s;&|<>()'"$\x60\\*?\[\]{}~]+)[ \t]+&&[ \t]*"""
 )
+
+
+def _command_options(tokens: list[str], cwd: Path, gear: list[str]) -> argparse.Namespace | None:
+    if not tokens or Path(tokens[0]).name != "gear":
+        return None
+    if (cwd / tokens[0]).resolve() != Path(gear[0]).resolve():
+        return None
+    parser = command_parser(add_help=False, exit_on_error=False)
+    parser.set_defaults(root=None)
+    try:
+        options, unknown = parser.parse_known_args(tokens[1:])
+    except argparse.ArgumentError:
+        return None
+    if unknown or options.host not in {None, clikit.host()}:
+        return None
+    trusted_root = Path(os.environ.get("GEAR_ROOT") or DEFAULT_ROOT).resolve()
+    if options.root is not None and (cwd / options.root).resolve() != trusted_root:
+        return None
+    return options
+
+
+def is_waiting_poll(command: object) -> bool:
+    if not isinstance(command, str):
+        return False
+    directory_change = DIRECTORY_CHANGE.match(command)
+    try:
+        tokens = shlex.split(command[directory_change.end():] if directory_change else command)
+        directory = shlex.split(directory_change["path"])[0] if directory_change else None
+    except ValueError:
+        return False
+    if (len(tokens) >= 2 and tokens[0] in {"env", "/usr/bin/env"}
+            and tokens[1] == f"{PARTICIPANT_ENV}={HOST_CALLER}"):
+        tokens = tokens[2:]
+    options = _command_options(tokens, clikit.caller_path(directory or "."), clikit.gear_argv(*COORDINATION))
+    if options is None or tuple(options.route[:3]) != (*COORDINATION, "poll"):
+        return False
+    args = options.route[3:]
+    for index, token in enumerate(args):
+        flag, equals, value = token.partition("=")
+        if flag != "--wait":
+            continue
+        try:
+            wait = float(value if equals else args[index + 1])
+        except (IndexError, ValueError):
+            return False
+        return math.isfinite(wait) and wait > 0
+    return False
 
 
 def _details(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -42,22 +90,9 @@ def _details(payload: dict[str, Any]) -> dict[str, Any] | None:
         directory = shlex.split(directory_change["path"])[0] if directory_change else None
     except ValueError:
         return None
-    if not tokens or Path(tokens[0]).name != "gear":
-        return None
     gear = clikit.gear_argv(*COORDINATION)
-    cwd = clikit.caller_path(directory or ".")
-    if (cwd / tokens[0]).resolve() != Path(gear[0]).resolve():
-        return None
-    parser = command_parser(add_help=False, exit_on_error=False)
-    parser.set_defaults(root=None)
-    try:
-        options, unknown = parser.parse_known_args(tokens[1:])
-    except argparse.ArgumentError:
-        return None
-    if unknown or options.host not in {None, clikit.host()}:
-        return None
-    trusted_root = Path(os.environ.get("GEAR_ROOT") or DEFAULT_ROOT).resolve()
-    if options.root is not None and (cwd / options.root).resolve() != trusted_root:
+    options = _command_options(tokens, clikit.caller_path(directory or "."), gear)
+    if options is None:
         return None
     route = tuple(options.route[:2])
     if route not in {COORDINATION, CONVERGE}:

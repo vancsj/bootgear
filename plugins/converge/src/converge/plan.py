@@ -24,7 +24,17 @@ def plan(request: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if completion := request.get("complete"):
         return _complete(slate, actor, role, completion)
-    return _offer(slate, actor, role)
+    offer = _offer(slate, actor, role)
+    if offer is not None:
+        if actor in active.get("advisors", ()) and active.get("advisor_scope"):
+            offer["work"]["scope"] = active["advisor_scope"]
+        return offer
+    if role == "main":
+        for seat in request.get("pending_advisors", ()):
+            advisor_role = active.get("roster", {}).get(seat)
+            if advisor_role and work.package(slate, seat, clikit.host() or "claude", requested=advisor_role)["actions"]:
+                return {"launch": seat}
+    return None
 
 
 def _complete(slate: Slate, actor: str, role: str, completion: dict[str, Any]) -> dict[str, Any]:
@@ -34,8 +44,14 @@ def _complete(slate: Slate, actor: str, role: str, completion: dict[str, Any]) -
             raise ledger.LedgerError(problems)
         return {"workflow": [event]}
     current = _offer(slate, actor, role)
-    if current and _focus(current["work"]) & _focus(completion["work"]):
-        raise ledger.LedgerError(["finish the assignment's evidence before completing it"])
+    remaining = _focus(current["work"]) & _focus(completion["work"]) if current else set()
+    if remaining:
+        subjects = set()
+        for item in sorted(remaining):
+            value = json.loads(item)
+            target = " ".join(f"{key} {value[key]}" for key in ("claim", "lens", "angle", "batch", "when") if key in value)
+            subjects.add(target or value["action"])
+        raise ledger.LedgerError(["finish the assignment's evidence before completing it", *sorted(subjects)])
     return {"workflow": []}
 
 

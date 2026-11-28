@@ -102,6 +102,10 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                    help="previous slate with a snapshot; requires --snapshot and --pass equal to the previous pass + 1; prints their git diff")
     p.add_argument("--settlement", type=caller_path, metavar="FILE",
                    help="engine settlement YAML; its converge_seats and advisor_roles seat the slate")
+    p.add_argument("--artifact", type=caller_path, metavar="PATH",
+                   help="artifact or review input file for the advisor; use with --advisor-brief")
+    p.add_argument("--advisor-brief", type=caller_path, metavar="FILE",
+                   help="review instructions for the advisor; use with --artifact")
     p.add_argument("--refuters", type=int, choices=(1, 2), default=2,
                    help="refuter seats on the slate; 1 drops r2")
     p.add_argument("--require-advisor", action="store_true", help="require external advisor coverage")
@@ -200,6 +204,11 @@ def _parser(catalog: Catalog = CATALOG) -> argparse.ArgumentParser:
                          '"searches":"rg entry a.py","positive_control":"entry found at a.py:1"}]}')
         p.add_argument("--input", required=True, metavar="FILE|-",
                        help="one generated action object; - reads stdin; all checks validate before append")
+        if name == "act":
+            p.description = ("For active work, copy one action input from coordination poll. Add the required "
+                             "evidence and assignment_id. Gear resolves the slate and seat.\n\n"
+                             "For a separate slate, give its ID and --as on the command line. "
+                             + p.description)
 
     p = command("reply", cmd_reply, write=True)
     p.description = "Reply to the batch's refutation. rebut requires new evidence; decline carries no evidence or text."

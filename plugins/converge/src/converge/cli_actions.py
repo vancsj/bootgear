@@ -8,6 +8,7 @@ import shlex
 import sys
 from typing import Any
 
+from bootgear_cli import clikit, coordination
 from bootgear_cli.clikit import (
     caller_path,
     emit,
@@ -134,14 +135,22 @@ def cmd_attack(args: argparse.Namespace) -> None:
 
 
 def cmd_action(args: argparse.Namespace) -> None:
-    if args.slate is None:
-        from .coordination_commands import cmd_act
-
-        if args.dir is not None or args.agent is not None:
-            _refuse(["the active assignment derives its directory and seat from the coordination store"])
-        cmd_act(args)
-        return
     if args.command == "act":
+        from .coordination_commands import cmd_act, refuse_active_action
+
+        message = ["omit the slate, --dir, and --as. Use the action and assignment_id from poll"]
+        if args.slate is None:
+            if args.dir is not None or args.agent is not None:
+                refuse_active_action(args, "refused", message)
+            cmd_act(args)
+            return
+        try:
+            store = coordination.observe(coordination.Caller.from_environment())
+        except (clikit.Refusal, OSError, ValueError):
+            store = None
+        active = coordination.active_slate(store) if store is not None else None
+        if active and args.slate == active["id"]:
+            refuse_active_action(args, "refused", message)
         args.dir = args.dir or ledger.DEFAULT_DIR.expanduser()
         if args.agent is None:
             _refuse(["explicit slate action requires --as"])

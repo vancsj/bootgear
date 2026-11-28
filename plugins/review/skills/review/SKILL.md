@@ -93,6 +93,7 @@ Use the order in the standard.
 In Engine, export the settlement and pass it with `--settlement`.
 If the task folder has an approved `converge.yaml`, pass it with `--config` on every visit.
 For standalone advisor reviews, pass the user's approved launcher settings with `--settlement`.
+Pass the review input path with `--artifact` and the scoped instructions with `--advisor-brief FILE`.
 Before standalone launcher approval, use Converge's advisor startup steps. Show the effective worker counts.
 Save the approved standalone config with the task. Use it for later visits and approved retries.
 Follow Converge's launch failure path. Include advisor gaps in the handback.
@@ -148,7 +149,7 @@ From pass 2, give the finder the diff command from init and the previous render.
 Require out-of-diff claims to show a behavior change caused by the diff.
 For a `fix-now` re-review, use one round limited to patch-caused problems.
 
-Give the gap hunter the current render, diff, linked ticket, and current test brief.
+Include the current render, diff, linked ticket, and test summary in the gap hunter's brief file.
 Ask what every lens missed and whether the diff omits requested work or adds unrequested work.
 
 ### Report and route findings

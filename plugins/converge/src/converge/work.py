@@ -252,9 +252,11 @@ def package(slate: Slate, actor: str, role_host: str,
                                      "reason": ""}, ["angle", "reason"],
                         ["choose one angle from the current item"])
             elif kind == "reply":
+                assert batch is not None
+                context = {"reply_stage": protocol.batch_state(slate, claim, batch)}
                 add("reply", {**base, "stance": "rebut", "evidence": ""}, ["evidence"],
-                    ["new evidence is required; text may clarify the claim"])
-                add("reply", {**base, "stance": "decline"})
+                    ["new evidence is required; text may clarify the claim"], context=context)
+                add("reply", {**base, "stance": "decline"}, context=context)
             elif kind == "verdict":
                 add("verdict", {**base, "verdict": "agree"})
                 add("verdict", {**base, "verdict": "disagree", "evidence": ""}, ["evidence"])

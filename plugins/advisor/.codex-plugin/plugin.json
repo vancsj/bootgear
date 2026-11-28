@@ -1,6 +1,6 @@
 {
   "name": "advisor",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Pair Claude Code and Codex CLI through the coordination store, or send a one-shot prompt to either CLI. Use for second opinions, reviews, rewrites, or scoped investigations.",
   "author": {
     "name": "vancsj",

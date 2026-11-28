@@ -4,21 +4,22 @@ Get Gear through `cli:gear`. Use its command help for the coordination interface
 
 ## Request
 
-Initialize the coordination store. Reserve a seat for the advisor and send its first request.
+Initialize the store. Reserve the advisor seat and use `assign` to request work.
 Use the approved launcher and give it the seat invitation.
 
-Start the background heartbeat. Poll for the assignment result and acknowledge its delivery ID.
-Match the result to the assignment ID from send.
+Start the background heartbeat. Follow `poll` and acknowledge its message ID.
+Match the result to the assignment ID from `assign`.
 Keep shared seats until the owning workflow ends. To stop an advisor, release its seat.
-The seat keeps open assignments and unread deliveries.
+The seat keeps open assignments and unread messages.
 
 ## Listen
 
 Use `join <invitation>` to take the seat.
 Poll with a wait interval. Poll again after an empty result or after completion.
-Acknowledge each delivery with its ID. Resume an open assignment after an interruption.
+Acknowledge a message with its `mN` ID. Resume open work after an interruption.
+Complete work with its `aN` ID and include your reply in that call.
 Run the seat heartbeat in the background. Follow the restart command when it stops.
-Send a blocked report if evidence, authority, or a needed input is missing.
+Use `blocked` when you cannot proceed. Use `send` for information during work.
 Run poll after compaction. End the turn when poll returns `stopped`.
 An idle advisor can end its pairing after the requester stays offline past the grace period.
 

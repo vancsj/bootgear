@@ -5,15 +5,25 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
-from typing import Any
+from dataclasses import replace
+from typing import Any, NoReturn
 
 from bootgear_cli import clikit, coordination
 
 from . import ledger, native_profiles, protocol, work
 from .cli_actions import _review_problems
-from .cli_common import _refuse
+from .cli_common import CATALOG, EXAMPLES, _refuse, _refuse_next
+
+ACTIVE_ACT_CATALOG = replace(CATALOG, examples={"act": EXAMPLES["act"]}, frequent=())
+
+
+def refuse_active_action(args: argparse.Namespace, message: str, problems: list[str]) -> NoReturn:
+    _refuse_next(args, message, problems,
+                 "refresh the current work: " + clikit.gear_command("cli", "coordination") + " poll",
+                 catalog=ACTIVE_ACT_CATALOG)
 
 
 def _digest(value: Any) -> str:
@@ -28,11 +38,15 @@ def _work_action(store: coordination.Store, value: dict[str, Any]) -> dict[str, 
     path = ledger.slate_path(store.path / "slates", slate_id)
     slate = ledger.read(path, slate_id, workflow=active["workflow"])
     assignment_id = value.get("assignment_id")
-    assignment = store.state["assignments"].get(assignment_id) if isinstance(assignment_id, str) else None
-    if not assignment or assignment.get("slate") != slate_id or assignment["executor_seat"] != store.seat:
-        _refuse(["poll for an active slate assignment before submitting evidence"])
+    if not isinstance(assignment_id, str) or not re.fullmatch(r"a[1-9][0-9]*", assignment_id):
+        _refuse(["provide assignment_id from the poll result, such as a1"])
+    assignment = store.state["assignments"].get(assignment_id)
+    if not assignment or assignment["executor_seat"] != store.seat:
+        _refuse([f"assignment_id {assignment_id} does not belong to this seat"])
+    if assignment.get("slate") != slate_id:
+        _refuse([f"assignment_id {assignment_id} does not hold work for the active slate"])
     if not any(_matches(suggestion["input"], value) for suggestion in assignment["work"]["actions"]):
-        _refuse(["action is outside the current assignment"])
+        _refuse([f"action or context does not match the work in assignment_id {assignment_id}"])
     action_hash = _digest(value)
     kind = value["action"]
     focus = {key: value[key] for key in ("claim", "lens", "angle", "batch", "when", "context")
@@ -67,6 +81,7 @@ def _work_action(store: coordination.Store, value: dict[str, Any]) -> dict[str, 
     workflow_event = kind in {"find-run", "gap-hunt-done"} or (kind == "angle-na" and value.get("phase") == "find")
     written = ledger.append(path, slate_id, {}, build=event, workflow=active["workflow"],
                             workflow_event=workflow_event)
+    active["claim_seq"] = written["seq"]
     assignment["progress_at"] = time.time()
     return written
 
@@ -83,15 +98,18 @@ def cmd_act(args: argparse.Namespace) -> None:
     try:
         value = json.loads(sys.stdin.read() if args.input == "-" else clikit.caller_path(args.input).read_text())
     except (OSError, ValueError) as error:
-        _refuse([str(error)], "invalid action")
+        refuse_active_action(args, "invalid action", [str(error)])
     if not isinstance(value, dict):
-        _refuse(["input must be one JSON object"])
+        refuse_active_action(args, "invalid action", ["input must be one JSON object"])
     try:
         with coordination.transaction(coordination.Caller.from_environment()) as store:
             event = _work_action(store, value)
     except ledger.LedgerError as error:
-        _refuse(error.problems)
-    data = {key: value for key, value in event.items() if key not in ("ts", "as", "action_hash")}
+        refuse_active_action(args, "refused", error.problems)
+    except clikit.Refusal as error:
+        refuse_active_action(args, "refused", [problem for _, problem in error.problems] or [error.message])
+    data = {key: value for key, value in event.items()
+            if key not in ("ts", "as", "action_id", "action_hash", "evidence_sha256")}
     clikit.emit(args.output_mode, data, f"{event['event'].upper()} seq={event['seq']}",
                 clikit.gear_command("cli", "coordination") + " poll")
 

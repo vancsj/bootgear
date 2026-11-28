@@ -66,10 +66,10 @@ def test_gear_builtin_help_is_guidance(command):
     help_for("codex", command)
 
 
-def test_coordination_help_exposes_delivery_acknowledgement():
+def test_coordination_help_exposes_message_acknowledgement():
     output = help_for("codex", "cli", "coordination", "poll")
     assert "--ack" in output
-    assert "delivery ID" in output
+    assert "message ID" in output
 
 
 def test_engine_force_help_names_the_preserved_boundary():

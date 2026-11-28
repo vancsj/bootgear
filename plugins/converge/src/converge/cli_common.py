@@ -89,14 +89,14 @@ def _refuse(problems: list[str], what: str = "refused", code: int = EXIT_REFUSED
 
 
 def _refuse_next(args: argparse.Namespace, message: str, problems: list[str],
-                 next_step: str) -> NoReturn:
+                 next_step: str, *, catalog: Catalog | None = None) -> NoReturn:
     """A refusal with its example and command list, then the next step: the last prose
     line, or the error object's `next` in JSON."""
     buffer = io.StringIO()
     refusal = Refusal(f"converge: {message}:", [("", p) for p in problems], code=EXIT_REFUSED)
     find = args.command == "angle-na" and args.phase == "find"
     with contextlib.redirect_stderr(buffer):
-        render_refusal(FIND_CATALOG if find else CATALOG, args.command, refusal,
+        render_refusal(catalog or (FIND_CATALOG if find else CATALOG), args.command, refusal,
                        args.output_mode)
     if args.output_mode == "json":
         error = json.loads(buffer.getvalue())

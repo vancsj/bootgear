@@ -7,7 +7,7 @@ import json
 import sys
 import time
 
-from bootgear_cli import clikit, coordination
+from bootgear_cli import clikit, coordination, coordination_hook
 
 
 def main() -> None:
@@ -30,6 +30,8 @@ def main() -> None:
     program = clikit.gear_command("cli", "coordination")
     poll = f"{program} poll --wait 300"
     if name == "Stop" and is_advisor:
+        if clikit.host() == "claude" and _waiting_poll(event.get("background_tasks")):
+            return
         print(json.dumps({"decision": "block", "reason": f"Keep listening for work. Run {poll}"}))
     elif name == "SessionStart" and event.get("source") == "compact" and (
             paired or coordination.active_slate(store)):
@@ -38,6 +40,14 @@ def main() -> None:
         record = store.state["seats"][store.seat]
         if record["restart_until"] or time.time() - record.get("heartbeat_at", 0) > coordination.HEARTBEAT_TTL:
             _hint(name, f"Restart the required seat heartbeat in the background. Run {program} heartbeat --wait 6180")
+
+
+def _waiting_poll(tasks: object) -> bool:
+    return isinstance(tasks, list) and any(
+        isinstance(task, dict) and task.get("type") == "shell" and task.get("status") == "running"
+        and coordination_hook.is_waiting_poll(task.get("command"))
+        for task in tasks
+    )
 
 
 def _hint(event: str, context: str) -> None:

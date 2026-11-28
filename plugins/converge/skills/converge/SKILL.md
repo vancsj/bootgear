@@ -26,12 +26,13 @@ The caller routes choices through deputy, resolve, or debate. A handback adds no
 
 Get Gear through `cli:gear`. Initialize the coordination store once.
 Open a slate with Converge `init`. Pass the lenses, angles, config, and settlement that apply.
-For an active slate, use `status` and resume it.
+For an active slate, resume through `poll`.
 
 Use the returned seats, invitations, and native profiles. Give each invitation only to its participant.
 Use native model and effort profiles as guidance. Keep each participant for its reply work.
-Use `advisor:advisor` for an advisor seat. Follow status when it shows ready work and a launch command.
-Give the requester's approved command the seat invitation. The configured count is the maximum number of advisor seats.
+Use `advisor:advisor` for an advisor seat. Follow the approved launch from requester `poll`.
+When opening the slate, pass `--artifact` and `--advisor-brief` for the advisor.
+Start each invitation once. The configured count is the maximum number of advisor seats.
 Keep advisor seats while the outer review has more visits. Release them when the review ends.
 If a participant disconnects, try to resume it before replacing its stale seat.
 Use the new invitation to give the replacement the same seat.
@@ -55,9 +56,11 @@ Use `none recorded` when absent. Tell roles to skip covered runs and probe uncov
 Join the assigned seat. Run the same coordination poll as main and the other roles.
 Use the assignment's evidence, angles, and action inputs. Fill only evidence and judgment fields.
 Keep the seat heartbeat active while you work.
-Submit each action through Converge `act`. Poll after a stale action refusal.
+Save one polled action input with its assignment ID and evidence to a JSON file.
+Run Converge `act --input FILE` in a separate plain Bash call. Follow its recovery output.
 Complete the assignment even when the work found zero claims. Poll again for work or results.
-Acknowledge each delivery on the next poll. Report blockers through the coordination command.
+Use `poll --ack` with the message ID. Use `complete` with the assignment ID and reply.
+Use `blocked` for blockers and `send` for information.
 
 ### Apply the role rules
 
@@ -79,7 +82,7 @@ Let the CLI compute phases, role work, cutoff, and eligibility. Give evidence an
 
 ### Finish
 
-Follow main poll and status for cutoff, render, gates, and convergence.
+Follow requester `poll` for work. Use cutoff, render, and gates for final checks.
 Keep survived, disputed, killed, and unverified status separate from cutoff. Keep follow-ups visible.
 For an applied fix-now patch, the caller runs checks and an independent patch review. Record its fix check through the CLI.
 After a failed fix check, the caller reverts within its permissions.
@@ -106,7 +109,8 @@ For missing siblings, report cli:setup for converge. Resume after setup and rest
 ## Host mechanics
 
 Get the absolute path from `cli:gear`. Read only the current host's section.
-Run one Gear command per Bash tool call. A literal `cd` path can precede Gear.
+Run one plain Gear command per Bash tool call. A literal `cd` path can precede Gear.
+Use public Gear commands to inspect coordination.
 
 ### Claude Code
 

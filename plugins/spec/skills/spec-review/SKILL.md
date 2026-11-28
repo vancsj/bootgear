@@ -62,6 +62,7 @@ Each later visit starts a new slate. Reuse the seated native judges and advisors
 
 Initialize the coordination store. Open one active slate with Converge.
 Use the returned invitations and role profiles. Let each role poll, act, and complete its own work.
+For an advisor, pass the primary artifact with `--artifact`. Pass its scope and other input paths in `--advisor-brief FILE`.
 
 Supply the project root and lenses.
 

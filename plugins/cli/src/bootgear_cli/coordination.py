@@ -7,10 +7,11 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,6 +142,7 @@ def initialize(caller: Caller, timeout: float) -> Record:
         if not path.exists():
             _write(path, {"seats": {"main": _seat("main", occupant=caller.identity())},
                           "assignments": {}, "requests": {}, "deliveries": [],
+                          "next_assignment": 1, "next_message": 1,
                           "active_slate": None, "slates": {}, "stopped": {}})
     return {"seat": "main", "status": "ready"}
 
@@ -155,8 +157,13 @@ class Store:
         if self.seat != "main":
             clikit.refuse("this operation requires the main seat")
 
+    def next_number(self, counter: str) -> int:
+        number = self.state[counter]
+        self.state[counter] = number + 1
+        return number
+
     def delivery(self, recipient: str, kind: str, body: Record) -> Record:
-        item = {"delivery_id": uuid4().hex, "kind": kind, **body}
+        item = {"message_id": f"m{self.next_number('next_message')}", "kind": kind, **body}
         self.state["deliveries"].append({"recipient": recipient, "body": item, "ack": False})
         return item
 
@@ -222,6 +229,13 @@ def transaction(caller: Caller, timeout: float = DEFAULT_TIMEOUT, *,
         raise
 
 
+def _invitation(store: Store) -> str:
+    pending = {record["invitation"] for record in store.state["seats"].values()}
+    while (key := uuid4().hex[:8]) in pending:
+        pass
+    return key
+
+
 def reserve(store: Store, seat: str, role: str) -> Record:
     store.require_main()
     _name(seat, "seat")
@@ -230,9 +244,9 @@ def reserve(store: Store, seat: str, role: str) -> Record:
     if existing and (existing["role"] != role or existing["occupant"]):
         clikit.refuse(f"seat is already reserved or occupied: {seat}")
     if not existing:
-        existing = store.state["seats"][seat] = _seat(role, invitation=uuid4().hex)
+        existing = store.state["seats"][seat] = _seat(role, invitation=_invitation(store))
     elif existing["invitation"] is None:
-        existing["invitation"] = uuid4().hex
+        existing["invitation"] = _invitation(store)
     return _reservation(store, seat, existing, "reserved")
 
 
@@ -249,7 +263,7 @@ def replace(store: Store, seat: str) -> Record:
     now = time.time()
     if now - previous["seen_at"] <= HEARTBEAT_TTL or now < previous["restart_until"]:
         clikit.refuse(f"seat is live: {seat}")
-    record = store.state["seats"][seat] = _seat(previous["role"], invitation=uuid4().hex)
+    record = store.state["seats"][seat] = _seat(previous["role"], invitation=_invitation(store))
     if "mechanism" in previous:
         record["mechanism"] = previous["mechanism"]
     return _reservation(store, seat, record, "replaced")
@@ -455,14 +469,37 @@ def finish(store: Store) -> None:
     store.state["active_slate"] = None
 
 
-def _planner(store: Store, timeout: float, *, completion: Record | None = None) -> Record | None:
+def advisor_launch(store: Store, seat: str) -> Record | None:
+    active = active_slate(store)
+    if active is None or seat not in active.get("advisors", ()):
+        return None
+    record = store.state["seats"][seat]
+    token = record["invitation"]
+    if record.get("mechanism") != "advisor" or record["occupant"] or not token:
+        return None
+    argv: list[str] | None = active.get("advisor_launch")
+    if not argv:
+        return None
+    invitation = f"{store.path.name}/{token}"
+    values = {"{seat}": seat, "{invitation}": invitation}
+    command = shlex.join([values.get(word, word) for word in argv])
+    return {"kind": "launch", "status": "ready", "seat": seat, "launch": command}
+
+
+def _planner_request(store: Store, completion: Record | None = None) -> Record:
     slate = active_slate(store)
     assert slate is not None
     request = {"slate": slate, "store": str(store.path), "seat": store.seat,
                "role": store.state["seats"][store.seat]["role"]}
     if completion is not None:
         request["complete"] = completion
-    argv = clikit.gear_argv(*slate["planner"])
+    elif store.seat == "main":
+        request["pending_advisors"] = [seat for seat in slate.get("advisors", ()) if advisor_launch(store, seat)]
+    return request
+
+
+def _planner(request: Record, timeout: float) -> Record | None:
+    argv = clikit.gear_argv(*request["slate"]["planner"])
     try:
         result = subprocess.run(argv, input=json.dumps(request), text=True, capture_output=True,
                                 check=False, timeout=timeout)
@@ -474,13 +511,15 @@ def _planner(store: Store, timeout: float, *, completion: Record | None = None) 
     return plan
 
 
-def _plan(store: Store, timeout: float) -> Record | None:
-    slate = active_slate(store)
-    if slate is None or (store.seat != "main" and store.seat not in slate.get("roster", {})):
-        return None
-    plan = _planner(store, timeout)
+def _admit_plan(store: Store, slate: Record, plan: Record | None) -> Record | None:
     if plan is None:
         return None
+    if isinstance(plan, dict) and set(plan) == {"launch"}:
+        seat = plan["launch"]
+        launch = advisor_launch(store, seat) if store.seat == "main" and isinstance(seat, str) else None
+        if launch is None:
+            clikit.refuse("coordination planner failed: invalid advisor launch")
+        return launch
     if (not isinstance(plan, dict) or set(plan) != {"batch", "receiver", "work"}
             or not isinstance(plan["batch"], str) or not plan["batch"]
             or not isinstance(plan["receiver"], str) or plan["receiver"] not in store.state["seats"]
@@ -504,11 +543,21 @@ def _valid_work(work: object) -> bool:
     )
 
 
-def send(store: Store, seat: str, message: str, request_key: str | None) -> Record:
+def _check_message(store: Store, seat: str, message: str) -> None:
     if seat not in store.state["seats"] or seat == store.seat:
         clikit.refuse(f"unknown or invalid recipient seat: {seat}")
     if not message.strip():
-        clikit.refuse("send requires a message")
+        clikit.refuse("provide message text")
+
+
+def send(store: Store, seat: str, message: str) -> Record:
+    _check_message(store, seat, message)
+    item = store.delivery(seat, "message", {"sender_seat": store.seat, "message": message})
+    return {"message_id": item["message_id"], "status": "sent"}
+
+
+def request(store: Store, seat: str, message: str, request_key: str | None) -> Record:
+    _check_message(store, seat, message)
     request_key = _key(store.seat, request_key or _key(seat, message))
     existing = store.state["requests"].get(request_key)
     if existing:
@@ -521,11 +570,8 @@ def send(store: Store, seat: str, message: str, request_key: str | None) -> Reco
 
 def assign(store: Store, executor: str, receiver: str, message: str | None, *,
            request_key: str | None = None, **attributes: Any) -> Record:
-    assignment_id = uuid4().hex
+    assignment_id = f"a{store.next_number('next_assignment')}"
     summary = {"assignment_id": assignment_id, "status": "open"}
-    if work := attributes.get("work"):
-        for action in work["actions"]:
-            action["input"]["assignment_id"] = assignment_id
     item = store.delivery(executor, "assignment",
                           {**summary, "executor_seat": executor, "receiver_seat": receiver,
                            "message": message, **attributes})
@@ -535,20 +581,77 @@ def assign(store: Store, executor: str, receiver: str, message: str | None, *,
     return summary
 
 
-def poll(store: Store, acknowledge: str | None, timeout: float = DEFAULT_TIMEOUT) -> Record:
+class _PlanNeeded(Exception):
+    def __init__(self, request: Record):
+        self.request = request
+
+
+_PlanResult = Record | clikit.Refusal | None
+
+
+def _checked_plan(current: Record, request: Record | None, result: _PlanResult) -> Record | None:
+    if request != current:
+        raise _PlanNeeded(current)
+    if isinstance(result, clikit.Refusal):
+        raise result
+    return result
+
+
+def _poll(store: Store, acknowledge: str | None, request: Record | None, result: _PlanResult) -> Record:
     deliveries = [row for row in store.state["deliveries"] if row["recipient"] == store.seat]
     if acknowledge:
-        item = next((row for row in deliveries if row["body"]["delivery_id"] == acknowledge), None)
+        if not re.fullmatch(r"m[1-9][0-9]*", acknowledge):
+            clikit.refuse("poll --ack takes a message ID such as m1")
+        item = next((row for row in deliveries if row["body"]["message_id"] == acknowledge), None)
         if item is None:
-            clikit.refuse("delivery does not belong to the polling seat")
+            clikit.refuse("message does not belong to the polling seat")
         item["ack"] = True
     unread = next((row["body"] for row in deliveries if not row["ack"]), None)
-    return (unread or store.open_assignment() or _plan(store, timeout) or _stalled_advisor(store)
+    if work := unread or store.open_assignment():
+        return work
+    slate = active_slate(store)
+    if slate is not None and (store.seat == "main" or store.seat in slate.get("roster", {})):
+        current = _planner_request(store)
+        if work := _admit_plan(store, slate, _checked_plan(current, request, result)):
+            return work
+    return (_stalled_advisor(store)
             or _idle_exit(store) or {"status": "idle"})
 
 
-def complete(store: Store, assignment_id: str, message: str | None,
+def _planned_transaction(caller: Caller, timeout: float,
+                         apply: Callable[[Store, Record | None, _PlanResult], Record], *,
+                         accept_stopped: bool = False) -> Record:
+    request: Record | None = None
+    result: _PlanResult = None
+    while True:
+        try:
+            with transaction(caller, timeout, accept_stopped=accept_stopped) as store:
+                return apply(store, request, result)
+        except _PlanNeeded as needed:
+            # Leave the lock before running Gear. Recheck work and slate state before committing.
+            request = needed.request
+            try:
+                result = _planner(request, timeout)
+            except clikit.Refusal as error:
+                result = error
+
+
+def poll(caller: Caller, acknowledge: str | None, timeout: float = DEFAULT_TIMEOUT) -> Record:
+    return _planned_transaction(caller, timeout,
+                                lambda store, request, plan: _poll(store, acknowledge, request, plan),
+                                accept_stopped=True)
+
+
+def complete(caller: Caller, assignment_id: str, message: str | None,
              timeout: float = DEFAULT_TIMEOUT) -> Record:
+    return _planned_transaction(caller, timeout,
+                                lambda store, request, plan: _complete(store, assignment_id, message, request, plan))
+
+
+def _complete(store: Store, assignment_id: str, message: str | None,
+              request: Record | None, result: _PlanResult) -> Record:
+    if not re.fullmatch(r"a[1-9][0-9]*", assignment_id):
+        clikit.refuse("complete takes an assignment ID such as a1; acknowledge messages with poll --ack")
     assignment = store.state["assignments"].get(assignment_id)
     if assignment is None or assignment["executor_seat"] != store.seat:
         clikit.refuse("assignment can only be completed by its executor seat")
@@ -561,15 +664,14 @@ def complete(store: Store, assignment_id: str, message: str | None,
         active = active_slate(store)
         if active is None or active["id"] != assignment["slate"]:
             clikit.refuse("assignment does not belong to the active slate")
-        completed = _planner(store, timeout, completion=assignment)
-        if (not isinstance(completed, dict) or set(completed) != {"workflow"}
-                or not isinstance(completed["workflow"], list)):
+        plan = _checked_plan(_planner_request(store, assignment), request, result)
+        if not isinstance(plan, dict) or set(plan) != {"workflow"} or not isinstance(plan["workflow"], list):
             clikit.refuse("coordination planner failed: invalid completion")
-        active["workflow"].extend(completed["workflow"])
+        active["workflow"].extend(plan["workflow"])
         assignment["advisor_work"] = linked(store, store.seat)
     assignment.update(status="complete", reply=message)
     for delivery in store.state["deliveries"]:
-        if delivery["body"]["delivery_id"] == assignment["delivery_id"]:
+        if delivery["body"]["message_id"] == assignment["message_id"]:
             delivery["ack"] = True
             break
     store.delivery(assignment["receiver_seat"], "result", {**summary, "message": message})

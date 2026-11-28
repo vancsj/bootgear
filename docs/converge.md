@@ -16,7 +16,10 @@ The Engine session ledger owns the settlement and run progress.
 
 ## Work and evidence
 
-A request can provide work. A poll can also admit the next eligible batch from Converge.
+An assignment has a numbered `a` ID. Its executor can complete it with a reply.
+Messages have numbered `m` IDs. The recipient acknowledges them in poll.
+Poll also admits the next eligible Converge batch and returns an approved advisor launch.
+The advisor receives the current artifact and brief with its work.
 The planner reads the current workflow state and claim slate. It uses the configured role and coverage rules.
 The store admits each batch once and records its executor and result receiver.
 Converge validates claim actions under the same lock as seat authorization.

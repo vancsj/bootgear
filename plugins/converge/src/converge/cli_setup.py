@@ -196,8 +196,11 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.dir is not None or args.agent is not None:
         _refuse(["the active slate derives its directory and seat from the coordination store"])
     with coordination.transaction(coordination.Caller.from_environment()) as store:
-        args.slate = f"review-{uuid4().hex[:16]}"
         args.dir = store.path / "slates"
+        while True:
+            args.slate = f"review-{uuid4().hex[:8]}"
+            if args.slate not in store.state["slates"] and not ledger.slate_path(args.dir, args.slate).exists():
+                break
         args.agent = "main"
         args.coordination_store = store
         coordination.activate(store, args.slate, "converge", "plan")
@@ -206,6 +209,14 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 def _init(args: argparse.Namespace, store: coordination.Store | None = None) -> None:
     seat_fields, notes = _init_seats(args)
+    if args.artifact is not None or args.advisor_brief is not None:
+        if store is None or args.artifact is None or args.advisor_brief is None:
+            _refuse(["use --artifact and --advisor-brief together when opening the active coordination slate"])
+        if not args.artifact.is_file() or not args.advisor_brief.is_file():
+            _refuse(["--artifact and --advisor-brief must name files"])
+        active = coordination.active_slate(store)
+        assert active is not None
+        active["advisor_scope"] = {"artifact": str(args.artifact), "brief": str(args.advisor_brief)}
     launcher = seat_fields.get("advisor", {}).get("launcher")
     launch_argv = None
     if store is not None and launcher:
@@ -290,7 +301,7 @@ def _init(args: argparse.Namespace, store: coordination.Store | None = None) -> 
         data["participants"] = participants
         lines.extend("SEAT " + " ".join(f"{key}={value}" for key, value in member.items()
                                         if value is not None) for member in participants)
-        emit(args.output_mode, data, lines, "start the invited native participants. Check status for ready advisors. Run "
+        emit(args.output_mode, data, lines, "start the invited native participants, then run "
              + gear_command("cli", "coordination") + " poll")
         return
     slate_seats = event.get("seats", {})
@@ -366,7 +377,10 @@ def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
         _refuse(problems)
     assert root is not None
     sha = _snapshot_commit(root, args.slate)
-    pinned = _git(root, "update-ref", _ref(args.slate), sha)
+    ref = _ref(args.slate)
+    # Generated IDs must not take an existing snapshot from a different store.
+    expected = ("",) if getattr(args, "coordination_store", None) is not None else ()
+    pinned = _git(root, "update-ref", ref, sha, *expected)
     if pinned.returncode != 0:
         _refuse([_git_error(f"pin: git update-ref {_ref(args.slate)} {sha}", pinned)])
     event = {"as": args.agent, **event, "snapshot": sha}
@@ -375,7 +389,7 @@ def _init_snapshot(args: argparse.Namespace, event: dict[str, Any],
     try:
         return ledger.append(path, args.slate, event, create=True)
     except BaseException as exc:
-        removed = _git(root, "update-ref", "-d", _ref(args.slate))
+        removed = _git(root, "update-ref", "-d", ref, sha)
         if removed.returncode == 0:
             cleanup = f"removed {_ref(args.slate)}"
         else:
