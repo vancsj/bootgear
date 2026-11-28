@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import shlex
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -319,6 +320,47 @@ def test_store_plans_one_main_assignment_for_each_slate(coordination):
     next_work = call("main-a", "poll", "--ack", result["message_id"])
     assert next_work["slate"] == two["slate"]
     assert next_work["assignment_id"] != first["assignment_id"]
+
+
+def test_parallel_finders_can_use_their_poll_action_files(coordination):
+    root, call, _ = coordination
+    converge = ("converge", "converge")
+    config = root.parent / "parallel-config.yaml"
+    config.write_text("parallelism: {finder: 2, r1: 1, r2: 1, max_workers: 3}\n")
+    angles = root.parent / "parallel-angles.yaml"
+    angles.write_text("- {id: first, tag: find, tell: first check, asks: first question}\n"
+                      "- {id: second, tag: find, tell: second check, asks: second question}\n")
+    call("main-a", "init")
+    slate = call("main-a", "init", "--refuters", "1", "--lenses", "example", "--config", str(config),
+                 "--angles", str(angles), route=converge)
+    roster = {seat["seat"]: seat for seat in slate["participants"]}
+    seats = ("finder", "finder-2")
+    for seat in seats:
+        call("main-a", "join", roster[seat]["invitation"], participant=seat)
+
+    def poll(seat):
+        return call("main-a", "poll", participant=seat)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assignments = list(pool.map(poll, seats))
+    files = []
+    for seat, assignment in zip(seats, assignments, strict=True):
+        guidance = assignment["next"]
+        assert poll(seat)["next"] == guidance
+        filename = shlex.split(guidance.split(" act --input ", 1)[1])[0]
+        assert f"to {filename}." in guidance
+        path = root.parent / filename
+        action = next(row["input"] for row in assignment["work"]["actions"]
+                      if row["input"]["action"] == "find-run")
+        action.update(assignment_id=assignment["assignment_id"], tell="Read the assigned path",
+                      searches="Read the samples", positive_control="Read the control", result="none")
+        path.write_text(json.dumps(action))
+        files.append(path)
+
+    for seat, assignment, path in zip(seats, assignments, files, strict=True):
+        call("main-a", "act", "--input", str(path), route=converge, participant=seat)
+        call("main-a", "complete", assignment["assignment_id"], participant=seat)
+        assert path.name == f"action-{slate['slate']}-{assignment['assignment_id']}.json"
 
 
 def test_review_coverage_and_empty_gap_hunt_share_store_with_advice(coordination, monkeypatch):

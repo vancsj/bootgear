@@ -18,7 +18,7 @@ CATALOG = clikit.Catalog(
      "complete": 'complete <assignment-id> "Review complete"',
      "blocked": 'blocked "The draft cannot be read"'},
     ("assign", "send", "poll", "complete"),
-    invalid_command_hints={"act": f"use {clikit.gear_command('converge', 'converge')} act --input action.json"},
+    invalid_command_hints={"act": f"use {clikit.gear_command('converge', 'converge')} act --input FILE"},
 )
 
 
@@ -147,9 +147,10 @@ def _next(command: str, result: coordination.Record) -> str | None:
         if result["kind"] == "assignment":
             finish = f"{program} complete {result['assignment_id']}"
             if result.get("work"):
-                act = clikit.gear_command("converge", "converge") + " act --input action.json"
+                filename = f"action-{result['slate']}-{result['assignment_id']}.json"
+                act = clikit.gear_command("converge", "converge") + f" act --input {filename}"
                 return (f"save the polled action input with assignment_id {result['assignment_id']} "
-                        f"and your evidence to action.json. Run {act} in a separate Bash call, then {finish}")
+                        f"and your evidence to {filename}. Run {act} in a separate Bash call, then {finish}")
             return f"do the assigned work, then {finish}"
     if command in {"join", "assign", "send", "poll", "blocked", "complete"}:
         return poll
